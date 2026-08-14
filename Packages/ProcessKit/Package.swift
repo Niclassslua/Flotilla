@@ -1,0 +1,13 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "ProcessKit",
+    platforms: [.macOS(.v15)],
+    products: [
+        .library(name: "ProcessKit", targets: ["ProcessKit"])
+    ],
+    targets: [
+        .target(name: "ProcessKit")
+    ]
+)
