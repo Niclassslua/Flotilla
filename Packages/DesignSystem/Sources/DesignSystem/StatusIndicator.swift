@@ -15,25 +15,38 @@ public struct StatusIndicator: View {
         self.pulses = pulses
     }
 
+    private var shouldPulse: Bool { pulses && !reduceMotion }
+
     public var body: some View {
         ZStack {
-            if pulses && !reduceMotion {
-                Circle()
-                    .stroke(color.opacity(isExpanded ? 0 : 0.55), lineWidth: 1.5)
-                    .frame(width: isExpanded ? 18 : 8, height: isExpanded ? 18 : 8)
-            }
+            // Drawn at a fixed size and scaled, never resized: animating the
+            // ring's frame changes the ZStack's bounds every frame, which
+            // nudges the dot around inside whatever lays this out.
+            Circle()
+                .stroke(color, lineWidth: 1.5)
+                .frame(width: 8, height: 8)
+                .scaleEffect(isExpanded ? 2.2 : 1)
+                .opacity(isExpanded ? 0 : 0.55)
+                .opacity(shouldPulse ? 1 : 0)
             Circle()
                 .fill(color)
                 .frame(width: 8, height: 8)
-                .shadow(color: color.opacity(0.45), radius: pulses ? 3 : 0)
+                .shadow(color: color.opacity(0.45), radius: shouldPulse ? 3 : 0)
         }
-            .frame(width: 18, height: 18)
-            .accessibilityLabel(label)
-            .onAppear {
-                guard pulses, !reduceMotion else { return }
-                withAnimation(.easeOut(duration: 1.35).repeatForever(autoreverses: false)) {
-                    isExpanded = true
-                }
-            }
+        .frame(width: 18, height: 18)
+        .animation(pulseAnimation, value: isExpanded)
+        .accessibilityLabel(label)
+        // Driven by `onChange` as well as `onAppear`: these indicators are
+        // reused as a session changes state, so a view that already exists
+        // when it starts working would otherwise never begin pulsing (and
+        // one that stops working would stay stuck mid-pulse).
+        .onAppear { isExpanded = shouldPulse }
+        .onChange(of: shouldPulse) { _, pulsing in isExpanded = pulsing }
+    }
+
+    /// `nil` on the way back to rest so the repeating animation is dropped
+    /// rather than left attached to the next state change.
+    private var pulseAnimation: Animation? {
+        isExpanded ? .easeOut(duration: 1.1).repeatForever(autoreverses: false) : nil
     }
 }

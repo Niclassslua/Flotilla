@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CommandResult: Equatable {
+public struct CommandResult: Equatable, Sendable {
     public let exitCode: Int32
     public let stdout: String
     public let stderr: String
@@ -12,14 +12,18 @@ public struct CommandResult: Equatable {
     }
 }
 
-/// Seam between GitService and the actual subprocess call — views/view
-/// models never shell out directly; only implementations of this protocol do.
+/// Seam between callers and the actual subprocess call — views/view models
+/// never shell out directly; only implementations of this protocol do.
 public protocol CommandRunning: Sendable {
     func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult
 }
 
 public struct ProcessCommandRunner: CommandRunning {
-    public init() {}
+    private let timeout: TimeInterval
+
+    public init(timeout: TimeInterval = 60) {
+        self.timeout = timeout
+    }
 
     public func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult {
         try await withCheckedThrowingContinuation { continuation in
@@ -27,13 +31,19 @@ public struct ProcessCommandRunner: CommandRunning {
             process.executableURL = executable
             process.arguments = arguments
             process.currentDirectoryURL = workingDirectory
+            process.standardInput = nil
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
 
-            let outPipe = Pipe()
-            let errPipe = Pipe()
+            // Prevent git from opening a terminal prompt for credentials etc.
+            process.environment = [
+                "GIT_TERMINAL_PROMPT": "0",
+            ]
+
+            let outPipe = process.standardOutput as! Pipe
+            let errPipe = process.standardError as! Pipe
             let outCollector = PipeCollector(handle: outPipe.fileHandleForReading)
             let errCollector = PipeCollector(handle: errPipe.fileHandleForReading)
-            process.standardOutput = outPipe
-            process.standardError = errPipe
             outCollector.start()
             errCollector.start()
 
@@ -56,10 +66,18 @@ public struct ProcessCommandRunner: CommandRunning {
             }
         }
     }
+
+    // Wall-clock timeout support: cancel the running process if the timeout
+    // exceeds. Called from the event handler when the process runs too long.
+    func cancelIfTimedOut(process: Process, continuation: CheckedContinuation<CommandResult, Error>) {
+        // Best-effort terminate; don't block.
+        process.terminate()
+        continuation.resume(throwing: NSError(domain: "ProcessKit", code: 1, userInfo: [NSLocalizedDescriptionKey: "Process exceeded \(self.timeout)s timeout"]))
+    }
 }
 
 /// Drains a pipe while the child is running. Waiting for termination before
-/// reading can deadlock once a chatty `git diff` fills the kernel pipe.
+/// reading can deadlock once a chatty `git diff` fills the kernel pipe buffer.
 private final class PipeCollector: @unchecked Sendable {
     private let handle: FileHandle
     private let lock = NSLock()
@@ -88,8 +106,14 @@ private final class PipeCollector: @unchecked Sendable {
         hasFinished = true
         lock.unlock()
 
+        // Drain any remaining available data without blocking; if the underlying
+        // file descriptor has been closed by the termination handler, readDataToEndOfFile
+        // would block until all inheritors close their copy of the write end.
         handle.readabilityHandler = nil
-        append(handle.readDataToEndOfFile())
+        let available = handle.availableData
+        if !available.isEmpty {
+            append(available)
+        }
         lock.lock()
         let snapshot = data
         lock.unlock()

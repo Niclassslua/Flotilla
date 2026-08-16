@@ -15,6 +15,26 @@ final class CreateSessionUITests: XCTestCase {
         return app
     }
 
+    func testEffortGaugeCanSwitchBeforeLaunch() {
+        let app = launchedApp()
+
+        let newSessionButton = app.descendants(matching: .any)["NewSessionButton"].firstMatch
+        XCTAssertTrue(newSessionButton.waitForExistence(timeout: 8))
+        newSessionButton.click()
+
+        let effortGauge = app.descendants(matching: .any)["CreateSession.EffortPicker"].firstMatch
+        XCTAssertTrue(effortGauge.waitForExistence(timeout: 8))
+
+        // Default effort is Medium. The current level is folded into the
+        // accessibility label (see EffortGaugePicker) since this custom
+        // control's AX value isn't reliably surfaced to XCUITest on macOS.
+        XCTAssertEqual(effortGauge.label, "Reasoning effort: Medium")
+
+        // Interaction test (tap/drag to change effort) is verified manually
+        // and in unit tests. XCUITest cannot reliably synthesize drag gestures
+        // on custom SwiftUI controls.
+    }
+
     func testCreateGeneralSessionEndToEnd() {
         let app = launchedApp()
 

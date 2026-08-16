@@ -20,9 +20,9 @@ final class HooksUITests: XCTestCase {
     func testSimulatedWaitingForInputFiresNotification() {
         let app = launchedApp()
 
-        // "Fix login bug" starts .working — working -> waitingForInput is a
-        // legal SessionStatusMachine transition (idle -> waitingForInput is
-        // not, so this session is chosen deliberately).
+        // Clicking the row mounts the session's terminal, which is what
+        // gives the screen reader something to read: the simulated prompt is
+        // replayed into the emulator and classified from there.
         let row = app.descendants(matching: .any)["SessionRow-Fix login bug"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 8))
         row.click()

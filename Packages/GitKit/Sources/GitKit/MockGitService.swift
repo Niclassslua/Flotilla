@@ -6,6 +6,7 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public var branchToReturn = "main"
     public var statusToReturn = GitStatus(entries: [])
     public var diffToReturn: [FileDiff] = []
+    public var diffStatToReturn = GitDiffStat(additions: 0, deletions: 0)
     public var worktreesToReturn: [GitWorktree] = []
     public var errorToThrow: Error?
 
@@ -27,6 +28,11 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public func diff(at repoPath: URL, staged: Bool) async throws -> [FileDiff] {
         if let errorToThrow { throw errorToThrow }
         return diffToReturn
+    }
+
+    public func diffStat(at repoPath: URL) async throws -> GitDiffStat {
+        if let errorToThrow { throw errorToThrow }
+        return diffStatToReturn
     }
 
     public func listWorktrees(at repoPath: URL) async throws -> [GitWorktree] {

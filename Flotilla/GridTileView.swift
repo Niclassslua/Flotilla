@@ -15,7 +15,7 @@ struct GridTileView: View {
             HStack(spacing: 8) {
                 Text(session.title)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(FlotillaPalette.cyan)
+                    .foregroundStyle(FlotillaColors().statusReady)
                     .lineLimit(1)
 
                 Text("/")
@@ -33,11 +33,7 @@ struct GridTileView: View {
 
                 Spacer()
                 HStack(spacing: 4) {
-                    StatusIndicator(
-                        color: StatusPresentation.color(for: session.status),
-                        label: StatusPresentation.label(for: session.status),
-                        pulses: session.status == .working
-                    )
+                    StatusBadge(session.status, variant: .compact)
                     Text(StatusPresentation.label(for: session.status))
                         .font(.caption2.weight(.medium))
                 }
@@ -56,7 +52,7 @@ struct GridTileView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 34)
-            .background(FlotillaPalette.panel)
+            .background(FlotillaColors().surface)
             .contentShape(Rectangle())
             .onTapGesture(perform: onActivate)
 
@@ -68,12 +64,13 @@ struct GridTileView: View {
                         controller: terminalManager.controller(
                             for: session,
                             process: process,
+                            scrollback: store.scrollback(for: session.id),
                             outputHandler: { [weak store] data in
                                 store?.appendTerminalOutput(data, toSessionID: session.id)
                             },
-                            inputHandler: { [weak store] in
-                                store?.applyObservedStatus(.working, toSessionID: session.id)
-                            }
+                            // See ContentView.terminal(for:) — keystrokes
+                            // are not evidence the agent is working.
+                            inputHandler: {}
                         ),
                         presentation: .grid,
                         isFocused: isActive
@@ -87,7 +84,7 @@ struct GridTileView: View {
                             .accessibilityHidden(true)
                     }
                 }
-                .background(FlotillaPalette.terminal)
+                .background(FlotillaColors().terminalCanvas)
             } else {
                 ContentUnavailableView(
                     "Agent Stopped",
@@ -96,16 +93,16 @@ struct GridTileView: View {
                 )
             }
         }
-        .background(FlotillaPalette.terminal)
+        .background(FlotillaColors().terminalCanvas)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(
                     isActive
-                        ? Color.orange.opacity(0.75)
+                        ? FlotillaColors().accent.opacity(0.75)
                         : session.status == .waitingForInput
-                        ? StatusPresentation.color(for: session.status).opacity(0.8)
-                        : Color(nsColor: .separatorColor).opacity(0.75),
+                        ? FlotillaColors().statusWaitingForInput.opacity(0.8)
+                        : FlotillaColors().separator.opacity(0.75),
                     lineWidth: isActive || session.status == .waitingForInput ? 1.5 : 1
                 )
         }

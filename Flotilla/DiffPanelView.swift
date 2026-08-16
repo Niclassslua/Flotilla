@@ -73,9 +73,13 @@ struct DiffPanelView: View {
     let session: Session
     @State private var viewModel: DiffPanelViewModel
 
+    #if DEBUG
     private var isUITesting: Bool {
         ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
     }
+    #else
+    private var isUITesting: Bool { false }
+    #endif
 
     init(session: Session, gitService: any GitServiceProtocol) {
         self.session = session
@@ -94,12 +98,14 @@ struct DiffPanelView: View {
                         .accessibilityIdentifier("DiffPanel.Summary")
                 }
                 Spacer()
+                #if DEBUG
                 if isUITesting {
                     Button("Simulate Edit") {
                         Task { await viewModel.simulateEditForAutomation() }
                     }
                     .accessibilityIdentifier("DiffPanel.SimulateEditButton")
                 }
+                #endif
                 Button {
                     Task { await viewModel.refresh() }
                 } label: {

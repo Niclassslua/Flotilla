@@ -30,8 +30,8 @@ private final class SessionToolbarViewModel {
 struct SessionToolbarView: View {
     let session: Session
     let project: Project?
-    @Binding var selectedSurface: SessionSurface
-    @Binding var isGitInspectorPresented: Bool
+    @Binding var selectedLens: SessionLens
+    @Binding var isChangesInspectorOpen: Bool
     @State private var viewModel: SessionToolbarViewModel
     @State private var isShowingDetails = false
 
@@ -39,13 +39,13 @@ struct SessionToolbarView: View {
         session: Session,
         project: Project?,
         gitService: any GitServiceProtocol,
-        selectedSurface: Binding<SessionSurface>,
-        isGitInspectorPresented: Binding<Bool>
+        selectedLens: Binding<SessionLens>,
+        isChangesInspectorOpen: Binding<Bool>
     ) {
         self.session = session
         self.project = project
-        _selectedSurface = selectedSurface
-        _isGitInspectorPresented = isGitInspectorPresented
+        _selectedLens = selectedLens
+        _isChangesInspectorOpen = isChangesInspectorOpen
         _viewModel = State(initialValue: SessionToolbarViewModel(session: session, gitService: gitService))
     }
 
@@ -53,7 +53,7 @@ struct SessionToolbarView: View {
         HStack(spacing: 8) {
             Text(project?.name ?? "Quick session")
                 .font(.caption.weight(.medium))
-                .foregroundStyle(FlotillaPalette.cyan)
+                .foregroundStyle(FlotillaColors().statusReady)
                 .lineLimit(1)
 
             Text("/")
@@ -68,7 +68,7 @@ struct SessionToolbarView: View {
             compactMetadata(
                 icon: "arrow.triangle.branch",
                 value: viewModel.branchName,
-                tint: FlotillaPalette.signal,
+                tint: FlotillaColors().statusWorking,
                 accessibilityIdentifier: "SessionToolbar.Branch"
             )
 
@@ -84,14 +84,14 @@ struct SessionToolbarView: View {
             Spacer(minLength: 6)
 
             HStack(spacing: 2) {
-                ForEach(SessionSurface.allCases) { surface in
+                ForEach(SessionLens.allCases) { lens in
                     toolbarButton(
-                        systemImage: surface.systemImage,
-                        help: surface.title,
-                        isSelected: selectedSurface == surface,
-                        accessibilityIdentifier: "Session.Surface.\(surface.rawValue)"
+                        systemImage: lens.systemImage,
+                        help: lens.title,
+                        isSelected: selectedLens == lens,
+                        accessibilityIdentifier: "Session.Lens.\(lens.rawValue)"
                     ) {
-                        selectedSurface = surface
+                        selectedLens = lens
                     }
                 }
 
@@ -102,10 +102,10 @@ struct SessionToolbarView: View {
                 toolbarButton(
                     systemImage: "sidebar.right",
                     help: "Toggle Git changes sidebar",
-                    isSelected: isGitInspectorPresented,
+                    isSelected: isChangesInspectorOpen,
                     accessibilityIdentifier: "Session.GitInspectorButton"
                 ) {
-                    isGitInspectorPresented.toggle()
+                    isChangesInspectorOpen.toggle()
                 }
 
                 toolbarButton(systemImage: "doc.on.doc", help: "Copy working directory") {
@@ -134,11 +134,7 @@ struct SessionToolbarView: View {
             }
 
             HStack(spacing: 5) {
-                StatusIndicator(
-                    color: StatusPresentation.color(for: session.status),
-                    label: StatusPresentation.label(for: session.status),
-                    pulses: session.status == .working
-                )
+                StatusBadge(session.status, variant: .compact)
                 Text(StatusPresentation.label(for: session.status))
                     .font(.caption2.weight(.medium))
             }
@@ -147,10 +143,10 @@ struct SessionToolbarView: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 44)
-        .background(FlotillaPalette.panel)
+        .background(FlotillaColors().surface)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(FlotillaPalette.subtleStroke)
+                .fill(FlotillaColors().separator)
                 .frame(height: 1)
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -207,7 +203,7 @@ struct SessionToolbarView: View {
                 .frame(width: 28, height: 28)
                 .contentShape(.rect)
                 .background(
-                    isSelected ? FlotillaPalette.elevated : Color.clear,
+                    isSelected ? FlotillaColors().surfaceElevated : Color.clear,
                     in: .rect(cornerRadius: 5)
                 )
         }
@@ -222,7 +218,6 @@ struct SessionToolbarView: View {
     private var worktreePath: String {
         (session.worktree?.worktreePath ?? project?.rootPath ?? session.workingDirectory).path
     }
-
 }
 
 private struct SessionDetailsPopover: View {

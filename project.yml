@@ -41,13 +41,15 @@ targets:
     platform: macOS
     sources:
       - path: Flotilla
+      - path: Flotilla.icon
+        buildPhase: resources
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla
       INFOPLIST_KEY_NSHumanReadableCopyright: ""
       INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
-      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       ENABLE_PREVIEWS: YES
       ENABLE_HARDENED_RUNTIME: YES
+      ASSETCATALOG_COMPILER_APPICON_NAME: Flotilla
     dependencies:
       - package: DesignSystem
       - package: SessionKit

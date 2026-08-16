@@ -20,14 +20,13 @@ final class StartupCheckViewModel {
     private(set) var foundToolPaths: [String: URL] = [:]
     var isDismissed = false
 
-    /// Gemini remains available as a provider and visible to Settings, but its
-    /// absence does not make the otherwise usable app environment incomplete.
     var warningItems: [String] {
         missingRequiredTools
             + missingOptionalTools
-            + missingAgents
-                .filter { $0 != .geminiCLI }
-                .map(\.displayName)
+            // opencode is an optional bonus agent — its absence is detected
+            // (visible in the check summary) but not warned about, so a
+            // missing opencode never blocks or nags.
+            + missingAgents.filter { $0 != .openCode }.map(\.displayName)
     }
 
     init(

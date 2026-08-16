@@ -5,17 +5,24 @@ import SessionKit
 import ProcessKit
 import HooksKit
 
-/// Wires one `SessionStatusObserver` per running session to the app's
+/// Wires one `SessionScreenMonitor` per running session to the app's
 /// `AppStore` (status updates) and a `NotificationDispatching` (macOS
 /// notifications), via `WaitingNotificationGate` so a notification fires
-/// only on the transition into waiting, not on every matching output chunk.
+/// only on the transition into waiting, not on every poll that still sees
+/// the prompt.
+///
+/// Status comes from what each agent draws on its screen. Inferring it from
+/// output volume instead — the previous approach — could not distinguish an
+/// agent doing work from a terminal redrawing itself, so merely opening a
+/// session's tab was enough to mark it "Working".
 @Observable
 @MainActor
 final class HookCoordinator {
     private let store: AppStore
+    private let screenReader: any SessionScreenReading
     private let dispatcher: NotificationDispatching
     private let notificationsEnabled: @MainActor () -> Bool
-    private var observers: [UUID: SessionStatusObserver] = [:]
+    private var monitors: [UUID: SessionScreenMonitor] = [:]
     private var gates: [UUID: WaitingNotificationGate] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
@@ -32,11 +39,13 @@ final class HookCoordinator {
     /// appearing until dismissed — automated tests must never risk that.
     init(
         store: AppStore,
+        screenReader: any SessionScreenReading,
         dispatcher: NotificationDispatching = SystemNotificationDispatcher(),
         requestsAuthorization: Bool = true,
         notificationsEnabled: @escaping @MainActor () -> Bool = { true }
     ) {
         self.store = store
+        self.screenReader = screenReader
         self.dispatcher = dispatcher
         self.notificationsEnabled = notificationsEnabled
         if requestsAuthorization, notificationsEnabled() {
@@ -45,36 +54,35 @@ final class HookCoordinator {
         observeAll()
     }
 
-    /// Starts observing any session that doesn't have an observer yet —
-    /// safe to call again whenever the session list changes (idempotent
-    /// per session via the `observers` dictionary check in `observe`).
+    /// Starts watching any session that isn't being watched yet — safe to
+    /// call again whenever the session list changes (idempotent per session
+    /// via the `monitors` dictionary check in `observe`).
     func observeAll() {
         let activeIDs = Set(store.sessions.map(\.id))
-        for sessionID in observers.keys where !activeIDs.contains(sessionID) || store.process(for: sessionID) == nil {
-            observers[sessionID]?.stop()
+        for sessionID in monitors.keys where !activeIDs.contains(sessionID) || store.process(for: sessionID) == nil {
+            monitors[sessionID]?.stop()
             tasks[sessionID]?.cancel()
-            observers[sessionID] = nil
+            monitors[sessionID] = nil
             tasks[sessionID] = nil
             gates[sessionID] = nil
         }
-        for session in store.sessions {
-            guard let process = store.process(for: session.id) else { continue }
-            observe(session: session, process: process)
+        for session in store.sessions where store.process(for: session.id) != nil {
+            observe(sessionID: session.id)
         }
     }
 
-    private func observe(session: Session, process: PTYProcessProtocol) {
-        guard observers[session.id] == nil else { return }
+    private func observe(sessionID: UUID) {
+        guard monitors[sessionID] == nil else { return }
 
-        let observer = SessionStatusObserver(output: process)
+        let monitor = SessionScreenMonitor(sessionID: sessionID, reader: screenReader)
         let gate = WaitingNotificationGate()
-        observers[session.id] = observer
-        gates[session.id] = gate
+        monitors[sessionID] = monitor
+        gates[sessionID] = gate
 
-        tasks[session.id] = Task { [weak self] in
-            observer.start()
-            for await status in observer.statusStream {
-                await self?.handle(status: status, sessionID: session.id, gate: gate)
+        tasks[sessionID] = Task { [weak self] in
+            monitor.start()
+            for await status in monitor.statusStream {
+                await self?.handle(status: status, sessionID: sessionID, gate: gate)
             }
         }
     }

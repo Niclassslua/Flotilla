@@ -12,8 +12,10 @@ struct CommandPaletteView: View {
     let openSession: (UUID) -> Void
 
     @State private var query = ""
+    @FocusState private var isFocused: Bool
+    @State private var selectedIndex: Int = 0
 
-    private var matchingCommands: [WorkspaceCommand] {
+    private var allMatchingCommands: [WorkspaceCommand] {
         guard !query.isEmpty else { return WorkspaceCommand.allCases }
         return WorkspaceCommand.allCases.filter {
             $0.title.localizedCaseInsensitiveContains(query)
@@ -38,12 +40,8 @@ struct CommandPaletteView: View {
         }
     }
 
-    private var navigationCommands: [WorkspaceCommand] {
-        matchingCommands.filter { [.showHome, .showProjects, .showSessions, .showGrid, .showSettings].contains($0) }
-    }
-
-    private var actionCommands: [WorkspaceCommand] {
-        matchingCommands.filter { !navigationCommands.contains($0) }
+    private var totalCount: Int {
+        allMatchingCommands.count + matchingProjects.count + matchingSessions.count
     }
 
     var body: some View {
@@ -54,6 +52,8 @@ struct CommandPaletteView: View {
                 TextField("Search commands and sessions", text: $query)
                     .textFieldStyle(.plain)
                     .font(.title3)
+                    .focused($isFocused)
+                    .focusable(true)
                     .accessibilityIdentifier("CommandPalette.Search")
                 Text("esc")
                     .font(.caption.monospaced())
@@ -64,13 +64,40 @@ struct CommandPaletteView: View {
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
+            .onKeyPress { press in
+                if press.key == .return {
+                    if selectedIndex < allMatchingCommands.count {
+                        let command = allMatchingCommands[selectedIndex]
+                        dismiss()
+                        perform(command)
+                    } else if selectedIndex < allMatchingCommands.count + matchingProjects.count {
+                        let idx = selectedIndex - allMatchingCommands.count
+                        let project = matchingProjects[idx]
+                        dismiss()
+                        openProject(project.id)
+                    } else if selectedIndex < totalCount {
+                        let idx = selectedIndex - allMatchingCommands.count - matchingProjects.count
+                        let session = matchingSessions[idx]
+                        dismiss()
+                        openSession(session.id)
+                    }
+                    return .handled
+                } else if press.key == .upArrow {
+                    withAnimation { selectedIndex = max(0, selectedIndex - 1) }
+                    return .handled
+                } else if press.key == .downArrow {
+                    withAnimation { selectedIndex = min(totalCount - 1, selectedIndex + 1) }
+                    return .handled
+                }
+                return .ignored
+            }
 
             Divider()
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     PaletteSectionTitle("Navigation")
-                    ForEach(navigationCommands) { command in
+                    ForEach(Array(allMatchingCommands.enumerated()), id: \.offset) { idx, command in
                         PaletteRow(
                             title: command.title,
                             subtitle: command.subtitle,
@@ -79,25 +106,12 @@ struct CommandPaletteView: View {
                             dismiss()
                             perform(command)
                         }
-                    }
-
-                    if !actionCommands.isEmpty {
-                        PaletteSectionTitle("Actions")
-                        ForEach(actionCommands) { command in
-                            PaletteRow(
-                                title: command.title,
-                                subtitle: command.subtitle,
-                                systemImage: command.systemImage
-                            ) {
-                                dismiss()
-                                perform(command)
-                            }
-                        }
+                        .background(selectedIndex == idx ? Color.accentColor.opacity(0.2) : .clear)
                     }
 
                     if !matchingProjects.isEmpty {
                         PaletteSectionTitle("Projects")
-                        ForEach(matchingProjects) { project in
+                        ForEach(Array(matchingProjects.enumerated()), id: \.offset) { idx, project in
                             PaletteRow(
                                 title: project.name,
                                 subtitle: project.rootPath.path,
@@ -106,12 +120,13 @@ struct CommandPaletteView: View {
                                 dismiss()
                                 openProject(project.id)
                             }
+                            .background(selectedIndex == allMatchingCommands.count + idx ? Color.accentColor.opacity(0.2) : .clear)
                         }
                     }
 
                     if !matchingSessions.isEmpty {
                         PaletteSectionTitle("Active sessions")
-                        ForEach(matchingSessions) { session in
+                        ForEach(Array(matchingSessions.enumerated()), id: \.element.id) { idx, session in
                             PaletteRow(
                                 title: session.title,
                                 subtitle: "\(session.agent.displayName) · \(session.goal)",
@@ -120,10 +135,11 @@ struct CommandPaletteView: View {
                                 dismiss()
                                 openSession(session.id)
                             }
+                            .background(selectedIndex == allMatchingCommands.count + matchingProjects.count + idx ? Color.accentColor.opacity(0.2) : .clear)
                         }
                     }
 
-                    if matchingCommands.isEmpty && matchingProjects.isEmpty && matchingSessions.isEmpty {
+                    if allMatchingCommands.isEmpty && matchingProjects.isEmpty && matchingSessions.isEmpty {
                         ContentUnavailableView.search(text: query)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 36)
@@ -134,6 +150,8 @@ struct CommandPaletteView: View {
         }
         .frame(width: 680, height: 560)
         .background(FlotillaPalette.panel)
+        .onAppear { isFocused = true; selectedIndex = 0 }
+        .onDisappear { isFocused = false }
     }
 }
 
@@ -192,26 +210,7 @@ private struct PaletteRow: View {
 
 struct KeyboardShortcutsView: View {
     @Environment(\.dismiss) private var dismiss
-
-    private let groups: [(String, [(String, String)])] = [
-        ("Navigation", [
-            ("New session", "⌘N"),
-            ("Command palette", "⌘K"),
-            ("Sessions", "⌘2"),
-            ("Projects", "⌘1")
-        ]),
-        ("Session", [
-            ("Terminal", "⌘⇧T"),
-            ("Review changes", "⌘⇧G"),
-            ("Files", "⌘⇧F"),
-            ("Grid", "⌘⇧M")
-        ]),
-        ("Application", [
-            ("Settings", "⌘,"),
-            ("Toggle sidebar", "⌃⌘S"),
-            ("Close sheet", "Esc")
-        ])
-    ]
+    @Environment(\.workspaceNavigator) private var navigator
 
     var body: some View {
         VStack(spacing: 0) {
@@ -232,7 +231,7 @@ struct KeyboardShortcutsView: View {
 
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
-                    ForEach(groups, id: \.0) { group in
+                    ForEach(shortcutGroups, id: \.0) { group in
                         VStack(alignment: .leading, spacing: 0) {
                             Text(group.0)
                                 .font(.headline)
@@ -240,6 +239,7 @@ struct KeyboardShortcutsView: View {
                             ForEach(group.1, id: \.0) { shortcut in
                                 HStack {
                                     Text(shortcut.0)
+                                        .foregroundStyle(.primary)
                                     Spacer()
                                     Text(shortcut.1)
                                         .font(.callout.monospaced())
@@ -253,10 +253,10 @@ struct KeyboardShortcutsView: View {
                             }
                         }
                         .padding(16)
-                        .background(FlotillaPalette.panel, in: RoundedRectangle(cornerRadius: 8))
+                        .background(FlotillaColors().surface, in: RoundedRectangle(cornerRadius: 8))
                         .overlay {
                             RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(FlotillaPalette.subtleStroke)
+                                .strokeBorder(FlotillaColors().separator)
                         }
                     }
                 }
@@ -264,8 +264,42 @@ struct KeyboardShortcutsView: View {
             }
         }
         .frame(width: 760, height: 500)
-        .background(FlotillaPalette.canvas)
+        .background(FlotillaColors().canvas)
         .accessibilityIdentifier("KeyboardShortcuts")
+    }
+
+    private var shortcutGroups: [(String, [(String, String)])] {
+        [
+            ("Navigation", [
+                ("New session", "⌘N"),
+                ("Command palette", "⌘K"),
+                ("Overview", "⌘1"),
+                ("Sessions", "⌘2"),
+                ("Projects", "⌘3"),
+            ]),
+            ("Layout", [
+                ("Focus", "⌘⌃1"),
+                ("Grid", "⌘⌃2"),
+                ("Board", "⌘⌃3"),
+            ]),
+            ("Session Lens", [
+                ("Terminal", "⌘⇧T"),
+                ("Files", "⌘⇧F"),
+                ("Instructions", "⌘⇧I"),
+                ("Changes", "⌘⇧G"),
+            ]),
+            ("Session", [
+                ("Previous session", "⌘⌥↑"),
+                ("Next session", "⌘⌥↓"),
+                ("Restart session", "⌘R"),
+                ("Delete session", "⌘⌫"),
+            ]),
+            ("Application", [
+                ("Settings", "⌘,"),
+                ("Toggle sidebar", "⌃⌘S"),
+                ("Close sheet", "Esc"),
+            ]),
+        ]
     }
 }
 

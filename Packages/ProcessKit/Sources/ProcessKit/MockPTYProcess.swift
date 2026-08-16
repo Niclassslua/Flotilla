@@ -17,6 +17,8 @@ public final class MockPTYProcess: PTYProcessProtocol, @unchecked Sendable {
     public private(set) var startedWorkingDirectory: URL?
     public private(set) var sentInput: [Data] = []
     public private(set) var lastSize: PTYSize?
+    public private(set) var lastResizeAt: Date?
+    public private(set) var lastInputAt: Date?
     public private(set) var startCallCount = 0
     public private(set) var terminateCallCount = 0
 
@@ -62,6 +64,7 @@ public final class MockPTYProcess: PTYProcessProtocol, @unchecked Sendable {
 
     public func send(input: Data) {
         sentInput.append(input)
+        lastInputAt = Date()
         if echoInputToOutput {
             broadcaster.broadcast(input)
         }
@@ -69,6 +72,7 @@ public final class MockPTYProcess: PTYProcessProtocol, @unchecked Sendable {
 
     public func resize(_ size: PTYSize) {
         lastSize = size
+        lastResizeAt = Date()
     }
 
     public func terminate() {

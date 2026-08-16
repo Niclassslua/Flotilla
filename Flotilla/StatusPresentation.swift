@@ -5,13 +5,17 @@ import DesignSystem
 /// Maps SessionKit's domain status into presentation — kept in the App
 /// layer so DesignSystem and SessionKit stay decoupled from each other.
 enum StatusPresentation {
+    // App is forced to dark mode, so we can use a static instance
+    private static let colors = FlotillaColors(colorScheme: .dark)
+
     static func color(for status: SessionStatus) -> Color {
         switch status {
-        case .working: return FlotillaPalette.ocean
-        case .idle: return .secondary
-        case .waitingForInput: return .orange
-        case .finished: return .blue
-        case .crashed: return .red
+        case .working: return colors.statusWorking
+        case .idle: return colors.statusIdle
+        case .waitingForInput: return colors.statusWaitingForInput
+        case .ready: return colors.statusReady
+        case .finished: return colors.statusFinished
+        case .crashed: return colors.statusCrashed
         }
     }
 
@@ -20,8 +24,38 @@ enum StatusPresentation {
         case .working: return "Working"
         case .idle: return "Idle"
         case .waitingForInput: return "Waiting for Input"
+        case .ready: return "Ready"
         case .finished: return "Finished"
         case .crashed: return "Crashed"
         }
     }
+
+    static func glyph(for status: SessionStatus) -> String {
+        switch status {
+        case .working: return "gearshape.2"
+        case .idle: return "circle"
+        case .waitingForInput: return "exclamationmark.circle"
+        case .ready: return "hand.raised"
+        case .finished: return "checkmark.circle"
+        case .crashed: return "xmark.octagon"
+        }
+    }
+
+    /// Lowercase technical register for dense surfaces like the sidebar's
+    /// fleet legend, where title-case labels would read as shouting.
+    static func compactLabel(for status: SessionStatus) -> String {
+        switch status {
+        case .working: return "working"
+        case .idle: return "idle"
+        case .waitingForInput: return "waiting"
+        case .ready: return "ready"
+        case .finished: return "finished"
+        case .crashed: return "crashed"
+        }
+    }
+
+    /// Statuses ordered by how urgently they need attention. Drives the
+    /// sidebar's fleet composition bar and legend so the most actionable
+    /// state is always read first.
+    static let attentionOrder: [SessionStatus] = [.waitingForInput, .working, .ready, .idle, .finished, .crashed]
 }

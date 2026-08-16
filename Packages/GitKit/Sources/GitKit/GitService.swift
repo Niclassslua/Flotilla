@@ -45,6 +45,26 @@ public struct FileDiffHunk: Equatable, Sendable {
     }
 }
 
+/// Aggregate line counts for a working tree, in the style of
+/// `git diff --shortstat`: how many lines were added and removed across
+/// staged, unstaged, and untracked changes. Used for compact `+12 −4`
+/// badges in the UI, where the full `FileDiff` payload would be wasteful.
+public struct GitDiffStat: Equatable, Sendable {
+    public var additions: Int
+    public var deletions: Int
+
+    public init(additions: Int, deletions: Int) {
+        self.additions = additions
+        self.deletions = deletions
+    }
+
+    public var isEmpty: Bool { additions == 0 && deletions == 0 }
+
+    public static func + (lhs: GitDiffStat, rhs: GitDiffStat) -> GitDiffStat {
+        GitDiffStat(additions: lhs.additions + rhs.additions, deletions: lhs.deletions + rhs.deletions)
+    }
+}
+
 public struct FileDiff: Equatable, Sendable {
     public enum Stage: String, Equatable, Sendable {
         case staged
@@ -79,16 +99,29 @@ public struct GitChangesSnapshot: Equatable, Sendable {
     public var allDiffs: [FileDiff] { staged + unstaged + untracked }
 }
 
-public enum GitServiceError: Error, Equatable {
+public enum GitServiceError: Error, Equatable, LocalizedError {
     case commandFailed(exitCode: Int32, stderr: String)
     case branchAlreadyExists(String)
     case worktreePathAlreadyExists(URL)
+
+    public var errorDescription: String? {
+        switch self {
+        case .commandFailed(let exitCode, let stderr):
+            let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty ? "git exited with code \(exitCode)" : "git exited with code \(exitCode): \(detail)"
+        case .branchAlreadyExists(let branch):
+            return "A branch named '\(branch)' already exists."
+        case .worktreePathAlreadyExists(let url):
+            return "A worktree already exists at \(url.path)."
+        }
+    }
 }
 
 public protocol GitServiceProtocol: Sendable {
     func currentBranch(at repoPath: URL) async throws -> String
     func status(at repoPath: URL) async throws -> GitStatus
     func diff(at repoPath: URL, staged: Bool) async throws -> [FileDiff]
+    func diffStat(at repoPath: URL) async throws -> GitDiffStat
     func listWorktrees(at repoPath: URL) async throws -> [GitWorktree]
     func createWorktree(basePath: URL, branch: String, destination: URL) async throws -> GitWorktree
     func removeWorktree(at path: URL, in repoPath: URL, branch: String, deleteBranch: Bool) async throws
@@ -174,6 +207,34 @@ public struct GitService: GitServiceProtocol {
         }
     }
 
+    /// Sums `--numstat` for staged and unstaged changes (a file modified in
+    /// both areas counts each side, matching `changes(at:)`) and counts the
+    /// lines of non-binary untracked files as additions, mirroring the
+    /// synthetic all-added hunks the diff view shows for new files.
+    public func diffStat(at repoPath: URL) async throws -> GitDiffStat {
+        async let stagedRequest = run(["diff", "--numstat", "--cached"], at: repoPath)
+        async let unstagedRequest = run(["diff", "--numstat"], at: repoPath)
+        async let statusRequest = status(at: repoPath)
+        let (staged, unstaged, status) = try await (stagedRequest, unstagedRequest, statusRequest)
+
+        var stat = Self.parseNumstat(staged.stdout) + Self.parseNumstat(unstaged.stdout)
+        for entry in status.entries where entry.isUntracked {
+            let url = repoPath.appendingPathComponent(entry.path)
+            guard let data = try? Data(contentsOf: url), !data.contains(0) else { continue }
+            stat = stat + GitDiffStat(additions: Self.lineCount(of: data), deletions: 0)
+        }
+        return stat
+    }
+
+    /// Line count the way git counts them: one per `\n`, plus one for a
+    /// trailing unterminated line. (Splitting on `\n` would over-count
+    /// newline-terminated files by one.)
+    private static func lineCount(of data: Data) -> Int {
+        let newlines = data.reduce(0) { $0 + ($1 == 0x0A ? 1 : 0) }
+        let endsWithNewline = data.last == 0x0A
+        return data.isEmpty || endsWithNewline ? newlines : newlines + 1
+    }
+
     public func listWorktrees(at repoPath: URL) async throws -> [GitWorktree] {
         let result = try await run(["worktree", "list", "--porcelain"], at: repoPath)
         var worktrees: [GitWorktree] = []
@@ -220,9 +281,37 @@ public struct GitService: GitServiceProtocol {
     }
 
     public func removeWorktree(at path: URL, in repoPath: URL, branch: String, deleteBranch: Bool) async throws {
-        _ = try await run(["worktree", "remove", path.path, "--force"], at: repoPath)
+        var worktreeFailure: GitServiceError?
+        do {
+            _ = try await run(["worktree", "remove", path.path, "--force"], at: repoPath)
+        } catch let GitServiceError.commandFailed(exitCode, stderr) {
+            worktreeFailure = .commandFailed(exitCode: exitCode, stderr: stderr)
+        }
+
+        if worktreeFailure != nil {
+            // `worktree remove` fails when the directory is already gone or
+            // its metadata is stale (e.g. deleted manually or by a previous
+            // partial cleanup). Recover by removing any lingering directory
+            // and pruning the stale worktree record from git, so the session
+            // deletion still cleans up on disk.
+            if FileManager.default.fileExists(atPath: path.path) {
+                try FileManager.default.removeItem(at: path)
+            }
+            _ = try? await run(["worktree", "prune"], at: repoPath)
+            if !FileManager.default.fileExists(atPath: path.path) {
+                worktreeFailure = nil
+            }
+        }
+
         if deleteBranch {
-            _ = try await run(["branch", "-D", branch], at: repoPath)
+            // Best-effort: deleting the branch is independent of the
+            // directory state and must never fail the session cleanup on
+            // its own.
+            _ = try? await run(["branch", "-D", branch], at: repoPath)
+        }
+
+        if let worktreeFailure {
+            throw worktreeFailure
         }
     }
 
@@ -237,6 +326,22 @@ public struct GitService: GitServiceProtocol {
             throw GitServiceError.commandFailed(exitCode: result.exitCode, stderr: result.stderr)
         }
         return result
+    }
+
+    /// Parses `git diff --numstat` output: one `added<TAB>deleted<TAB>path`
+    /// line per file, with `-` in place of a count for binary files (which
+    /// contribute zero). `public` for the same direct unit-testability
+    /// reason as `parseUnifiedDiff`.
+    public static func parseNumstat(_ raw: String) -> GitDiffStat {
+        var stat = GitDiffStat(additions: 0, deletions: 0)
+        for rawLine in raw.split(separator: "\n", omittingEmptySubsequences: true) {
+            let fields = rawLine.split(separator: "\t")
+            guard fields.count >= 2,
+                  let added = Int(fields[0]),
+                  let deleted = Int(fields[1]) else { continue }
+            stat = stat + GitDiffStat(additions: added, deletions: deleted)
+        }
+        return stat
     }
 
     /// `public` (not just `internal`) specifically so it's directly unit

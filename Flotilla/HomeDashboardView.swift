@@ -1,29 +1,33 @@
 import SwiftUI
 import SessionKit
 import DesignSystem
+import SettingsKit
 
 struct HomeDashboardView: View {
     @Bindable var store: AppStore
-    let defaultAgent: AgentKind
     let openProject: (UUID) -> Void
     let openSession: (UUID) -> Void
 
     @State private var goal = ""
     @State private var selectedProjectID: UUID?
-    @State private var agent: AgentKind
+    @State private var agent: AgentKind = .claudeCode
+    @State private var model = ""
+    @State private var effort: AgentEffort = .medium
     @State private var useWorktree = true
     @State private var isLaunching = false
+    @State private var openCodeSubscription: OpenCodeSubscription = .none
 
     init(
         store: AppStore,
-        defaultAgent: AgentKind,
         openProject: @escaping (UUID) -> Void,
-        openSession: @escaping (UUID) -> Void
+        openSession: @escaping (UUID) -> Void,
+        openCodeSubscription: OpenCodeSubscription = .none,
+        defaultAgent: AgentKind = .claudeCode
     ) {
         self.store = store
-        self.defaultAgent = defaultAgent
         self.openProject = openProject
         self.openSession = openSession
+        self.openCodeSubscription = openCodeSubscription
         _agent = State(initialValue: defaultAgent)
     }
 
@@ -95,6 +99,14 @@ struct HomeDashboardView: View {
 
             Divider()
 
+            if let error = store.lastCreationError {
+                FlotillaBanner.error(error) {
+                    store.lastCreationError = nil
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+
             HStack(spacing: 10) {
                 Menu {
                     Button {
@@ -117,6 +129,10 @@ struct HomeDashboardView: View {
                 }
                 .labelsHidden()
                 .frame(width: 126)
+
+                ModelPickerView(agent: agent, openCodeSubscription: openCodeSubscription, model: $model)
+
+                EffortGaugePicker(agent: agent, effort: $effort)
 
                 if selectedProject != nil {
                     Toggle(isOn: $useWorktree) {
@@ -195,9 +211,7 @@ struct HomeDashboardView: View {
                         openSession(session.id)
                     } label: {
                         HStack(spacing: 10) {
-                            Circle()
-                                .fill(StatusPresentation.color(for: session.status))
-                                .frame(width: 7, height: 7)
+                            StatusBadge(session.status, variant: .compact)
                             Text(session.title)
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
@@ -229,6 +243,8 @@ struct HomeDashboardView: View {
                 title: String(trimmedGoal.prefix(60)),
                 goal: trimmedGoal,
                 agent: agent,
+                model: model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : model,
+                effort: agent.supportsEffortSelection ? effort : nil,
                 projectFolder: selectedProject?.rootPath,
                 checkoutMode: useWorktree && selectedProject != nil ? .newWorktree : .mainCheckout
             )

@@ -86,6 +86,22 @@ final class UnifiedDiffParsingTests: XCTestCase {
     }
 }
 
+final class NumstatParsingTests: XCTestCase {
+    func testSumsMultipleFiles() {
+        let raw = "10\t2\tfile1.swift\n3\t0\tfile2.swift\n"
+        XCTAssertEqual(GitService.parseNumstat(raw), GitDiffStat(additions: 13, deletions: 2))
+    }
+
+    func testBinaryFilesContributeZero() {
+        let raw = "-\t-\timage.png\n5\t1\tcode.swift\n"
+        XCTAssertEqual(GitService.parseNumstat(raw), GitDiffStat(additions: 5, deletions: 1))
+    }
+
+    func testEmptyInputIsZero() {
+        XCTAssertEqual(GitService.parseNumstat(""), GitDiffStat(additions: 0, deletions: 0))
+    }
+}
+
 final class WorktreePlannerTests: XCTestCase {
     func testMainCheckoutDecision() {
         let planner = WorktreePlanner()
@@ -229,6 +245,24 @@ final class GitServiceRealRepoTests: XCTestCase {
         XCTAssertTrue(snapshot.untracked.first?.hunks.first?.lines.contains("+new file") == true)
     }
 
+    func testDiffStatSumsStagedUnstagedAndUntracked() async throws {
+        // README.md starts as "hello\n" (one line) from setUp.
+        try "changed\nmore\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try await git(["add", "README.md"])
+        try "changed\nmore\nextra\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try "one\ntwo\nthree\n".write(to: repoPath.appendingPathComponent("NEW.md"), atomically: true, encoding: .utf8)
+
+        let stat = try await service.diffStat(at: repoPath)
+
+        // Staged: +2 −1. Unstaged: +1 −0. Untracked NEW.md: +3 −0.
+        XCTAssertEqual(stat, GitDiffStat(additions: 6, deletions: 1))
+    }
+
+    func testDiffStatIsZeroForCleanTree() async throws {
+        let stat = try await service.diffStat(at: repoPath)
+        XCTAssertEqual(stat, GitDiffStat(additions: 0, deletions: 0))
+    }
+
     func testCreateWorktreeSucceedsAndAppearsInList() async throws {
         let destination = worktreeBase.appendingPathComponent("feature-x")
         let worktree = try await service.createWorktree(basePath: repoPath, branch: "feature-x", destination: destination)
@@ -268,6 +302,21 @@ final class GitServiceRealRepoTests: XCTestCase {
 
         let worktrees = try await service.listWorktrees(at: repoPath)
         XCTAssertEqual(worktrees.count, 1)
+    }
+
+    func testRemoveWorktreeRecoversWhenDirectoryAlreadyGone() async throws {
+        let destination = worktreeBase.appendingPathComponent("stale")
+        _ = try await service.createWorktree(basePath: repoPath, branch: "stale", destination: destination)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+
+        try FileManager.default.removeItem(at: destination)
+
+        try await service.removeWorktree(at: destination, in: repoPath, branch: "stale", deleteBranch: true)
+
+        let worktrees = try await service.listWorktrees(at: repoPath)
+        XCTAssertEqual(worktrees.count, 1, "stale worktree metadata should be pruned")
+        let branches = try await git(["branch", "--list", "stale"])
+        XCTAssertTrue(branches.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 }
 

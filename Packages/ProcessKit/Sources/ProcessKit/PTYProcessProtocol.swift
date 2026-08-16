@@ -22,6 +22,19 @@ public protocol SessionOutputObserving: AnyObject, Sendable {
     var id: UUID { get }
     var outputStream: AsyncStream<Data> { get }
     var isRunning: Bool { get }
+
+    /// When the pty was last resized. `SIGWINCH` makes a full-screen TUI
+    /// redraw everything it is already showing, so the burst of output that
+    /// follows a resize says nothing about whether the agent is doing work.
+    /// Exposed here — rather than plumbed through the view layer — because
+    /// the process is the one object that knows when the resize happened,
+    /// and observers get it read-only, keeping the no-write guarantee above.
+    var lastResizeAt: Date? { get }
+
+    /// When input was last written to the pty. The child echoes keystrokes
+    /// straight back, so output arriving right after a write is the user's
+    /// own typing coming home, not agent activity.
+    var lastInputAt: Date? { get }
 }
 
 public protocol PTYProcessProtocol: SessionOutputObserving {

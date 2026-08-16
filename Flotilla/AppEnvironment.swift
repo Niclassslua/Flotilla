@@ -134,7 +134,7 @@ final class AppEnvironment {
         try? repository.save(Session(
             title: "General chat",
             goal: "Ask about SwiftUI animation timing",
-            agent: .geminiCLI,
+            agent: .openCode,
             projectID: nil,
             workingDirectory: FileManager.default.temporaryDirectory,
             status: .waitingForInput

@@ -19,6 +19,7 @@ final class SessionStatusMachineTests: XCTestCase {
     func testLegalTransitions() {
         let legalPairs: [(SessionStatus, SessionStatus)] = [
             (.idle, .working),
+            (.idle, .waitingForInput),
             (.idle, .finished),
             (.idle, .crashed),
             (.working, .idle),
@@ -30,20 +31,26 @@ final class SessionStatusMachineTests: XCTestCase {
             (.waitingForInput, .finished),
             (.waitingForInput, .crashed),
             (.crashed, .working),
+            (.finished, .working),
         ]
         for (from, to) in legalPairs {
             XCTAssertTrue(machine.canTransition(from: from, to: to), "\(from) -> \(to) should be legal")
         }
     }
 
-    func testFinishedIsTerminalAndCrashedOnlyAllowsExplicitRestart() {
+    /// Both terminal states are re-enterable only through `.working`, the
+    /// status an explicit restart moves a session to. Nothing else may
+    /// reopen them — in particular no output-derived status, which is what
+    /// keeps a stray repaint from resurrecting a session that is done.
+    func testTerminalStatesOnlyReopenViaExplicitRestart() {
         for target in SessionStatus.allCases {
-            XCTAssertFalse(machine.canTransition(from: .finished, to: target), "finished -> \(target) must be illegal")
-            XCTAssertEqual(
-                machine.canTransition(from: .crashed, to: target),
-                target == .working,
-                "crashed may transition only to working"
-            )
+            for terminal: SessionStatus in [.finished, .crashed] {
+                XCTAssertEqual(
+                    machine.canTransition(from: terminal, to: target),
+                    target == .working,
+                    "\(terminal) may transition only to working"
+                )
+            }
         }
     }
 
@@ -54,11 +61,19 @@ final class SessionStatusMachineTests: XCTestCase {
     }
 
     func testIllegalTransitionLeavesSessionUnchanged() {
-        let session = makeSession(status: .idle)
-        // idle -> waitingForInput is not a direct legal edge.
-        let result = machine.transition(session, to: .waitingForInput)
-        XCTAssertEqual(result.status, .idle)
+        let session = makeSession(status: .finished)
+        // A finished session cannot drift back to idle on its own.
+        let result = machine.transition(session, to: .idle)
+        XCTAssertEqual(result.status, .finished)
         XCTAssertEqual(result.lastActiveAt, session.lastActiveAt)
+    }
+
+    /// A session that has been quiet long enough to read as idle can still
+    /// be the one asking for permission; that edge must stay open or the
+    /// prompt is never surfaced in the sidebar.
+    func testIdleSessionCanStartWaitingForInput() {
+        let session = makeSession(status: .idle)
+        XCTAssertEqual(machine.transition(session, to: .waitingForInput).status, .waitingForInput)
     }
 
     func testLegalTransitionUpdatesStatusAndTimestamp() {

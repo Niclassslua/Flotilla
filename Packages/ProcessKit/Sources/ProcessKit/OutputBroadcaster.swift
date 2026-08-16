@@ -3,13 +3,12 @@ import Foundation
 /// `AsyncStream` is single-consumer: two independent `for await` loops
 /// racing over the same stream instance don't each see every element —
 /// whichever loop happens to be awaiting `next()` gets it, starving the
-/// other. Both `TerminalController` and HooksKit's `SessionStatusObserver`
-/// need every byte of a session's output independently, so
-/// `PTYProcessProtocol.outputStream` is backed by this broadcaster: each
+/// other. Independent consumers each need every byte of a session's output,
+/// so `PTYProcessProtocol.outputStream` is backed by this broadcaster: each
 /// access to the property creates a fresh subscription.
 ///
 /// New subscribers replay the full buffered history before receiving live
-/// broadcasts (capped at `historyLimit` chunks) — this isn't just a nicety,
+/// broadcasts (capped at `maxHistoryBytes`) — this isn't just a nicety,
 /// it's required for correctness: a subscriber created even slightly after
 /// `broadcast(_:)` is first called would otherwise silently miss that
 /// output forever (this is exactly how a naive lazy-subscribe design lost
@@ -19,15 +18,16 @@ final class OutputBroadcaster: @unchecked Sendable {
     private let lock = NSLock()
     private var continuations: [UUID: AsyncStream<Data>.Continuation] = [:]
     private var history: [Data] = []
-    private var historyStart = 0
+    private var historyByteSize = 0
     private var isFinished = false
-    private let historyLimit = 4096
+    private let maxHistoryBytes = 256 * 1_024
 
     func subscribe() -> AsyncStream<Data> {
-        AsyncStream { continuation in
+        AsyncStream { [weak self] continuation in
+            guard let self else { return }
             lock.lock()
             if isFinished {
-                let replay = Array(history[historyStart...])
+                let replay = Array(self.history[0..<min(self.history.count, 1024)])
                 lock.unlock()
                 for chunk in replay { continuation.yield(chunk) }
                 continuation.finish()
@@ -39,7 +39,9 @@ final class OutputBroadcaster: @unchecked Sendable {
             // duplicate or precede) the history replay for this subscriber.
             let subscriberID = UUID()
             continuations[subscriberID] = continuation
-            for chunk in history[historyStart...] { continuation.yield(chunk) }
+            for i in 0..<history.count {
+                continuation.yield(history[i])
+            }
             lock.unlock()
 
             continuation.onTermination = { [weak self] _ in
@@ -51,15 +53,35 @@ final class OutputBroadcaster: @unchecked Sendable {
         }
     }
 
+    func start() {
+        lock.lock()
+        isFinished = false  // Reset so new subscribers don't immediately finish
+        history.removeAll()
+        historyByteSize = 0
+        continuations.removeAll()
+        lock.unlock()
+    }
+
     func broadcast(_ data: Data) {
         lock.lock()
         history.append(data)
-        if history.count - historyStart > historyLimit {
-            historyStart += 1
-        }
-        if historyStart >= historyLimit {
-            history.removeFirst(historyStart)
-            historyStart = 0
+        historyByteSize += data.count
+        if historyByteSize > maxHistoryBytes {
+            // Remove oldest chunks until we're under the byte limit
+            var writeIndex = 0
+            var readByteSize = 0
+            for i in 0..<history.count {
+                readByteSize += history[i].count
+                if readByteSize >= historyByteSize - maxHistoryBytes {
+                    writeIndex = i + 1
+                    break
+                }
+            }
+            history.removeFirst(writeIndex)
+            historyByteSize -= readByteSize - (historyByteSize - maxHistoryBytes)
+            if history.isEmpty {
+                historyByteSize = 0
+            }
         }
         let subscribers = Array(continuations.values)
         lock.unlock()

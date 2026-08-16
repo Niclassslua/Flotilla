@@ -36,131 +36,218 @@ final class WaitingNotificationGateTests: XCTestCase {
     }
 }
 
-final class SessionStatusObserverTests: XCTestCase {
-    func testDetectsWaitingStatusFromMockOutput() async throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
+final class TerminalScreenHeuristicTests: XCTestCase {
+    private let heuristic = TerminalScreenHeuristic()
 
-        let observer = SessionStatusObserver(output: mock)
-        observer.start()
+    /// What Claude Code draws while it is actually doing something: the
+    /// interrupt hint is present precisely for the duration of the work.
+    private let workingScreen = """
+    ● I'll start by reading the sidebar view.
 
-        async let firstStatus = observer.statusStream.first(where: { _ in true })
-        mock.simulateOutput("Proceed? (y/n) ")
+    ● Read(Flotilla/SessionRow.swift)
+      ⎿  Read 148 lines
 
-        let status = await firstStatus
-        XCTAssertEqual(status, .waitingForInput)
-        observer.stop()
+    ✻ Thinking… (12s · ↑ 1.2k tokens · esc to interrupt)
+    """
+
+    /// The same session a moment later: work done, composer back, no hint.
+    private let idleScreen = """
+    ● I updated the beacon so it no longer shifts while pulsing.
+
+    ╭──────────────────────────────────────────╮
+    │ > Try "fix the status indicator"         │
+    ╰──────────────────────────────────────────╯
+      ? for shortcuts
+    """
+
+    private let permissionScreen = """
+    ● Bash(rm -rf build/)
+      ⎿  Running…
+
+    Do you want to proceed?
+    ❯ 1. Yes
+      2. No, and tell Claude what to do differently
+    """
+
+    func testInterruptHintMeansWorking() {
+        XCTAssertEqual(heuristic.status(forScreen: workingScreen), .working)
     }
 
-    /// The permission-safety guarantee: SessionStatusObserver only ever
-    /// holds a `SessionOutputObserving` reference (no send/terminate in
-    /// that protocol's surface), so it structurally cannot call them even
-    /// though the concrete mock instance backing it has those methods.
-    /// This test proves the observer's behavior matches that guarantee —
-    /// running a full scenario through it never once touches the mock's
-    /// write-capable methods.
-    func testObserverNeverExpandsProcessPermissions() async throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-
-        let observer = SessionStatusObserver(output: mock)
-        observer.start()
-
-        async let firstStatus = observer.statusStream.first(where: { _ in true })
-        mock.simulateOutput("Do you want to continue? (y/n) ")
-        _ = await firstStatus
-        observer.stop()
-
-        XCTAssertTrue(mock.sentInput.isEmpty, "observer must never call send(input:)")
-        XCTAssertEqual(mock.terminateCallCount, 0, "observer must never call terminate()")
-        XCTAssertTrue(mock.isRunning, "observer must never affect process lifecycle")
+    func testComposerWithNoInterruptHintMeansIdle() {
+        XCTAssertEqual(heuristic.status(forScreen: idleScreen), .idle)
     }
 
-    func testOrdinaryOutputTransitionsFromWorkingToIdleAfterQuietPeriod() async throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-        let observer = SessionStatusObserver(output: mock)
-        observer.start()
-        var iterator = observer.statusStream.makeAsyncIterator()
-
-        mock.simulateOutput("Compiling workspace")
-
-        let working = await iterator.next()
-        let idle = await iterator.next()
-        XCTAssertEqual(working, .working)
-        XCTAssertEqual(idle, .idle)
-        observer.stop()
+    func testPermissionPromptMeansWaiting() {
+        XCTAssertEqual(heuristic.status(forScreen: permissionScreen), .waitingForInput)
     }
 
-    func testWaitingPromptDoesNotDecayToIdleDuringQuietPeriod() async throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-        let observer = SessionStatusObserver(output: mock)
-        observer.start()
-        var iterator = observer.statusStream.makeAsyncIterator()
-
-        mock.simulateOutput("Permission required (y/n)")
-        let waiting = await iterator.next()
-        XCTAssertEqual(waiting, .waitingForInput)
-        try await Task.sleep(for: .milliseconds(2_200))
-
-        mock.simulateOutput("Permission accepted")
-        let resumed = await iterator.next()
-        XCTAssertEqual(resumed, .working)
-        observer.stop()
+    /// A prompt outranks a spinner: some CLIs keep drawing the busy line
+    /// underneath a question they are blocked on.
+    func testPromptWinsOverSimultaneousInterruptHint() {
+        let screen = """
+        Do you want to allow this edit?
+        ❯ 1. Yes
+          2. No
+        ✻ Waiting… (esc to interrupt)
+        """
+        XCTAssertEqual(heuristic.status(forScreen: screen), .waitingForInput)
     }
 
-    func testFragmentedPromptTailDoesNotUndoWaitingState() async throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-        let observer = SessionStatusObserver(output: mock)
-        observer.start()
-        var iterator = observer.statusStream.makeAsyncIterator()
+    /// The reason only the bottom of the screen is consulted: transcript
+    /// text scrolled above the status area must not be mistaken for it.
+    /// Markers still count while they sit within the inspected tail — this
+    /// is a heuristic, and its protection is exactly the tail window.
+    func testTranscriptScrolledAboveTheStatusAreaIsIgnored() {
+        let transcript = (1...12)
+            .map { "● Step \($0): the hint reads \"esc to interrupt\", then asks \"Do you want to proceed?\"" }
+            .joined(separator: "\n")
+        let screen = """
+        \(transcript)
+        ╭──────────────────────────────────────────╮
+        │ > Try "fix the status indicator"         │
+        │                                          │
+        ╰──────────────────────────────────────────╯
+          ? for shortcuts
+          ⏵⏵ accept edits on
+          main ✱ 3 files changed
+          claude-opus-5
+        """
+        XCTAssertEqual(heuristic.status(forScreen: screen), .idle)
+    }
 
-        for fragment in ["Permission ", "required", " — awaiting choice"] {
-            mock.simulateOutput(fragment)
+    /// The flip side, stated plainly so the limit is not mistaken for a
+    /// guarantee: a marker inside the tail window does count.
+    func testMarkerInsideTheTailWindowStillCounts() {
+        let screen = """
+        ● Reading files
+        ✻ Compacting… (esc to interrupt)
+        """
+        XCTAssertEqual(heuristic.status(forScreen: screen), .working)
+    }
+
+    /// A numbered list the agent merely printed is not an open question —
+    /// only a list with a live selection caret is.
+    func testNumberedListWithoutSelectionCaretIsNotWaiting() {
+        let screen = """
+        Here are the next steps:
+        1. Fix the beacon
+        2. Fix the status word
+        3. Ship it
+
+        │ >                                        │
+        """
+        XCTAssertEqual(heuristic.status(forScreen: screen), .idle)
+    }
+
+    func testEmptyScreenIsIdle() {
+        XCTAssertEqual(heuristic.status(forScreen: ""), .idle)
+    }
+}
+
+final class SessionScreenMonitorTests: XCTestCase {
+    /// Hands out a scripted sequence of screens, one per poll, repeating the
+    /// last one forever — the way a real session holds a screen until
+    /// something changes it.
+    private actor ScriptedScreenReader: SessionScreenReading {
+        private let screens: [String?]
+        private var index = 0
+        private(set) var readCount = 0
+
+        init(_ screens: [String?]) { self.screens = screens }
+
+        func readScreen(for sessionID: UUID) async -> String? {
+            readCount += 1
+            let screen = screens[min(index, screens.count - 1)]
+            index += 1
+            return screen
         }
-        var observed: SessionStatus?
-        while observed != .waitingForInput {
-            observed = await iterator.next()
-        }
-        XCTAssertEqual(observed, .waitingForInput)
+    }
 
-        try await Task.sleep(for: .milliseconds(600))
-        mock.simulateOutput("Compilation resumed")
-        let resumed = await iterator.next()
-        XCTAssertEqual(resumed, .working)
-        observer.stop()
+    private func collect(
+        from monitor: SessionScreenMonitor,
+        settling: Duration = .milliseconds(400)
+    ) async -> [SessionStatus] {
+        let statuses = StatusBox()
+        let collector = Task {
+            for await status in monitor.statusStream { await statuses.append(status) }
+        }
+        monitor.start()
+        try? await Task.sleep(for: settling)
+        monitor.stop()
+        collector.cancel()
+        return await statuses.values
+    }
+
+    private actor StatusBox {
+        private(set) var values: [SessionStatus] = []
+        func append(_ status: SessionStatus) { values.append(status) }
+    }
+
+    func testReportsStatusReadFromTheScreen() async {
+        let reader = ScriptedScreenReader(["✻ Thinking… (esc to interrupt)"])
+        let monitor = SessionScreenMonitor(
+            sessionID: UUID(),
+            reader: reader,
+            pollInterval: .milliseconds(30)
+        )
+        let observed = await collect(from: monitor)
+        XCTAssertEqual(observed, [.working])
+    }
+
+    /// The property that fixes the reported bug: a screen that keeps saying
+    /// the same thing produces exactly one status, no matter how many times
+    /// it is redrawn or re-read.
+    func testUnchangingScreenReportsStatusOnlyOnce() async {
+        let reader = ScriptedScreenReader(["> ready", "> ready", "> ready", "> ready"])
+        let monitor = SessionScreenMonitor(
+            sessionID: UUID(),
+            reader: reader,
+            pollInterval: .milliseconds(30)
+        )
+        let observed = await collect(from: monitor)
+        XCTAssertEqual(observed, [.idle])
+        let readCount = await reader.readCount
+        XCTAssertGreaterThan(readCount, 1, "the monitor should have polled repeatedly")
+    }
+
+    /// An animating spinner changes the screen on every frame but never
+    /// changes what it means, so it must not produce a stream of updates.
+    func testAnimatingSpinnerReportsWorkingOnlyOnce() async {
+        let frames = ["✻", "✢", "·", "✳"].map { "\($0) Thinking… (esc to interrupt)" }
+        let monitor = SessionScreenMonitor(
+            sessionID: UUID(),
+            reader: ScriptedScreenReader(frames),
+            pollInterval: .milliseconds(30)
+        )
+        let observed = await collect(from: monitor)
+        XCTAssertEqual(observed, [.working])
+    }
+
+    func testFollowsTheScreenFromWorkingToIdle() async {
+        let reader = ScriptedScreenReader([
+            "✻ Thinking… (esc to interrupt)",
+            "✻ Thinking… (esc to interrupt)",
+            "● Done.\n│ > │\n  ? for shortcuts",
+        ])
+        let monitor = SessionScreenMonitor(
+            sessionID: UUID(),
+            reader: reader,
+            pollInterval: .milliseconds(30)
+        )
+        let observed = await collect(from: monitor)
+        XCTAssertEqual(observed, [.working, .idle])
+    }
+
+    /// An unreadable screen is "no information" — the status must be left
+    /// alone rather than decaying to idle on an absence.
+    func testUnreadableScreenReportsNothing() async {
+        let monitor = SessionScreenMonitor(
+            sessionID: UUID(),
+            reader: ScriptedScreenReader([nil]),
+            pollInterval: .milliseconds(30)
+        )
+        let observed = await collect(from: monitor)
+        XCTAssertTrue(observed.isEmpty)
     }
 }
 
@@ -172,36 +259,34 @@ final class NotificationDispatchingTests: XCTestCase {
         }
     }
 
-    /// End-to-end wiring test: observer -> gate -> dispatcher, mirroring
-    /// how the App-layer HookCoordinator composes these three pieces.
-    func testFullPipelineNotifiesExactlyOnceForOneWaitingEpisode() async throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
+    private final class StaticScreenReader: SessionScreenReading, @unchecked Sendable {
+        private let screen: String
+        init(_ screen: String) { self.screen = screen }
+        func readScreen(for sessionID: UUID) async -> String? { screen }
+    }
 
-        let observer = SessionStatusObserver(output: mock)
+    /// End-to-end wiring test: monitor -> gate -> dispatcher, mirroring how
+    /// the App-layer HookCoordinator composes these three pieces. The
+    /// prompt stays on screen across many polls and must notify once.
+    func testFullPipelineNotifiesExactlyOnceForOneWaitingEpisode() async throws {
+        let monitor = SessionScreenMonitor(
+            sessionID: UUID(),
+            reader: StaticScreenReader("Do you want to proceed?\n❯ 1. Yes\n  2. No"),
+            pollInterval: .milliseconds(30)
+        )
         let gate = WaitingNotificationGate()
         let dispatcher = RecordingDispatcher()
 
         let collectorTask = Task {
-            for await status in observer.statusStream {
+            for await status in monitor.statusStream {
                 if gate.shouldNotify(for: status) {
                     await dispatcher.notifyWaitingForInput(sessionTitle: "Test Session")
                 }
             }
         }
-        observer.start()
-
-        mock.simulateOutput("Permission required (y/n) ")
-        mock.simulateOutput("still waiting, permission required (y/n) ")
-        try await Task.sleep(nanoseconds: 200_000_000)
-
-        observer.stop()
+        monitor.start()
+        try await Task.sleep(for: .milliseconds(300))
+        monitor.stop()
         collectorTask.cancel()
 
         XCTAssertEqual(dispatcher.notifiedTitles, ["Test Session"])

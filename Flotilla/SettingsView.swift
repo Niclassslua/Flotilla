@@ -13,7 +13,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case git
     case notifications
     case agents
-    case appearance
+    // case appearance  // Removed - dark mode only for now
     case projects
     case environment
     case advanced
@@ -28,7 +28,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .git: "Git & Worktrees"
         case .notifications: "Notifications"
         case .agents: "Coding Agents"
-        case .appearance: "Appearance"
+        // case .appearance: "Appearance"
         case .projects: "Projects"
         case .environment: "Developer Tools"
         case .advanced: "Advanced"
@@ -43,7 +43,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .git: "arrow.triangle.branch"
         case .notifications: "bell.fill"
         case .agents: "cpu.fill"
-        case .appearance: "paintbrush.fill"
+        // case .appearance: "paintbrush.fill"
         case .projects: "folder.fill"
         case .environment: "wrench.and.screwdriver.fill"
         case .advanced: "slider.horizontal.3"
@@ -58,7 +58,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .git: .green
         case .notifications: .red
         case .agents: .purple
-        case .appearance: .pink
+        // case .appearance: .pink
         case .projects: .blue
         case .environment: .orange
         case .advanced: .teal
@@ -72,8 +72,8 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .terminal: "terminal editor font size scroll option meta"
         case .git: "git branch worktree delete lifecycle"
         case .notifications: "notifications waiting input sound privacy"
-        case .agents: "claude codex gemini executable arguments authentication"
-        case .appearance: "appearance theme system light dark"
+        case .agents: "claude codex opencode executable arguments authentication"
+        // case .appearance: "appearance theme system light dark"
         case .projects: "projects paths rules skills local"
         case .environment: "developer tools git github gh tmux path"
         case .advanced: "advanced local storage sqlite pty about"
@@ -122,6 +122,7 @@ struct SettingsView: View {
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 720, idealWidth: 800, minHeight: 540, idealHeight: 620)
         .tint(FlotillaPalette.ocean)
+        #if DEBUG
         .overlay(alignment: .topLeading) {
             Text("Settings")
                 .accessibilityIdentifier("SettingsView")
@@ -129,6 +130,7 @@ struct SettingsView: View {
                 .opacity(0.001)
                 .allowsHitTesting(false)
         }
+        #endif
     }
 
     private var selectedTab: SettingsTab {
@@ -171,8 +173,8 @@ struct SettingsView: View {
             NotificationSettingsPane(viewModel: viewModel)
         case .agents:
             AgentSettingsPane(viewModel: viewModel)
-        case .appearance:
-            AppearanceSettingsPane(viewModel: viewModel)
+        // case .appearance:
+            // AppearanceSettingsPane(viewModel: viewModel)
         case .projects:
             ProjectSettingsPane(viewModel: viewModel)
         case .environment:
@@ -288,22 +290,9 @@ private struct GeneralSettingsPane: View {
 private struct SessionSettingsPane: View {
     @Bindable var viewModel: SettingsViewModel
 
-    private var defaultAgentBinding: Binding<AgentKind> {
-        Binding {
-            AgentKind(rawValue: viewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode
-        } set: { value in
-            viewModel.settings.sessionDefaults.defaultAgentRawValue = value.rawValue
-        }
-    }
-
     var body: some View {
         Form {
             Section {
-                Picker("Coding agent", selection: defaultAgentBinding) {
-                    ForEach(AgentKind.allCases) { agent in
-                        Text(agent.displayName).tag(agent)
-                    }
-                }
                 Toggle("Create a worktree for project sessions", isOn: $viewModel.settings.sessionDefaults.createWorktreeByDefault)
                     .toggleStyle(.switch)
             } header: {
@@ -343,6 +332,8 @@ private struct TerminalSettingsPane: View {
                     Slider(value: $viewModel.settings.terminal.scrollSpeed, in: 0.5...2, step: 0.1)
                         .frame(width: 180)
                 }
+                Toggle("GPU Rendering (Metal)", isOn: $viewModel.settings.terminal.gpuRendering)
+                    .toggleStyle(.switch)
             } header: {
                 SettingsSectionHeader("Terminal", systemImage: "terminal")
             }
@@ -440,6 +431,18 @@ private struct AgentSettingsPane: View {
                 } header: {
                     SettingsSectionHeader(LocalizedStringKey(agent.displayName), systemImage: "cpu")
                 }
+                if agent == .openCode {
+                    Section {
+                        Picker("OpenCode subscription", selection: $viewModel.settings.openCodeSubscription) {
+                            Text("None").tag(OpenCodeSubscription.none)
+                            Text("Zen").tag(OpenCodeSubscription.zen)
+                            Text("Go").tag(OpenCodeSubscription.go)
+                        }
+                        .pickerStyle(.segmented)
+                    } header: {
+                        SettingsSectionHeader("OpenCode Plan", systemImage: "network")
+                    }
+                }
             }
         }
         .flotillaSettingsFormLayout()
@@ -450,13 +453,13 @@ private struct AgentSettingsPane: View {
             switch agent {
             case .claudeCode: viewModel.settings.agentPaths.claudeCodePath
             case .codexCLI: viewModel.settings.agentPaths.codexCLIPath
-            case .geminiCLI: viewModel.settings.agentPaths.geminiCLIPath
+            case .openCode: viewModel.settings.agentPaths.openCodePath
             }
         } set: { value in
             switch agent {
             case .claudeCode: viewModel.settings.agentPaths.claudeCodePath = value
             case .codexCLI: viewModel.settings.agentPaths.codexCLIPath = value
-            case .geminiCLI: viewModel.settings.agentPaths.geminiCLIPath = value
+            case .openCode: viewModel.settings.agentPaths.openCodePath = value
             }
         }
     }
@@ -469,7 +472,7 @@ private struct AgentSettingsPane: View {
             switch agent {
             case .claudeCode: viewModel.settings.agentArguments.claudeCodeArguments = parsed
             case .codexCLI: viewModel.settings.agentArguments.codexCLIArguments = parsed
-            case .geminiCLI: viewModel.settings.agentArguments.geminiCLIArguments = parsed
+            case .openCode: viewModel.settings.agentArguments.openCodeArguments = parsed
             }
         }
     }
@@ -478,7 +481,7 @@ private struct AgentSettingsPane: View {
         switch agent {
         case .claudeCode: viewModel.settings.agentArguments.claudeCodeArguments
         case .codexCLI: viewModel.settings.agentArguments.codexCLIArguments
-        case .geminiCLI: viewModel.settings.agentArguments.geminiCLIArguments
+        case .openCode: viewModel.settings.agentArguments.openCodeArguments
         }
     }
 
@@ -486,7 +489,7 @@ private struct AgentSettingsPane: View {
         switch agent {
         case .claudeCode: "Settings.ClaudeCodePath"
         case .codexCLI: "Settings.CodexCLIPath"
-        case .geminiCLI: "Settings.GeminiCLIPath"
+        case .openCode: "Settings.OpenCodePath"
         }
     }
 
@@ -557,8 +560,8 @@ private struct EnvironmentSettingsPane: View {
                 ForEach(["git", "gh", "tmux"], id: \.self) { tool in
                     ToolStatusRow(name: tool, locator: PATHExecutableLocator())
                 }
+                .id(generation)
                 Button("Rescan") { generation = UUID() }
-                    .id(generation)
             } header: {
                 SettingsSectionHeader("Developer Tools", systemImage: "wrench.and.screwdriver")
             }

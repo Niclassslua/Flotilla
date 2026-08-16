@@ -6,12 +6,12 @@ extension AgentKind {
         switch self {
         case .claudeCode: "ProviderLogoClaude"
         case .codexCLI: "ProviderLogoCodex"
-        case .geminiCLI: "ProviderLogoGemini"
+        case .openCode: "ProviderLogoOpenCode"
         }
     }
 }
 
-/// The provider's real brand mark (Claude, Codex/OpenAI, Gemini), rendered
+/// The provider's real brand mark (Claude, Codex/OpenAI, OpenCode), rendered
 /// from vector assets in Assets.xcassets rather than a generic SF Symbol.
 struct ProviderLogo: View {
     let agent: AgentKind

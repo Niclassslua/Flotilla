@@ -5,6 +5,7 @@ import SessionKit
 enum RecordDecodingError: LocalizedError {
     case invalidProjectID(String)
     case invalidSession(id: String, field: String, value: String)
+    case invalidKanbanBoard(id: String, field: String, value: String)
 
     var errorDescription: String? {
         switch self {
@@ -12,6 +13,8 @@ enum RecordDecodingError: LocalizedError {
             "Stored project has an invalid identifier: \(value)"
         case let .invalidSession(id, field, value):
             "Stored session \(id) has an invalid \(field): \(value)"
+        case let .invalidKanbanBoard(id, field, value):
+            "Stored kanban board \(id) has an invalid \(field): \(value)"
         }
     }
 }
@@ -47,12 +50,16 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var title: String
     var goal: String
     var agent: String
+    var model: String?
+    var effort: String?
     var projectID: String?
     var workingDirectory: String
     var worktreeBranchName: String?
     var worktreePath: String?
     var worktreeBaseCheckoutPath: String?
     var status: String
+    var kanbanColumnID: String?
+    var workflowStage: String?
     var terminalScrollback: Data
     var createdAt: Date
     var lastActiveAt: Date
@@ -62,12 +69,16 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         title = session.title
         goal = session.goal
         agent = session.agent.rawValue
+        model = session.model
+        effort = session.effort?.rawValue
         projectID = session.projectID?.uuidString
         workingDirectory = session.workingDirectory.path
         worktreeBranchName = session.worktree?.branchName
         worktreePath = session.worktree?.worktreePath.path
         worktreeBaseCheckoutPath = session.worktree?.baseCheckoutPath.path
         status = session.status.rawValue
+        kanbanColumnID = session.kanbanColumnID?.uuidString
+        workflowStage = session.workflowStage?.rawValue
         terminalScrollback = session.terminalScrollback
         createdAt = session.createdAt
         lastActiveAt = session.lastActiveAt
@@ -82,6 +93,15 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         }
         guard let sessionStatus = SessionStatus(rawValue: status) else {
             throw RecordDecodingError.invalidSession(id: id, field: "status", value: status)
+        }
+        let sessionEffort: AgentEffort?
+        if let effort {
+            guard let parsedEffort = AgentEffort(rawValue: effort) else {
+                throw RecordDecodingError.invalidSession(id: id, field: "effort", value: effort)
+            }
+            sessionEffort = parsedEffort
+        } else {
+            sessionEffort = nil
         }
         let projectUUID: UUID?
         if let projectID {
@@ -102,18 +122,128 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             )
         }
 
+        let kanbanColumnUUID: UUID?
+        if let kanbanColumnID {
+            kanbanColumnUUID = UUID(uuidString: kanbanColumnID)
+        } else {
+            kanbanColumnUUID = nil
+        }
+
+        let workflowStageValue: WorkflowStage?
+        if let workflowStage {
+            workflowStageValue = WorkflowStage(rawValue: workflowStage)
+        } else {
+            workflowStageValue = nil
+        }
+
         return Session(
             id: uuid,
             title: title,
             goal: goal,
             agent: agentKind,
+            model: model,
+            effort: sessionEffort,
             projectID: projectUUID,
             workingDirectory: URL(fileURLWithPath: workingDirectory),
             worktree: worktree,
             status: sessionStatus,
+            kanbanColumnID: kanbanColumnUUID,
+            workflowStage: workflowStageValue,
             terminalScrollback: terminalScrollback,
             createdAt: createdAt,
             lastActiveAt: lastActiveAt
+        )
+    }
+}
+
+struct KanbanColumnRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "kanban_column"
+
+    var id: String
+    var boardID: String
+    var title: String
+    var order: Int
+    var statusFilter: String?
+    var agentFilter: String?
+    var workflowStageFilter: String?
+    var color: String?
+
+    init(column: KanbanColumn, boardID: UUID) {
+        self.id = column.id.uuidString
+        self.boardID = boardID.uuidString
+        self.title = column.title
+        self.order = column.order
+        self.statusFilter = column.statusFilter?.rawValue
+        self.agentFilter = column.agentFilter?.rawValue
+        self.workflowStageFilter = column.workflowStageFilter?.rawValue
+        self.color = column.color
+    }
+
+    func toDomain() -> KanbanColumn {
+        return KanbanColumn(
+            id: UUID(uuidString: id) ?? UUID(),
+            title: title,
+            order: order,
+            statusFilter: statusFilter.flatMap(SessionStatus.init(rawValue:)),
+            agentFilter: agentFilter.flatMap(AgentKind.init(rawValue:)),
+            workflowStageFilter: workflowStageFilter.flatMap(WorkflowStage.init(rawValue:)),
+            color: color
+        )
+    }
+}
+
+struct KanbanBoardRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "kanban_board"
+
+    var id: String
+    var projectID: String?
+    var name: String
+    var columnMode: String
+    var customColumnsJSON: String
+    var cardOrderJSON: String
+    var updatedAt: Date
+
+    init(board: KanbanBoard) {
+        id = board.id.uuidString
+        projectID = board.projectID?.uuidString
+        name = board.name
+        columnMode = board.columnMode.rawValue
+        // Encode custom columns and card order as JSON
+        let encoder = JSONEncoder()
+        customColumnsJSON = (try? String(data: encoder.encode(board.customColumns), encoding: .utf8)) ?? "[]"
+        cardOrderJSON = (try? String(data: encoder.encode(board.cardOrder), encoding: .utf8)) ?? "{}"
+        updatedAt = board.updatedAt
+    }
+
+    func toDomain() throws -> KanbanBoard {
+        guard let uuid = UUID(uuidString: id) else {
+            throw RecordDecodingError.invalidKanbanBoard(id: id, field: "identifier", value: id)
+        }
+        guard let mode = KanbanColumnMode(rawValue: columnMode) else {
+            throw RecordDecodingError.invalidKanbanBoard(id: id, field: "columnMode", value: columnMode)
+        }
+        let projectUUID: UUID?
+        if let projectID {
+            guard let parsed = UUID(uuidString: projectID) else {
+                throw RecordDecodingError.invalidKanbanBoard(id: id, field: "project identifier", value: projectID)
+            }
+            projectUUID = parsed
+        } else {
+            projectUUID = nil
+        }
+
+        let decoder = JSONDecoder()
+        let customColumns = (try? decoder.decode([KanbanColumn].self, from: Data(customColumnsJSON.utf8))) ?? []
+        let cardOrder = (try? decoder.decode([String: Int].self, from: Data(cardOrderJSON.utf8))) ?? [:]
+
+        return KanbanBoard(
+            id: uuid,
+            projectID: projectUUID,
+            name: name,
+            columnMode: mode,
+            customColumns: customColumns,
+            cardOrder: cardOrder,
+            updatedAt: updatedAt
         )
     }
 }

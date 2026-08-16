@@ -32,9 +32,44 @@ public protocol AgentProviding: Sendable {
     var binaryName: String { get }
     func launchPlan(
         goal: String?,
+        model: String?,
+        effort: AgentEffort?,
         settings: AppSettings,
         baseEnvironment: [String: String]
     ) -> AgentLaunchPlan
+}
+
+extension AgentProviding {
+    /// Convenience overload for callers that don't need to set effort.
+    public func launchPlan(
+        goal: String?,
+        model: String?,
+        settings: AppSettings,
+        baseEnvironment: [String: String]
+    ) -> AgentLaunchPlan {
+        launchPlan(
+            goal: goal,
+            model: model,
+            effort: nil,
+            settings: settings,
+            baseEnvironment: baseEnvironment
+        )
+    }
+
+    /// Convenience overload for callers that don't need to pin a model.
+    public func launchPlan(
+        goal: String?,
+        settings: AppSettings,
+        baseEnvironment: [String: String]
+    ) -> AgentLaunchPlan {
+        launchPlan(
+            goal: goal,
+            model: nil,
+            effort: nil,
+            settings: settings,
+            baseEnvironment: baseEnvironment
+        )
+    }
 }
 
 public struct CLIAgentProvider: AgentProviding {
@@ -48,11 +83,23 @@ public struct CLIAgentProvider: AgentProviding {
 
     public func launchPlan(
         goal: String?,
+        model: String?,
+        effort: AgentEffort?,
         settings: AppSettings,
         baseEnvironment: [String: String]
     ) -> AgentLaunchPlan {
         var environment = baseEnvironment
-        environment["TERM"] = environment["TERM"] ?? "xterm-256color"
+        // GUI-launched apps (Finder, or Xcode's debugger) get their
+        // environment from launchd, not a shell — that's either no `TERM`
+        // at all, or `TERM=dumb`. `dumb` is present-but-unusable the same
+        // way `TmuxSessionWrapping` documents for its own outer client: a
+        // plain `?? "..."` fallback only fires when the key is *absent*, so
+        // a `dumb` inherited value survives here and reaches the agent CLI
+        // directly, whose color-support detection sees `dumb` and disables
+        // all color output — the terminal renders in black and white.
+        if environment["TERM"] == nil || environment["TERM"] == "dumb" {
+            environment["TERM"] = "xterm-256color"
+        }
         environment["COLORTERM"] = environment["COLORTERM"] ?? "truecolor"
         environment["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
         environment["PATH"] = PATHExecutableLocator.augmentedPATH(
@@ -60,11 +107,39 @@ public struct CLIAgentProvider: AgentProviding {
         )
 
         let trimmedGoal = goal?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let input = trimmedGoal.isEmpty ? nil : Data("\(trimmedGoal)\n".utf8)
+        // Neither a trailing "\n" nor "\r" reliably submits in Claude
+        // Code's or Codex's interactive composer when written directly to
+        // the PTY like this — both real CLIs' TUIs appear to treat a bulk
+        // write as paste-like content needing a separate, genuine keystroke
+        // to confirm, so the goal is left typed-but-unsent until the user
+        // manually presses Enter. `\r` is kept here as the conventional
+        // choice for a literal Enter keystroke; it's not known to matter
+        // either way. When tmux is available, `SessionProcessManager`
+        // delivers the goal via `tmux send-keys` instead, which is
+        // confirmed to actually submit — this raw write only remains as the
+        // fallback for sessions launched without tmux.
+        let input = trimmedGoal.isEmpty ? nil : Data("\(trimmedGoal)\r".utf8)
+
+        var arguments = configuredArguments(in: settings.agentArguments)
+        let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedModel.isEmpty {
+            arguments += ["--model", trimmedModel]
+        }
+        if let effort {
+            switch kind {
+            case .claudeCode:
+                arguments += ["--effort", effort.rawValue]
+            case .codexCLI:
+                arguments += ["--config", "model_reasoning_effort=\"\(effort.rawValue)\""]
+            case .openCode:
+                break
+            }
+        }
+
         return AgentLaunchPlan(
             binaryName: binaryName,
             configuredPath: configuredPath(in: settings.agentPaths),
-            arguments: configuredArguments(in: settings.agentArguments),
+            arguments: arguments,
             environment: environment,
             initialInput: input
         )
@@ -74,7 +149,7 @@ public struct CLIAgentProvider: AgentProviding {
         switch kind {
         case .claudeCode: paths.claudeCodePath
         case .codexCLI: paths.codexCLIPath
-        case .geminiCLI: paths.geminiCLIPath
+        case .openCode: paths.openCodePath
         }
     }
 
@@ -82,7 +157,7 @@ public struct CLIAgentProvider: AgentProviding {
         switch kind {
         case .claudeCode: arguments.claudeCodeArguments
         case .codexCLI: arguments.codexCLIArguments
-        case .geminiCLI: arguments.geminiCLIArguments
+        case .openCode: arguments.openCodeArguments
         }
     }
 }
@@ -96,8 +171,8 @@ public struct AgentProviderRegistry: Sendable {
             CLIAgentProvider(kind: kind, binaryName: "claude")
         case .codexCLI:
             CLIAgentProvider(kind: kind, binaryName: "codex")
-        case .geminiCLI:
-            CLIAgentProvider(kind: kind, binaryName: "gemini")
+        case .openCode:
+            CLIAgentProvider(kind: kind, binaryName: "opencode")
         }
     }
 }

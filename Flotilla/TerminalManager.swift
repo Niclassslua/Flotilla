@@ -13,34 +13,54 @@ final class TerminalManager {
     private var fontSize = 14.0
     private var optionAsMetaKey = true
     private var scrollSensitivity = 1.0
+    private var gpuRendering = false
 
-    func applyPreferences(fontSize: Double, optionAsMetaKey: Bool, scrollSensitivity: Double) {
+    func applyPreferences(
+        fontSize: Double,
+        optionAsMetaKey: Bool,
+        scrollSensitivity: Double,
+        gpuRendering: Bool = false
+    ) {
         self.fontSize = fontSize
         self.optionAsMetaKey = optionAsMetaKey
         self.scrollSensitivity = scrollSensitivity
+        self.gpuRendering = gpuRendering
         for controller in controllers.values {
             controller.applyPreferences(
                 fontSize: fontSize,
                 optionAsMetaKey: optionAsMetaKey,
-                scrollSensitivity: scrollSensitivity
+                scrollSensitivity: scrollSensitivity,
+                gpuRendering: gpuRendering
             )
         }
+    }
+
+    /// `scrollback` is passed in rather than read from `session.terminalScrollback`
+    /// because live terminal output is kept off the observed `Session` struct
+    /// (see `AppStore.scrollback(for:)`) — only the persisted snapshot lives there.
+    /// Whether a session already has a warm controller. Only used by the
+    /// performance probes, to tell "this view mounted a cached renderer" apart
+    /// from "this view paid for a fresh emulator plus a scrollback replay".
+    func hasController(for sessionID: UUID) -> Bool {
+        controllers[sessionID] != nil
     }
 
     func controller(
         for session: Session,
         process: PTYProcessProtocol,
+        scrollback: Data,
         outputHandler: @escaping @MainActor @Sendable (Data) -> Void,
         inputHandler: @escaping @MainActor @Sendable () -> Void
     ) -> TerminalController {
         if let existing = controllers[session.id], existing.processID == process.id {
             return existing
         }
+        PerfLog.event("TerminalManager: creating controller for \(session.title) (scrollback \(scrollback.count)B)")
         let controller = TerminalController(
             sessionID: session.id,
             process: process,
             accessibilityIdentifier: "TerminalView-\(session.title)",
-            initialScrollback: session.terminalScrollback,
+            initialScrollback: scrollback,
             multilineNewlineSequence: multilineNewlineSequence(for: session.agent),
             outputHandler: outputHandler,
             inputHandler: inputHandler
@@ -48,10 +68,17 @@ final class TerminalManager {
         controller.applyPreferences(
             fontSize: fontSize,
             optionAsMetaKey: optionAsMetaKey,
-            scrollSensitivity: scrollSensitivity
+            scrollSensitivity: scrollSensitivity,
+            gpuRendering: gpuRendering
         )
         controllers[session.id] = controller
         return controller
+    }
+
+    /// The screen a session's renderer currently shows, or `nil` when that
+    /// session has no controller yet (its terminal has never been opened).
+    func screenText(for sessionID: UUID) -> String? {
+        controllers[sessionID]?.visibleScreenText()
     }
 
     func removeController(for sessionID: UUID) {
@@ -63,12 +90,12 @@ final class TerminalManager {
     }
 
     /// Matches Xirp's agent-specific multiline input profiles. Claude's
-    /// terminal UI expects Escape+Return; Codex and Gemini accept a line feed.
+    /// terminal UI expects Escape+Return; Codex and OpenCode accept a line feed.
     private func multilineNewlineSequence(for agent: AgentKind) -> Data {
         switch agent {
         case .claudeCode:
             Data([0x1B, 0x0D])
-        case .codexCLI, .geminiCLI:
+        case .codexCLI, .openCode:
             Data([0x0A])
         }
     }

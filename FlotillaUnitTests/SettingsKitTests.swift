@@ -42,12 +42,34 @@ final class SettingsKitTests: XCTestCase {
     }
 
     func testOlderSettingsPayloadDecodesWithNewWorkspaceAndArgumentDefaults() throws {
-        let oldJSON = Data(#"{"agentPaths":{"claudeCodePath":"/usr/local/bin/claude","codexCLIPath":"","geminiCLIPath":""},"worktreeBaseDirectory":"/tmp/worktrees","appearance":"dark"}"#.utf8)
+        let oldJSON = Data(#"{"agentPaths":{"claudeCodePath":"/usr/local/bin/claude","codexCLIPath":""},"worktreeBaseDirectory":"/tmp/worktrees","appearance":"dark"}"#.utf8)
 
         let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
 
         XCTAssertEqual(decoded.agentPaths.claudeCodePath, "/usr/local/bin/claude")
         XCTAssertEqual(decoded.agentArguments, AgentArgumentOverrides())
         XCTAssertEqual(decoded.workspace, WorkspacePreferences())
+    }
+
+    /// `TerminalPreferences` gained `gpuRendering` after users could already
+    /// have a `terminal` object persisted without it. `AppSettings` is
+    /// decoded with `try?` (`SettingsStoring.load`), so if `gpuRendering`
+    /// were a synthesized, throwing-on-missing-key property, an old settings
+    /// file would fail to decode entirely and silently reset every setting —
+    /// not just this one. This must decode cleanly and default to `false`,
+    /// with the rest of `terminal` (and the surrounding settings) intact.
+    func testSettingsWrittenBeforeGPURenderingStillDecode() throws {
+        let oldJSON = Data(
+            #"{"worktreeBaseDirectory":"/tmp/worktrees","appearance":"dark","terminal":{"fontSize":16,"optionActsAsMeta":false,"naturalTextSelection":true,"scrollSpeed":1.5}}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
+
+        XCTAssertEqual(decoded.terminal.gpuRendering, false)
+        XCTAssertEqual(decoded.terminal.fontSize, 16)
+        XCTAssertEqual(decoded.terminal.optionActsAsMeta, false)
+        XCTAssertEqual(decoded.terminal.scrollSpeed, 1.5)
+        XCTAssertEqual(decoded.appearance, .dark)
+        XCTAssertEqual(decoded.worktreeBaseDirectory, "/tmp/worktrees")
     }
 }

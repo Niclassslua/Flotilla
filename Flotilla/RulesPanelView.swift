@@ -1,4 +1,5 @@
 import SwiftUI
+import DesignSystem
 
 enum InstructionFileFilter: Equatable {
     case all
@@ -29,6 +30,7 @@ struct RulesPanelView: View {
     let filter: InstructionFileFilter
     @State private var viewModel: RulesPanelViewModel
     @FocusState private var isEditorFocused: Bool
+    @State private var showLoadError = false
 
     init(
         rootURL: URL,
@@ -51,7 +53,15 @@ struct RulesPanelView: View {
             editor
                 .frame(minWidth: 320)
         }
-        .task(id: rootURL) { await viewModel.load() }
+        .task(id: rootURL) { 
+            await viewModel.load()
+            showLoadError = viewModel.message != nil && viewModel.message?.hasPrefix("Could not") == true
+        }
+        .alert("Load Error", isPresented: $showLoadError) {
+            Button("OK") { showLoadError = false }
+        } message: {
+            Text(viewModel.message ?? "Unknown error")
+        }
     }
 
     private var fileList: some View {
@@ -68,17 +78,24 @@ struct RulesPanelView: View {
                 .buttonStyle(.plain)
                 .help("Refresh instruction files")
             }
-            .padding(12)
+            .padding(.horizontal, FlotillaSpacing.medium)
+            .padding(.vertical, FlotillaSpacing.small)
+            .background(FlotillaColors().surface)
 
             Divider()
 
-            if entries.isEmpty, !viewModel.isLoading {
+            if viewModel.isLoading && entries.isEmpty {
+                ProgressView("Loading instructions…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(FlotillaColors().surface)
+            } else if entries.isEmpty, !viewModel.isLoading {
                 ContentUnavailableView(
                     filter == .skills ? "No Skills" : "No Instructions",
                     systemImage: filter == .skills ? "hammer" : "doc.badge.gearshape",
                     description: Text(emptyDescription)
                 )
                 .accessibilityIdentifier("RulesPanel.Empty")
+                .background(FlotillaColors().surface)
             } else {
                 List(entries, selection: $viewModel.selectedEntry) { entry in
                     Button {
@@ -88,11 +105,18 @@ struct RulesPanelView: View {
                             .lineLimit(2)
                     }
                     .buttonStyle(.plain)
+                    .listRowBackground(
+                        RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                            .fill(viewModel.selectedEntry == entry ? FlotillaColors().accent.opacity(0.09) : .clear)
+                    )
                     .accessibilityIdentifier("RulesPanel.File-\(entry.relativePath)")
                 }
+                .scrollContentBackground(.hidden)
+                .background(FlotillaColors().surface)
                 .accessibilityIdentifier("RulesPanel.FileList")
             }
         }
+        .background(FlotillaColors().surface)
     }
 
     private var emptyDescription: String {
@@ -103,7 +127,7 @@ struct RulesPanelView: View {
         }
     }
 
-    @ViewBuilder
+@ViewBuilder
     private var editor: some View {
         @Bindable var bindableViewModel = viewModel
         if let selectedEntry = viewModel.selectedEntry {
@@ -120,13 +144,13 @@ struct RulesPanelView: View {
                     if let message = viewModel.message {
                         Label(
                             message,
-                            systemImage: message == "Saved" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                            systemImage: message.hasPrefix("Saved") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                         )
-                            .font(.caption)
-                            .foregroundStyle(message == "Saved" ? Color.green : Color.red)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(message)
-                            .accessibilityIdentifier("RulesPanel.SaveConfirmation")
+                        .font(.caption)
+                        .foregroundStyle(message.hasPrefix("Saved") ? FlotillaColors().success : Color.red)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(message)
+                        .accessibilityIdentifier("RulesPanel.SaveConfirmation")
                     }
                     Button("Save") {
                         // AppKit commits the final TextEditor edit when focus
@@ -143,11 +167,15 @@ struct RulesPanelView: View {
                         .disabled(viewModel.isSaving)
                         .accessibilityIdentifier("RulesPanel.SaveButton")
                 }
-                .padding(12)
+                .padding(.horizontal, FlotillaSpacing.medium)
+                .padding(.vertical, FlotillaSpacing.small)
+                .background(FlotillaColors().surface)
                 Divider()
                 TextEditor(text: $bindableViewModel.content)
                     .font(.system(.body, design: .monospaced))
-                    .padding(6)
+                    .scrollContentBackground(.hidden)
+                    .padding(FlotillaSpacing.small)
+                    .background(FlotillaColors().terminalCanvas)
                     .focused($isEditorFocused)
                     .accessibilityIdentifier("RulesPanel.Editor")
             }
@@ -158,6 +186,7 @@ struct RulesPanelView: View {
                 description: Text("Review and edit the rules this project gives its agents.")
             )
             .accessibilityIdentifier("RulesPanel.NoSelection")
+            .background(FlotillaColors().terminalCanvas)
         }
     }
 }

@@ -1,5 +1,7 @@
 import XCTest
 import ProcessKit
+import AgentKit
+import SettingsKit
 
 final class MockPTYProcessTests: XCTestCase {
     func testStartRecordsInvocationAndMarksRunning() throws {
@@ -188,6 +190,45 @@ final class SystemPTYProcessTests: XCTestCase {
 
         XCTAssertTrue(String(decoding: collected, as: UTF8.self).contains("hello-from-pty"))
     }
+
+    /// End-to-end regression for the black-and-white terminal bug: GUI-launched
+    /// apps (Finder, Xcode's debugger) inherit `TERM=dumb` from launchd, and
+    /// left untouched that reaches the agent CLI's real environment, whose
+    /// color-support detection sees `dumb` and disables all color output.
+    /// This exercises the full pipeline `CLIAgentProvider.launchPlan` feeds
+    /// `SessionProcessManager.start` with — a real PTY spawning a real
+    /// subprocess — rather than asserting on `AgentLaunchPlan` in isolation.
+    func testAgentLaunchPlanEnvironmentReachesRealSubprocessWithUsableTerm() async throws {
+        let plan = CLIAgentProvider(kind: .claudeCode, binaryName: "claude").launchPlan(
+            goal: nil,
+            settings: AppSettings(),
+            baseEnvironment: ["TERM": "dumb", "PATH": ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"]
+        )
+
+        let process = SystemPTYProcess()
+        try process.start(
+            executable: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: [],
+            environment: plan.environment,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+
+        // `env`'s output order follows the environment dictionary's iteration
+        // order, which Swift does not guarantee — drain to actual process
+        // exit (stream completion) rather than breaking on the first
+        // expected substring, or a race could stop the read before a
+        // not-yet-printed line has been flushed.
+        var collected = Data()
+        for await chunk in process.outputStream {
+            collected.append(chunk)
+        }
+
+        let printedEnvironment = String(decoding: collected, as: UTF8.self)
+        XCTAssertTrue(printedEnvironment.contains("TERM=xterm-256color"))
+        XCTAssertFalse(printedEnvironment.contains("TERM=dumb"))
+        XCTAssertTrue(printedEnvironment.contains("COLORTERM=truecolor"))
+    }
 }
 
 final class StartupEnvironmentCheckerTests: XCTestCase {
@@ -202,12 +243,12 @@ final class StartupEnvironmentCheckerTests: XCTestCase {
         let locator = FakeLocator(available: ["claude", "tmux"])
         let checker = StartupEnvironmentChecker(locator: locator)
 
-        let report = checker.check(tools: ["claude", "codex", "gemini", "tmux", "gh"])
+        let report = checker.check(tools: ["claude", "codex", "opencode", "tmux", "gh"])
 
         XCTAssertTrue(report.isInstalled("claude"))
         XCTAssertTrue(report.isInstalled("tmux"))
         XCTAssertFalse(report.isInstalled("codex"))
-        XCTAssertEqual(Set(report.missingTools), ["codex", "gemini", "gh"])
+        XCTAssertEqual(Set(report.missingTools), ["codex", "opencode", "gh"])
     }
 
     func testEmptyToolListNeverThrows() {

@@ -1,4 +1,5 @@
 import SwiftUI
+import DesignSystem
 
 struct FileBrowserView: View {
     let rootURL: URL
@@ -36,21 +37,33 @@ struct FileBrowserView: View {
                 .help("Refresh files")
                 .accessibilityIdentifier("FileBrowser.RefreshButton")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, FlotillaSpacing.medium)
+            .padding(.vertical, FlotillaSpacing.small)
+            .background(FlotillaColors().surface)
 
             Divider()
 
             if viewModel.isLoading && viewModel.nodes.isEmpty {
                 ProgressView("Loading files…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(FlotillaColors().surface)
+            } else if let errorMessage = viewModel.errorMessage, viewModel.nodes.isEmpty {
+                // Show error state when there's an error and no files loaded
+                ContentUnavailableView(
+                    "Error Loading Files",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(errorMessage)
+                )
+                .accessibilityIdentifier("FileBrowser.Error")
+                .background(FlotillaColors().surface)
             } else if viewModel.nodes.isEmpty {
                 ContentUnavailableView(
                     "No Files",
                     systemImage: "folder",
-                    description: Text(viewModel.errorMessage ?? "This worktree is empty.")
+                    description: Text("This worktree is empty.")
                 )
                 .accessibilityIdentifier("FileBrowser.Empty")
+                .background(FlotillaColors().surface)
             } else {
                 List {
                     OutlineGroup(viewModel.nodes, children: \.children) { node in
@@ -63,13 +76,20 @@ struct FileBrowserView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(node.isDirectory)
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                                .fill(viewModel.selectedNode == node ? FlotillaColors().accent.opacity(0.09) : .clear)
+                        )
                         .accessibilityIdentifier("FileBrowser.Row-\(node.name)")
                     }
                 }
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .background(FlotillaColors().surface)
                 .accessibilityIdentifier("FileBrowser.List")
             }
         }
+        .background(FlotillaColors().surface)
     }
 
     @ViewBuilder
@@ -104,27 +124,31 @@ struct FileBrowserView: View {
                     .disabled(viewModel.isSaving)
                     .accessibilityIdentifier("FileBrowser.SaveButton")
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(.thinMaterial)
+                .padding(.horizontal, FlotillaSpacing.medium)
+                .padding(.vertical, FlotillaSpacing.small)
+                .background(FlotillaColors().surface)
 
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, FlotillaSpacing.medium)
+                        .padding(.vertical, FlotillaSpacing.xSmall)
                         .background(Color.red.opacity(0.08))
+                        .accessibilityIdentifier("FileBrowser.ErrorMessage")
                 }
 
                 Divider()
 
                 TextEditor(text: $bindableViewModel.content)
                     .font(.system(.body, design: .monospaced))
-                    .padding(7)
+                    .scrollContentBackground(.hidden)
+                    .padding(FlotillaSpacing.small)
+                    .background(FlotillaColors().terminalCanvas)
                     .focused($isEditorFocused)
                     .accessibilityIdentifier("FileBrowser.Editor")
+                    .accessibilityLabel("File editor for \(node.name)")
             }
         } else {
             ContentUnavailableView(
@@ -133,6 +157,7 @@ struct FileBrowserView: View {
                 description: Text("Open a text file to inspect or edit it in place.")
             )
             .accessibilityIdentifier("FileBrowser.NoSelection")
+            .background(FlotillaColors().terminalCanvas)
         }
     }
 

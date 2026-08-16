@@ -74,4 +74,30 @@ final class DeleteSessionUITests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
         XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: 8), .completed, "worktree directory should be removed from disk")
     }
+
+    /// The row's always-present trash button is the fast path to the same
+    /// confirmation sheet the context menu opens — one click instead of
+    /// right-click-then-menu-item.
+    func testRowDeleteButtonOpensConfirmationAndRemovesSession() {
+        let app = launchedApp()
+
+        // The app launches on the Home destination; the sidebar (and its
+        // SessionRow elements) only renders under the Sessions tab.
+        let sessionsTab = app.descendants(matching: .any)["Global.Sessions"].firstMatch
+        XCTAssertTrue(sessionsTab.waitForExistence(timeout: 8))
+        sessionsTab.click()
+
+        let row = app.descendants(matching: .any)["SessionRow-Fix login bug"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+
+        let deleteButton = app.descendants(matching: .any)["SessionRow-Fix login bug-DeleteButton"].firstMatch
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 8))
+        deleteButton.click()
+
+        let deleteSessionOnlyButton = app.descendants(matching: .any)["DeleteSessionDialog.DeleteSessionOnly"].firstMatch
+        XCTAssertTrue(deleteSessionOnlyButton.waitForExistence(timeout: 8))
+        deleteSessionOnlyButton.click()
+
+        XCTAssertTrue(row.waitForNonExistence(timeout: 8))
+    }
 }

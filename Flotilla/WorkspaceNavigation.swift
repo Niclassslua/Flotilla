@@ -1,71 +1,8 @@
 import Foundation
+import SessionKit
 
-extension Notification.Name {
-    static let flotillaNewSession = Notification.Name("Flotilla.NewSession")
-    static let flotillaCommandPalette = Notification.Name("Flotilla.CommandPalette")
-    static let flotillaShowProjects = Notification.Name("Flotilla.ShowProjects")
-    static let flotillaShowSessions = Notification.Name("Flotilla.ShowSessions")
-    static let flotillaShowGrid = Notification.Name("Flotilla.ShowGrid")
-}
-
-enum AppDestination: String, CaseIterable, Identifiable {
-    case home
-    case projects
-    case sessions
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .home: "Home"
-        case .projects: "Projects"
-        case .sessions: "Sessions"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .home: "house"
-        case .projects: "folder"
-        case .sessions: "terminal"
-        }
-    }
-}
-
-enum WorkspaceViewMode: String, Equatable {
-    case single
-    case grid
-}
-
-enum SessionSurface: String, CaseIterable, Identifiable, Equatable {
-    case terminal
-    case git
-    case files
-    case rules
-    case skills
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .terminal: "Terminal"
-        case .git: "Diff"
-        case .files: "Files"
-        case .rules: "Rules"
-        case .skills: "Skills"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .terminal: "terminal"
-        case .git: "plusminus"
-        case .files: "folder"
-        case .rules: "doc.badge.gearshape"
-        case .skills: "hammer"
-        }
-    }
-}
+// Shared navigation types are now in WorkspaceNavigator.swift
+// This file only contains the command enum for the command palette
 
 enum WorkspaceSheet: Identifiable {
     case createSession
@@ -85,15 +22,15 @@ enum WorkspaceSheet: Identifiable {
 
 enum WorkspaceCommand: String, CaseIterable, Identifiable {
     case newSession
-    case showHome
+    case showOverview
     case showProjects
     case showSessions
     case showGrid
+    case showBoard
     case showTerminal
-    case showGit
     case showFiles
-    case showRules
-    case showSkills
+    case showInstructions
+    case showChanges
     case restoreSessions
     case showSettings
 
@@ -102,15 +39,15 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .newSession: "New session"
-        case .showHome: "Go to Home"
+        case .showOverview: "Go to Overview"
         case .showProjects: "Go to Projects"
         case .showSessions: "Go to Sessions"
         case .showGrid: "Show session grid"
+        case .showBoard: "Show Kanban board"
         case .showTerminal: "Open Terminal"
-        case .showGit: "Review Git changes"
         case .showFiles: "Browse project files"
-        case .showRules: "Edit agent rules"
-        case .showSkills: "Browse agent skills"
+        case .showInstructions: "View instructions"
+        case .showChanges: "Review changes"
         case .restoreSessions: "Restore stopped sessions"
         case .showSettings: "Open Settings"
         }
@@ -119,15 +56,15 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .newSession: "Launch an agent in a checkout or worktree"
-        case .showHome: "Open the goal-first launch dashboard"
+        case .showOverview: "Open the goal-first launch dashboard"
         case .showProjects: "Browse local project workspaces"
         case .showSessions: "Return to active session focus"
         case .showGrid: "Tile every live terminal"
+        case .showBoard: "Visualize sessions on a Kanban board"
         case .showTerminal: "Focus the selected session's terminal"
-        case .showGit: "Inspect staged, unstaged, and untracked changes"
         case .showFiles: "Open the selected worktree's file editor"
-        case .showRules: "Open CLAUDE.md, AGENTS.md, and GEMINI.md"
-        case .showSkills: "Open project skill definitions"
+        case .showInstructions: "View all instruction documents"
+        case .showChanges: "Toggle Git changes inspector"
         case .restoreSessions: "Restart finished or crashed sessions"
         case .showSettings: "Configure agents, worktrees, and appearance"
         }
@@ -136,15 +73,15 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .newSession: "plus"
-        case .showHome: "house"
+        case .showOverview: "house"
         case .showProjects: "folder"
         case .showSessions: "terminal"
         case .showGrid: "square.grid.2x2"
+        case .showBoard: "square.grid.2x2.fill"
         case .showTerminal: "terminal"
-        case .showGit: "plusminus"
         case .showFiles: "folder"
-        case .showRules: "doc.badge.gearshape"
-        case .showSkills: "hammer"
+        case .showInstructions: "doc.badge.gearshape"
+        case .showChanges: "arrow.triangle.branch"
         case .restoreSessions: "arrow.clockwise"
         case .showSettings: "gearshape"
         }

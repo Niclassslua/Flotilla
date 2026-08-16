@@ -1,5 +1,12 @@
 import Foundation
 import Observation
+import os
+
+/// Traces every filesystem scan Flotilla performs, so a "why did macOS just
+/// ask for my X folder" report can be root-caused from a Console.app filter
+/// on subsystem `com.niclassslua.flotilla` / category `FileScan`, instead of
+/// guessed at from source.
+let fileScanLog = Logger(subsystem: "com.niclassslua.flotilla", category: "FileScan")
 
 struct FileNode: Identifiable, Hashable, Sendable {
     let url: URL
@@ -56,19 +63,49 @@ struct WorkspaceFileService: WorkspaceFileServicing {
         ".git", ".build", "DerivedData", "node_modules", "Pods", ".swiftpm"
     ])
 
+    /// The real, resolved paths of macOS's TCC-protected user folders
+    /// (Desktop, Documents, Downloads, Music, Pictures, Movies). Reading the
+    /// *contents* of one of these triggers a system "Allow access" prompt.
+    /// Matched by actual path rather than by name, so a project's own
+    /// subfolder that happens to be called e.g. "Downloads" or "Library"
+    /// isn't skipped — only the genuine system folders are, which only show
+    /// up as scan targets at all when a project root was chosen broadly
+    /// enough (e.g. the home directory) to contain them as real children.
+    private static let tccProtectedPaths: Set<String> = {
+        let fm = FileManager.default
+        let domains: [FileManager.SearchPathDirectory] = [
+            .desktopDirectory, .documentDirectory, .downloadsDirectory,
+            .musicDirectory, .picturesDirectory, .moviesDirectory
+        ]
+        return Set(domains.compactMap {
+            fm.urls(for: $0, in: .userDomainMask).first?.resolvingSymlinksInPath().standardizedFileURL.path
+        })
+    }()
+
+    /// Shared with any other filesystem scanner in the app (e.g. the Import
+    /// Workspace path resolver) that needs to avoid touching these folders.
+    static func isTCCProtected(_ url: URL) -> Bool {
+        let protected = tccProtectedPaths.contains(url.resolvingSymlinksInPath().standardizedFileURL.path)
+        if protected {
+            fileScanLog.notice("skipping TCC-protected folder: \(url.path, privacy: .public)")
+        }
+        return protected
+    }
+
     private static func loadChildren(
         of directory: URL,
         depth: Int,
         fileManager: FileManager
     ) throws -> [FileNode] {
         guard depth < 8 else { return [] }
+        fileScanLog.notice("loadChildren: listing contents of \(directory.path, privacy: .public) (depth \(depth))")
         let entries = try fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles]
         )
         return try entries
-            .filter { !excludedDirectories.contains($0.lastPathComponent) }
+            .filter { !excludedDirectories.contains($0.lastPathComponent) && !isTCCProtected($0) }
             .map { url in
                 let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 let isDirectory = values.isDirectory == true && values.isSymbolicLink != true
@@ -90,22 +127,29 @@ struct WorkspaceFileService: WorkspaceFileServicing {
     ) throws -> [RuleFileEntry] {
         let canonicalRoot = root.resolvingSymlinksInPath().standardizedFileURL
         let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey]
+        fileScanLog.notice("discoverInstructionFiles: recursive scan rooted at \(root.path, privacy: .public)")
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: keys,
             options: [.skipsPackageDescendants],
-            errorHandler: { _, _ in true }
+            errorHandler: { url, error in
+                fileScanLog.error("enumerator error at \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                return true
+            }
         ) else { return [] }
 
         let instructionNames = Set(["CLAUDE.md", "AGENTS.md", "GEMINI.md", "SKILL.md"])
         var results: [RuleFileEntry] = []
         for case let url as URL in enumerator {
             let values = try url.resourceValues(forKeys: Set(keys))
+            if values.isDirectory == true {
+                fileScanLog.debug("visiting directory \(url.path, privacy: .public)")
+            }
             if values.isSymbolicLink == true {
                 if values.isDirectory == true { enumerator.skipDescendants() }
                 continue
             }
-            if values.isDirectory == true, excludedDirectories.contains(url.lastPathComponent) {
+            if values.isDirectory == true, excludedDirectories.contains(url.lastPathComponent) || isTCCProtected(url) {
                 enumerator.skipDescendants()
                 continue
             }
@@ -135,6 +179,7 @@ final class FileBrowserViewModel {
     private(set) var nodes: [FileNode] = []
     var selectedNode: FileNode?
     var content = ""
+    var savedAt: Date?
     private(set) var isLoading = false
     private(set) var isSaving = false
     private(set) var errorMessage: String?
@@ -146,6 +191,7 @@ final class FileBrowserViewModel {
     }
 
     func refresh() async {
+        fileScanLog.notice("FileBrowserViewModel.refresh: root=\(self.root.path, privacy: .public)")
         isLoading = true
         defer { isLoading = false }
         do {
@@ -159,8 +205,29 @@ final class FileBrowserViewModel {
 
     func select(_ node: FileNode) async {
         guard !node.isDirectory else { return }
+        
+        // Check for unsaved changes before switching
+        if let currentNode = selectedNode, currentNode != node, content != "" {
+            let fileManager = FileManager.default
+            if let attributes = try? fileManager.attributesOfItem(atPath: currentNode.url.path),
+               let modificationDate = attributes[.modificationDate] as? Date,
+               let savedAt,
+               modificationDate <= savedAt {
+                // Content appears unchanged, safe to switch
+            } else {
+                // Prompt user about unsaved changes - for now, save automatically
+                // In a full implementation, this would show a confirmation dialog
+                await save()
+            }
+        }
+        
         do {
             content = try await service.readText(at: node.url)
+            let fileManager = FileManager.default
+            if let attributes = try? fileManager.attributesOfItem(atPath: node.url.path),
+               let modificationDate = attributes[.modificationDate] as? Date {
+                savedAt = modificationDate
+            }
             selectedNode = node
             errorMessage = nil
             message = nil
@@ -171,10 +238,25 @@ final class FileBrowserViewModel {
 
     func save() async {
         guard let selectedNode, !selectedNode.isDirectory else { return }
+        
+        // Check for write conflict: if the file was modified since we opened it
+        let fileManager = FileManager.default
+        let currentAttributes = try? fileManager.attributesOfItem(atPath: selectedNode.url.path)
+        let currentModificationDate = currentAttributes?[.modificationDate] as? Date
+        
+        if let savedAt, let currentModificationDate,
+           currentModificationDate > savedAt
+        {
+            message = "File was modified outside this app — changes may be lost"
+            isSaving = false
+            return
+        }
+        
         isSaving = true
         defer { isSaving = false }
         do {
             try await service.writeText(content, to: selectedNode.url)
+            savedAt = Date()
             message = "Saved"
             errorMessage = nil
         } catch {
@@ -193,6 +275,7 @@ final class RulesPanelViewModel {
     private(set) var entries: [RuleFileEntry] = []
     var selectedEntry: RuleFileEntry?
     var content = ""
+    var savedAt: Date?
     private(set) var isLoading = false
     private(set) var isSaving = false
     private(set) var message: String?
@@ -203,6 +286,7 @@ final class RulesPanelViewModel {
     }
 
     func load() async {
+        fileScanLog.notice("RulesPanelViewModel.load: root=\(self.root.path, privacy: .public)")
         isLoading = true
         defer { isLoading = false }
         do {
@@ -217,6 +301,11 @@ final class RulesPanelViewModel {
     func select(_ entry: RuleFileEntry) async {
         do {
             content = try await service.readText(at: entry.url)
+            let fileManager = FileManager.default
+            if let attributes = try? fileManager.attributesOfItem(atPath: entry.url.path),
+               let modificationDate = attributes[.modificationDate] as? Date {
+                savedAt = modificationDate
+            }
             selectedEntry = entry
             message = nil
         } catch {
@@ -226,10 +315,25 @@ final class RulesPanelViewModel {
 
     func save() async {
         guard let selectedEntry else { return }
+        
+        // Check for write conflict: if the file was modified since we opened it
+        let fileManager = FileManager.default
+        let currentAttributes = try? fileManager.attributesOfItem(atPath: selectedEntry.url.path)
+        let currentModificationDate = currentAttributes?[.modificationDate] as? Date
+        
+        if let savedAt, let currentModificationDate,
+           currentModificationDate > savedAt
+        {
+            message = "File was modified outside this app — changes may be lost"
+            isSaving = false
+            return
+        }
+        
         isSaving = true
         defer { isSaving = false }
         do {
             try await service.writeText(content, to: selectedEntry.url)
+            savedAt = Date()
             message = "Saved"
         } catch {
             message = "Could not save: \(error.localizedDescription)"

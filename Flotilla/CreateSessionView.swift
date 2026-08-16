@@ -1,13 +1,14 @@
 import SwiftUI
 import AppKit
 import SessionKit
+import AgentKit
 import DesignSystem
+import SettingsKit
 
 struct CreateSessionView: View {
     @Bindable var store: AppStore
     @Environment(\.dismiss) private var dismiss
 
-    let defaultAgent: AgentKind
     let createWorktreeByDefault: Bool
     let initialProject: Project?
     let didCreateSession: (UUID) -> Void
@@ -16,27 +17,29 @@ struct CreateSessionView: View {
     @State private var selectedFolder: URL?
     @State private var goal = ""
     @State private var agent: AgentKind
+    @State private var model = ""
+    @State private var effort: AgentEffort = .medium
     @State private var checkoutMode: CheckoutMode = .mainCheckout
     @State private var isCreating = false
-    @State private var showsPrompt = false
-    @State private var projectQuery = ""
+    @State private var openCodeSubscription: OpenCodeSubscription = .none
 
     init(
         store: AppStore,
-        defaultAgent: AgentKind = .claudeCode,
         createWorktreeByDefault: Bool = true,
         initialProject: Project? = nil,
-        didCreateSession: @escaping (UUID) -> Void = { _ in }
+        didCreateSession: @escaping (UUID) -> Void = { _ in },
+        openCodeSubscription: OpenCodeSubscription = .none,
+        defaultAgent: AgentKind = .claudeCode
     ) {
         self.store = store
-        self.defaultAgent = defaultAgent
         self.createWorktreeByDefault = createWorktreeByDefault
         self.initialProject = initialProject
         self.didCreateSession = didCreateSession
         _isGeneralSession = State(initialValue: initialProject == nil)
         _selectedFolder = State(initialValue: initialProject?.rootPath)
-        _agent = State(initialValue: defaultAgent)
         _checkoutMode = State(initialValue: createWorktreeByDefault ? .newWorktree : .mainCheckout)
+        _openCodeSubscription = State(initialValue: openCodeSubscription)
+        _agent = State(initialValue: defaultAgent)
     }
 
     private var isUITesting: Bool {
@@ -44,22 +47,15 @@ struct CreateSessionView: View {
     }
 
     private var canCreate: Bool {
-        !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (isGeneralSession || selectedFolder != nil)
-            && !isCreating
+        (isGeneralSession || selectedFolder != nil) && !isCreating
+    }
+
+    private var trimmedModel: String? {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     var body: some View {
-        Group {
-            if isUITesting || showsPrompt {
-                promptedSessionBody
-            } else {
-                quickSessionBody
-            }
-        }
-    }
-
-    private var promptedSessionBody: some View {
         VStack(spacing: 0) {
             header
             Divider()
@@ -70,15 +66,11 @@ struct CreateSessionView: View {
                     agentSection
                     if !isGeneralSession { checkoutSection }
 
-                    if let error = store.lastCreationError {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(.callout)
-                            .foregroundStyle(.red)
-                            .padding(12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                            .accessibilityIdentifier("CreateSession.ErrorMessage")
+if let error = store.lastCreationError {
+                    FlotillaBanner.error(error) {
+                        store.lastCreationError = nil
                     }
+                }
                 }
                 .padding(FlotillaSpacing.xLarge)
             }
@@ -87,196 +79,6 @@ struct CreateSessionView: View {
         }
         .frame(minWidth: 560, idealWidth: 640, minHeight: 560, idealHeight: 640)
         .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    private var quickSessionBody: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(FlotillaPalette.ocean)
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 36, height: 36)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Quick Session")
-                        .font(.title3.weight(.semibold))
-                    Text("Choose where the agent should start.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(18)
-
-            Divider()
-
-            VStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                    TextField("Search projects", text: $projectQuery)
-                        .textFieldStyle(.plain)
-                }
-                .padding(.horizontal, 11)
-                .frame(height: 34)
-                .background(FlotillaPalette.elevated, in: RoundedRectangle(cornerRadius: 6))
-
-                ScrollView {
-                    LazyVStack(spacing: 5) {
-                        quickSourceRow(
-                            title: "General Session",
-                            subtitle: FileManager.default.homeDirectoryForCurrentUser.path,
-                            systemImage: "terminal",
-                            selected: isGeneralSession
-                        ) {
-                            isGeneralSession = true
-                            selectedFolder = nil
-                            checkoutMode = .mainCheckout
-                        }
-
-                        ForEach(matchingProjects) { project in
-                            quickSourceRow(
-                                title: project.name,
-                                subtitle: project.rootPath.path,
-                                systemImage: "folder.fill",
-                                selected: !isGeneralSession && selectedFolder == project.rootPath
-                            ) {
-                                isGeneralSession = false
-                                selectedFolder = project.rootPath
-                                checkoutMode = createWorktreeByDefault ? .newWorktree : .mainCheckout
-                            }
-                        }
-                    }
-                }
-                .frame(maxHeight: 245)
-
-                if !isGeneralSession {
-                    Toggle(isOn: worktreeBinding) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Create in a new worktree")
-                            Text("Keep this session isolated from the main checkout.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .toggleStyle(.switch)
-                    .padding(.horizontal, 2)
-                }
-
-                Button {
-                    showsPrompt = true
-                } label: {
-                    HStack {
-                        Image(systemName: "text.bubble")
-                        Text("Create session with prompt")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .padding(11)
-                .background(FlotillaPalette.elevated, in: RoundedRectangle(cornerRadius: 6))
-            }
-            .padding(16)
-
-            Divider()
-
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                if isCreating { ProgressView().controlSize(.small) }
-                Button("Background") { launchQuick(opensSession: false) }
-                    .disabled(isCreating)
-                Button("Start Session") { launchQuick(opensSession: true) }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(isCreating)
-            }
-            .padding(16)
-        }
-        .frame(width: 560)
-        .background(FlotillaPalette.panel)
-    }
-
-    private var matchingProjects: [Project] {
-        guard !projectQuery.isEmpty else { return store.projects }
-        return store.projects.filter {
-            $0.name.localizedCaseInsensitiveContains(projectQuery)
-                || $0.rootPath.path.localizedCaseInsensitiveContains(projectQuery)
-        }
-    }
-
-    private var worktreeBinding: Binding<Bool> {
-        Binding(
-            get: { checkoutMode == .newWorktree },
-            set: { checkoutMode = $0 ? .newWorktree : .mainCheckout }
-        )
-    }
-
-    private func quickSourceRow(
-        title: String,
-        subtitle: String,
-        systemImage: String,
-        selected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: systemImage)
-                    .foregroundStyle(selected ? FlotillaPalette.ocean : .secondary)
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.primary)
-                    Text(subtitle)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(FlotillaPalette.ocean)
-                }
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 50)
-            .background(selected ? FlotillaPalette.ocean.opacity(0.09) : .clear, in: RoundedRectangle(cornerRadius: 6))
-            .overlay {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(selected ? FlotillaPalette.ocean.opacity(0.55) : FlotillaPalette.subtleStroke)
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func launchQuick(opensSession: Bool) {
-        isCreating = true
-        let title = isGeneralSession ? "General session" : (selectedFolder?.lastPathComponent ?? "New session")
-        Task {
-            await store.createSession(
-                title: title,
-                goal: "",
-                agent: agent,
-                projectFolder: isGeneralSession ? nil : selectedFolder,
-                checkoutMode: checkoutMode,
-                deliverGoal: false
-            )
-            isCreating = false
-            guard store.lastCreationError == nil else { return }
-            if opensSession, let id = store.selectedSessionID { didCreateSession(id) }
-            dismiss()
-        }
     }
 
     private var header: some View {
@@ -337,7 +139,7 @@ struct CreateSessionView: View {
     }
 
     private var goalSection: some View {
-        CreationSection(number: "02", title: "Set the objective", subtitle: "This is sent directly to the selected CLI after its PTY starts.") {
+        CreationSection(number: "02", title: "Set the objective", subtitle: "Optional — sent directly to the selected CLI after its PTY starts.") {
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $goal)
                     .font(.body)
@@ -366,7 +168,7 @@ struct CreateSessionView: View {
         CreationSection(number: "03", title: "Select the agent", subtitle: "Your existing CLI authentication is used unchanged.") {
             Picker("Agent", selection: $agent) {
                 ForEach(AgentKind.allCases) { kind in
-                    Text(kind.displayName).tag(kind)
+                    Label(kind.displayName, image: kind.logoImageName).tag(kind)
                 }
             }
             .pickerStyle(.segmented)
@@ -375,8 +177,8 @@ struct CreateSessionView: View {
             .accessibilityIdentifier("CreateSession.AgentPicker")
 
             HStack(spacing: 8) {
-                Image(systemName: agentIcon)
-                    .foregroundStyle(FlotillaPalette.ocean)
+                ProviderLogo(agent: agent)
+                    .frame(width: 16, height: 16)
                 Text(agentDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -384,6 +186,17 @@ struct CreateSessionView: View {
                 Text("Credentials stay in the CLI")
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 8) {
+                ModelPickerView(agent: agent, openCodeSubscription: openCodeSubscription, model: $model)
+                    .accessibilityIdentifier("CreateSession.ModelField")
+
+                EffortGaugePicker(
+                    agent: agent,
+                    effort: $effort,
+                    accessibilityIdentifier: "CreateSession.EffortPicker"
+                )
             }
         }
     }
@@ -426,8 +239,13 @@ struct CreateSessionView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("CreateSession.ProgressIndicator")
             }
+            Button("Background") {
+                launch(opensSession: false)
+            }
+            .disabled(!canCreate)
+            .accessibilityIdentifier("CreateSession.BackgroundButton")
             Button("Launch Session") {
-                launchPrompted()
+                launch(opensSession: true)
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
@@ -440,32 +258,30 @@ struct CreateSessionView: View {
     }
 
     private var sessionTitle: String {
-        String(goal.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+        let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedGoal.isEmpty {
+            return String(trimmedGoal.prefix(60))
+        }
+        return isGeneralSession ? "General session" : (selectedFolder?.lastPathComponent ?? "New session")
     }
 
-    private func launchPrompted() {
+    private func launch(opensSession: Bool) {
         Task {
             isCreating = true
             await store.createSession(
                 title: sessionTitle,
                 goal: goal,
                 agent: agent,
+                model: trimmedModel,
+                effort: agent.supportsEffortSelection ? effort : nil,
                 projectFolder: isGeneralSession ? nil : selectedFolder,
-                checkoutMode: checkoutMode
+                checkoutMode: checkoutMode,
+                deliverGoal: !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             )
             isCreating = false
-            if store.lastCreationError == nil {
-                if let id = store.selectedSessionID { didCreateSession(id) }
-                dismiss()
-            }
-        }
-    }
-
-    private var agentIcon: String {
-        switch agent {
-        case .claudeCode: "sparkle"
-        case .codexCLI: "chevron.left.forwardslash.chevron.right"
-        case .geminiCLI: "diamond"
+            guard store.lastCreationError == nil else { return }
+            if opensSession, let id = store.selectedSessionID { didCreateSession(id) }
+            dismiss()
         }
     }
 
@@ -473,7 +289,7 @@ struct CreateSessionView: View {
         switch agent {
         case .claudeCode: "Claude Code in an interactive terminal"
         case .codexCLI: "Codex CLI in an interactive terminal"
-        case .geminiCLI: "Gemini CLI in an interactive terminal"
+        case .openCode: "OpenCode in an interactive terminal"
         }
     }
 
@@ -523,6 +339,214 @@ private struct CreationSection<Content: View>: View {
                 content
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// A compact, self-labeled control for choosing reasoning effort. Renders as a
+/// small equalizer-style bar gauge (rather than a bare `Slider`) so its
+/// purpose reads at a glance even when squeezed into a dense toolbar row, and
+/// so all four discrete levels are visible simultaneously instead of hidden
+/// behind a continuous thumb position.
+struct EffortGaugePicker: View {
+    let agent: AgentKind
+    @Binding var effort: AgentEffort
+    var accessibilityIdentifier: String? = nil
+
+    @State private var isHovering = false
+    @State private var controlWidth: CGFloat = 0
+
+    private var levels: [AgentEffort] { AgentEffort.allCases }
+
+    var body: some View {
+        if agent.supportsEffortSelection {
+            HStack(spacing: 6) {
+                Image(systemName: "gauge.with.dots.needle.67percent")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(effort.tintColor)
+                    .frame(width: 12)
+
+                barsRow
+
+                Text(effort.displayName)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(effort.tintColor)
+                    .frame(minWidth: 34, alignment: .leading)
+                    .contentTransition(.opacity)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(FlotillaPalette.elevated, in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(isHovering ? effort.tintColor.opacity(0.6) : FlotillaPalette.subtleStroke)
+            }
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.onAppear { controlWidth = proxy.size.width }
+                        .onChange(of: proxy.size.width) { _, newValue in controlWidth = newValue }
+                }
+            )
+            .contentShape(Capsule())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        select(atX: value.location.x, width: controlWidth)
+                    }
+            )
+            .onTapGesture { location in
+                select(atX: location.x, width: controlWidth)
+            }
+            .onHover { isHovering = $0 }
+            .animation(.snappy(duration: 0.18), value: effort)
+            .animation(.easeOut(duration: 0.12), value: isHovering)
+            .help("Reasoning effort: \(effort.displayName). \(effort.detail)")
+            .accessibilityElement(children: .ignore)
+            // The current level is folded into the label (rather than relying
+            // solely on `.accessibilityValue`) because this custom control's
+            // AX value isn't reliably surfaced to assistive clients on macOS.
+            .accessibilityLabel("Reasoning effort: \(effort.displayName)")
+            .accessibilityValue(effort.displayName)
+            .accessibilityHint("Choose how much reasoning the coding agent should use.")
+            .accessibilityAdjustableAction(adjustEffort)
+            .accessibilityIdentifier(accessibilityIdentifier ?? "EffortGaugeSlider")
+        }
+    }
+
+    private var barsRow: some View {
+        HStack(alignment: .bottom, spacing: 3) {
+            ForEach(levels) { level in
+                bar(for: level)
+            }
+        }
+        .frame(height: 16, alignment: .bottom)
+    }
+
+    private func bar(for level: AgentEffort) -> some View {
+        let isFilled = level.rank <= effort.rank
+        return Capsule()
+            .fill(isFilled ? level.tintColor : Color.secondary.opacity(0.25))
+            .frame(width: 4, height: 6 + CGFloat(level.rank) * 3.5)
+    }
+
+    private func select(atX x: CGFloat, width: CGFloat) {
+        let clampedX = min(max(x, 0), width)
+        let index = min(levels.count - 1, Int(clampedX / width * CGFloat(levels.count)))
+        let target = levels[index]
+        guard target != effort else { return }
+        withAnimation(.snappy(duration: 0.15)) { effort = target }
+    }
+
+    private func adjustEffort(_ direction: AccessibilityAdjustmentDirection) {
+        switch direction {
+        case .increment:
+            let next = min(effort.rank + 1, levels.count - 1)
+            effort = levels[next]
+        case .decrement:
+            let previous = max(effort.rank - 1, 0)
+            effort = levels[previous]
+        @unknown default:
+            break
+        }
+    }
+}
+
+private extension AgentEffort {
+    var rank: Int {
+        switch self {
+        case .low: 0
+        case .medium: 1
+        case .high: 2
+        case .xhigh: 3
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .low: "Faster responses for straightforward work."
+        case .medium: "A balanced default for most coding tasks."
+        case .high: "More reasoning for complex implementation work."
+        case .xhigh: "The deepest reasoning for the hardest tasks."
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .low: .secondary
+        case .medium: FlotillaPalette.cyan
+        case .high: FlotillaPalette.ocean
+        case .xhigh: FlotillaPalette.ocean
+        }
+    }
+}
+
+/// A dropdown of the current `agent`'s available models — fetched live from
+/// the installed CLI (`AgentKit.ModelCatalogCache`), falling back to a small
+/// static shortlist if that fails — plus a "Custom…" option that reveals a
+/// text field. `model` is the resolved value passed straight to
+/// `AppStore.createSession` — empty means "agent's own default".
+struct ModelPickerView: View {
+    let agent: AgentKind
+    let openCodeSubscription: OpenCodeSubscription
+    @Binding var model: String
+
+    @State private var selection = ""
+    @State private var customText = ""
+    @State private var availableModels: [String] = []
+    @State private var isLoading = true
+
+    private let customTag = "__custom__"
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Picker("Model", selection: $selection) {
+                Text("Default").tag("")
+                ForEach(availableModels, id: \.self) { preset in
+                    Text(preset).tag(preset)
+                }
+                Text("Custom…").tag(customTag)
+            }
+            .labelsHidden()
+            .onChange(of: selection) { _, newValue in
+                model = newValue == customTag ? customText : newValue
+            }
+
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .help("Fetching available models from the CLI…")
+            }
+
+            if selection == customTag {
+                TextField("Model name", text: $customText)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: customText) { _, newValue in
+                        model = newValue
+                    }
+            }
+        }
+        // `.task(id:)` re-fetches (cancelling any in-flight fetch) whenever
+        // `agent` changes. A model chosen for one agent is almost never
+        // valid for another, so switching resets back to "Default" rather
+        // than silently carrying a stale value.
+        .task(id: agent) {
+            selection = ""
+            customText = ""
+            model = ""
+            isLoading = true
+            availableModels = await ModelCatalogCache.shared.models(for: agent, openCodeSubscription: openCodeSubscription)
+            isLoading = false
+            syncSelection(presets: availableModels)
+        }
+    }
+
+    private func syncSelection(presets: [String]) {
+        if model.isEmpty {
+            selection = ""
+        } else if presets.contains(model) {
+            selection = model
+        } else {
+            selection = customTag
+            customText = model
         }
     }
 }

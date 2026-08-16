@@ -1,7 +1,9 @@
 import SwiftUI
 import AppKit
 import SessionKit
+import GitKit
 import DesignSystem
+import SettingsKit
 
 private enum ProjectWorkspaceTab: String, CaseIterable, Identifiable {
     case overview
@@ -28,8 +30,8 @@ private enum ProjectWorkspaceTab: String, CaseIterable, Identifiable {
 struct ProjectsWorkspaceView: View {
     @Bindable var store: AppStore
     @Binding var selectedProjectID: UUID?
-    let defaultAgent: AgentKind
     let openSession: (UUID) -> Void
+    let openCodeSubscription: OpenCodeSubscription
 
     @State private var searchText = ""
     @State private var selectedTab: ProjectWorkspaceTab = .overview
@@ -59,12 +61,15 @@ struct ProjectsWorkspaceView: View {
             if let selectedProject {
                 NavigationSplitView {
                     List(filteredProjects, selection: $selectedProjectID) { project in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(project.name)
-                                .font(.callout.weight(.medium))
-                            Text("\(store.sessions(for: project).count) sessions")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        HStack(spacing: 9) {
+                            ProjectMark(title: project.name, tint: ProjectMark.tint(for: project))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(project.name)
+                                    .font(.callout.weight(.medium))
+                                Text("\(store.sessions(for: project).count) sessions")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(.vertical, 3)
                         .tag(project.id)
@@ -82,7 +87,6 @@ struct ProjectsWorkspaceView: View {
                         sessions: store.sessions(for: selectedProject),
                         selectedTab: $selectedTab,
                         store: store,
-                        defaultAgent: defaultAgent,
                         openSession: openSession
                     )
                     .id(selectedProject.id)
@@ -257,14 +261,13 @@ private struct ProjectWorkspaceDetail: View {
     let sessions: [Session]
     @Binding var selectedTab: ProjectWorkspaceTab
     @Bindable var store: AppStore
-    let defaultAgent: AgentKind
     let openSession: (UUID) -> Void
 
     private var projectSession: Session {
         sessions.first ?? Session(
             title: project.name,
             goal: "Project workspace",
-            agent: defaultAgent,
+            agent: .claudeCode,
             projectID: project.id,
             workingDirectory: project.rootPath
         )
@@ -281,7 +284,6 @@ private struct ProjectWorkspaceDetail: View {
                         project: project,
                         sessions: sessions,
                         store: store,
-                        defaultAgent: defaultAgent,
                         openSession: openSession
                     )
                 case .git:
@@ -340,11 +342,13 @@ private struct ProjectOverviewView: View {
     let project: Project
     let sessions: [Session]
     @Bindable var store: AppStore
-    let defaultAgent: AgentKind
     let openSession: (UUID) -> Void
+    let openCodeSubscription: OpenCodeSubscription
 
     @State private var goal = ""
-    @State private var agent: AgentKind
+    @State private var agent: AgentKind = .claudeCode
+    @State private var model = ""
+    @State private var effort: AgentEffort = .medium
     @State private var useWorktree = true
     @State private var isLaunching = false
 
@@ -352,15 +356,14 @@ private struct ProjectOverviewView: View {
         project: Project,
         sessions: [Session],
         store: AppStore,
-        defaultAgent: AgentKind,
-        openSession: @escaping (UUID) -> Void
+        openSession: @escaping (UUID) -> Void,
+        openCodeSubscription: OpenCodeSubscription = .none
     ) {
         self.project = project
         self.sessions = sessions
         self.store = store
-        self.defaultAgent = defaultAgent
         self.openSession = openSession
-        _agent = State(initialValue: defaultAgent)
+        self.openCodeSubscription = openCodeSubscription
     }
 
     var body: some View {
@@ -394,6 +397,8 @@ private struct ProjectOverviewView: View {
                     ForEach(AgentKind.allCases) { Text($0.displayName).tag($0) }
                 }
                 .frame(width: 150)
+                ModelPickerView(agent: agent, openCodeSubscription: openCodeSubscription, model: $model)
+                EffortGaugePicker(agent: agent, effort: $effort)
                 Toggle("New worktree", isOn: $useWorktree)
                     .toggleStyle(.switch)
                 Spacer()
@@ -426,7 +431,7 @@ private struct ProjectOverviewView: View {
                         Button {
                             openSession(session.id)
                         } label: {
-                            ProjectSessionCard(session: session)
+                            ProjectSessionCard(session: session, gitService: store.gitService)
                         }
                         .buttonStyle(.plain)
                     }
@@ -471,6 +476,8 @@ private struct ProjectOverviewView: View {
                 title: String(trimmedGoal.prefix(60)),
                 goal: trimmedGoal,
                 agent: agent,
+                model: model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : model,
+                effort: agent.supportsEffortSelection ? effort : nil,
                 projectFolder: project.rootPath,
                 checkoutMode: useWorktree ? .newWorktree : .mainCheckout
             )
@@ -485,6 +492,7 @@ private struct ProjectOverviewView: View {
 
 private struct ProjectSessionCard: View {
     let session: Session
+    let gitService: any GitServiceProtocol
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -496,6 +504,7 @@ private struct ProjectSessionCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                SessionDiffStatView(session: session, gitService: gitService)
                 Text(session.agent.displayName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -590,12 +599,20 @@ private struct ProjectPathSheet: View {
         guard !trimmed.isEmpty else { return [] }
         let root = URL(fileURLWithPath: trimmed).standardizedFileURL
         guard importsWorkspace else { return [root] }
+        fileScanLog.notice("resolvedPaths: listing immediate children of \(root.path, privacy: .public)")
         guard let children = try? FileManager.default.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else { return [] }
         return children.filter { child in
+            // Never stat inside a TCC-protected system folder (Desktop,
+            // Downloads, Music, Pictures, Movies, Documents) — doing so
+            // triggers a macOS "Allow access" prompt even for a plain
+            // existence check, and this runs on every keystroke while
+            // typing a workspace path (see `.disabled` above), so a
+            // home-directory-ish path must not silently probe into them.
+            guard !WorkspaceFileService.isTCCProtected(child) else { return false }
             var isDirectory: ObjCBool = false
             let gitPath = child.appendingPathComponent(".git").path
             return FileManager.default.fileExists(atPath: child.path, isDirectory: &isDirectory)

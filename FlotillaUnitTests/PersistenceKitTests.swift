@@ -18,6 +18,8 @@ final class PersistenceKitTests: XCTestCase {
             title: "Fix login bug",
             goal: "Users can't log in on Safari",
             agent: .claudeCode,
+            model: "sonnet",
+            effort: .high,
             projectID: project.id,
             workingDirectory: URL(fileURLWithPath: "/Users/dev/Flotilla"),
             worktree: WorktreeInfo(
@@ -64,7 +66,7 @@ final class PersistenceKitTests: XCTestCase {
         let session = Session(
             title: "Throwaway",
             goal: "Goal",
-            agent: .geminiCLI,
+            agent: .openCode,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
             status: .idle

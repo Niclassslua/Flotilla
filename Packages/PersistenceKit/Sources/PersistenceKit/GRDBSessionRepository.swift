@@ -71,6 +71,41 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 table.add(column: "terminalScrollback", .blob).notNull().defaults(to: Data())
             }
         }
+        migrator.registerMigration("v3_addModelAndEffort") { db in
+            try db.alter(table: "session") { table in
+                table.add(column: "model", .text)
+                table.add(column: "effort", .text)
+            }
+        }
+        migrator.registerMigration("v4_addKanbanAndSessionKanbanFields") { db in
+            // Add kanban columns to session table
+            try db.alter(table: "session") { table in
+                table.add(column: "kanbanColumnID", .text)
+                table.add(column: "workflowStage", .text)
+            }
+            // Create kanban_board table
+            try db.create(table: "kanban_board") { t in
+                t.column("id", .text).primaryKey()
+                t.column("projectID", .text)
+                t.column("name", .text).notNull()
+                t.column("columnMode", .text).notNull()
+                t.column("customColumnsJSON", .text).notNull()
+                t.column("cardOrderJSON", .text).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            // Create kanban_column table
+            try db.create(table: "kanban_column") { t in
+                t.column("id", .text).primaryKey()
+                t.column("boardID", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("order", .integer).notNull()
+                t.column("statusFilter", .text)
+                t.column("agentFilter", .text)
+                t.column("workflowStageFilter", .text)
+                t.column("color", .text)
+            }
+            try db.create(index: "idx_kanban_column_boardID", on: "kanban_column", columns: ["boardID"])
+        }
         return migrator
     }
 
@@ -79,6 +114,17 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
             let projects = try ProjectRecord.fetchAll(db).map { try $0.toDomain() }
             let sessions = try SessionRecord.fetchAll(db).map { try $0.toDomain() }
             return (projects, sessions)
+        }
+    }
+    
+    public func loadScrollback(sessionID: UUID) -> Data? {
+        do {
+            return try dbQueue.read { db in
+                let record = try SessionRecord.fetchOne(db, key: sessionID.uuidString)
+                return record?.terminalScrollback
+            }
+        } catch {
+            return nil
         }
     }
 
@@ -98,5 +144,89 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
         _ = try dbQueue.write { db in
             try SessionRecord.deleteOne(db, key: sessionID.uuidString)
         }
+    }
+
+    // MARK: - Kanban Board Methods
+
+    public func loadKanbanBoards() throws -> [KanbanBoard] {
+        try dbQueue.read { db in
+            let boardRecords = try KanbanBoardRecord.fetchAll(db)
+            return try boardRecords.map { try $0.toDomain() }
+        }
+    }
+
+    public func loadKanbanBoard(id: UUID) throws -> KanbanBoard? {
+        try dbQueue.read { db in
+            let record = try KanbanBoardRecord.fetchOne(db, key: id.uuidString)
+            return try record?.toDomain()
+        }
+    }
+
+    public func loadKanbanBoard(forProject projectID: UUID?) throws -> KanbanBoard? {
+        try dbQueue.read { db in
+            let projectIDString = projectID?.uuidString
+            let record = try KanbanBoardRecord
+                .filter(Column("projectID") == projectIDString)
+                .fetchOne(db)
+            return try record?.toDomain()
+        }
+    }
+
+    public func saveKanbanBoard(_ board: KanbanBoard) throws {
+        try dbQueue.write { db in
+            var boardToSave = board
+            boardToSave.updatedAt = Date()
+            try KanbanBoardRecord(board: boardToSave).save(db)
+            
+            // Save custom columns
+            if board.columnMode == .custom {
+                // Delete existing columns for this board
+                try KanbanColumnRecord
+                    .filter(Column("boardID") == board.id.uuidString)
+                    .deleteAll(db)
+                
+                // Insert new columns
+                for column in board.customColumns {
+                    try KanbanColumnRecord(column: column, boardID: board.id).save(db)
+                }
+            }
+        }
+    }
+
+    public func deleteKanbanBoard(id: UUID) throws {
+        try dbQueue.write { db in
+            // Delete columns first (foreign key not enforced, manual cleanup)
+            try KanbanColumnRecord
+                .filter(Column("boardID") == id.uuidString)
+                .deleteAll(db)
+            _ = try KanbanBoardRecord.deleteOne(db, key: id.uuidString)
+        }
+    }
+
+    public func getOrCreateDefaultKanbanBoard(forProject projectID: UUID?, name: String) throws -> KanbanBoard {
+        if let existing = try loadKanbanBoard(forProject: projectID) {
+            return existing
+        }
+        
+        let defaultColumns: [KanbanColumn]
+        let columnMode: KanbanColumnMode
+        
+        if projectID == nil {
+            // Global board - only status mode makes sense
+            columnMode = .status
+            defaultColumns = KanbanColumn.defaultStatusColumns()
+        } else {
+            columnMode = .status
+            defaultColumns = KanbanColumn.defaultStatusColumns()
+        }
+        
+        let board = KanbanBoard(
+            projectID: projectID,
+            name: name,
+            columnMode: columnMode,
+            customColumns: defaultColumns
+        )
+        try saveKanbanBoard(board)
+        return board
     }
 }

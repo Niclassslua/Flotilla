@@ -3,7 +3,7 @@ import Foundation
 public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case claudeCode
     case codexCLI
-    case geminiCLI
+    case openCode
 
     public var id: String { rawValue }
 
@@ -11,22 +11,150 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
         switch self {
         case .claudeCode: return "Claude Code"
         case .codexCLI: return "Codex CLI"
-        case .geminiCLI: return "Gemini CLI"
+        case .openCode: return "OpenCode"
+        }
+    }
+
+    public var supportsEffortSelection: Bool {
+        switch self {
+        case .claudeCode, .codexCLI: true
+        case .openCode: false
         }
     }
 }
 
-public enum SessionStatus: String, Codable, Sendable, CaseIterable {
+public enum AgentEffort: String, Codable, CaseIterable, Sendable, Identifiable {
+    case low
+    case medium
+    case high
+    case xhigh
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .low: "Low"
+        case .medium: "Medium"
+        case .high: "High"
+        case .xhigh: "X-High"
+        }
+    }
+}
+
+public enum SessionStatus: String, Codable, Sendable, CaseIterable, Identifiable {
     case working
     case idle
     case waitingForInput
+    case ready
     case finished
     case crashed
+
+    public var id: String { rawValue }
 }
 
 public enum CheckoutMode: String, Codable, Sendable {
     case mainCheckout
     case newWorktree
+}
+
+public enum KanbanColumnMode: String, Codable, CaseIterable, Sendable {
+    case status
+    case agents
+    case workflow
+    case custom
+}
+
+public enum WorkflowStage: String, Codable, CaseIterable, Sendable, Identifiable {
+    case backlog
+    case inProgress
+    case review
+    case merged
+
+    public var id: String { rawValue }
+}
+
+public struct KanbanColumn: Codable, Hashable, Sendable, Identifiable {
+    public let id: UUID
+    public var title: String
+    public var order: Int
+    public var statusFilter: SessionStatus?
+    public var agentFilter: AgentKind?
+    public var workflowStageFilter: WorkflowStage?
+    public var color: String?
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        order: Int,
+        statusFilter: SessionStatus? = nil,
+        agentFilter: AgentKind? = nil,
+        workflowStageFilter: WorkflowStage? = nil,
+        color: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.order = order
+        self.statusFilter = statusFilter
+        self.agentFilter = agentFilter
+        self.workflowStageFilter = workflowStageFilter
+        self.color = color
+    }
+
+    public static func defaultStatusColumns() -> [KanbanColumn] {
+        [
+            KanbanColumn(title: "Working", order: 0, statusFilter: .working),
+            KanbanColumn(title: "Waiting", order: 1, statusFilter: .waitingForInput),
+            KanbanColumn(title: "Ready", order: 2, statusFilter: .ready),
+            KanbanColumn(title: "Idle", order: 3, statusFilter: .idle),
+            KanbanColumn(title: "Finished", order: 4, statusFilter: .finished),
+            KanbanColumn(title: "Crashed", order: 5, statusFilter: .crashed),
+        ]
+    }
+
+    public static func defaultAgentColumns() -> [KanbanColumn] {
+        [
+            KanbanColumn(title: "Claude Code", order: 0, agentFilter: .claudeCode),
+            KanbanColumn(title: "Codex CLI", order: 1, agentFilter: .codexCLI),
+            KanbanColumn(title: "OpenCode", order: 2, agentFilter: .openCode),
+        ]
+    }
+
+    public static func defaultWorkflowColumns() -> [KanbanColumn] {
+        [
+            KanbanColumn(title: "Backlog", order: 0, workflowStageFilter: .backlog),
+            KanbanColumn(title: "In Progress", order: 1, workflowStageFilter: .inProgress),
+            KanbanColumn(title: "Review", order: 2, workflowStageFilter: .review),
+            KanbanColumn(title: "Merged", order: 3, workflowStageFilter: .merged),
+        ]
+    }
+}
+
+public struct KanbanBoard: Codable, Hashable, Sendable, Identifiable {
+    public let id: UUID
+    public var projectID: UUID?
+    public var name: String
+    public var columnMode: KanbanColumnMode
+    public var customColumns: [KanbanColumn]
+    public var cardOrder: [String: Int]
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        projectID: UUID?,
+        name: String,
+        columnMode: KanbanColumnMode = .status,
+        customColumns: [KanbanColumn] = [],
+        cardOrder: [String: Int] = [:],
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.projectID = projectID
+        self.name = name
+        self.columnMode = columnMode
+        self.customColumns = customColumns
+        self.cardOrder = cardOrder
+        self.updatedAt = updatedAt
+    }
 }
 
 public struct WorktreeInfo: Codable, Hashable, Sendable {
@@ -58,11 +186,19 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public var title: String
     public var goal: String
     public var agent: AgentKind
+    /// `nil` uses the agent's own default model; otherwise passed as `--model <value>`.
+    public var model: String?
+    /// Per-session reasoning/compute effort. `nil` preserves the CLI's own default.
+    public var effort: AgentEffort?
     /// `nil` for a general/standalone session not tied to any project.
     public var projectID: UUID?
     public var workingDirectory: URL
     public var worktree: WorktreeInfo?
     public var status: SessionStatus
+    /// Kanban board column assignment (for custom column mode)
+    public var kanbanColumnID: UUID?
+    /// Workflow stage (for workflow column mode)
+    public var workflowStage: WorkflowStage?
     /// Raw PTY byte stream retained across launches and replayed into
     /// SwiftTerm. Capped by the app before persistence.
     public var terminalScrollback: Data
@@ -74,10 +210,14 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         title: String,
         goal: String,
         agent: AgentKind,
+        model: String? = nil,
+        effort: AgentEffort? = nil,
         projectID: UUID?,
         workingDirectory: URL,
         worktree: WorktreeInfo? = nil,
         status: SessionStatus = .idle,
+        kanbanColumnID: UUID? = nil,
+        workflowStage: WorkflowStage? = nil,
         terminalScrollback: Data = Data(),
         createdAt: Date = Date(),
         lastActiveAt: Date = Date()
@@ -86,10 +226,14 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         self.title = title
         self.goal = goal
         self.agent = agent
+        self.model = model
+        self.effort = effort
         self.projectID = projectID
         self.workingDirectory = workingDirectory
         self.worktree = worktree
         self.status = status
+        self.kanbanColumnID = kanbanColumnID
+        self.workflowStage = workflowStage
         self.terminalScrollback = terminalScrollback
         self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt

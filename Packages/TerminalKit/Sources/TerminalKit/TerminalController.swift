@@ -36,11 +36,21 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     private var fontSize = 14.0
     private var optionAsMetaKey = true
     private var scrollSensitivity = 1.0
+    private var gpuRendering = false
     private var outputTask: Task<Void, Never>?
     private var accessibilityTask: Task<Void, Never>?
     private var resizeTask: Task<Void, Never>?
+    private var hasSentInitialResize = false
+    private let pendingOutput = CoalescingOutputBuffer()
+    private var lastPublishedAccessibleText: [ObjectIdentifier: String] = [:]
+
+    /// Number of times `flushPendingOutput` has actually fed the renderers,
+    /// as opposed to the number of PTY reads received. Exposed so tests can
+    /// assert that a burst of reads collapses into far fewer flushes.
+    public private(set) var outputFlushCount = 0
 
     private static let maximumReplayBytes = 2 * 1_024 * 1_024
+    private static let replayTrimSlack = 256 * 1_024
 
     /// `accessibilityIdentifier` must be unique per session (e.g. include
     /// the session title) — Grid View can show several terminals mounted
@@ -69,8 +79,13 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         configure(sessionTerminalView)
         if !initialScrollback.isEmpty {
             let bytes = [UInt8](initialScrollback)
-            sessionTerminalView.feed(byteArray: bytes[...])
-            publishAccessibleContent()
+            TerminalPerfLog.measure(
+                "TerminalController.replayInitialScrollback",
+                "\(accessibilityIdentifier) \(bytes.count)B"
+            ) {
+                sessionTerminalView.feed(byteArray: bytes[...])
+                publishAccessibleContent()
+            }
         }
         consumeOutput()
     }
@@ -84,15 +99,32 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
             return existing
         }
 
-        let view = Self.makeTerminalView(for: presentation)
-        terminalViews[presentation] = view
-        configure(view)
-        if !replayBuffer.isEmpty {
-            let bytes = [UInt8](replayBuffer)
-            view.feed(byteArray: bytes[...])
-            publishAccessibleContent(for: view)
+        return TerminalPerfLog.measure(
+            "TerminalController.makeRenderer",
+            "\(accessibilityIdentifier) presentation=\(presentation) replay=\(replayBuffer.count)B"
+        ) {
+            let view = Self.makeTerminalView(for: presentation)
+            terminalViews[presentation] = view
+            configure(view)
+            if !replayBuffer.isEmpty {
+                let bytes = [UInt8](replayBuffer)
+                view.feed(byteArray: bytes[...])
+                publishAccessibleContent(for: view)
+            }
+            return view
         }
-        return view
+    }
+
+    /// The text the emulator currently has on screen.
+    ///
+    /// This is the same buffer read-out already published for accessibility,
+    /// exposed so status inference can look at what the agent is *drawing*
+    /// instead of guessing from how many bytes it wrote. Reading it is free —
+    /// no process is spawned and the emulator is not disturbed.
+    @MainActor
+    public func visibleScreenText() -> String? {
+        guard let terminal = sessionTerminalView.terminal else { return nil }
+        return String(decoding: terminal.getBufferAsData(), as: UTF8.self)
     }
 
     /// Applies host-app presentation preferences without recreating the
@@ -101,17 +133,26 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     public func applyPreferences(
         fontSize: Double,
         optionAsMetaKey: Bool,
-        scrollSensitivity: Double
+        scrollSensitivity: Double,
+        gpuRendering: Bool = false
     ) {
         self.fontSize = fontSize
         self.optionAsMetaKey = optionAsMetaKey
         self.scrollSensitivity = scrollSensitivity
+        self.gpuRendering = gpuRendering
         for view in terminalViews.values {
             configureXirpAppearance(view, fontSize: CGFloat(fontSize))
             view.optionAsMetaKey = optionAsMetaKey
             view.scrollSensitivity = CGFloat(scrollSensitivity)
             view.scrollerStyle = .overlay
+            applyRenderer(gpuRendering, to: view)
         }
+    }
+
+    /// Falls back to CoreGraphics on any failure (e.g. no Metal device) —
+    /// `setUseMetal` is best-effort, never a hard requirement to render.
+    private func applyRenderer(_ gpuRendering: Bool, to view: TerminalView) {
+        try? view.setUseMetal(gpuRendering)
     }
 
     /// Xirp's default prompt bindings submit with Return and insert a
@@ -123,10 +164,10 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     }
 
     private static func makeTerminalView(for presentation: TerminalPresentation) -> TerminalView {
-        TerminalView(
+        FlotillaTerminalView(
             frame: .zero,
             options: TerminalOptions(
-                cursorStyle: presentation == .grid ? .steadyBlock : .blinkBlock,
+                cursorStyle: .steadyBlock,
                 scrollback: 0
             )
         )
@@ -134,6 +175,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
 
     private func configure(_ view: TerminalView) {
         view.terminalDelegate = self
+        applyRenderer(gpuRendering, to: view)
         // SwiftTerm's custom-drawn content is not exposed in the AX tree, so
         // republish each renderer's buffer for assistive technology and UI
         // automation. Only the currently mounted presentation is visible.
@@ -221,24 +263,49 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         outputTask = Task { [weak self] in
             for await chunk in stream {
                 guard let self else { return }
-                let bytes = [UInt8](chunk)
-                await MainActor.run {
-                    self.appendToReplayBuffer(chunk)
-                    for view in self.terminalViews.values {
-                        view.feed(byteArray: bytes[...])
+                if self.pendingOutput.append(chunk) {
+                    Task { @MainActor [weak self] in
+                        self?.flushPendingOutput()
                     }
-                    self.outputHandler(chunk)
-                    self.scheduleAccessibleContentPublication()
                 }
             }
+            // The stream finished (process exited) — drain whatever arrived
+            // after the last scheduled flush so no trailing output is lost.
+            await MainActor.run { [weak self] in
+                self?.flushPendingOutput()
+            }
         }
+    }
+
+    /// Drains everything buffered since the last flush and applies it to the
+    /// emulator(s) exactly once, regardless of how many PTY reads produced
+    /// it. Coalescing here means a TUI's cursor-hide/cursor-show escape pair
+    /// — or any other multi-chunk repaint — always resolves within a single
+    /// flush instead of being visible mid-repaint for a runloop turn.
+    @MainActor
+    private func flushPendingOutput() {
+        let data = pendingOutput.drain()
+        guard !data.isEmpty else { return }
+        outputFlushCount += 1
+        appendToReplayBuffer(data)
+        let bytes = [UInt8](data)
+        TerminalPerfLog.measure(
+            "TerminalController.feed",
+            "\(accessibilityIdentifier) \(bytes.count)B → \(terminalViews.count) renderer(s)"
+        ) {
+            for view in terminalViews.values {
+                view.feed(byteArray: bytes[...])
+            }
+        }
+        outputHandler(data)
+        scheduleAccessibleContentPublication()
     }
 
     @MainActor
     private func scheduleAccessibleContentPublication() {
         accessibilityTask?.cancel()
-        accessibilityTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(100))
+        accessibilityTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
             self?.publishAccessibleContent()
         }
@@ -247,7 +314,11 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     @MainActor
     private func appendToReplayBuffer(_ data: Data) {
         replayBuffer.append(data)
-        if replayBuffer.count > Self.maximumReplayBytes {
+        // Trim with slack rather than back down to the cap on every chunk:
+        // this turns an O(chunks) sequence of full-buffer copies into an
+        // amortized O(1) one, at the cost of briefly overshooting the cap by
+        // up to `replayTrimSlack` bytes.
+        if replayBuffer.count > Self.maximumReplayBytes + Self.replayTrimSlack {
             replayBuffer = Data(replayBuffer.suffix(Self.maximumReplayBytes))
         }
     }
@@ -258,9 +329,16 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         }
     }
 
+    /// Skips renderers that aren't mounted (no `window`) and skips the
+    /// `setAccessibilityValue` call entirely when the serialized buffer text
+    /// hasn't changed since the last publish — both `getBufferAsData` and the
+    /// AX write are otherwise paid on every debounce tick per renderer.
     private func publishAccessibleContent(for terminalView: TerminalView) {
-        guard let terminal = terminalView.terminal else { return }
+        guard terminalView.window != nil, let terminal = terminalView.terminal else { return }
         let text = String(decoding: terminal.getBufferAsData(), as: UTF8.self)
+        let key = ObjectIdentifier(terminalView)
+        guard lastPublishedAccessibleText[key] != text else { return }
+        lastPublishedAccessibleText[key] = text
         terminalView.setAccessibilityValue(text)
     }
 
@@ -272,13 +350,24 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     }
 
     public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-        // Xirp waits for pane layout to settle before resizing the PTY. This
-        // avoids sending a stream of transient dimensions during a grid
-        // reflow and lets the agent redraw once at the final rows/columns.
+        // The process starts at a deliberately narrow guessed size (see
+        // SessionProcessManager) before any terminal view has laid out. The
+        // first real measurement corrects that mismatch immediately, so the
+        // agent redraws its startup screen at the true size before it can
+        // print much at the wrong one. Later calls, from a live grid reflow,
+        // still wait for pane layout to settle so we don't send a stream of
+        // transient dimensions mid-drag.
         resizeTask?.cancel()
+        TerminalPerfLog.event("sizeChanged \(accessibilityIdentifier) → \(newCols)x\(newRows) initial=\(!hasSentInitialResize)")
+        guard hasSentInitialResize else {
+            hasSentInitialResize = true
+            process.resize(PTYSize(cols: newCols, rows: newRows))
+            return
+        }
         resizeTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled, let self else { return }
+            TerminalPerfLog.event("PTY resize \(self.accessibilityIdentifier) → \(newCols)x\(newRows)")
             self.process.resize(PTYSize(cols: newCols, rows: newRows))
         }
     }
