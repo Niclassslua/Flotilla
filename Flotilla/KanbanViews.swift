@@ -417,14 +417,21 @@ struct KanbanCardView: View {
         .onTapGesture(count: 2) {
             openSession(session.id)
         }
-        .onAppear {
+        .task {
+            // Deliberately not `onAppear`: attaching a peek can have to build
+            // a terminal controller and replay that session's scrollback into
+            // a fresh emulator, and doing that for every card inside the
+            // layout-switch commit is what made entering the board hang. This
+            // yields first, so the board draws and each card's terminal
+            // attaches on a later runloop turn.
+            await Task.yield()
             setupTerminalPeek()
         }
         .onDisappear {
             terminalPeekController = nil
         }
     }
-    
+
     private var cardHeader: some View {
         HStack(spacing: 8) {
             StatusBadge(session.status, variant: .compact)
@@ -494,7 +501,7 @@ struct KanbanCardView: View {
             
 // Real diff stats
             if let worktree = session.worktree {
-                SessionDiffStatView(session: session, gitService: store.gitService)
+                SessionDiffStatView(session: session, diffStatStore: store.diffStatStore)
             } else {
                 Text("±0")
                     .font(.caption2.monospacedDigit())
@@ -584,30 +591,43 @@ struct KanbanCardView: View {
     }
 }
 
+/// Hosts the card-sized `.peek` renderer for one session. It never touches the
+/// `.session` renderer, so the focused workspace keeps its own terminal mounted
+/// and measured for its own pane (see `TerminalPresentation.peek`).
 struct TerminalPeekView: NSViewRepresentable {
     let controller: TerminalController
     let session: Session
-    
+
     func makeNSView(context: Context) -> NSView {
         PerfLog.measure("TerminalPeekView.makeNSView", session.title) {
-            // NOTE: `.session` is the *same* renderer the focused workspace
-            // mounts, so every peek reparents that live NSView into this
-            // scroll view. The probe below records how often that happens.
-            let terminalView = controller.terminalView(for: .session)
-            PerfLog.event("TerminalPeekView reparenting .session renderer for \(session.title) (previous superview: \(terminalView.superview.map { String(describing: type(of: $0)) } ?? "none"))")
-            let container = NSScrollView()
-            container.documentView = terminalView
-            container.hasVerticalScroller = false
-            container.hasHorizontalScroller = false
-            container.autohidesScrollers = true
-            container.backgroundColor = NSColor(FlotillaColors().terminalCanvas)
-            container.drawsBackground = true
+            let container = NSView()
+            container.wantsLayer = true
+            container.layer?.backgroundColor = NSColor(FlotillaColors().terminalCanvas).cgColor
+            mount(controller.terminalView(for: .peek), in: container)
             return container
         }
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         PerfLog.bump("TerminalPeekView.updateNSView", session.title)
+        let terminalView = controller.terminalView(for: .peek)
+        guard terminalView.superview !== nsView else { return }
+        mount(terminalView, in: nsView)
+    }
+
+    /// Pins the renderer to the card instead of handing it to an `NSScrollView`
+    /// as a `documentView`: SwiftTerm sizes its grid from its own frame, and a
+    /// document view with no constraints never gets one.
+    private func mount(_ terminalView: NSView, in container: NSView) {
+        terminalView.removeFromSuperview()
+        terminalView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(terminalView)
+        NSLayoutConstraint.activate([
+            terminalView.topAnchor.constraint(equalTo: container.topAnchor),
+            terminalView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            terminalView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            terminalView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
     }
 }
 

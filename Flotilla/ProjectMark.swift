@@ -35,9 +35,9 @@ struct ProjectMark: View {
     /// Hues harmonized with FlotillaPalette — muted enough to sit in a dark
     /// sidebar without turning section headers into a rainbow.
     static let tints: [Color] = [
-        FlotillaPalette.signal,
-        FlotillaPalette.cyan,
-        FlotillaPalette.ocean,
+        FlotillaColors().statusWorking,
+        FlotillaColors().statusReady,
+        FlotillaColors().accent,
         Color(red: 0.78, green: 0.65, blue: 0.95),
         Color(red: 0.93, green: 0.74, blue: 0.42),
         Color(red: 0.62, green: 0.78, blue: 0.66),

@@ -15,9 +15,13 @@ struct FileBrowserView: View {
         HSplitView {
             fileNavigator
                 .frame(minWidth: 210, idealWidth: 260, maxWidth: 360)
+                .frame(maxHeight: .infinity)
+                .layoutPriority(1)
             editor
-                .frame(minWidth: 360)
+                .frame(minWidth: 360, maxWidth: .infinity)
+                .frame(maxHeight: .infinity)
         }
+        .frame(maxHeight: .infinity)
         .task(id: rootURL) { await viewModel.refresh() }
     }
 
@@ -48,7 +52,6 @@ struct FileBrowserView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(FlotillaColors().surface)
             } else if let errorMessage = viewModel.errorMessage, viewModel.nodes.isEmpty {
-                // Show error state when there's an error and no files loaded
                 ContentUnavailableView(
                     "Error Loading Files",
                     systemImage: "exclamationmark.triangle",
@@ -70,9 +73,16 @@ struct FileBrowserView: View {
                         Button {
                             Task { await viewModel.select(node) }
                         } label: {
-                            Label(node.name, systemImage: node.isDirectory ? "folder" : icon(for: node.url))
-                                .foregroundStyle(.primary)
-                                .contentShape(.rect)
+                            HStack(spacing: 8) {
+                                Image(systemName: node.iconInfo.systemName)
+                                    .foregroundStyle(node.iconInfo.color)
+                                    .font(.system(size: 13))
+                                Text(node.name)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                         .disabled(node.isDirectory)
@@ -90,6 +100,7 @@ struct FileBrowserView: View {
             }
         }
         .background(FlotillaColors().surface)
+        .frame(maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -98,8 +109,9 @@ struct FileBrowserView: View {
         if let node = viewModel.selectedNode {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
-                    Image(systemName: icon(for: node.url))
-                        .foregroundStyle(.secondary)
+                    Image(systemName: node.iconInfo.systemName)
+                        .foregroundStyle(node.iconInfo.color)
+                        .font(.system(size: 16))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(node.name)
                             .font(.headline)
@@ -141,15 +153,20 @@ struct FileBrowserView: View {
 
                 Divider()
 
-                TextEditor(text: $bindableViewModel.content)
-                    .font(.system(.body, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .padding(FlotillaSpacing.small)
-                    .background(FlotillaColors().terminalCanvas)
-                    .focused($isEditorFocused)
-                    .accessibilityIdentifier("FileBrowser.Editor")
-                    .accessibilityLabel("File editor for \(node.name)")
+                SyntaxHighlightedTextEditor(
+                    text: $bindableViewModel.content,
+                    language: SyntaxHighlightedTextEditor.Language.from(url: node.url),
+                    font: .system(.body, design: .monospaced),
+                    onTextChange: { newValue in
+                        bindableViewModel.content = newValue
+                    }
+                )
+                .focused($isEditorFocused)
+                .padding(FlotillaSpacing.small)
+                .accessibilityIdentifier("FileBrowser.Editor")
+                .accessibilityLabel("File editor for \(node.name)")
             }
+            .frame(maxHeight: .infinity)
         } else {
             ContentUnavailableView(
                 "Select a File",
@@ -158,15 +175,7 @@ struct FileBrowserView: View {
             )
             .accessibilityIdentifier("FileBrowser.NoSelection")
             .background(FlotillaColors().terminalCanvas)
-        }
-    }
-
-    private func icon(for url: URL) -> String {
-        switch url.pathExtension.lowercased() {
-        case "swift": "swift"
-        case "md": "doc.richtext"
-        case "json", "yml", "yaml": "curlybraces"
-        default: "doc.text"
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

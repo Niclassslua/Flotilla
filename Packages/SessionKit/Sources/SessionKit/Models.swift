@@ -100,31 +100,44 @@ public struct KanbanColumn: Codable, Hashable, Sendable, Identifiable {
         self.color = color
     }
 
+    /// A fixed identity for one of the built-in columns.
+    ///
+    /// The board view builds its columns by calling the factories below on
+    /// every SwiftUI body evaluation, and `ForEach` keys off `id`. With the
+    /// default `UUID()` every evaluation produced columns SwiftUI had never
+    /// seen, so it tore down and rebuilt every column, card and hosted
+    /// terminal view instead of diffing them — which froze the Kanban layout.
+    /// Deriving the id from the column's kind keeps it stable across calls
+    /// without hardcoding opaque literals.
+    private static func builtInID(kind: UInt8, index: UInt8) -> UUID {
+        UUID(uuid: (0xF1, 0x07, 0x11, 0x11, 0x00, 0x00, 0x40, 0x00, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, kind, index))
+    }
+
     public static func defaultStatusColumns() -> [KanbanColumn] {
         [
-            KanbanColumn(title: "Working", order: 0, statusFilter: .working),
-            KanbanColumn(title: "Waiting", order: 1, statusFilter: .waitingForInput),
-            KanbanColumn(title: "Ready", order: 2, statusFilter: .ready),
-            KanbanColumn(title: "Idle", order: 3, statusFilter: .idle),
-            KanbanColumn(title: "Finished", order: 4, statusFilter: .finished),
-            KanbanColumn(title: "Crashed", order: 5, statusFilter: .crashed),
+            KanbanColumn(id: builtInID(kind: 1, index: 0), title: "Working", order: 0, statusFilter: .working),
+            KanbanColumn(id: builtInID(kind: 1, index: 1), title: "Waiting", order: 1, statusFilter: .waitingForInput),
+            KanbanColumn(id: builtInID(kind: 1, index: 2), title: "Ready", order: 2, statusFilter: .ready),
+            KanbanColumn(id: builtInID(kind: 1, index: 3), title: "Idle", order: 3, statusFilter: .idle),
+            KanbanColumn(id: builtInID(kind: 1, index: 4), title: "Finished", order: 4, statusFilter: .finished),
+            KanbanColumn(id: builtInID(kind: 1, index: 5), title: "Crashed", order: 5, statusFilter: .crashed),
         ]
     }
 
     public static func defaultAgentColumns() -> [KanbanColumn] {
         [
-            KanbanColumn(title: "Claude Code", order: 0, agentFilter: .claudeCode),
-            KanbanColumn(title: "Codex CLI", order: 1, agentFilter: .codexCLI),
-            KanbanColumn(title: "OpenCode", order: 2, agentFilter: .openCode),
+            KanbanColumn(id: builtInID(kind: 2, index: 0), title: "Claude Code", order: 0, agentFilter: .claudeCode),
+            KanbanColumn(id: builtInID(kind: 2, index: 1), title: "Codex CLI", order: 1, agentFilter: .codexCLI),
+            KanbanColumn(id: builtInID(kind: 2, index: 2), title: "OpenCode", order: 2, agentFilter: .openCode),
         ]
     }
 
     public static func defaultWorkflowColumns() -> [KanbanColumn] {
         [
-            KanbanColumn(title: "Backlog", order: 0, workflowStageFilter: .backlog),
-            KanbanColumn(title: "In Progress", order: 1, workflowStageFilter: .inProgress),
-            KanbanColumn(title: "Review", order: 2, workflowStageFilter: .review),
-            KanbanColumn(title: "Merged", order: 3, workflowStageFilter: .merged),
+            KanbanColumn(id: builtInID(kind: 3, index: 0), title: "Backlog", order: 0, workflowStageFilter: .backlog),
+            KanbanColumn(id: builtInID(kind: 3, index: 1), title: "In Progress", order: 1, workflowStageFilter: .inProgress),
+            KanbanColumn(id: builtInID(kind: 3, index: 2), title: "Review", order: 2, workflowStageFilter: .review),
+            KanbanColumn(id: builtInID(kind: 3, index: 3), title: "Merged", order: 3, workflowStageFilter: .merged),
         ]
     }
 }

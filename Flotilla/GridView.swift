@@ -51,7 +51,7 @@ struct GridView: View {
                 .accessibilityIdentifier("GridView")
             }
         }
-        .background(FlotillaPalette.canvas)
+        .background(FlotillaColors().canvas)
         .onAppear(perform: ensureActiveSession)
         .onChange(of: visibleSessions.map(\.id)) {
             ensureActiveSession()
@@ -88,7 +88,7 @@ struct GridView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
-        .background(FlotillaPalette.panel)
+        .background(FlotillaColors().surface)
     }
 
     private var selectedProjectName: String {

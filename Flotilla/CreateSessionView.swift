@@ -85,13 +85,13 @@ if let error = store.lastCreationError {
         HStack(spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(FlotillaPalette.ocean)
+                    .fill(FlotillaColors().accent)
                 Image(systemName: "point.3.connected.trianglepath.dotted")
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(.white)
             }
             .frame(width: 48, height: 48)
-            .shadow(color: FlotillaPalette.ocean.opacity(0.25), radius: 10, y: 4)
+            .shadow(color: FlotillaColors().accent.opacity(0.25), radius: 10, y: 4)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Launch a Session")
@@ -120,7 +120,7 @@ if let error = store.lastCreationError {
             if !isGeneralSession {
                 HStack(spacing: 10) {
                     Image(systemName: selectedFolder == nil ? "folder.badge.questionmark" : "folder.fill")
-                        .foregroundStyle(selectedFolder == nil ? Color.secondary : FlotillaPalette.ocean)
+                        .foregroundStyle(selectedFolder == nil ? Color.secondary : FlotillaColors().accent)
                     Text(selectedFolder?.path ?? "No project folder selected")
                         .foregroundStyle(selectedFolder == nil ? .secondary : .primary)
                         .lineLimit(1)
@@ -216,7 +216,7 @@ if let error = store.lastCreationError {
 
             HStack(spacing: 8) {
                 Image(systemName: checkoutMode == .newWorktree ? "checkmark.shield.fill" : "exclamationmark.triangle")
-                    .foregroundStyle(checkoutMode == .newWorktree ? FlotillaPalette.ocean : Color.secondary)
+                    .foregroundStyle(checkoutMode == .newWorktree ? FlotillaColors().accent : Color.secondary)
                 Text(checkoutMode == .newWorktree
                      ? "Creates a dedicated branch and worktree under your configured base directory."
                      : "The agent edits the selected checkout directly; concurrent sessions can conflict.")
@@ -324,9 +324,9 @@ private struct CreationSection<Content: View>: View {
         HStack(alignment: .top, spacing: 14) {
             Text(number)
                 .font(.caption2.monospacedDigit().weight(.bold))
-                .foregroundStyle(FlotillaPalette.ocean)
+                .foregroundStyle(FlotillaColors().accent)
                 .frame(width: 24, height: 24)
-                .background(FlotillaPalette.ocean.opacity(0.12), in: Circle())
+                .background(FlotillaColors().accent.opacity(0.12), in: Circle())
 
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -376,9 +376,9 @@ struct EffortGaugePicker: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(FlotillaPalette.elevated, in: Capsule())
+            .background(FlotillaColors().surfaceElevated, in: Capsule())
             .overlay {
-                Capsule().strokeBorder(isHovering ? effort.tintColor.opacity(0.6) : FlotillaPalette.subtleStroke)
+                Capsule().strokeBorder(isHovering ? effort.tintColor.opacity(0.6) : FlotillaColors().separator)
             }
             .background(
                 GeometryReader { proxy in
@@ -472,9 +472,9 @@ private extension AgentEffort {
     var tintColor: Color {
         switch self {
         case .low: .secondary
-        case .medium: FlotillaPalette.cyan
-        case .high: FlotillaPalette.ocean
-        case .xhigh: FlotillaPalette.ocean
+        case .medium: FlotillaColors().statusReady
+        case .high: FlotillaColors().accent
+        case .xhigh: FlotillaColors().accent
         }
     }
 }

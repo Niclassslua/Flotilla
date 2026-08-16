@@ -193,11 +193,29 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
         stateLock.lock()
         running = false
         let source = masterReadSource
+        let fd = masterFD
         masterReadSource = nil
         masterFD = -1
         childPID = -1
         let callback = storedTerminationHandler
         stateLock.unlock()
+
+        // A fast-exiting child (e.g. `/bin/echo`) can make `waitpid` return
+        // before the read source's event handler has ever fired. Cancelling
+        // the source then permanently discards the pending read — the child's
+        // final output is lost and its stream ends empty. Drain whatever the
+        // child wrote before tearing the source down; once the child is gone,
+        // reads on the pty master return EIO immediately, so this never
+        // blocks. (An in-flight read event consumes distinct bytes, so
+        // concurrent reads cannot duplicate delivery.)
+        if fd >= 0 {
+            var buffer = [UInt8](repeating: 0, count: 65536)
+            while true {
+                let n = Darwin.read(fd, &buffer, buffer.count)
+                guard n > 0 else { break }
+                broadcaster.broadcast(Data(buffer[..<n]))
+            }
+        }
 
         // cancel() stops new event handler invocations from being queued and,
         // once any in-flight invocation returns, runs the cancel handler

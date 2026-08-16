@@ -10,6 +10,12 @@ import ProcessKit
 public enum TerminalPresentation: Hashable, Sendable {
     case session
     case grid
+    /// The small read-only preview on a Kanban card. It is a presentation of
+    /// its own rather than a second mount of `.session`: an NSView has exactly
+    /// one superview, so sharing the focused workspace's renderer meant every
+    /// card reparented a live terminal out of wherever it was, re-measuring it
+    /// for a 300×120 card and resizing the PTY behind it.
+    case peek
 }
 
 /// Owns the PTY subscription for one session and fans its output out to an
@@ -55,6 +61,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// `accessibilityIdentifier` must be unique per session (e.g. include
     /// the session title) — Grid View can show several terminals mounted
     /// simultaneously, so a fixed identifier would be ambiguous.
+    @MainActor
     public init(
         sessionID: UUID,
         process: PTYProcessProtocol,
@@ -151,6 +158,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
 
     /// Falls back to CoreGraphics on any failure (e.g. no Metal device) —
     /// `setUseMetal` is best-effort, never a hard requirement to render.
+    @MainActor
     private func applyRenderer(_ gpuRendering: Bool, to view: TerminalView) {
         try? view.setUseMetal(gpuRendering)
     }
@@ -163,6 +171,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         Task { @MainActor in inputHandler() }
     }
 
+    @MainActor
     private static func makeTerminalView(for presentation: TerminalPresentation) -> TerminalView {
         FlotillaTerminalView(
             frame: .zero,
@@ -173,11 +182,12 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         )
     }
 
+    @MainActor
     private func configure(_ view: TerminalView) {
         view.terminalDelegate = self
         applyRenderer(gpuRendering, to: view)
         // SwiftTerm's custom-drawn content is not exposed in the AX tree, so
-        // republish each renderer's buffer for assistive technology and UI
+        // republish each renderer's buffer for assististive technology and UI
         // automation. Only the currently mounted presentation is visible.
         view.setAccessibilityElement(true)
         view.setAccessibilityIdentifier(accessibilityIdentifier)
@@ -191,6 +201,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// Mirrors Xirp's default xterm.js presentation. Xirp ships a Nerd Font
     /// stack, uses 14 pt by default, and fixes its dark terminal palette even
     /// when the surrounding application follows the system appearance.
+    @MainActor
     private func configureXirpAppearance(_ terminalView: TerminalView, fontSize: CGFloat) {
         let preferredFontNames = [
             "JetBrainsMono Nerd Font Mono",

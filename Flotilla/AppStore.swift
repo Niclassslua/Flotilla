@@ -18,6 +18,7 @@ final class AppStore {
 
     let repository: SessionRepository
     let gitService: GitServiceProtocol
+    let diffStatStore: DiffStatStore
     private let processManager: SessionProcessManager
     /// A closure, not a frozen value, so a Settings change to the worktree
     /// base directory takes effect on the very next session creation
@@ -52,6 +53,7 @@ final class AppStore {
     ) {
         self.repository = repository
         self.gitService = gitService
+        self.diffStatStore = DiffStatStore(gitService: gitService)
         self.processManager = processManager
         self.worktreeBaseDirectoryProvider = worktreeBaseDirectoryProvider
         processManager.eventHandler = { [weak self] event in
@@ -218,7 +220,7 @@ final class AppStore {
         // Update board card order - assign next available position in the column
         // Count sessions already in this column (excluding the one being moved)
         var cardOrder = board.cardOrder
-        let column = board.customColumns.first(where: { $0.id == columnID })!
+        _ = board.customColumns.first(where: { $0.id == columnID })
         let existingInColumn = sessions.filter { s in
             s.kanbanColumnID == columnID && s.id != sessionID
         }
@@ -519,7 +521,7 @@ final class AppStore {
             // UI. Keep the session and bring its process back up so the user
             // can retry the deletion once the lock is released.
             lastOperationError = worktreeCleanupWarning
-            try? processManager.start(session: session, deliverGoal: false)
+            _ = try? processManager.start(session: session, deliverGoal: false)
             return
         }
 

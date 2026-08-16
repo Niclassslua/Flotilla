@@ -125,8 +125,12 @@ final class SessionProcessManager {
                 + ["set-option", "-g", "default-terminal", "tmux-256color"]
             setOptionProcess.standardOutput = FileHandle.nullDevice
             setOptionProcess.standardError = FileHandle.nullDevice
-            try? setOptionProcess.run()
-            setOptionProcess.waitUntilExit()
+            // Only wait when the process actually started: `waitUntilExit`
+            // on a process whose `run()` threw (binary vanished, wrong arch)
+            // blocks forever — there is no child to wait for.
+            if (try? setOptionProcess.run()) != nil {
+                setOptionProcess.waitUntilExit()
+            }
         }
 
         let launch = TmuxSessionWrapping.wrap(

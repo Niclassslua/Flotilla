@@ -26,7 +26,7 @@ public struct ProcessCommandRunner: CommandRunning {
     }
 
     public func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult {
-        try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             process.executableURL = executable
             process.arguments = arguments
@@ -87,6 +87,11 @@ private final class PipeCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
     private var hasFinished = false
+    /// True while the readability handler is between its `read` and its
+    /// `append` — the window where bytes it has consumed are not yet visible
+    /// to `finish()`. `finish()` waits for this to clear before snapshotting,
+    /// so an in-flight handler read can never lose the bytes it consumed.
+    private var handlerReadInFlight = false
 
     init(handle: FileHandle) {
         self.handle = handle
@@ -94,9 +99,16 @@ private final class PipeCollector: @unchecked Sendable {
 
     func start() {
         handle.readabilityHandler = { [weak self] handle in
+            guard let self else { return }
+            self.lock.lock()
+            self.handlerReadInFlight = true
+            self.lock.unlock()
             let chunk = handle.availableData
+            self.lock.lock()
+            self.handlerReadInFlight = false
+            self.lock.unlock()
             guard !chunk.isEmpty else { return }
-            self?.append(chunk)
+            self.append(chunk)
         }
     }
 
@@ -109,6 +121,20 @@ private final class PipeCollector: @unchecked Sendable {
         }
         hasFinished = true
         lock.unlock()
+
+        // The termination handler can fire while the readability handler is
+        // mid-read: that read has *consumed* bytes that are therefore not
+        // visible to `availableData` below, and its append would land after
+        // our snapshot — silently losing the child's tail output. Wait
+        // (bounded) for any in-flight handler read to settle first; once
+        // the child has exited the handler's read cannot block.
+        for _ in 0..<200 {
+            lock.lock()
+            let inFlight = handlerReadInFlight
+            lock.unlock()
+            if !inFlight { break }
+            Thread.sleep(forTimeInterval: 0.0001)
+        }
 
         // Drain any remaining available data without blocking; if the underlying
         // file descriptor has been closed by the termination handler, readDataToEndOfFile

@@ -121,7 +121,7 @@ struct SettingsView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 720, idealWidth: 800, minHeight: 540, idealHeight: 620)
-        .tint(FlotillaPalette.ocean)
+        .tint(FlotillaColors().accent)
         #if DEBUG
         .overlay(alignment: .topLeading) {
             Text("Settings")
@@ -619,7 +619,7 @@ private struct ToolStatusRow: View {
         LabeledContent(name) {
             HStack(spacing: 7) {
                 Circle()
-                    .fill(location == nil ? Color.orange : FlotillaPalette.ocean)
+                    .fill(location == nil ? Color.orange : FlotillaColors().accent)
                     .frame(width: 7, height: 7)
                 Text(location?.path ?? "Not found")
                     .font(.system(.caption, design: .monospaced))

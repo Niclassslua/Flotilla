@@ -31,22 +31,21 @@ struct DiffStatBadge: View {
     }
 }
 
-/// Polls `diffStat(at:)` for a session's repo (its worktree when it has
-/// one) while the row/card is on screen, and renders a `DiffStatBadge`.
-/// The task is tied to the repo path so a session that gains a worktree
-/// after creation switches targets without a view rebuild. Errors render
-/// nothing: a stale badge is worse than no badge.
+/// Renders the shared per-session diff stat from `DiffStatStore`. The store
+/// polls once per session (refcounted across all badge instances on screen)
+/// and hands the cached value out synchronously, so a dozen rows/cards for
+/// the same session cost exactly one polling task. Errors render nothing:
+/// a stale badge is worse than no badge.
 ///
-/// Layout note: `.task` must sit on the outer `HStack`, not on a view whose
-/// body resolves to `EmptyView` — SwiftUI never fires a task attached to a
-/// subtree that renders nothing, which would deadlock the poll (stat stays
-/// nil, badge never appears). The container is always present (even at zero
-/// width for a clean tree), so the initial poll is guaranteed to run.
+/// Layout note: `.onAppear`/`.onDisappear` must sit on the outer `HStack`,
+/// not on a view whose body resolves to `EmptyView` — SwiftUI never fires
+/// lifecycle callbacks attached to a subtree that renders nothing, which
+/// would deadlock the refcount (stat stays nil, badge never appears). The
+/// container is always present (even at zero width for a clean tree), so the
+/// watch is guaranteed to attach.
 struct SessionDiffStatView: View {
     let session: Session
-    let gitService: any GitServiceProtocol
-
-    @State private var stat: GitDiffStat?
+    let diffStatStore: DiffStatStore?
 
     private var repoPath: URL {
         session.worktree?.worktreePath ?? session.workingDirectory
@@ -54,27 +53,19 @@ struct SessionDiffStatView: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            if let stat {
+            if let stat = diffStatStore?.stat(for: session.id) {
                 DiffStatBadge(stat: stat)
             }
         }
         .accessibilityIdentifier("DiffStatBadge-\(session.title)")
-        .task(id: repoPath) { await monitor() }
-    }
-
-    private func monitor() async {
-        await refresh()
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled else { return }
-            await refresh()
+        .onAppear {
+            diffStatStore?.watch(sessionID: session.id, repoPath: repoPath)
         }
-    }
-
-    private func refresh() async {
-        let start = DispatchTime.now().uptimeNanoseconds
-        stat = try? await gitService.diffStat(at: repoPath)
-        let milliseconds = Double(DispatchTime.now().uptimeNanoseconds &- start) / 1_000_000
-        PerfLog.event("diffStat \(session.title) \(String(format: "%.1f", milliseconds))ms (3 git processes) at \(repoPath.lastPathComponent)")
+        .onChange(of: repoPath) { _, newPath in
+            diffStatStore?.setRepoPath(newPath, sessionID: session.id)
+        }
+        .onDisappear {
+            diffStatStore?.unwatch(sessionID: session.id)
+        }
     }
 }

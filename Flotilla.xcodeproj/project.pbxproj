@@ -44,6 +44,7 @@
 		6F50F86EFC801DBC11E411CB /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10FA4B68C945F7656869E72F /* ContentView.swift */; };
 		722BCF7EE2884F961D1414DD /* HooksKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3C04B541BCABB66405B1C847 /* HooksKit */; };
 		723875E0AA69C129B1AA034F /* FlotillaUnitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */; };
+		7915273EEF98D75301DF9245 /* SyntaxHighlightedTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9872301D40294F9A1AC0132F /* SyntaxHighlightedTextEditor.swift */; };
 		79487EA23C46135232451FB2 /* HooksKit in Frameworks */ = {isa = PBXBuildFile; productRef = C25FA4077872094789200E11 /* HooksKit */; };
 		7B1F17DE94EC64B7DFE901A8 /* PersistenceKit in Frameworks */ = {isa = PBXBuildFile; productRef = 90BE8C16AC4B2147D4D413C4 /* PersistenceKit */; };
 		7B67EC38849008BDB276E8FB /* SessionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F8D2F2169407E8FA0432BBF /* SessionRow.swift */; };
@@ -51,6 +52,7 @@
 		802073C68A2CD1D53877853E /* FlotillaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96A3D2D1468CDFA948B0E1E /* FlotillaApp.swift */; };
 		81C78C6DD775CB433EF6872E /* RestartSessionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66DA9DABD1725C0E701BD2A /* RestartSessionUITests.swift */; };
 		83D47B1BF7FE7A2BA393ECAE /* FileBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70CFCC9AFA6C9AF54E0E7CC7 /* FileBrowserView.swift */; };
+		84C68B40AF60011958E9D451 /* FileIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C12A015B53DF3BC9C8ED273 /* FileIconHelper.swift */; };
 		88C3ED6C4E5C2692B278643A /* WorkspaceNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F46E12016C9EAC9CBBF8830 /* WorkspaceNavigation.swift */; };
 		8BD8492768B3EC20D5A9C56A /* SessionKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6D93705F55A5D34EE54781 /* SessionKitTests.swift */; };
 		8EB6E4E9C649E2A2BCA59007 /* ProcessKit in Frameworks */ = {isa = PBXBuildFile; productRef = 638E85CFF2EF3D34E8D9BA60 /* ProcessKit */; };
@@ -74,6 +76,7 @@
 		C7F772DB0DC0620BA9347B66 /* KanbanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8007B7DFF42E35CB2C584727 /* KanbanTests.swift */; };
 		C963138F5465E1FEDDB682E0 /* FileNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D6D3AC66F17CE73B4B11254 /* FileNode.swift */; };
 		CBF95FAF51CF45FB7B4092F6 /* SessionToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317A5649FF8296228C30CA4A /* SessionToolbarView.swift */; };
+		CEE4CDCB0FF5A36F05861FF6 /* DiffStatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3A4F59A625E483E65C9C03 /* DiffStatStore.swift */; };
 		D050C0DB8F39CC367F6CDCC1 /* DiffStatBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DB931C1B112836ED7EFFFF4 /* DiffStatBadge.swift */; };
 		D37BCF50B5C1F0B9CC77B9FE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6E82A51AF77E0200DE401E14 /* Assets.xcassets */; };
 		D3B6C05DAE124919B9768ACE /* StatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231E3D5F2AB73B1CF9511276 /* StatusPresentation.swift */; };
@@ -126,6 +129,7 @@
 		317375274369CC35C23D6991 /* SettingsKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsKitTests.swift; sourceTree = "<group>"; };
 		317A5649FF8296228C30CA4A /* SessionToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionToolbarView.swift; sourceTree = "<group>"; };
 		39EA549F39B605D08B736383 /* ProjectMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMark.swift; sourceTree = "<group>"; };
+		3A3A4F59A625E483E65C9C03 /* DiffStatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffStatStore.swift; sourceTree = "<group>"; };
 		3F46E12016C9EAC9CBBF8830 /* WorkspaceNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceNavigation.swift; sourceTree = "<group>"; };
 		4D087FCC4F2FEE300C885373 /* AgentKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AgentKit; path = Packages/AgentKit; sourceTree = SOURCE_ROOT; };
 		4DB931C1B112836ED7EFFFF4 /* DiffStatBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffStatBadge.swift; sourceTree = "<group>"; };
@@ -138,6 +142,7 @@
 		5F8D2F2169407E8FA0432BBF /* SessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRow.swift; sourceTree = "<group>"; };
 		64E9ED463505D508B071660E /* SettingsKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SettingsKit; path = Packages/SettingsKit; sourceTree = SOURCE_ROOT; };
 		66AFE4069D9D5CE8EFD95B0F /* GridTileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridTileView.swift; sourceTree = "<group>"; };
+		6C12A015B53DF3BC9C8ED273 /* FileIconHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileIconHelper.swift; sourceTree = "<group>"; };
 		6E82A51AF77E0200DE401E14 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		705D6E0A1E689F0672964D08 /* GitKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GitKit; path = Packages/GitKit; sourceTree = SOURCE_ROOT; };
 		70BC83D1E94B12F65DD5E1E2 /* SessionProcessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionProcessManager.swift; sourceTree = "<group>"; };
@@ -155,6 +160,7 @@
 		8D6D3AC66F17CE73B4B11254 /* FileNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNode.swift; sourceTree = "<group>"; };
 		9167419F82C96BB959BDC26D /* RulesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesPanelView.swift; sourceTree = "<group>"; };
 		96262704F0E073633EE1AA24 /* ProcessKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ProcessKit; path = Packages/ProcessKit; sourceTree = SOURCE_ROOT; };
+		9872301D40294F9A1AC0132F /* SyntaxHighlightedTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlightedTextEditor.swift; sourceTree = "<group>"; };
 		A17376EF1B5EAE79721945D7 /* SessionScreenReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionScreenReader.swift; sourceTree = "<group>"; };
 		A185A326325E0657CB0E93B1 /* PerfLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfLog.swift; sourceTree = "<group>"; };
 		A81869BA04B1A4E358E9D943 /* TerminalManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalManager.swift; sourceTree = "<group>"; };
@@ -251,7 +257,9 @@
 				7C3E4FF1906A236364331113 /* CreateSessionView.swift */,
 				C26501E7C1DA2BA3CC4B1182 /* DiffPanelView.swift */,
 				4DB931C1B112836ED7EFFFF4 /* DiffStatBadge.swift */,
+				3A3A4F59A625E483E65C9C03 /* DiffStatStore.swift */,
 				70CFCC9AFA6C9AF54E0E7CC7 /* FileBrowserView.swift */,
+				6C12A015B53DF3BC9C8ED273 /* FileIconHelper.swift */,
 				8D6D3AC66F17CE73B4B11254 /* FileNode.swift */,
 				A96A3D2D1468CDFA948B0E1E /* FlotillaApp.swift */,
 				66AFE4069D9D5CE8EFD95B0F /* GridTileView.swift */,
@@ -275,6 +283,7 @@
 				55D2A680C64B972FD9015C13 /* StartupWarningBanner.swift */,
 				1AA89E931F91138492DF13F0 /* StatusBadge.swift */,
 				231E3D5F2AB73B1CF9511276 /* StatusPresentation.swift */,
+				9872301D40294F9A1AC0132F /* SyntaxHighlightedTextEditor.swift */,
 				1A1806EC634D70E024ECD45F /* TerminalHostView.swift */,
 				A81869BA04B1A4E358E9D943 /* TerminalManager.swift */,
 				2720C701A1A41F3C66A8CBF6 /* TmuxSessionWrapping.swift */,
@@ -516,7 +525,9 @@
 				63A05E66EE5817F248D8AA40 /* CreateSessionView.swift in Sources */,
 				D74DBDDDDBE5BFBABFCF7A31 /* DiffPanelView.swift in Sources */,
 				D050C0DB8F39CC367F6CDCC1 /* DiffStatBadge.swift in Sources */,
+				CEE4CDCB0FF5A36F05861FF6 /* DiffStatStore.swift in Sources */,
 				83D47B1BF7FE7A2BA393ECAE /* FileBrowserView.swift in Sources */,
+				84C68B40AF60011958E9D451 /* FileIconHelper.swift in Sources */,
 				C963138F5465E1FEDDB682E0 /* FileNode.swift in Sources */,
 				802073C68A2CD1D53877853E /* FlotillaApp.swift in Sources */,
 				41875027A5FA4DF5E45D70FB /* GridTileView.swift in Sources */,
@@ -540,6 +551,7 @@
 				9B351AE432770A5FE130EFFB /* StartupWarningBanner.swift in Sources */,
 				5AFEBA002DC9EE604362C38C /* StatusBadge.swift in Sources */,
 				D3B6C05DAE124919B9768ACE /* StatusPresentation.swift in Sources */,
+				7915273EEF98D75301DF9245 /* SyntaxHighlightedTextEditor.swift in Sources */,
 				B68881F0B8EF22038ABF2E47 /* TerminalHostView.swift in Sources */,
 				6C9D4BCCDEB0251DF659F48E /* TerminalManager.swift in Sources */,
 				7D2BE5236B800B0007025AF2 /* TmuxSessionWrapping.swift in Sources */,

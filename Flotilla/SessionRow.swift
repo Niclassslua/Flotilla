@@ -14,8 +14,8 @@ struct SessionRow: View {
     /// yet wire up a delete flow render the row exactly as before.
     var onDeleteRequested: (() -> Void)? = nil
     /// `nil` hides the working-tree diff badge (e.g. contexts without a
-    /// git service); when present, the metadata line ends in `+N −N`.
-    var gitService: (any GitServiceProtocol)? = nil
+    /// diff stat store); when present, the metadata line ends in `+N −N`.
+    var diffStatStore: DiffStatStore? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
@@ -86,10 +86,10 @@ struct SessionRow: View {
     private var providerTile: some View {
         ZStack(alignment: .bottomTrailing) {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(FlotillaPalette.panel)
+                .fill(FlotillaColors().surface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(FlotillaPalette.subtleStroke.opacity(0.6), lineWidth: 0.5)
+                        .strokeBorder(FlotillaColors().separator.opacity(0.6), lineWidth: 0.5)
                 }
                 .overlay {
                     ProviderLogo(agent: session.agent)
@@ -120,7 +120,7 @@ struct SessionRow: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 8, height: 8)
-                .overlay(Circle().strokeBorder(FlotillaPalette.sidebar, lineWidth: 1.5))
+                .overlay(Circle().strokeBorder(FlotillaColors().sidebar, lineWidth: 1.5))
         }
         .frame(width: 16, height: 16)
         .animation(pulseAnimation, value: beaconPulses)
@@ -152,9 +152,9 @@ struct SessionRow: View {
                 Text(session.agent.displayName)
                     .font(.caption2)
             }
-            if let gitService {
+            if let diffStatStore {
                 Spacer(minLength: 2)
-                SessionDiffStatView(session: session, gitService: gitService)
+                SessionDiffStatView(session: session, diffStatStore: diffStatStore)
             }
         }
         .foregroundStyle(.secondary)
@@ -185,13 +185,13 @@ struct SessionRow: View {
             .overlay {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(FlotillaPalette.subtleStroke, lineWidth: 0.5)
+                        .strokeBorder(FlotillaColors().separator, lineWidth: 0.5)
                 }
             }
     }
 
     private var backgroundFill: Color {
-        if isSelected { return FlotillaPalette.elevated }
+        if isSelected { return FlotillaColors().surfaceElevated }
         // A whole-row attention wash for sessions that need input — signal
         // carried by shape and area, not by a colored edge stripe.
         if needsInput { return Color.orange.opacity(isHovering ? 0.13 : 0.08) }

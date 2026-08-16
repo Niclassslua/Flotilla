@@ -40,7 +40,7 @@ public final class UserDefaultsSettingsStore: SettingsStoring, @unchecked Sendab
     }
 
     public func save(_ settings: AppSettings) {
-        var encoded = defaults.data(forKey: key) ?? Data()
+        let _ = defaults.data(forKey: key) ?? Data()
         let newData = try? JSONEncoder().encode(settings)
         guard let data = newData else { return }
         defaults.set(data, forKey: key)

@@ -511,7 +511,7 @@ struct ContentView: View {
             session: session,
             isSelected: navigator.selectedSessionID == session.id,
             onDeleteRequested: { sessionPendingDeletion = session },
-            gitService: store.gitService
+            diffStatStore: store.diffStatStore
         )
         .tag(session.id)
         .accessibilityIdentifier("SessionRow-\(session.title)")

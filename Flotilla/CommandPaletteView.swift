@@ -149,7 +149,7 @@ struct CommandPaletteView: View {
             }
         }
         .frame(width: 680, height: 560)
-        .background(FlotillaPalette.panel)
+        .background(FlotillaColors().surface)
         .onAppear { isFocused = true; selectedIndex = 0 }
         .onDisappear { isFocused = false }
     }

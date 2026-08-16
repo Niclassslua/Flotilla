@@ -14,7 +14,7 @@ enum SessionCardVariant {
 struct SessionCard: View {
     let session: Session
     let variant: SessionCardVariant
-    let gitService: (any GitServiceProtocol)?
+    let diffStatStore: DiffStatStore?
     let onTap: () -> Void
     let onDelete: () -> Void
     let onRestart: () -> Void
@@ -29,7 +29,7 @@ struct SessionCard: View {
     init(
         session: Session,
         variant: SessionCardVariant = .row,
-        gitService: (any GitServiceProtocol)? = nil,
+        diffStatStore: DiffStatStore? = nil,
         onTap: @escaping () -> Void = {},
         onDelete: @escaping () -> Void = {},
         onRestart: @escaping () -> Void = {},
@@ -41,7 +41,7 @@ struct SessionCard: View {
     ) {
         self.session = session
         self.variant = variant
-        self.gitService = gitService
+        self.diffStatStore = diffStatStore
         self.onTap = onTap
         self.onDelete = onDelete
         self.onRestart = onRestart
@@ -256,8 +256,8 @@ struct SessionCard: View {
 
             Spacer()
 
-            if let gitService {
-                SessionDiffStatView(session: session, gitService: gitService)
+            if let diffStatStore {
+                SessionDiffStatView(session: session, diffStatStore: diffStatStore)
             } else {
                 Text("±0")
                     .font(.caption2.monospacedDigit())
@@ -362,9 +362,9 @@ struct SessionCard: View {
                 Text(session.agent.displayName)
                     .font(.caption2)
             }
-            if let gitService {
+            if let diffStatStore {
                 Spacer(minLength: 2)
-                SessionDiffStatView(session: session, gitService: gitService)
+                SessionDiffStatView(session: session, diffStatStore: diffStatStore)
             }
         }
         .foregroundStyle(.secondary)

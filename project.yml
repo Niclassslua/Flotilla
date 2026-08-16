@@ -99,5 +99,7 @@ schemes:
         FlotillaUITests: [test]
     test:
       targets:
-        - FlotillaUnitTests
+        - name: FlotillaUnitTests
+          environmentVariables:
+            UI_TESTING: "1"
         - FlotillaUITests

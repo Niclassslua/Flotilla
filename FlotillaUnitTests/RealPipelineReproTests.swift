@@ -291,6 +291,15 @@ final class RealPipelineReproTests: XCTestCase {
         guard FileManager.default.isExecutableFile(atPath: claudePath) else {
             throw XCTSkip("real claude not installed")
         }
+        // A dedicated temp folder, NOT `generalSessionWorkingDirectory()`:
+        // real Claude Code refuses to start a second instance inside a
+        // directory where another claude is already running (the user's own
+        // app may have a general session there), and this test must be able
+        // to run while the app is in use.
+        let testDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flotilla-real-claude-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: testDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: testDirectory) }
         var settings = AppSettings()
         settings.agentPaths.claudeCodePath = claudePath
         let store = AppStore(
@@ -308,7 +317,7 @@ final class RealPipelineReproTests: XCTestCase {
             title: "Real claude restart",
             goal: "",
             agent: .claudeCode,
-            projectFolder: nil,
+            projectFolder: testDirectory,
             checkoutMode: .mainCheckout
         )
         let created = try XCTUnwrap(store.sessions.first { $0.title == "Real claude restart" })

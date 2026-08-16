@@ -147,9 +147,12 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         // gone) just fails silently — there's nothing to clean up either way.
         // Synchronous on purpose: callers (session restart) immediately run
         // `new-session -A` with the same name, and an in-flight kill landing
-        // after that would kill the freshly created session.
-        try? process.run()
-        process.waitUntilExit()
+        // after that would kill the freshly created session. Only wait when
+        // the process actually started — `waitUntilExit` on a process whose
+        // `run()` threw blocks forever.
+        if (try? process.run()) != nil {
+            process.waitUntilExit()
+        }
     }
 }
 

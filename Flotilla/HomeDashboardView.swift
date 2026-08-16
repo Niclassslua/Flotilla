@@ -55,7 +55,7 @@ struct HomeDashboardView: View {
         }
         .background {
             LinearGradient(
-                colors: [FlotillaPalette.ocean.opacity(0.06), .clear, FlotillaPalette.signal.opacity(0.025)],
+                colors: [FlotillaColors().accent.opacity(0.06), .clear, FlotillaColors().statusWorking.opacity(0.025)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -67,7 +67,7 @@ struct HomeDashboardView: View {
             Image(systemName: "point.3.connected.trianglepath.dotted")
                 .font(.system(size: 38, weight: .light))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(FlotillaPalette.ocean)
+                .foregroundStyle(FlotillaColors().accent)
                 .accessibilityHidden(true)
             Text("What should an agent build?")
                 .font(.largeTitle.weight(.semibold))
@@ -267,9 +267,9 @@ struct ProjectCompactCard: View {
             HStack {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(FlotillaPalette.ocean.opacity(0.12))
+                        .fill(FlotillaColors().accent.opacity(0.12))
                     Image(systemName: "folder.fill")
-                        .foregroundStyle(FlotillaPalette.ocean)
+                        .foregroundStyle(FlotillaColors().accent)
                 }
                 .frame(width: 32, height: 32)
                 Spacer()
@@ -293,15 +293,15 @@ struct ProjectCompactCard: View {
                 Spacer()
                 Text(sessionCount > 0 ? "Active" : "Ready")
                     .font(.caption2.weight(.medium))
-                    .foregroundStyle(sessionCount > 0 ? FlotillaPalette.signal : .secondary)
+                    .foregroundStyle(sessionCount > 0 ? FlotillaColors().statusWorking : .secondary)
             }
         }
         .padding(15)
         .frame(maxWidth: .infinity, minHeight: 154, alignment: .leading)
-        .background(FlotillaPalette.panel, in: RoundedRectangle(cornerRadius: 8))
+        .background(FlotillaColors().surface, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(FlotillaPalette.subtleStroke)
+                .strokeBorder(FlotillaColors().separator)
         }
         .contentShape(.rect)
     }
