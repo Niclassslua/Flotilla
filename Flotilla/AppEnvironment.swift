@@ -65,10 +65,8 @@ final class AppEnvironment {
 
     private static func resetUITestWorktreeDirectories() {
         let fileManager = FileManager.default
-        // These exact /tmp roots are reserved by this test harness. Keeping
-        // cleanup here makes repeated xcodebuild runs deterministic without
-        // ever touching a developer's configured production worktree root.
-        for path in [uiTestWorktreeBasePath, URL(fileURLWithPath: "/tmp/flotilla-custom-worktrees")] {
+        let fixtureWorktree = URL(fileURLWithPath: "/tmp/flotilla-fixture-project-worktrees/fix-login-bug")
+        for path in [uiTestWorktreeBasePath, URL(fileURLWithPath: "/tmp/flotilla-custom-worktrees"), fixtureWorktree] {
             try? fileManager.removeItem(at: path)
             try? fileManager.createDirectory(at: path, withIntermediateDirectories: true)
         }

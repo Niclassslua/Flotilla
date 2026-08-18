@@ -26,6 +26,7 @@ struct StartupWarningBanner: View {
                         isDismissed = true
                     }
                 }
+                .buttonStyle(.bordered)
                 .accessibilityIdentifier("StartupWarningBanner.DismissButton")
             }
             .padding(.horizontal, 12)

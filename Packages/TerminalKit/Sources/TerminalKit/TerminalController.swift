@@ -28,14 +28,16 @@ public enum TerminalPresentation: Hashable, Sendable {
 /// `SystemPTYProcess`/`MockPTYProcess`.
 public final class TerminalController: NSObject, TerminalViewDelegate, @unchecked Sendable {
     public let sessionID: UUID
-    public let processID: UUID
+    public private(set) var processID: UUID
     public var terminalView: TerminalView { sessionTerminalView }
 
-    private let process: PTYProcessProtocol
+    private var process: PTYProcessProtocol
     private let outputHandler: @MainActor @Sendable (Data) -> Void
     private let inputHandler: @MainActor @Sendable () -> Void
     private let multilineNewlineSequence: Data
     private let accessibilityIdentifier: String
+    private let customReflowHandler: (@MainActor @Sendable (TerminalPresentation) -> Void)?
+    private let onPTYResize: (@MainActor @Sendable (PTYSize) -> Void)?
     private let sessionTerminalView: TerminalView
     private var terminalViews: [TerminalPresentation: TerminalView]
     private var replayBuffer: Data
@@ -49,15 +51,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     private var reflowTask: Task<Void, Never>?
     private var hasSentInitialResize = false
 
-    /// Which renderer is allowed to drive the PTY size.
-    ///
-    /// There is one PTY per session but several renderers of it, and every one
-    /// of them reports `sizeChanged` to this same controller. Without this
-    /// gate the last renderer to lay out wins, so a 23-row grid tile laying
-    /// out after the 59-row focused view resizes the agent down to 23 rows —
-    /// and a Kanban peek card resizes it smaller still. The agent then draws
-    /// into a fraction of the visible terminal, which is what "the resize
-    /// sometimes doesn't work" looks like from the outside.
+    private var isReplaying = false
     private var authoritativePresentation: TerminalPresentation = .session
     private let pendingOutput = CoalescingOutputBuffer()
     private var lastPublishedAccessibleText: [ObjectIdentifier: String] = [:]
@@ -85,6 +79,8 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         accessibilityIdentifier: String,
         initialScrollback: Data = Data(),
         multilineNewlineSequence: Data = Data([0x1B, 0x0D]),
+        customReflowHandler: (@MainActor @Sendable (TerminalPresentation) -> Void)? = nil,
+        onPTYResize: (@MainActor @Sendable (PTYSize) -> Void)? = nil,
         outputHandler: @escaping @MainActor @Sendable (Data) -> Void = { _ in },
         inputHandler: @escaping @MainActor @Sendable () -> Void = {}
     ) {
@@ -94,6 +90,8 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         self.process = process
         self.outputHandler = outputHandler
         self.inputHandler = inputHandler
+        self.customReflowHandler = customReflowHandler
+        self.onPTYResize = onPTYResize
         self.multilineNewlineSequence = multilineNewlineSequence
         self.accessibilityIdentifier = accessibilityIdentifier
         self.sessionTerminalView = sessionTerminalView
@@ -101,13 +99,15 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         self.replayBuffer = initialScrollback
         super.init()
         configure(sessionTerminalView)
-if !initialScrollback.isEmpty {
+        if !initialScrollback.isEmpty {
             let bytes = [UInt8](initialScrollback)
             TerminalPerfLog.measure(
                 "TerminalController.replayInitialScrollback",
                 "\(accessibilityIdentifier) \(bytes.count)B"
             ) {
+                isReplaying = true
                 sessionTerminalView.feed(byteArray: bytes[...])
+                isReplaying = false
                 Task { @MainActor in
                     await publishAccessibleContent()
                 }
@@ -134,7 +134,9 @@ if !initialScrollback.isEmpty {
             configure(view)
             if !replayBuffer.isEmpty {
                 let bytes = [UInt8](replayBuffer)
+                isReplaying = true
                 view.feed(byteArray: bytes[...])
+                isReplaying = false
                 Task { @MainActor in
                     await publishAccessibleContent(for: view)
                 }
@@ -156,11 +158,16 @@ if !initialScrollback.isEmpty {
         TerminalPerfLog.event("authoritative \(accessibilityIdentifier) → \(presentation)")
         // The renderer taking over may already be at its final size, in which
         // case no further `sizeChanged` is coming and the PTY would keep the
-        // size the previous renderer left behind.
-        if let view = terminalViews[presentation] {
+        // size the previous renderer left behind. Only sync if the view is attached
+        // to a window and laid out with real dimensions.
+        if let view = terminalViews[presentation], view.window != nil, view.frame.width > 0, view.frame.height > 0 {
             let terminal = view.getTerminal()
             let size = terminal.getDims()
-            process.resize(PTYSize(cols: size.cols, rows: size.rows))
+            guard size.cols >= Self.minimumUsableCols, size.rows >= Self.minimumUsableRows else { return }
+            let ptySize = PTYSize(cols: size.cols, rows: size.rows)
+            process.resize(ptySize)
+            reflowOnDisplay(presentation)
+            onPTYResize?(ptySize)
         }
     }
 
@@ -174,9 +181,10 @@ if !initialScrollback.isEmpty {
     /// it becomes the visible one: open a tile full-screen and the text stays
     /// hard-wrapped to the tile's column count.
     ///
-    /// Replaying the transcript into it is the same path already used when a
-    /// renderer is first created, so the emulator ends up in the state it
-    /// would have been in had it been this size all along.
+    /// For tmux-wrapped sessions, the custom reflow handler triggers a server-side
+    /// repaint (`refresh-client`) instead of replaying stale alt-screen frames.
+    /// For non-tmux sessions, replaying the transcript into the reset emulator
+    /// restores the state it would have had at this size.
     ///
     /// Debounced, because the mount that triggers this is immediately followed
     /// by the layout pass that gives the renderer its real size — replaying
@@ -187,25 +195,52 @@ if !initialScrollback.isEmpty {
         reflowTask?.cancel()
         reflowTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(180))
-            guard !Task.isCancelled, let self, !self.replayBuffer.isEmpty else { return }
-            TerminalPerfLog.event("reflow \(self.accessibilityIdentifier) presentation=\(presentation)")
-            view.getTerminal().resetToInitialState()
-            let bytes = [UInt8](self.replayBuffer)
-            view.feed(byteArray: bytes[...])
-            self.publishAccessibleContent(for: view)
+            guard !Task.isCancelled, let self else { return }
+            if let customReflow = self.customReflowHandler {
+                TerminalPerfLog.event("customReflow \(self.accessibilityIdentifier) presentation=\(presentation)")
+                customReflow(presentation)
+            } else {
+                guard !self.replayBuffer.isEmpty else { return }
+                TerminalPerfLog.event("reflow \(self.accessibilityIdentifier) presentation=\(presentation)")
+                view.getTerminal().resetToInitialState()
+                let bytes = [UInt8](self.replayBuffer)
+                self.isReplaying = true
+                view.feed(byteArray: bytes[...])
+                self.isReplaying = false
+                self.publishAccessibleContent(for: view)
+            }
         }
     }
 
     /// The text the emulator currently has on screen.
     ///
-    /// This is the same buffer read-out already published for accessibility,
-    /// exposed so status inference can look at what the agent is *drawing*
-    /// instead of guessing from how many bytes it wrote. Reading it is free —
-    /// no process is spawned and the emulator is not disturbed.
+    /// Reads from the authoritative mounted view (or falls back to session view),
+    /// exposed so status inference looks at what the agent is actively drawing
+    /// without disturbances.
     @MainActor
     public func visibleScreenText() -> String? {
-        guard let terminal = sessionTerminalView.terminal else { return nil }
+        let activeView = terminalViews[authoritativePresentation] ?? sessionTerminalView
+        guard let terminal = activeView.terminal ?? sessionTerminalView.terminal else { return nil }
         return String(decoding: terminal.getBufferAsData(), as: UTF8.self)
+    }
+
+    /// Rebinds the controller to a replacement PTY process (e.g. after a non-destructive
+    /// tmux reattach) while keeping existing TerminalViews, fonts, and scrollback warm.
+    @MainActor
+    public func rebind(process: PTYProcessProtocol) {
+        self.processID = process.id
+        self.process = process
+        self.outputTask?.cancel()
+        self.hasSentInitialResize = false
+        consumeOutput()
+        if let currentView = terminalViews[authoritativePresentation], currentView.window != nil, currentView.frame.width > 0, currentView.frame.height > 0 {
+            let dims = currentView.getTerminal().getDims()
+            if dims.cols >= Self.minimumUsableCols, dims.rows >= Self.minimumUsableRows {
+                let size = PTYSize(cols: dims.cols, rows: dims.rows)
+                process.resize(size)
+                onPTYResize?(size)
+            }
+        }
     }
 
     /// Applies host-app presentation preferences without recreating the
@@ -433,6 +468,11 @@ if !initialScrollback.isEmpty {
     // MARK: - TerminalViewDelegate
 
     public func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        guard !isReplaying else { return }
+        guard let presentation = terminalViews.first(where: { $0.value === source })?.key,
+              presentation == authoritativePresentation else {
+            return
+        }
         process.send(input: Data(data))
         Task { @MainActor in inputHandler() }
     }
@@ -468,16 +508,25 @@ if !initialScrollback.isEmpty {
         // transient dimensions mid-drag.
         resizeTask?.cancel()
         TerminalPerfLog.event("sizeChanged \(accessibilityIdentifier) → \(newCols)x\(newRows) initial=\(!hasSentInitialResize)")
+        let size = PTYSize(cols: newCols, rows: newRows)
         guard hasSentInitialResize else {
             hasSentInitialResize = true
-            process.resize(PTYSize(cols: newCols, rows: newRows))
+            process.resize(size)
+            Task { @MainActor [weak self] in
+                self?.reflowOnDisplay(presentation)
+                self?.onPTYResize?(size)
+            }
             return
         }
         resizeTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled, let self else { return }
             TerminalPerfLog.event("PTY resize \(self.accessibilityIdentifier) → \(newCols)x\(newRows)")
-            self.process.resize(PTYSize(cols: newCols, rows: newRows))
+            self.process.resize(size)
+            await MainActor.run {
+                self.reflowOnDisplay(presentation)
+                self.onPTYResize?(size)
+            }
         }
     }
 
@@ -488,11 +537,12 @@ if !initialScrollback.isEmpty {
     public func scrolled(source: TerminalView, position: Double) {}
 
     public func clipboardCopy(source: TerminalView, content: Data) {
+        guard !content.isEmpty else { return }
+        let string = String(decoding: content, as: UTF8.self)
+        guard !string.isEmpty else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        if let string = String(data: content, encoding: .utf8) {
-            pasteboard.setString(string, forType: .string)
-        }
+        pasteboard.setString(string, forType: .string)
     }
 
     public func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}

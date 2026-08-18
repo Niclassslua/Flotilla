@@ -44,49 +44,51 @@ struct WorkspaceToolbar: ToolbarContent {
     }
 
     var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            // New Session lives on the sidebar rail now (see FleetSidebar) —
-            // a second "+" up here was redundant. Cmd+N still works via the
-            // app's Workspace menu command.
-
-            // Command Palette
+        ToolbarItem(placement: .primaryAction) {
             Button(action: onCommandPalette) {
                 Image(systemName: "command")
             }
             .help("Command palette")
             .accessibilityIdentifier("Toolbar.CommandPalette")
-            .keyboardShortcut("k", modifiers: .command)
+        }
 
-            // Inspector toggle
+        ToolbarItem(placement: .primaryAction) {
             Button(action: onInspectorToggle) {
                 Image(systemName: "sidebar.right")
             }
             .help("Toggle inspector")
             .accessibilityIdentifier("Toolbar.InspectorToggle")
-            .keyboardShortcut("g", modifiers: [.command, .shift])
         }
 
         ToolbarItemGroup(placement: .principal) {
-            // Presentation picker - only show when in fleet scope
-            if showsPresentationPicker {
-                Picker("Presentation", selection: presentation) {
-                    // Text, not Label: a segmented picker renders icon-only,
-                    // and Grid's `square.grid.2x2` against Board's
-                    // `square.grid.2x2.fill` is not a distinction anyone can
-                    // read at 16pt.
-                    ForEach([WorkspacePresentation.grid, .board, .list]) { mode in
-                        Text(mode.title).tag(mode)
+            if case .session(let sessionID) = navigator.selection,
+               let session = store.sessions.first(where: { $0.id == sessionID }) {
+                SessionToolbarView(
+                    session: session,
+                    project: store.project(for: session),
+                    gitService: store.gitService,
+                    selectedLens: $navigator.sessionLens,
+                    isChangesInspectorOpen: $navigator.isInspectorOpen
+                )
+                .id(session.id)
+            } else {
+                // Presentation picker - only show when in fleet scope
+                if showsPresentationPicker {
+                    Picker("Presentation", selection: presentation) {
+                        ForEach([WorkspacePresentation.grid, .board, .list]) { mode in
+                            Text(mode.title).tag(mode)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 170)
+                    .help("Switch presentation")
+                    .accessibilityIdentifier("Toolbar.PresentationPicker")
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 170)
-                .help("Switch presentation")
-                .accessibilityIdentifier("Toolbar.PresentationPicker")
-            }
 
-            if isFleetScope, navigator.presentation == .grid {
-                GridLayoutControls(settingsViewModel: settingsViewModel)
+                if isFleetScope, navigator.presentation == .grid {
+                    GridLayoutControls(settingsViewModel: settingsViewModel)
+                }
             }
         }
 

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AgentKit
 import SessionKit
 import ProcessKit
@@ -11,7 +12,12 @@ import SettingsKit
 @MainActor
 final class SessionProcessManager {
     private var processes: [UUID: PTYProcessProtocol] = [:]
+    private var activeSessions: [UUID: Session] = [:]
     private var tmuxWrappedSessions: [UUID: URL] = [:]
+    private var reattachTimestamps: [UUID: [Date]] = [:]
+    private var verifyResizeTasks: [UUID: Task<Void, Never>] = [:]
+    private var goalDeliveryTasks: [UUID: Task<Void, Never>] = [:]
+    private var hasConfiguredGlobalOptions = false
     private let locator: ExecutableLocating
     private let processFactory: any PTYProcessCreating
     private let providers: AgentProviderRegistry
@@ -19,6 +25,7 @@ final class SessionProcessManager {
     private let tmuxTerminator: any TmuxSessionTerminating
     private let tmuxGoalDeliverer: any TmuxGoalDelivering
     private let tmuxServerProbe: any TmuxServerProbing
+    private let tmuxClientProbe: any TmuxClientProbing
     private var intentionallyTerminating = Set<UUID>()
     private var tmuxProbeCache: (usable: Bool, probedAt: Date)?
     private static let tmuxProbeCacheLifetime: TimeInterval = 5
@@ -56,7 +63,8 @@ final class SessionProcessManager {
         settingsProvider: @escaping () -> AppSettings = { AppSettings() },
         tmuxTerminator: any TmuxSessionTerminating = ProcessTmuxSessionTerminator(),
         tmuxGoalDeliverer: any TmuxGoalDelivering = ProcessTmuxGoalDeliverer(),
-        tmuxServerProbe: any TmuxServerProbing = ProcessTmuxServerProbe()
+        tmuxServerProbe: any TmuxServerProbing = ProcessTmuxServerProbe(),
+        tmuxClientProbe: any TmuxClientProbing = ProcessTmuxClientProbe()
     ) {
         self.locator = locator
         self.processFactory = processFactory
@@ -65,6 +73,7 @@ final class SessionProcessManager {
         self.tmuxTerminator = tmuxTerminator
         self.tmuxGoalDeliverer = tmuxGoalDeliverer
         self.tmuxServerProbe = tmuxServerProbe
+        self.tmuxClientProbe = tmuxClientProbe
     }
 
     func process(for sessionID: UUID) -> PTYProcessProtocol? {
@@ -79,11 +88,28 @@ final class SessionProcessManager {
     /// of launching a fresh agent.
     func killServerSideSession(sessionID: UUID) {
         guard let tmuxExecutable = locator.locate("tmux") else { return }
+        goalDeliveryTasks[sessionID]?.cancel()
+        goalDeliveryTasks[sessionID] = nil
         tmuxWrappedSessions[sessionID] = nil
+        latestExpectedSizes[sessionID] = nil
         tmuxTerminator.killSession(
             named: TmuxSessionWrapping.sessionName(for: sessionID),
             tmuxExecutable: tmuxExecutable
         )
+    }
+
+    /// Reconciles active tmux sessions on the Flotilla socket against known valid session IDs.
+    /// Any background session named `flotilla-<UUID>` not found in `knownSessionIDs` is reaped.
+    func reapOrphanTmuxSessions(knownSessionIDs: Set<UUID>) {
+        guard let tmuxExecutable = locator.locate("tmux") else { return }
+        let activeSessions = tmuxTerminator.listSessions(tmuxExecutable: tmuxExecutable)
+        let prefix = "flotilla-"
+        for name in activeSessions where name.hasPrefix(prefix) {
+            let uuidString = String(name.dropFirst(prefix.count))
+            if let uuid = UUID(uuidString: uuidString), !knownSessionIDs.contains(uuid) {
+                tmuxTerminator.killSession(named: name, tmuxExecutable: tmuxExecutable)
+            }
+        }
     }
 
     @discardableResult
@@ -117,24 +143,25 @@ final class SessionProcessManager {
         }
         let tmuxExecutable = usableTmuxExecutable(for: session.id)
         tmuxWrappedSessions[session.id] = tmuxExecutable
-
         // Covers an already-running server; the `-f` config passed to
         // `new-session` below covers the cold-socket case this cannot.
         var tmuxConfigurationFile: URL?
         if let tmuxExecutable {
             tmuxConfigurationFile = TmuxSessionWrapping.writeConfigurationFile()
-            for option in TmuxSessionWrapping.globalOptions {
-                let setOptionProcess = Process()
-                setOptionProcess.executableURL = tmuxExecutable
-                setOptionProcess.arguments = TmuxSessionWrapping.socketArguments()
-                    + ["set-option", "-g"] + option
-                setOptionProcess.standardOutput = FileHandle.nullDevice
-                setOptionProcess.standardError = FileHandle.nullDevice
-                // Only wait when the process actually started: `waitUntilExit`
-                // on a process whose `run()` threw (binary vanished, wrong arch)
-                // blocks forever — there is no child to wait for.
-                if (try? setOptionProcess.run()) != nil {
-                    setOptionProcess.waitUntilExit()
+            if !hasConfiguredGlobalOptions {
+                hasConfiguredGlobalOptions = true
+                Task.detached(priority: .utility) {
+                    for option in TmuxSessionWrapping.globalOptions {
+                        let setOptionProcess = Process()
+                        setOptionProcess.executableURL = tmuxExecutable
+                        setOptionProcess.arguments = TmuxSessionWrapping.socketArguments()
+                            + ["set-option", "-g"] + option
+                        setOptionProcess.standardOutput = FileHandle.nullDevice
+                        setOptionProcess.standardError = FileHandle.nullDevice
+                        if (try? setOptionProcess.run()) != nil {
+                            setOptionProcess.waitUntilExit()
+                        }
+                    }
                 }
             }
         }
@@ -150,17 +177,9 @@ final class SessionProcessManager {
         )
 
         let process = processFactory.makeProcess()
-        // Deliberately narrower than any real terminal surface in this app
-        // (the smallest grid tile is ~20-45 columns depending on font size).
-        // The CLI's startup banner picks a single- vs two-column layout
-        // based on this initial width; guessing wide (e.g. 80) makes it draw
-        // a wide banner with absolute cursor placement that overlaps and
-        // garbles once SwiftTerm actually renders it in a narrower pane —
-        // and those corrupted bytes get persisted into session scrollback.
-        // `TerminalController.sizeChanged` corrects this to the real size
-        // immediately once a terminal view lays out, so undershooting here
-        // is always safe.
-        let size = PTYSize(cols: 40, rows: 20)
+        // Standard initial terminal dimensions for background / unmounted launches.
+        // `TerminalController.sizeChanged` updates this to measured geometry upon mount.
+        let size = PTYSize(cols: 100, rows: 30)
         process.terminationHandler = { [weak self, weak process] exitCode in
             Task { @MainActor [weak self] in
                 guard let self, let process else { return }
@@ -170,9 +189,6 @@ final class SessionProcessManager {
                         self.eventHandler?(.terminated(sessionID: session.id, exitCode: exitCode))
                     }
                 } else {
-                    // A replacement process is registered: this exit belongs
-                    // to a superseded lifecycle and must neither clear the
-                    // new entry nor surface as an unexpected termination.
                     self.intentionallyTerminating.remove(session.id)
                 }
             }
@@ -191,18 +207,19 @@ final class SessionProcessManager {
         }
 
         processes[session.id] = process
+        activeSessions[session.id] = session
+        goalDeliveryTasks[session.id]?.cancel()
+        goalDeliveryTasks[session.id] = nil
         if plan.initialInput != nil {
             if let tmuxExecutable {
                 // A raw PTY write only ever gets the goal typed, not
                 // submitted (see TmuxGoalDelivering's doc comment) — tmux
                 // send-keys is the mechanism confirmed to actually work.
-                // Detached because the deliverer blocks its thread waiting
-                // for the pane to actually be ready; must not run on the
-                // main actor.
                 let deliverer = tmuxGoalDeliverer
                 let trimmedGoal = session.goal.trimmingCharacters(in: .whitespacesAndNewlines)
                 let sessionName = TmuxSessionWrapping.sessionName(for: session.id)
-                Task.detached(priority: .userInitiated) {
+                goalDeliveryTasks[session.id] = Task.detached(priority: .userInitiated) {
+                    guard !Task.isCancelled else { return }
                     deliverer.deliverGoal(trimmedGoal, toSessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
                 }
             } else if let initialInput = plan.initialInput {
@@ -210,6 +227,117 @@ final class SessionProcessManager {
             }
         }
         return process
+    }
+
+    func isTmuxWrapped(sessionID: UUID) -> Bool {
+        tmuxWrappedSessions[sessionID] != nil
+    }
+
+    func refreshTmuxClient(for sessionID: UUID) {
+        guard let tmuxExecutable = tmuxWrappedSessions[sessionID] else { return }
+        let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)
+        let probe = tmuxClientProbe
+        Task.detached(priority: .utility) {
+            probe.refreshClient(sessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
+        }
+    }
+
+    /// Replaces only the outer PTY process (the tmux client), detaching and
+    /// reattaching to the existing server-side tmux session without killing the
+    /// agent running inside it. Used to recover from a deaf or desynced client.
+    @discardableResult
+    func reattach(session: Session) throws -> PTYProcessProtocol {
+        if let existing = processes[session.id], existing.isRunning {
+            intentionallyTerminating.insert(session.id)
+            existing.terminate()
+            processes[session.id] = nil
+        }
+        return try start(session: session, deliverGoal: false)
+    }
+
+    @discardableResult
+    func reattach(sessionID: UUID) throws -> PTYProcessProtocol? {
+        guard let session = activeSessions[sessionID] else { return nil }
+        return try reattach(session: session)
+    }
+
+    private var latestExpectedSizes: [UUID: PTYSize] = [:]
+
+    /// Verifies whether tmux registered the resize that was sent to the outer PTY.
+    /// If tmux's client size does not match after debounce, non-destructively
+    /// reattaches the client up to a rate limit of 2 attempts per minute per session.
+    func verifyAndRecoverResize(
+        sessionID: UUID,
+        expectedSize: PTYSize,
+        onRecoveryFailure: (@MainActor (String) -> Void)? = nil
+    ) {
+        guard let tmuxExecutable = tmuxWrappedSessions[sessionID] else { return }
+        let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)
+        let probe = tmuxClientProbe
+        latestExpectedSizes[sessionID] = expectedSize
+
+        verifyResizeTasks[sessionID]?.cancel()
+        verifyResizeTasks[sessionID] = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let self, self.latestExpectedSizes[sessionID] == expectedSize else { return }
+
+            let reportedSize = await Task.detached(priority: .utility) {
+                probe.clientSize(sessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
+            }.value
+
+            guard !Task.isCancelled, self.latestExpectedSizes[sessionID] == expectedSize else { return }
+
+            if let reportedSize {
+                Logger(subsystem: "com.niclassslua.flotilla", category: "TerminalResize").notice(
+                    "Resize check for \(sessionID): expected \(expectedSize.cols)x\(expectedSize.rows), tmux reported \(reportedSize.cols)x\(reportedSize.rows)"
+                )
+                if reportedSize.cols != expectedSize.cols || reportedSize.rows != expectedSize.rows {
+                    Logger(subsystem: "com.niclassslua.flotilla", category: "TerminalResize").error(
+                        "Resize mismatch for \(sessionID): expected \(expectedSize.cols)x\(expectedSize.rows), tmux reported \(reportedSize.cols)x\(reportedSize.rows) — triggering reattach recovery"
+                    )
+                    await MainActor.run {
+                        self.handleResizeMismatch(
+                            sessionID: sessionID,
+                            expectedSize: expectedSize,
+                            onRecoveryFailure: onRecoveryFailure
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func handleResizeMismatch(
+        sessionID: UUID,
+        expectedSize: PTYSize,
+        onRecoveryFailure: (@MainActor (String) -> Void)?
+    ) {
+        let now = Date()
+        let window = now.addingTimeInterval(-60)
+        var timestamps = (reattachTimestamps[sessionID] ?? []).filter { $0 > window }
+        if timestamps.count >= 2 {
+            let errorMsg = "Terminal resize recovery limit reached (2 attempts in 60s) for session \(sessionID)"
+            Logger(subsystem: "com.niclassslua.flotilla", category: "TerminalResize").error("\(errorMsg)")
+            onRecoveryFailure?(errorMsg)
+            return
+        }
+
+        timestamps.append(now)
+        reattachTimestamps[sessionID] = timestamps
+
+        do {
+            if let session = activeSessions[sessionID] {
+                Logger(subsystem: "com.niclassslua.flotilla", category: "TerminalResize").notice(
+                    "Reattaching session \(sessionID) due to resize mismatch"
+                )
+                try reattach(session: session)
+            }
+        } catch {
+            let msg = "Failed to reattach mis-sized session \(sessionID): \(error.localizedDescription)"
+            Logger(subsystem: "com.niclassslua.flotilla", category: "TerminalResize").error("\(msg)")
+            onRecoveryFailure?(msg)
+        }
     }
 
     private func resolveExecutable(plan: AgentLaunchPlan) -> URL? {
@@ -249,6 +377,13 @@ final class SessionProcessManager {
     /// App quit never calls this, so tmux-backed sessions still survive a
     /// relaunch by design.
     func terminate(sessionID: UUID) {
+        activeSessions[sessionID] = nil
+        verifyResizeTasks[sessionID]?.cancel()
+        verifyResizeTasks[sessionID] = nil
+        goalDeliveryTasks[sessionID]?.cancel()
+        goalDeliveryTasks[sessionID] = nil
+        reattachTimestamps[sessionID] = nil
+
         if let process = processes[sessionID], process.isRunning {
             intentionallyTerminating.insert(sessionID)
             process.terminate()

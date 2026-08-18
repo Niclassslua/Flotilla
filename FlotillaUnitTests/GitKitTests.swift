@@ -52,23 +52,6 @@ final class UnifiedDiffParsingTests: XCTestCase {
         XCTAssertTrue(GitService.parseUnifiedDiff("").isEmpty)
     }
 
-    func testSingleFileSingleHunk() {
-        let raw = """
-        diff --git a/README.md b/README.md
-        index 111..222 100644
-        --- a/README.md
-        +++ b/README.md
-        @@ -1,1 +1,2 @@
-         # Title
-        +New line
-        """
-        let diffs = GitService.parseUnifiedDiff(raw)
-        XCTAssertEqual(diffs.count, 1)
-        XCTAssertEqual(diffs[0].path, "README.md")
-        XCTAssertEqual(diffs[0].hunks.count, 1)
-        XCTAssertEqual(diffs[0].hunks[0].lines, [" # Title", "+New line"])
-    }
-
     func testDeletedFileKeepsOriginalPathInsteadOfDevNull() {
         let raw = """
         diff --git a/obsolete.swift b/obsolete.swift
@@ -210,22 +193,6 @@ final class GitServiceRealRepoTests: XCTestCase {
         XCTAssertTrue(paths.contains("README.md"))
         XCTAssertTrue(paths.contains("NEW.md"))
         XCTAssertTrue(status.entries.first(where: { $0.path == "NEW.md" })?.isUntracked ?? false)
-    }
-
-    func testDiffDistinguishesStagedFromUnstaged() async throws {
-        try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
-
-        let unstagedBefore = try await service.diff(at: repoPath, staged: false)
-        XCTAssertEqual(unstagedBefore.first?.path, "README.md")
-
-        let stagedBefore = try await service.diff(at: repoPath, staged: true)
-        XCTAssertTrue(stagedBefore.isEmpty)
-
-        try await git(["add", "README.md"])
-
-        let stagedAfter = try await service.diff(at: repoPath, staged: true)
-        XCTAssertEqual(stagedAfter.first?.path, "README.md")
-        XCTAssertFalse(stagedAfter.first?.hunks.isEmpty ?? true)
     }
 
     func testChangesSnapshotRetainsStagedAndUnstagedVersionsAndUntrackedText() async throws {

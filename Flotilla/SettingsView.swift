@@ -286,6 +286,10 @@ private struct GeneralSettingsPane: View {
     }
 
     private func chooseWorktreeDirectory() {
+        if ProcessInfo.processInfo.environment["UI_TESTING"] == "1" {
+            viewModel.settings.worktreeBaseDirectory = "/tmp/flotilla-custom-worktrees"
+            return
+        }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -464,12 +468,14 @@ private struct AgentSettingsPane: View {
             case .claudeCode: viewModel.settings.agentPaths.claudeCodePath
             case .codexCLI: viewModel.settings.agentPaths.codexCLIPath
             case .openCode: viewModel.settings.agentPaths.openCodePath
+            case .antigravity: viewModel.settings.agentPaths.antigravityPath
             }
         } set: { value in
             switch agent {
             case .claudeCode: viewModel.settings.agentPaths.claudeCodePath = value
             case .codexCLI: viewModel.settings.agentPaths.codexCLIPath = value
             case .openCode: viewModel.settings.agentPaths.openCodePath = value
+            case .antigravity: viewModel.settings.agentPaths.antigravityPath = value
             }
         }
     }
@@ -483,6 +489,7 @@ private struct AgentSettingsPane: View {
             case .claudeCode: viewModel.settings.agentArguments.claudeCodeArguments = parsed
             case .codexCLI: viewModel.settings.agentArguments.codexCLIArguments = parsed
             case .openCode: viewModel.settings.agentArguments.openCodeArguments = parsed
+            case .antigravity: viewModel.settings.agentArguments.antigravityArguments = parsed
             }
         }
     }
@@ -492,6 +499,7 @@ private struct AgentSettingsPane: View {
         case .claudeCode: viewModel.settings.agentArguments.claudeCodeArguments
         case .codexCLI: viewModel.settings.agentArguments.codexCLIArguments
         case .openCode: viewModel.settings.agentArguments.openCodeArguments
+        case .antigravity: viewModel.settings.agentArguments.antigravityArguments
         }
     }
 
@@ -500,10 +508,15 @@ private struct AgentSettingsPane: View {
         case .claudeCode: "Settings.ClaudeCodePath"
         case .codexCLI: "Settings.CodexCLIPath"
         case .openCode: "Settings.OpenCodePath"
+        case .antigravity: "Settings.AntigravityPath"
         }
     }
 
     private func chooseExecutable(for agent: AgentKind) {
+        if ProcessInfo.processInfo.environment["UI_TESTING"] == "1" {
+            pathBinding(for: agent).wrappedValue = "/usr/bin/\(agent.rawValue)"
+            return
+        }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.canChooseFiles = true

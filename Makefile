@@ -32,6 +32,8 @@ test: xcodegen
 		-configuration Debug \
 		-destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) \
+		-parallel-testing-enabled YES \
+		-maximum-parallel-testing-workers 4 \
 		test -only-testing:FlotillaUnitTests
 
 test-ui: xcodegen
@@ -41,6 +43,8 @@ test-ui: xcodegen
 		-configuration Debug \
 		-destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) \
+		-parallel-testing-enabled YES \
+		-maximum-parallel-testing-workers 3 \
 		test -only-testing:FlotillaUITests
 
 archive: xcodegen

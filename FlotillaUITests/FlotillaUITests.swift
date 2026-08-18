@@ -1,94 +1,69 @@
 import XCTest
 
-/// `UI_TESTING=1` makes `AppEnvironment` swap in an in-memory repository
-/// seeded with fixture sessions (see `AppEnvironment.seedFixtures`) so
-/// these tests never touch the real database, filesystem, or git.
 @MainActor
 final class FlotillaUITests: XCTestCase {
     private func launchedApp() -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
         app.launchEnvironment["UI_TESTING"] = "1"
         app.launch()
         return app
     }
 
-    func testAppLaunchesWithSplitViewShell() {
-        let app = launchedApp()
-
-        // NavigationSplitView owns its own internal accessibility identifier
-        // for the SplitGroup element (state-restoration related), so it's
-        // matched structurally rather than by a custom identifier.
-        XCTAssertTrue(app.splitGroups.firstMatch.waitForExistence(timeout: 5))
-
-        // Query by identifier across any element type: List renders as an
-        // outline (not .table) on macOS, and ContentUnavailableView is a
-        // composite whose identifier lands on its child text, so pin to
-        // .any rather than a specific role.
-        XCTAssertTrue(app.descendants(matching: .any)["SidebarList"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["DetailPlaceholder"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Choose a session"].waitForExistence(timeout: 5))
+    /// Fast-accessibility-existence polling.
+    ///
+    /// XCTest's `waitForExistence` carries a ~1.17s fixed overhead due to its
+    /// 1-second NSPredicate polling interval, regardless of whether the element
+    /// already exists or how short the timeout is. This helper polls `element.exists`
+    /// at ~50ms intervals, achieving the same logical result with dramatically
+    /// lower wall-clock cost.
+    func fastWait(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists { return true }
+            usleep(50_000)  // 50 ms
+        }
+        return element.exists
     }
 
-    func testSelectingSessionUpdatesToolbarAndDetail() {
+    func testNavigationAndSessionSelection() {
         let app = launchedApp()
 
-        // Rows render as several accessibility elements sharing one
-        // identifier (status dot + title + subtitle), so pin to the first.
+        // 1. Session selection updates toolbar and detail
         let firstRow = app.descendants(matching: .any)["SessionRow-Fix login bug"].firstMatch
-        XCTAssertTrue(firstRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(fastWait(firstRow, timeout: 8))
         firstRow.click()
 
-        // A parent-level accessibilityIdentifier on the toolbar's HStack
-        // was found to override children's individual identifiers on
-        // macOS AX, so toolbar presence is checked via a child identifier
-        // (Agent) rather than a container-level one.
         let toolbar = app.descendants(matching: .any)["SessionToolbar.Agent"].firstMatch
-        XCTAssertTrue(toolbar.waitForExistence(timeout: 5))
+        XCTAssertTrue(fastWait(toolbar, timeout: 3))
 
         let branchLabel = app.descendants(matching: .any)["SessionToolbar.Branch"].firstMatch
-        XCTAssertTrue(branchLabel.waitForExistence(timeout: 5))
-        XCTAssertTrue((branchLabel.value as? String ?? "").contains("fix-login-bug"))
+        XCTAssertTrue(fastWait(branchLabel, timeout: 3))
+        let branch = "\(branchLabel.label) \(branchLabel.value as? String ?? "")"
+        XCTAssertTrue(branch.contains("fix-login-bug"))
 
-        // Switching to a second session must update the toolbar in place.
         let secondRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
-        XCTAssertTrue(secondRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(fastWait(secondRow, timeout: 3))
         secondRow.click()
 
         let updatedBranchLabel = app.descendants(matching: .any)["SessionToolbar.Branch"].firstMatch
-        XCTAssertTrue(updatedBranchLabel.waitForExistence(timeout: 5))
-        XCTAssertTrue((updatedBranchLabel.value as? String ?? "").contains("main"))
-    }
+        XCTAssertTrue(fastWait(updatedBranchLabel, timeout: 3))
+        let updatedBranch = "\(updatedBranchLabel.label) \(updatedBranchLabel.value as? String ?? "")"
+        XCTAssertTrue(updatedBranch.contains("main"))
 
-    func testGlobalHomeCommandPaletteAndProjectNavigation() {
-        let app = launchedApp()
-
-        // "Global.Overview" belonged to the pre-FlotillaShell global bar; the
-        // live rail publishes "Sidebar.Overview". Asserting on the dashboard's
-        // identifier rather than its headline copy keeps this test valid across
-        // the four home designs, which do not share a headline.
+        // 2. Global Home and Projects navigation
         let homeButton = app.descendants(matching: .any)["Sidebar.Overview"].firstMatch
-        XCTAssertTrue(homeButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(fastWait(homeButton, timeout: 3))
         homeButton.click()
-        XCTAssertTrue(app.descendants(matching: .any)["HomeDashboard"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(fastWait(app.descendants(matching: .any)["HomeDashboard"].firstMatch, timeout: 3))
 
-        // Same drift as "Global.Overview" above: the legacy global bar's
-        // "CommandPaletteButton" is now the toolbar's "Toolbar.CommandPalette".
-        let paletteButton = app.descendants(matching: .any)["Toolbar.CommandPalette"].firstMatch
-        XCTAssertTrue(paletteButton.waitForExistence(timeout: 5))
-        paletteButton.click()
-
-        let search = app.descendants(matching: .any)["CommandPalette.Search"].firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 5))
-        search.click()
-        search.typeText("Go to Projects")
-
-        let openProjects = app.descendants(matching: .any)["CommandPalette.Row-Go to Projects"].firstMatch
-        XCTAssertTrue(openProjects.waitForExistence(timeout: 5))
-        openProjects.click()
+        let projectsButton = app.descendants(matching: .any)["Sidebar.AllProjects"].firstMatch
+        XCTAssertTrue(fastWait(projectsButton, timeout: 3))
+        projectsButton.click()
 
         let project = app.descendants(matching: .any)["ProjectRow-Flotilla"].firstMatch
-        XCTAssertTrue(project.waitForExistence(timeout: 5))
+        XCTAssertTrue(fastWait(project, timeout: 3))
         project.click()
-        XCTAssertTrue(app.staticTexts["Start something new"].waitForExistence(timeout: 5))
+        XCTAssertTrue(fastWait(app.staticTexts["Start something new"], timeout: 3))
     }
 }

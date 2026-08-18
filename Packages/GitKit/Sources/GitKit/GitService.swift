@@ -1,6 +1,6 @@
 import Foundation
 
-public struct GitWorktree: Equatable, Sendable {
+public struct GitWorktree: Hashable, Equatable, Sendable {
     public var branch: String
     public var path: URL
     public var isMainWorktree: Bool

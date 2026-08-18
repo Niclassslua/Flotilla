@@ -269,7 +269,8 @@ struct ContentView: View {
                 store: store,
                 selectedProjectID: $navigator.selectedProjectID,
                 openSession: openSession,
-                openCodeSubscription: .none
+                terminalManager: terminalManager,
+                openCodeSubscription: settingsViewModel.settings.openCodeSubscription
             )
         case .sessions:
             sessionsWorkspace
@@ -487,6 +488,8 @@ struct ContentView: View {
                     for: session,
                     process: process,
                     scrollback: store.scrollback(for: session.id),
+                    customReflowHandler: store.customReflowHandler(for: session.id),
+                    onPTYResize: store.resizeHandler(for: session.id),
                     outputHandler: { [weak store] data in
                         store?.appendTerminalOutput(data, toSessionID: session.id)
                     },

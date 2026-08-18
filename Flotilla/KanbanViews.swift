@@ -18,6 +18,8 @@ struct KanbanTabView: View {
     var body: some View {
         let _ = PerfLog.bump("KanbanTabView.body")
         VStack(spacing: 0) {
+            headerBar
+            Divider()
             if let board = store.selectedKanbanBoard {
                 KanbanBoardView(
                     store: store,
@@ -47,6 +49,64 @@ struct KanbanTabView: View {
                 }
             )
         }
+    }
+
+    private var headerBar: some View {
+        HStack(spacing: 12) {
+            if let selected = store.selectedKanbanBoard {
+                Menu {
+                    ForEach(store.kanbanBoards) { board in
+                        Button {
+                            store.selectKanbanBoard(board.id)
+                        } label: {
+                            HStack {
+                                Text(board.name)
+                                if board.id == selected.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("New Board…") {
+                        showingNewBoardSheet = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.grid.2x2")
+                            .foregroundStyle(FlotillaColors.accent)
+                        Text(selected.name)
+                            .font(.system(size: 13, weight: .semibold))
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("BoardPicker")
+            }
+
+            Spacer()
+
+            if let board = store.selectedKanbanBoard {
+                Picker("Column Mode", selection: Binding(
+                    get: { board.columnMode },
+                    set: { newMode in
+                        store.updateKanbanBoardColumnMode(newMode)
+                    }
+                )) {
+                    ForEach([KanbanColumnMode.status, .agents, .workflow], id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 240)
+                .accessibilityIdentifier("ColumnModePicker")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(FlotillaColors.surface)
     }
 }
 
@@ -367,6 +427,7 @@ struct KanbanColumnView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous))
+        .accessibilityIdentifier("KanbanColumn-\(column.title)-Header")
     }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {

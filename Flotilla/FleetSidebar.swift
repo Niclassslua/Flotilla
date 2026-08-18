@@ -60,7 +60,7 @@ struct SidebarRail: View {
         .padding(.horizontal, showLabels ? 6 : 0)
         .padding(.bottom, 10)
         .help("New session")
-        .accessibilityIdentifier("Sidebar.NewSession")
+        .accessibilityIdentifier("NewSessionButton")
     }
 
     @ViewBuilder

@@ -23,6 +23,7 @@ struct PreviewSessionRepository: SessionRepository {
     func save(_ project: Project) throws {}
     func save(_ session: Session) throws {}
     func delete(sessionID: UUID) throws {}
+    func delete(projectID: UUID) throws {}
     func loadScrollback(sessionID: UUID) -> Data? { nil }
 
     func loadKanbanBoards() throws -> [KanbanBoard] { [] }

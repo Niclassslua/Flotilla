@@ -23,10 +23,10 @@ final class StartupCheckViewModel {
     var warningItems: [String] {
         missingRequiredTools
             + missingOptionalTools
-            // opencode is an optional bonus agent — its absence is detected
+            // opencode and antigravity are optional bonus agents — their absence is detected
             // (visible in the check summary) but not warned about, so a
-            // missing opencode never blocks or nags.
-            + missingAgents.filter { $0 != .openCode }.map(\.displayName)
+            // missing opencode/antigravity never blocks or nags.
+            + missingAgents.filter { $0 != .openCode && $0 != .antigravity }.map(\.displayName)
     }
 
     init(

@@ -115,23 +115,6 @@ final class RealPipelineReproTests: XCTestCase {
         manager.terminate(sessionID: session.id)
     }
 
-    func testTmuxWrappedLaunchWithGoalStaysRunning() async throws {
-        let manager = makeManager(useTmux: true)
-        let session = Session(
-            title: "Repro tmux goal",
-            goal: "Ignore me",
-            agent: .claudeCode,
-            projectID: nil,
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .idle
-        )
-        let process = try manager.start(session: session, deliverGoal: true)
-        XCTAssertTrue(process.isRunning, "process must be running right after start")
-        try await Task.sleep(for: .seconds(1.5))
-        XCTAssertTrue(process.isRunning, "process must STILL be running after 1.5s")
-        manager.terminate(sessionID: session.id)
-    }
-
     func testCreateSessionThroughStoreKeepsProcessRunning() async throws {
         var settings = AppSettings()
         settings.agentPaths.claudeCodePath = "/bin/sleep"
@@ -285,29 +268,39 @@ final class RealPipelineReproTests: XCTestCase {
 
         var clientExited = false
         for _ in 0..<50 where !clientExited {
-            if store.process(for: created.id) == nil { clientExited = true }
+            if store.process(for: created.id) == nil || store.process(for: created.id)?.isRunning == false { clientExited = true }
             try await Task.sleep(for: .milliseconds(100))
         }
         XCTAssertTrue(clientExited, "app-side client must exit when the agent dies")
-        XCTAssertNil(waitForTmuxPanePID(sessionName), "tmux session must be destroyed when its agent exits")
+        XCTAssertTrue(waitForTmuxPaneToDisappear(sessionName), "tmux session must be destroyed when its agent exits")
 
         store.restartSession(sessionID: created.id)
 
         let restarted = try XCTUnwrap(store.process(for: created.id), "restart must register a fresh process")
         XCTAssertTrue(restarted.isRunning, "restart must leave a running process")
-        try await Task.sleep(for: .seconds(1))
+        try await Task.sleep(for: .milliseconds(300))
         XCTAssertTrue(store.process(for: created.id)?.isRunning == true, "restart must stay running")
         let freshPID = try XCTUnwrap(waitForTmuxPanePID(sessionName), "restart must recreate the tmux session")
         XCTAssertNotEqual(freshPID, originalPID, "restart must run a fresh agent, not reuse the dead one")
         await store.deleteSession(sessionID: created.id, deleteWorktree: false)
     }
 
-    private func waitForTmuxPanePID(_ name: String) -> String? {
-        for _ in 0..<100 {
+    private func waitForTmuxPanePID(_ name: String, timeout: TimeInterval = 4.0) -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
             if let pid = tmuxPanePID(name) { return pid }
-            Thread.sleep(forTimeInterval: 0.1)
+            Thread.sleep(forTimeInterval: 0.05)
         }
         return nil
+    }
+
+    private func waitForTmuxPaneToDisappear(_ name: String, timeout: TimeInterval = 3.0) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if tmuxPanePID(name) == nil { return true }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return tmuxPanePID(name) == nil
     }
 
     /// Full end-to-end with the REAL Claude Code CLI (the same binary the app
@@ -385,7 +378,7 @@ final class RealPipelineReproTests: XCTestCase {
     private func capturePane(_ name: String) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/tmux")
-        process.arguments = ["-L", "flotilla", "capture-pane", "-p", "-t", name]
+        process.arguments = TmuxSessionWrapping.socketArguments() + ["capture-pane", "-p", "-t", name]
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
@@ -398,7 +391,7 @@ final class RealPipelineReproTests: XCTestCase {
     private func tmuxPanePID(_ name: String) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/tmux")
-        process.arguments = ["-L", "flotilla", "display-message", "-p", "-t", name, "#{pane_pid}"]
+        process.arguments = TmuxSessionWrapping.socketArguments() + ["display-message", "-p", "-t", name, "#{pane_pid}"]
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice

@@ -7,17 +7,25 @@ public struct AgentPathOverrides: Codable, Equatable, Sendable {
     public var claudeCodePath: String
     public var codexCLIPath: String
     public var openCodePath: String
+    public var antigravityPath: String
 
-    public init(claudeCodePath: String = "", codexCLIPath: String = "", openCodePath: String = "") {
+    public init(
+        claudeCodePath: String = "",
+        codexCLIPath: String = "",
+        openCodePath: String = "",
+        antigravityPath: String = ""
+    ) {
         self.claudeCodePath = claudeCodePath
         self.codexCLIPath = codexCLIPath
         self.openCodePath = openCodePath
+        self.antigravityPath = antigravityPath
     }
 
     private enum CodingKeys: String, CodingKey {
         case claudeCodePath
         case codexCLIPath
         case openCodePath
+        case antigravityPath
     }
 
     public init(from decoder: any Decoder) throws {
@@ -25,6 +33,7 @@ public struct AgentPathOverrides: Codable, Equatable, Sendable {
         claudeCodePath = try container.decodeIfPresent(String.self, forKey: .claudeCodePath) ?? ""
         codexCLIPath = try container.decodeIfPresent(String.self, forKey: .codexCLIPath) ?? ""
         openCodePath = try container.decodeIfPresent(String.self, forKey: .openCodePath) ?? ""
+        antigravityPath = try container.decodeIfPresent(String.self, forKey: .antigravityPath) ?? ""
     }
 }
 
@@ -34,21 +43,25 @@ public struct AgentArgumentOverrides: Codable, Equatable, Sendable {
     public var claudeCodeArguments: [String]
     public var codexCLIArguments: [String]
     public var openCodeArguments: [String]
+    public var antigravityArguments: [String]
 
     public init(
         claudeCodeArguments: [String] = [],
         codexCLIArguments: [String] = [],
-        openCodeArguments: [String] = []
+        openCodeArguments: [String] = [],
+        antigravityArguments: [String] = []
     ) {
         self.claudeCodeArguments = claudeCodeArguments
         self.codexCLIArguments = codexCLIArguments
         self.openCodeArguments = openCodeArguments
+        self.antigravityArguments = antigravityArguments
     }
 
     private enum CodingKeys: String, CodingKey {
         case claudeCodeArguments
         case codexCLIArguments
         case openCodeArguments
+        case antigravityArguments
     }
 
     public init(from decoder: any Decoder) throws {
@@ -56,6 +69,7 @@ public struct AgentArgumentOverrides: Codable, Equatable, Sendable {
         claudeCodeArguments = try container.decodeIfPresent([String].self, forKey: .claudeCodeArguments) ?? []
         codexCLIArguments = try container.decodeIfPresent([String].self, forKey: .codexCLIArguments) ?? []
         openCodeArguments = try container.decodeIfPresent([String].self, forKey: .openCodeArguments) ?? []
+        antigravityArguments = try container.decodeIfPresent([String].self, forKey: .antigravityArguments) ?? []
     }
 }
 

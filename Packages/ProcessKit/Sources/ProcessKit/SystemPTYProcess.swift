@@ -143,6 +143,19 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
         if pid == 0 {
             // Child. `forkpty` already made us the session leader with the
             // pty slave as our controlling terminal (via `login_tty`).
+            //
+            // Restore an empty signal mask and reset all signal dispositions
+            // to SIG_DFL so the child does not inherit blocked signals (e.g.
+            // SIGWINCH blocked on GCD / Swift concurrency threads) or ignored
+            // dispositions across execve.
+            var emptyMask = sigset_t()
+            sigemptyset(&emptyMask)
+            sigprocmask(SIG_SETMASK, &emptyMask, nil)
+
+            for sig in 1..<NSIG {
+                signal(sig, SIG_DFL)
+            }
+
             if let cWorkingDirectory {
                 _ = chdir(cWorkingDirectory)
             }
@@ -300,19 +313,15 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
         killpg(pid, SIGTERM)
 
         // Escalate to SIGKILL after ~3 seconds if the process hasn't exited.
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3) {
-            let updatedPID = pid
-            // Use WNOHANG so this doesn't block if the process is still running.
-            var status: Int32 = 0
-            while waitpid(updatedPID, &status, WNOHANG) == -1 && errno == EINTR {}
-            // Check if process has exited: low 7 bits signalled, or process exited.
-            let exited = (status & 0x7f) != 0 || status >> 8 != 0
-            if exited {
-                // Process already terminated — nothing to do.
-                return
-            }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self else { return }
+            self.stateLock.lock()
+            let stillRunning = self.running && self.childPID == pid
+            self.stateLock.unlock()
+            guard stillRunning else { return }
+
             // Process still running after escalation timeout — send SIGKILL.
-            killpg(updatedPID, SIGKILL)
+            killpg(pid, SIGKILL)
         }
     }
 }

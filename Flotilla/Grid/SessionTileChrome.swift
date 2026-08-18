@@ -1,6 +1,7 @@
 import SwiftUI
 import SessionKit
 import DesignSystem
+import TerminalKit
 
 /// The per-tile actions every grid design offers. Bundled into one value so
 /// the four designs pass a single parameter instead of repeating seven
@@ -144,6 +145,8 @@ struct TileTerminalBody: View {
                         for: session,
                         process: process,
                         scrollback: store.scrollback(for: session.id),
+                        customReflowHandler: store.customReflowHandler(for: session.id),
+                        onPTYResize: store.resizeHandler(for: session.id),
                         outputHandler: { [weak store] data in
                             store?.appendTerminalOutput(data, toSessionID: session.id)
                         },

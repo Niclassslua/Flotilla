@@ -55,9 +55,13 @@ final class DiffStatStore {
 
     private func start(sessionID: UUID, repoPath: URL) {
         paths[sessionID] = repoPath
+        // UI tests need the initial value for the badge to render, but the
+        // 8s re-poll spawns 3 git processes per session forever — background
+        // churn that stalls XCUITest's quiescence checks.
+        let pollRepeatedly = ProcessInfo.processInfo.environment["UI_TESTING"] != "1"
         tasks[sessionID] = Task { [weak self] in
             await self?.refresh(sessionID: sessionID, repoPath: repoPath)
-            while !Task.isCancelled {
+            while pollRepeatedly && !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(8))
                 guard !Task.isCancelled else { return }
                 await self?.refresh(sessionID: sessionID, repoPath: repoPath)

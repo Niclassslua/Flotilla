@@ -49,10 +49,15 @@ final class TerminalManager {
         for session: Session,
         process: PTYProcessProtocol,
         scrollback: Data,
+        customReflowHandler: (@MainActor @Sendable (TerminalPresentation) -> Void)? = nil,
+        onPTYResize: (@MainActor @Sendable (PTYSize) -> Void)? = nil,
         outputHandler: @escaping @MainActor @Sendable (Data) -> Void,
         inputHandler: @escaping @MainActor @Sendable () -> Void
     ) -> TerminalController {
-        if let existing = controllers[session.id], existing.processID == process.id {
+        if let existing = controllers[session.id] {
+            if existing.processID != process.id {
+                existing.rebind(process: process)
+            }
             return existing
         }
         PerfLog.event("TerminalManager: creating controller for \(session.title) (scrollback \(scrollback.count)B)")
@@ -62,6 +67,8 @@ final class TerminalManager {
             accessibilityIdentifier: "TerminalView-\(session.title)",
             initialScrollback: scrollback,
             multilineNewlineSequence: multilineNewlineSequence(for: session.agent),
+            customReflowHandler: customReflowHandler,
+            onPTYResize: onPTYResize,
             outputHandler: outputHandler,
             inputHandler: inputHandler
         )
@@ -95,7 +102,7 @@ final class TerminalManager {
         switch agent {
         case .claudeCode:
             Data([0x1B, 0x0D])
-        case .codexCLI, .openCode:
+        case .codexCLI, .openCode, .antigravity:
             Data([0x0A])
         }
     }

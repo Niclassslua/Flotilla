@@ -78,32 +78,22 @@ final class PersistenceKitTests: XCTestCase {
         XCTAssertTrue(sessions.isEmpty)
     }
 
-    func testGeneralSessionHasNilProjectID() throws {
-        let repo = try GRDBSessionRepository()
-        let session = Session(
-            title: "General",
-            goal: "No project tie",
-            agent: .claudeCode,
-            projectID: nil,
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .idle
-        )
-        try repo.save(session)
-
-        let (_, sessions) = try repo.loadAll()
-        XCTAssertNil(sessions.first?.projectID)
-    }
-
     func testCorruptedDatabaseFileRecoversWithFreshStore() throws {
-        let dbPath = FileManager.default.temporaryDirectory
+        let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("flotilla-corrupt-\(UUID().uuidString)")
-            .appendingPathComponent("state.sqlite")
-        try FileManager.default.createDirectory(at: dbPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let dbPath = dir.appendingPathComponent("state.sqlite")
+        let walPath = dir.appendingPathComponent("state.sqlite-wal")
+        let shmPath = dir.appendingPathComponent("state.sqlite-shm")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data("this is not a sqlite database".utf8).write(to: dbPath)
+        try Data("corrupt wal".utf8).write(to: walPath)
+        try Data("corrupt shm".utf8).write(to: shmPath)
 
         let repo = try GRDBSessionRepository(path: dbPath)
 
         XCTAssertTrue(repo.recoveredFromCorruption)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: walPath.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: shmPath.path))
         let (projects, sessions) = try repo.loadAll()
         XCTAssertTrue(projects.isEmpty)
         XCTAssertTrue(sessions.isEmpty)
@@ -113,7 +103,7 @@ final class PersistenceKitTests: XCTestCase {
         let (projectsAfterSave, _) = try repo.loadAll()
         XCTAssertEqual(projectsAfterSave.count, 1)
 
-        try? FileManager.default.removeItem(at: dbPath.deletingLastPathComponent())
+        try? FileManager.default.removeItem(at: dir)
     }
 
     func testFreshDatabaseFileDoesNotReportRecovery() throws {

@@ -6,7 +6,7 @@ import SwiftUI
 /// click-outside-to-dismiss behavior a Spotlight-style launcher needs.
 private final class CommandPalettePanel: NSPanel {
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
+    override var canBecomeMain: Bool { true }
 }
 
 @MainActor
@@ -17,17 +17,20 @@ final class CommandPaletteWindowController: NSWindowController, NSWindowDelegate
     init(onClose: @escaping () -> Void) {
         let panel = CommandPalettePanel(
             contentRect: NSRect(x: 0, y: 0, width: 680, height: 560),
-            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
+            styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
         panel.isReleasedWhenClosed = false
         panel.level = .floating
         panel.hasShadow = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hidesOnDeactivate = true
+        panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
+        panel.setAccessibilityLabel("Command Palette")
         super.init(window: panel)
         self.onClose = onClose
         panel.delegate = self
@@ -56,6 +59,7 @@ final class CommandPaletteWindowController: NSWindowController, NSWindowDelegate
             panel.center()
         }
         panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func windowDidResignKey(_ notification: Notification) {

@@ -38,17 +38,6 @@ private struct ScriptedCommandRunner: CommandRunning {
 }
 
 final class ModelCatalogTests: XCTestCase {
-    func testFetchModelsReturnsStaticFallbackWhenCLINotFound() async {
-        let fetcher = ModelCatalogFetcher(
-            locator: FixedLocator(url: nil),
-            runner: MockCommandRunner(outcome: .failure)
-        )
-
-        let models = await fetcher.fetchModels(for: .claudeCode)
-
-        XCTAssertEqual(models, ModelCatalog.staticFallback(for: .claudeCode))
-    }
-
     func testFetchModelsParsesClaudeAvailableListDroppingLongContextAndDefault() async {
         let stdout = """
         Current model: Sonnet 5 (effort: high)
@@ -82,26 +71,30 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(models, ["gpt-5.6-sol", "gpt-5.4"])
     }
 
-    func testFetchModelsFallsBackWhenCommandFails() async {
-        let fetcher = ModelCatalogFetcher(
+    func testFetchModelsFallsBackOnAllFailureModes() async {
+        // Mode 1: CLI binary not found
+        let notFoundFetcher = ModelCatalogFetcher(
+            locator: FixedLocator(url: nil),
+            runner: MockCommandRunner(outcome: .failure)
+        )
+        let fallbackNotFound = await notFoundFetcher.fetchModels(for: .claudeCode)
+        XCTAssertEqual(fallbackNotFound, ModelCatalog.staticFallback(for: .claudeCode))
+
+        // Mode 2: Command runner throws
+        let throwingFetcher = ModelCatalogFetcher(
             locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
             runner: MockCommandRunner(outcome: .failure)
         )
+        let fallbackThrowing = await throwingFetcher.fetchModels(for: .claudeCode)
+        XCTAssertEqual(fallbackThrowing, ModelCatalog.staticFallback(for: .claudeCode))
 
-        let models = await fetcher.fetchModels(for: .claudeCode)
-
-        XCTAssertEqual(models, ModelCatalog.staticFallback(for: .claudeCode))
-    }
-
-    func testFetchModelsFallsBackOnNonZeroExitCode() async {
-        let fetcher = ModelCatalogFetcher(
+        // Mode 3: Non-zero exit code
+        let nonZeroFetcher = ModelCatalogFetcher(
             locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/codex")),
             runner: MockCommandRunner(outcome: .success(CommandResult(exitCode: 1, stdout: "", stderr: "boom")))
         )
-
-        let models = await fetcher.fetchModels(for: .codexCLI)
-
-        XCTAssertEqual(models, ModelCatalog.staticFallback(for: .codexCLI))
+        let fallbackNonZero = await nonZeroFetcher.fetchModels(for: .codexCLI)
+        XCTAssertEqual(fallbackNonZero, ModelCatalog.staticFallback(for: .codexCLI))
     }
 
     // MARK: - Per-agent / per-model effort levels
@@ -264,5 +257,63 @@ final class ModelCatalogTests: XCTestCase {
         let models = await fetcher.fetchModels(for: .openCode)
 
         XCTAssertEqual(models, ModelCatalog.staticFallback(for: .openCode))
+    }
+
+    func testAntigravitySupportsLowMediumHighEffortLevels() {
+        XCTAssertEqual(AgentEffortCatalog.supportedLevels(for: .antigravity), [.low, .medium, .high])
+        XCTAssertTrue(AgentKind.antigravity.supportsEffortSelection)
+        XCTAssertTrue(AgentEffortCatalog.supports(.low, agent: .antigravity))
+        XCTAssertTrue(AgentEffortCatalog.supports(.medium, agent: .antigravity))
+        XCTAssertTrue(AgentEffortCatalog.supports(.high, agent: .antigravity))
+        XCTAssertFalse(AgentEffortCatalog.supports(.max, agent: .antigravity))
+        XCTAssertFalse(AgentEffortCatalog.supports(.ultra, agent: .antigravity))
+    }
+
+    func testAntigravityStaticFallbackProfiles() {
+        let profiles = ModelCatalog.staticFallbackProfiles(for: .antigravity)
+        XCTAssertFalse(profiles.isEmpty)
+        XCTAssertTrue(profiles.contains(where: { $0.slug == "gemini-3.7-flash-high" }))
+        XCTAssertEqual(profiles.first(where: { $0.slug == "gemini-3.7-flash-high" })?.displayName, "Gemini 3.7 Flash (High)")
+        XCTAssertEqual(ModelCatalog.staticFallback(for: .antigravity), profiles.map(\.slug))
+    }
+
+    func testAntigravityEffortParsingFromHelpOutput() {
+        let helpOutput = """
+        Usage of agy:
+          --effort                        Reasoning effort for the current CLI session (low|medium|high)
+          --model                         Model for the current CLI session
+        """
+        let levels = ModelCatalogFetcher.parseAntigravityEffortLevels(helpOutput)
+        XCTAssertEqual(levels, [.low, .medium, .high])
+    }
+
+    func testAntigravityModelParsing() {
+        let output = """
+          agy models
+          gemini-3.7-flash-high     Gemini 3.7 Flash (High)
+          gemini-3.7-flash-medium   Gemini 3.7 Flash (Medium)
+          gemini-3.7-flash-low      Gemini 3.7 Flash (Low)
+          gemini-3.6-flash-high     Gemini 3.6 Flash (High)
+          claude-sonnet-4-6         Claude Sonnet 4.6 (Thinking)
+          claude-opus-4-6-thinking  Claude Opus 4.6 (Thinking)
+          gpt-oss-120b-medium       GPT-OSS 120B (Medium)
+        """
+        let entries = ModelCatalogFetcher.parseAntigravityModelEntries(output)
+        XCTAssertEqual(entries.count, 7)
+        XCTAssertEqual(entries[0].slug, "gemini-3.7-flash-high")
+        XCTAssertEqual(entries[0].displayName, "Gemini 3.7 Flash (High)")
+        XCTAssertEqual(entries[4].slug, "claude-sonnet-4-6")
+        XCTAssertEqual(entries[4].displayName, "Claude Sonnet 4.6 (Thinking)")
+
+        let slugs = ModelCatalogFetcher.parseAntigravityModelList(output)
+        XCTAssertEqual(slugs, [
+            "gemini-3.7-flash-high",
+            "gemini-3.7-flash-medium",
+            "gemini-3.7-flash-low",
+            "gemini-3.6-flash-high",
+            "claude-sonnet-4-6",
+            "claude-opus-4-6-thinking",
+            "gpt-oss-120b-medium"
+        ])
     }
 }

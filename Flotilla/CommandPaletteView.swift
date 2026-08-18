@@ -52,8 +52,6 @@ struct CommandPaletteView: View {
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($isFocused)
-                    .focusable(true)
-                    .focusEffectDisabled()
                     .accessibilityIdentifier("CommandPalette.Search")
                 Button {
                     onDismiss()
@@ -157,8 +155,9 @@ struct CommandPaletteView: View {
                 .padding(10)
             }
         }
-        .frame(width: 680, height: 560)
+        .frame(minWidth: 540, idealWidth: 620, minHeight: 460, idealHeight: 500)
         .background(FlotillaColors.surface)
+        .accessibilityIdentifier("CommandPaletteView")
         .onAppear { isFocused = true; selectedIndex = 0 }
         .onDisappear { isFocused = false }
         .onExitCommand { onDismiss() }

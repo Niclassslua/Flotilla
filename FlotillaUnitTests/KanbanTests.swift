@@ -95,7 +95,7 @@ final class KanbanPersistenceTests: XCTestCase {
         XCTAssertEqual(boards.count, 3)
     }
 
-    func testGetOrCreateDefaultKanbanBoardForProject() throws {
+    func testGetOrCreateDefaultKanbanBoardForProjectAndGlobal() throws {
         let repo = try GRDBSessionRepository()
         let projectID = UUID()
 
@@ -108,16 +108,13 @@ final class KanbanPersistenceTests: XCTestCase {
         // Second call should return same board
         let board2 = try repo.getOrCreateDefaultKanbanBoard(forProject: projectID, name: "Project Board")
         XCTAssertEqual(board2.id, board.id)
-    }
 
-    func testGetOrCreateDefaultKanbanBoardGlobal() throws {
-        let repo = try GRDBSessionRepository()
-
-        let board = try repo.getOrCreateDefaultKanbanBoard(forProject: nil, name: "All Projects")
-        XCTAssertNil(board.projectID)
-        XCTAssertEqual(board.name, "All Projects")
-        XCTAssertEqual(board.columnMode, .status)
-        XCTAssertEqual(board.customColumns.count, 6)
+        // Global board creation
+        let globalBoard = try repo.getOrCreateDefaultKanbanBoard(forProject: nil, name: "All Projects")
+        XCTAssertNil(globalBoard.projectID)
+        XCTAssertEqual(globalBoard.name, "All Projects")
+        XCTAssertEqual(globalBoard.columnMode, .status)
+        XCTAssertEqual(globalBoard.customColumns.count, 6)
     }
 
     func testDeleteKanbanBoard() throws {
@@ -179,10 +176,6 @@ final class KanbanAppStoreTests: XCTestCase {
         XCTAssertFalse(store.kanbanBoards.isEmpty)
         XCTAssertNotNil(store.selectedKanbanBoardID)
         XCTAssertNotNil(store.selectedKanbanBoard)
-    }
-
-    func testGlobalBoardExists() throws {
-        let (store, _) = makeStore()
 
         let globalBoard = store.kanbanBoards.first { $0.projectID == nil }
         XCTAssertNotNil(globalBoard)

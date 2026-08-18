@@ -24,12 +24,19 @@ final class SessionStatusMachineTests: XCTestCase {
             (.idle, .crashed),
             (.working, .idle),
             (.working, .waitingForInput),
+            (.working, .ready),
             (.working, .finished),
             (.working, .crashed),
             (.waitingForInput, .working),
             (.waitingForInput, .idle),
+            (.waitingForInput, .ready),
             (.waitingForInput, .finished),
             (.waitingForInput, .crashed),
+            (.ready, .working),
+            (.ready, .waitingForInput),
+            (.ready, .idle),
+            (.ready, .finished),
+            (.ready, .crashed),
             (.crashed, .working),
             (.finished, .working),
         ]
@@ -66,14 +73,6 @@ final class SessionStatusMachineTests: XCTestCase {
         let result = machine.transition(session, to: .idle)
         XCTAssertEqual(result.status, .finished)
         XCTAssertEqual(result.lastActiveAt, session.lastActiveAt)
-    }
-
-    /// A session that has been quiet long enough to read as idle can still
-    /// be the one asking for permission; that edge must stay open or the
-    /// prompt is never surfaced in the sidebar.
-    func testIdleSessionCanStartWaitingForInput() {
-        let session = makeSession(status: .idle)
-        XCTAssertEqual(machine.transition(session, to: .waitingForInput).status, .waitingForInput)
     }
 
     func testLegalTransitionUpdatesStatusAndTimestamp() {

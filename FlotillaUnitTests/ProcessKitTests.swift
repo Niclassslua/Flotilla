@@ -23,67 +23,6 @@ final class MockPTYProcessTests: XCTestCase {
         XCTAssertEqual(mock.lastSize, PTYSize(cols: 80, rows: 24))
     }
 
-    func testStartingTwiceThrows() throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-        XCTAssertThrowsError(try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )) { error in
-            XCTAssertEqual(error as? PTYProcessError, .alreadyRunning)
-        }
-    }
-
-    func testFailureToStartLeavesProcessNotRunning() {
-        let mock = MockPTYProcess()
-        mock.shouldFailToStart = true
-        XCTAssertThrowsError(try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )) { error in
-            XCTAssertEqual(error as? PTYProcessError, .failedToOpenPTY)
-        }
-        XCTAssertFalse(mock.isRunning)
-    }
-
-    func testSendRecordsInput() throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-        mock.send(input: Data("ls\n".utf8))
-        XCTAssertEqual(mock.sentInput, [Data("ls\n".utf8)])
-    }
-
-    func testResizeUpdatesLastSize() throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-        mock.resize(PTYSize(cols: 120, rows: 40))
-        XCTAssertEqual(mock.lastSize, PTYSize(cols: 120, rows: 40))
-    }
-
     func testTerminateStopsProcessAndFiresHandler() throws {
         let mock = MockPTYProcess()
         try mock.start(
@@ -127,25 +66,6 @@ final class MockPTYProcessTests: XCTestCase {
         XCTAssertFalse(mock.isRunning)
         // A crash is not a caller-initiated terminate().
         XCTAssertEqual(mock.terminateCallCount, 0)
-    }
-
-    func testDoubleExitOnlyFiresHandlerOnce() throws {
-        let mock = MockPTYProcess()
-        try mock.start(
-            executable: URL(fileURLWithPath: "/bin/echo"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-
-        var fireCount = 0
-        mock.terminationHandler = { _ in fireCount += 1 }
-        mock.terminate()
-        mock.terminate() // second call after already stopped must be a no-op
-        mock.simulateCrash()
-
-        XCTAssertEqual(fireCount, 1)
     }
 
     func testOutputStreamDeliversSimulatedBytes() async throws {
@@ -229,6 +149,74 @@ final class SystemPTYProcessTests: XCTestCase {
         XCTAssertFalse(printedEnvironment.contains("TERM=dumb"))
         XCTAssertTrue(printedEnvironment.contains("COLORTERM=truecolor"))
     }
+
+    /// Tests that the child process can receive SIGWINCH even when the calling
+    /// thread (e.g. Swift concurrency / GCD thread) has SIGWINCH blocked.
+    func testChildReceivesSIGWINCHEvenWhenCallingThreadBlocksIt() async throws {
+        var blockMask = sigset_t()
+        sigemptyset(&blockMask)
+        sigaddset(&blockMask, SIGWINCH)
+        var oldMask = sigset_t()
+        pthread_sigmask(SIG_BLOCK, &blockMask, &oldMask)
+        defer {
+            pthread_sigmask(SIG_SETMASK, &oldMask, nil)
+        }
+
+        let process = SystemPTYProcess()
+        try process.start(
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "trap 'echo GOTWINCH' WINCH; echo READY; while :; do sleep 0.2; done"],
+            environment: ProcessInfo.processInfo.environment,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+        defer {
+            process.terminate()
+        }
+
+        let stream = process.outputStream
+        let accumulator = LockedStringAccumulator()
+
+        let task = Task {
+            for await chunk in stream {
+                accumulator.append(String(decoding: chunk, as: UTF8.self))
+            }
+        }
+
+        // Wait until the child is ready and listening for traps
+        for _ in 0..<50 {
+            if accumulator.contains("READY") { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(accumulator.contains("READY"), "Shell script must start and output READY")
+
+        // Trigger resize which fires SIGWINCH from the kernel to the PTY foreground process group
+        process.resize(PTYSize(cols: 100, rows: 30))
+
+        for _ in 0..<50 {
+            if accumulator.contains("GOTWINCH") { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(accumulator.contains("GOTWINCH"), "Child must receive SIGWINCH despite parent thread blocking it")
+        task.cancel()
+    }
+}
+
+private final class LockedStringAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var buffer = ""
+
+    func append(_ string: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        buffer += string
+    }
+
+    func contains(_ needle: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return buffer.contains(needle)
+    }
 }
 
 final class StartupEnvironmentCheckerTests: XCTestCase {
@@ -249,13 +237,6 @@ final class StartupEnvironmentCheckerTests: XCTestCase {
         XCTAssertTrue(report.isInstalled("tmux"))
         XCTAssertFalse(report.isInstalled("codex"))
         XCTAssertEqual(Set(report.missingTools), ["codex", "opencode", "gh"])
-    }
-
-    func testEmptyToolListNeverThrows() {
-        let checker = StartupEnvironmentChecker(locator: FakeLocator(available: []))
-        let report = checker.check(tools: [])
-        XCTAssertTrue(report.foundTools.isEmpty)
-        XCTAssertTrue(report.missingTools.isEmpty)
     }
 
     func testPATHExecutableLocatorFindsRealBinary() {

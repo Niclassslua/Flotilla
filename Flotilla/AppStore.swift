@@ -3,6 +3,8 @@ import Observation
 import SessionKit
 import GitKit
 import ProcessKit
+import TerminalKit
+import AgentKit
 
 @Observable
 @MainActor
@@ -74,6 +76,11 @@ final class AppStore {
     /// subdirectory keeps a "General Session" (no project folder) usable
     /// without ever exposing those folders to the CLI's own file walk.
     private static func generalSessionWorkingDirectory() -> URL {
+        if ProcessInfo.processInfo.environment["UI_TESTING"] == "1" {
+            let directory = URL(fileURLWithPath: "/tmp/flotilla-uitest-general-session")
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            return directory
+        }
         let directory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".flotilla", isDirectory: true)
             .appendingPathComponent("general-session", isDirectory: true)
@@ -89,6 +96,9 @@ final class AppStore {
             for session in loaded.sessions where liveScrollback[session.id] == nil {
                 liveScrollback[session.id] = session.terminalScrollback
             }
+            // Reap orphaned tmux sessions left behind by crashes or external deletions
+            let activeIDs = Set(loaded.sessions.map(\.id))
+            processManager.reapOrphanTmuxSessions(knownSessionIDs: activeIDs)
         } catch {
             lastOperationError = "Session data could not be loaded: \(error.localizedDescription)"
             return
@@ -394,6 +404,60 @@ final class AppStore {
         }
     }
 
+    /// Asynchronously queries the active agent's native storage/API for an
+    /// auto-generated session title and applies it if found.
+    func syncAgentTitle(forSessionID sessionID: UUID) async {
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
+        // Only look for native agent sessions active around or after this session was launched
+        let searchSince = session.createdAt.addingTimeInterval(-30)
+        if let discovered = await AgentSessionProviderRegistry.default.fetchLatestSession(
+            for: session.agent,
+            workingDirectory: session.workingDirectory,
+            since: searchSince
+        ) {
+            let discoveredTitle = discovered.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !discoveredTitle.isEmpty else { return }
+            guard !discoveredTitle.contains("\n"), discoveredTitle.count <= 120 else { return }
+            guard !discoveredTitle.hasPrefix("New session - ") else { return }
+            syncDiscoveredTitle(discoveredTitle, toSessionID: sessionID)
+        }
+    }
+
+    /// Spawns a lightweight background retry loop that checks the agent's
+    /// native session storage at progressively spaced intervals (1s, 2.5s, 5s, 9s, 15s, 25s)
+    /// to pick up auto-generated titles (e.g. Claude's ai-title, OpenCode's prompt/title,
+    /// Codex's name/prompt, Antigravity's objective) as soon as the agent produces them.
+    func scheduleTitleSync(forSessionID sessionID: UUID) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let retryDelays: [TimeInterval] = [1.0, 2.5, 5.0, 9.0, 15.0, 25.0]
+            for delay in retryDelays {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard let currentSession = self.sessions.first(where: { $0.id == sessionID }) else { break }
+                guard currentSession.status == .working || currentSession.status == .waitingForInput || currentSession.status == .idle else { break }
+                await self.syncAgentTitle(forSessionID: sessionID)
+            }
+        }
+    }
+
+    /// Updates a session's title from discovered agent metadata.
+    func syncDiscoveredTitle(_ title: String, toSessionID sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, sessions[index].title != trimmed else { return }
+        sessions[index].title = trimmed
+        do {
+            try repository.save(mergingLiveScrollback(sessions[index]))
+        } catch {
+            lastOperationError = "Session title could not be saved: \(error.localizedDescription)"
+        }
+    }
+
+    /// Renames a session and persists the update.
+    func renameSession(sessionID: UUID, newTitle: String) {
+        syncDiscoveredTitle(newTitle, toSessionID: sessionID)
+    }
+
     /// Appends to the live scrollback buffer only — `sessions` is untouched,
     /// so a chatty PTY no longer invalidates the observed session list on
     /// every chunk. The debounced task below is the only place this reaches
@@ -423,6 +487,21 @@ final class AppStore {
         }
     }
 
+    /// Immediately flushes all debounced live scrollback buffers to the persistent
+    /// repository, cancelling in-flight debounce timers. Called before app termination
+    /// to guarantee zero terminal history loss on Cmd+Q.
+    func flushLiveScrollback() {
+        for (_, task) in scrollbackSaveTasks {
+            task.cancel()
+        }
+        scrollbackSaveTasks.removeAll()
+        for session in sessions {
+            if liveScrollback[session.id] != nil {
+                try? repository.save(mergingLiveScrollback(session))
+            }
+        }
+    }
+
     func restartSession(sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         lastOperationError = nil
@@ -438,8 +517,38 @@ final class AppStore {
             let updated = statusMachine.transition(sessions[index], to: .working)
             sessions[index] = updated
             try repository.save(mergingLiveScrollback(updated))
+            scheduleTitleSync(forSessionID: sessionID)
         } catch {
             lastOperationError = error.localizedDescription
+        }
+    }
+
+    func reattachSession(sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        do {
+            try processManager.reattach(session: sessions[index])
+        } catch {
+            lastOperationError = "Failed to reattach session: \(error.localizedDescription)"
+        }
+    }
+
+    func customReflowHandler(for sessionID: UUID) -> (@MainActor @Sendable (TerminalPresentation) -> Void)? {
+        guard processManager.isTmuxWrapped(sessionID: sessionID) else { return nil }
+        return { [weak self] _ in
+            self?.processManager.refreshTmuxClient(for: sessionID)
+        }
+    }
+
+    func resizeHandler(for sessionID: UUID) -> (@MainActor @Sendable (PTYSize) -> Void) {
+        return { [weak self] size in
+            guard let self else { return }
+            self.processManager.verifyAndRecoverResize(
+                sessionID: sessionID,
+                expectedSize: size,
+                onRecoveryFailure: { [weak self] error in
+                    self?.lastOperationError = error
+                }
+            )
         }
     }
 
@@ -485,6 +594,20 @@ final class AppStore {
         }
     }
 
+    /// Removes a project from the library. Sessions associated with the
+    /// project are retained as standalone sessions.
+    func removeProject(id: UUID) {
+        do {
+            try repository.delete(projectID: id)
+            projects.removeAll { $0.id == id }
+            if selectedProjectID == id {
+                selectedProjectID = nil
+            }
+        } catch {
+            lastOperationError = "The project could not be removed: \(error.localizedDescription)"
+        }
+    }
+
     /// Deletes a session, terminating its process and — when it has a
     /// worktree and `deleteWorktree` is true — removing the worktree
     /// directory and its branch via `GitServiceProtocol.removeWorktree`.
@@ -513,16 +636,6 @@ final class AppStore {
             } catch {
                 worktreeCleanupWarning = "The session was deleted, but its worktree could not be fully removed: \(error.localizedDescription)"
             }
-        }
-
-        if let worktreeCleanupWarning {
-            // The worktree is still on disk and git-locked — deleting the
-            // session would orphan it with no way to recover it through the
-            // UI. Keep the session and bring its process back up so the user
-            // can retry the deletion once the lock is released.
-            lastOperationError = worktreeCleanupWarning
-            _ = try? processManager.start(session: session, deliverGoal: false)
-            return
         }
 
         do {
@@ -616,6 +729,7 @@ final class AppStore {
 
             reload()
             selectedSessionID = session.id
+            scheduleTitleSync(forSessionID: session.id)
             return session.id
         } catch {
             var message = error.localizedDescription

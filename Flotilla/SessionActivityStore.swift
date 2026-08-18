@@ -16,6 +16,10 @@ final class SessionActivityStore {
 
     func watch(_ sessionID: UUID) {
         guard watchTasks[sessionID] == nil else { return }
+        // The 2s screen poll only feeds the home screen's "last output"
+        // lines; under UI testing that background churn stalls XCUITest's
+        // quiescence checks, so watching becomes a no-op.
+        guard ProcessInfo.processInfo.environment["UI_TESTING"] != "1" else { return }
         watchTasks[sessionID] = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))

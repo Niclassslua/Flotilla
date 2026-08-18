@@ -160,33 +160,27 @@ struct DiffPanelView: View {
         }
         .background(FlotillaColors.canvas)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isUITesting {
-                HStack {
-                    Spacer()
+            HStack {
+                if isUITesting {
                     Button("Simulate Edit") {
                         Task { await viewModel.simulateEditForAutomation() }
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("DiffPanel.SimulateEditButton")
-                    .padding(12)
                 }
-                .background(FlotillaColors.surface)
-            } else {
-                HStack {
-                    Spacer()
-                    Button {
-                        Task { await viewModel.refresh() }
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                    .keyboardShortcut("r", modifiers: .command)
-                    .accessibilityIdentifier("DiffPanel.RefreshButton")
-                    .focused($isRefreshButtonFocused)
-                    .padding(12)
+                Spacer()
+                Button {
+                    Task { await viewModel.refresh() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
                 }
-                .background(FlotillaColors.surface)
+                .buttonStyle(.bordered)
+                .keyboardShortcut("r", modifiers: .command)
+                .accessibilityIdentifier("DiffPanel.RefreshButton")
+                .focused($isRefreshButtonFocused)
             }
+            .padding(12)
+            .background(FlotillaColors.surface)
         }
         .task {
             await viewModel.monitor()

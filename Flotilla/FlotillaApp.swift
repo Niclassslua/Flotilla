@@ -79,18 +79,12 @@ struct FlotillaApp: App {
 
         if environment.isUITesting,
            let sessionTitle = ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_WAITING_SESSION"] {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(750))
-                appStore.simulateWaitingPromptForUITesting(sessionTitle: sessionTitle)
-            }
+            appStore.simulateWaitingPromptForUITesting(sessionTitle: sessionTitle)
         }
 
         if environment.isUITesting,
            let sessionTitle = ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_CRASHED_SESSION"] {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(750))
-                appStore.simulateCrashedSessionForUITesting(sessionTitle: sessionTitle)
-            }
+            appStore.simulateCrashedSessionForUITesting(sessionTitle: sessionTitle)
         }
     }
 
@@ -171,27 +165,35 @@ struct FlotillaApp: App {
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 Divider()
                 Button("Previous Session") {
-                    if let sessions = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt }).first,
-                       let current = store.selectedSession,
-                       let index = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt }).firstIndex(where: { $0.id == current.id }),
-                       index < store.sessions.count - 1 {
-                        let next = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt })[index + 1]
-                        navigator.selection = .session(next.id)
-                        store.selectedSessionID = next.id
-                    }
-                }
-                .keyboardShortcut("]", modifiers: [.command, .option])
-                Button("Next Session") {
-                    if let sessions = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt }).first,
-                       let current = store.selectedSession,
-                       let index = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt }).firstIndex(where: { $0.id == current.id }),
-                       index > 0 {
-                        let prev = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt })[index - 1]
-                        navigator.selection = .session(prev.id)
-                        store.selectedSessionID = prev.id
+                    let sorted = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt })
+                    guard !sorted.isEmpty else { return }
+                    if let currentID = store.selectedSessionID,
+                       let index = sorted.firstIndex(where: { $0.id == currentID }) {
+                        let prevIndex = (index - 1 + sorted.count) % sorted.count
+                        let target = sorted[prevIndex]
+                        navigator.selection = .session(target.id)
+                        store.selectedSessionID = target.id
+                    } else if let first = sorted.first {
+                        navigator.selection = .session(first.id)
+                        store.selectedSessionID = first.id
                     }
                 }
                 .keyboardShortcut("[", modifiers: [.command, .option])
+                Button("Next Session") {
+                    let sorted = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt })
+                    guard !sorted.isEmpty else { return }
+                    if let currentID = store.selectedSessionID,
+                       let index = sorted.firstIndex(where: { $0.id == currentID }) {
+                        let nextIndex = (index + 1) % sorted.count
+                        let target = sorted[nextIndex]
+                        navigator.selection = .session(target.id)
+                        store.selectedSessionID = target.id
+                    } else if let first = sorted.first {
+                        navigator.selection = .session(first.id)
+                        store.selectedSessionID = first.id
+                    }
+                }
+                .keyboardShortcut("]", modifiers: [.command, .option])
                 Divider()
                 Button("Restart Session") {
                     if let session = store.selectedSession {

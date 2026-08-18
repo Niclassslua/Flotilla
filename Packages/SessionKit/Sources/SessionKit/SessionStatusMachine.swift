@@ -18,7 +18,7 @@ public struct SessionStatusMachine: Sendable {
         case (.waitingForInput, .working), (.waitingForInput, .idle),
              (.waitingForInput, .ready), (.waitingForInput, .finished), (.waitingForInput, .crashed):
             return true
-        case (.ready, .working), (.ready, .finished), (.ready, .crashed):
+        case (.ready, .working), (.ready, .waitingForInput), (.ready, .idle), (.ready, .finished), (.ready, .crashed):
             return true
         case (.crashed, .working):
             return true

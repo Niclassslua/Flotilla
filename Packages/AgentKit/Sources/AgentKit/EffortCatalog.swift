@@ -47,6 +47,7 @@ public enum AgentEffortCatalog {
         case .claudeCode: [.low, .medium, .high, .xhigh, .max]
         case .codexCLI: [.minimal, .low, .medium, .high, .xhigh, .max, .ultra]
         case .openCode: []
+        case .antigravity: [.low, .medium, .high]
         }
     }
 
@@ -62,7 +63,7 @@ public enum AgentEffortCatalog {
             case .xhigh: "Extra High"
             default: level.displayName
             }
-        case .claudeCode, .openCode:
+        case .claudeCode, .openCode, .antigravity:
             level.displayName
         }
     }
@@ -154,6 +155,7 @@ public enum AgentEffortCatalog {
         switch agent {
         case .claudeCode: "claude --effort \(level.rawValue)"
         case .codexCLI: "codex -c model_reasoning_effort=\"\(level.rawValue)\""
+        case .antigravity: "agy --effort \(level.rawValue)"
         case .openCode: nil
         }
     }

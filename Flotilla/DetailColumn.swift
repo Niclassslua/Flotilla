@@ -5,21 +5,25 @@ import TerminalKit
 import GitKit
 
 struct DetailColumn: View {
+    @Environment(\.openSettings) private var openSettings
     @Bindable var store: AppStore
     @Bindable var navigator: WorkspaceNavigator
     @Bindable var settingsViewModel: SettingsViewModel
+    @Bindable var startupCheck: StartupCheckViewModel
     let terminalManager: TerminalManager
     let workspaceRegistry: SessionWorkspaceRegistry
     let activityStore: SessionActivityStore
     let onOpenSession: (UUID) -> Void
     let onOpenProject: (UUID) -> Void
     let onCreateSession: () -> Void
+    let onCommandPalette: () -> Void
+    let onInspectorToggle: () -> Void
 
-    /// Which grid tile has keyboard focus. Previously passed as
-    /// `.constant(nil)`, which meant no tile could ever become active.
     @State private var activeGridSessionID: UUID?
+    @State private var projectMode: ProjectWorkspaceMode = .overview
 
     var body: some View {
+        let _ = navigator.presentedSheet
         Group {
             switch navigator.selection {
             case .overview:
@@ -40,8 +44,8 @@ struct DetailColumn: View {
                 navigator: navigator,
                 store: store,
                 settingsViewModel: settingsViewModel,
-                onCommandPalette: { navigator.presentedSheet = .commandPalette },
-                onInspectorToggle: { navigator.isInspectorOpen.toggle() }
+                onCommandPalette: onCommandPalette,
+                onInspectorToggle: onInspectorToggle
             )
         }
         .navigationTitle(scopeTitle)
@@ -127,12 +131,15 @@ case .grid:
 
     @ViewBuilder
     private func terminal(for session: Session) -> some View {
-        if let process = store.process(for: session.id) {
+        if session.status != .crashed && session.status != .finished,
+           let process = store.process(for: session.id) {
             TerminalHostView(
                 controller: terminalManager.controller(
                     for: session,
                     process: process,
                     scrollback: store.scrollback(for: session.id),
+                    customReflowHandler: store.customReflowHandler(for: session.id),
+                    onPTYResize: store.resizeHandler(for: session.id),
                     outputHandler: { data in
                         store.appendTerminalOutput(data, toSessionID: session.id)
                     },
@@ -142,6 +149,7 @@ case .grid:
                 isFocused: true
             )
             .id(session.id)
+            .accessibilityIdentifier("TerminalView-\(session.title)")
             .background(FlotillaColors.terminalCanvas)
         } else {
             ContentUnavailableView {
@@ -165,36 +173,16 @@ case .grid:
     @ViewBuilder
     private func projectContent(projectID: UUID) -> some View {
         if let project = store.projects.first(where: { $0.id == projectID }) {
-            VStack(spacing: 0) {
-                projectHeader(project)
-                Divider()
-
-                switch navigator.presentation {
-case .grid:
-                    GridView(
-                        store: store,
-                        terminalManager: terminalManager,
-                        activeSessionID: $activeGridSessionID,
-                        openSession: onOpenSession,
-                        projectFilter: projectID,
-                        settingsViewModel: settingsViewModel
-                    )
-                case .board:
-                    KanbanTabView(
-                        store: store,
-                        terminalManager: terminalManager,
-                        openSession: onOpenSession
-                    )
-                case .list:
-                    projectListView(project)
-                case .focus:
-                    if let session = store.sessions(for: project).first {
-                        sessionSurface(for: session)
-                    } else {
-                        EmptyWorkspaceView(hasSessions: false, onCreate: onCreateSession)
-                    }
-                }
-            }
+            ProjectWorkspaceDetail(
+                project: project,
+                sessions: store.sessions(for: project),
+                selectedMode: $projectMode,
+                store: store,
+                terminalManager: terminalManager,
+                openSession: onOpenSession,
+                openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
+                onBackToGrid: { navigator.selection = .allProjects }
+            )
         } else {
             ContentUnavailableView("Project Not Found", systemImage: "folder.badge.questionmark")
         }
@@ -281,12 +269,14 @@ case .grid:
 
     @ViewBuilder
     private var projectsContent: some View {
-        ProjectCollectionView(
-            projects: store.projects,
-            sessionCount: { store.sessions(for: $0).count },
-            select: onOpenProject,
-            add: { navigator.presentedSheet = .createSession },
-            importWorkspace: { navigator.presentedSheet = .createSession }
+        ProjectsCommandCenterView(
+            store: store,
+            onSelect: onOpenProject,
+            onAdd: { navigator.presentedSheet = .createSession },
+            onImportWorkspace: { navigator.presentedSheet = .createSession },
+            onQuickLaunch: { project in
+                onOpenProject(project.id)
+            }
         )
     }
 
@@ -371,6 +361,10 @@ case .grid:
     @ViewBuilder
     private var banners: some View {
         VStack(spacing: 0) {
+            StartupWarningBanner(
+                missingTools: startupCheck.warningItems,
+                isDismissed: $startupCheck.isDismissed
+            )
             if let warning = store.lastOperationError {
                 OperationErrorBanner(message: warning) {
                     store.lastOperationError = nil

@@ -52,6 +52,9 @@ protocol TmuxPaneCapturing: Sendable {
 
 struct ProcessTmuxPaneCapture: TmuxPaneCapturing {
     func capturePane(sessionNamed name: String, tmuxExecutable: URL) -> String? {
+        guard FileManager.default.fileExists(atPath: ProcessTmuxServerProbe.defaultSocketPath()) else {
+            return nil
+        }
         let process = Process()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments()
@@ -61,14 +64,23 @@ struct ProcessTmuxPaneCapture: TmuxPaneCapturing {
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            // A missing session exits non-zero with no output; that is "no
-            // information", not "blank screen".
-            guard process.terminationStatus == 0, !data.isEmpty else { return nil }
-            return String(decoding: data, as: UTF8.self)
         } catch {
             return nil
         }
+
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            process.waitUntilExit()
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + 2) == .success else {
+            process.terminate()
+            return nil
+        }
+
+        guard process.terminationStatus == 0 else { return nil }
+        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        guard !data.isEmpty else { return nil }
+        return String(decoding: data, as: UTF8.self)
     }
 }

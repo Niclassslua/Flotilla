@@ -139,6 +139,7 @@ struct SessionToolbarView: View {
                     .font(.caption2.weight(.medium))
             }
             .padding(.leading, 3)
+            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("SessionToolbar.Status")
         }
         .padding(.horizontal, 12)

@@ -4,6 +4,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case claudeCode
     case codexCLI
     case openCode
+    case antigravity
 
     public var id: String { rawValue }
 
@@ -12,6 +13,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .claudeCode: return "Claude Code"
         case .codexCLI: return "Codex CLI"
         case .openCode: return "OpenCode"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -21,7 +23,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
     /// which of those a given model accepts) is `AgentEffortCatalog`'s job.
     public var supportsEffortSelection: Bool {
         switch self {
-        case .claudeCode, .codexCLI: true
+        case .claudeCode, .codexCLI, .antigravity: true
         case .openCode: false
         }
     }
@@ -78,9 +80,18 @@ public enum SessionStatus: String, Codable, Sendable, CaseIterable, Identifiable
     public var id: String { rawValue }
 }
 
-public enum CheckoutMode: String, Codable, Sendable {
+public enum CheckoutMode: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case mainCheckout
     case newWorktree
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .mainCheckout: return "Main Checkout"
+        case .newWorktree: return "New Worktree"
+        }
+    }
 }
 
 public enum KanbanColumnMode: String, Codable, CaseIterable, Sendable {

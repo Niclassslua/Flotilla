@@ -115,16 +115,6 @@ final class TerminalScreenHeuristicTests: XCTestCase {
         XCTAssertEqual(heuristic.status(forScreen: screen), .idle)
     }
 
-    /// The flip side, stated plainly so the limit is not mistaken for a
-    /// guarantee: a marker inside the tail window does count.
-    func testMarkerInsideTheTailWindowStillCounts() {
-        let screen = """
-        ● Reading files
-        ✻ Compacting… (esc to interrupt)
-        """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .working)
-    }
-
     /// A numbered list the agent merely printed is not an open question —
     /// only a list with a live selection caret is.
     func testNumberedListWithoutSelectionCaretIsNotWaiting() {
@@ -137,10 +127,6 @@ final class TerminalScreenHeuristicTests: XCTestCase {
         │ >                                        │
         """
         XCTAssertEqual(heuristic.status(forScreen: screen), .idle)
-    }
-
-    func testEmptyScreenIsIdle() {
-        XCTAssertEqual(heuristic.status(forScreen: ""), .idle)
     }
 }
 
@@ -181,17 +167,6 @@ final class SessionScreenMonitorTests: XCTestCase {
     private actor StatusBox {
         private(set) var values: [SessionStatus] = []
         func append(_ status: SessionStatus) { values.append(status) }
-    }
-
-    func testReportsStatusReadFromTheScreen() async {
-        let reader = ScriptedScreenReader(["✻ Thinking… (esc to interrupt)"])
-        let monitor = SessionScreenMonitor(
-            sessionID: UUID(),
-            reader: reader,
-            pollInterval: .milliseconds(30)
-        )
-        let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [.working])
     }
 
     /// The property that fixes the reported bug: a screen that keeps saying

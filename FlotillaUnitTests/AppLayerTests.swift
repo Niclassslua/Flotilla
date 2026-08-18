@@ -101,7 +101,7 @@ final class StartupCheckViewModelTests: XCTestCase {
     func testMissingOpenCodeIsDetectedButExcludedFromWarningItems() {
         let viewModel = StartupCheckViewModel(
             locator: SelectiveExecutableLocator(
-                availableNames: ["git", "tmux", "gh", "claude", "codex"]
+                availableNames: ["git", "tmux", "gh", "claude", "codex", "agy"]
             )
         )
 
@@ -112,7 +112,7 @@ final class StartupCheckViewModelTests: XCTestCase {
     func testOtherMissingAgentStillAppearsInWarningItems() {
         let viewModel = StartupCheckViewModel(
             locator: SelectiveExecutableLocator(
-                availableNames: ["git", "tmux", "gh", "claude", "opencode"]
+                availableNames: ["git", "tmux", "gh", "claude", "opencode", "agy"]
             )
         )
 
@@ -287,7 +287,7 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(factory.processes.isEmpty)
     }
 
-    func testFailedWorktreeCleanupKeepsSessionAndRestartsItsProcess() async throws {
+    func testFailedWorktreeCleanupSurfacesWarningAndDeletesSession() async throws {
         let repository = try GRDBSessionRepository()
         let project = Project(name: "Repo", rootPath: URL(fileURLWithPath: "/tmp/repo"))
         let session = Session(
@@ -319,11 +319,11 @@ final class AppStoreLifecycleTests: XCTestCase {
 
         await store.deleteSession(sessionID: session.id, deleteWorktree: true)
 
-        XCTAssertEqual(store.sessions.map(\.id), [session.id])
-        XCTAssertNotNil(store.lastOperationError)
-        XCTAssertEqual(factory.processes.count, 2)
-        XCTAssertTrue(factory.processes[1].isRunning)
-        XCTAssertTrue(factory.processes[1].sentInput.isEmpty)
+        XCTAssertTrue(store.sessions.isEmpty, "Session must be removed from memory")
+        let (_, loadedSessions) = try repository.loadAll()
+        XCTAssertTrue(loadedSessions.isEmpty, "Session must be deleted from repository")
+        XCTAssertNotNil(store.lastOperationError, "Worktree cleanup warning must be surfaced")
+        XCTAssertEqual(factory.processes.count, 1, "Process must not be resurrected")
     }
 
     func testUnexpectedProcessCrashPersistsCrashedStateAndCanRestart() async throws {
@@ -477,5 +477,457 @@ final class AppStoreLifecycleTests: XCTestCase {
         let elapsed = Date().timeIntervalSince(start)
 
         XCTAssertLessThan(elapsed, 0.5)
+    }
+}
+
+private final class MockTmuxClientProbe: TmuxClientProbing, @unchecked Sendable {
+    var stubbedSizes: [String: PTYSize] = [:]
+    private let lock = NSLock()
+    private var _clientSizeCalls: [(sessionName: String, executable: URL)] = []
+    private var _refreshClientCalls: [(sessionName: String, executable: URL)] = []
+
+    var clientSizeCalls: [(sessionName: String, executable: URL)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _clientSizeCalls
+    }
+
+    var refreshClientCalls: [(sessionName: String, executable: URL)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _refreshClientCalls
+    }
+
+    func clientSize(sessionNamed name: String, tmuxExecutable: URL) -> PTYSize? {
+        lock.lock()
+        _clientSizeCalls.append((name, tmuxExecutable))
+        lock.unlock()
+        return stubbedSizes[name]
+    }
+
+    func refreshClient(sessionNamed name: String, tmuxExecutable: URL) {
+        lock.lock()
+        _refreshClientCalls.append((name, tmuxExecutable))
+        lock.unlock()
+    }
+}
+
+@MainActor
+final class SessionProcessManagerResizeRecoveryTests: XCTestCase {
+    private func makeManager(
+        factory: RecordingProcessFactory,
+        probe: MockTmuxClientProbe
+    ) -> SessionProcessManager {
+        SessionProcessManager(
+            locator: FixedExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxServerProbe: StubTmuxServerProbe(usable: true),
+            tmuxClientProbe: probe
+        )
+    }
+
+    func testResizeMismatchTriggersReattach() async throws {
+        let factory = RecordingProcessFactory()
+        let probe = MockTmuxClientProbe()
+        let manager = makeManager(factory: factory, probe: probe)
+
+        let session = Session(
+            title: "Mismatch",
+            goal: "Test",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        let sessionName = TmuxSessionWrapping.sessionName(for: session.id)
+        probe.stubbedSizes[sessionName] = PTYSize(cols: 80, rows: 25) // Stale size
+
+        let initialProcess = try manager.start(session: session, deliverGoal: false)
+        XCTAssertEqual(factory.processes.count, 1)
+
+        // Request verification for expected size 199x47
+        manager.verifyAndRecoverResize(sessionID: session.id, expectedSize: PTYSize(cols: 199, rows: 47))
+
+        // Wait for debounce (250ms) + async probe
+        for _ in 0..<20 {
+            if factory.processes.count > 1 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+
+        XCTAssertEqual(factory.processes.count, 2, "Mismatch must trigger reattach (a fresh PTY process)")
+        let replacement = manager.process(for: session.id)
+        XCTAssertTrue(replacement !== initialProcess, "Replacement process must be distinct from initial")
+    }
+
+    func testResizeMatchDoesNotTriggerReattach() async throws {
+        let factory = RecordingProcessFactory()
+        let probe = MockTmuxClientProbe()
+        let manager = makeManager(factory: factory, probe: probe)
+
+        let session = Session(
+            title: "Match",
+            goal: "Test",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        let sessionName = TmuxSessionWrapping.sessionName(for: session.id)
+        probe.stubbedSizes[sessionName] = PTYSize(cols: 199, rows: 47) // Matching size
+
+        let initialProcess = try manager.start(session: session, deliverGoal: false)
+        XCTAssertEqual(factory.processes.count, 1)
+
+        manager.verifyAndRecoverResize(sessionID: session.id, expectedSize: PTYSize(cols: 199, rows: 47))
+        try await Task.sleep(for: .milliseconds(350))
+
+        XCTAssertEqual(factory.processes.count, 1, "Matching size must NOT trigger reattach")
+        XCTAssertTrue(manager.process(for: session.id) === initialProcess)
+    }
+
+    func testReattachRecoveryRateLimit() async throws {
+        let factory = RecordingProcessFactory()
+        let probe = MockTmuxClientProbe()
+        let manager = makeManager(factory: factory, probe: probe)
+
+        let session = Session(
+            title: "RateLimit",
+            goal: "Test",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        let sessionName = TmuxSessionWrapping.sessionName(for: session.id)
+        probe.stubbedSizes[sessionName] = PTYSize(cols: 80, rows: 25)
+
+        _ = try manager.start(session: session, deliverGoal: false)
+
+        var failureMessage: String?
+        // 1st mismatch -> reattach #1
+        manager.verifyAndRecoverResize(sessionID: session.id, expectedSize: PTYSize(cols: 100, rows: 30)) { msg in
+            failureMessage = msg
+        }
+        for _ in 0..<20 {
+            if factory.processes.count >= 2 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(factory.processes.count, 2)
+        XCTAssertNil(failureMessage)
+
+        // 2nd mismatch -> reattach #2
+        manager.verifyAndRecoverResize(sessionID: session.id, expectedSize: PTYSize(cols: 120, rows: 40)) { msg in
+            failureMessage = msg
+        }
+        for _ in 0..<20 {
+            if factory.processes.count >= 3 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(factory.processes.count, 3)
+        XCTAssertNil(failureMessage)
+
+        // 3rd mismatch -> cap hit! Should not reattach, should invoke onRecoveryFailure
+        manager.verifyAndRecoverResize(sessionID: session.id, expectedSize: PTYSize(cols: 140, rows: 50)) { msg in
+            failureMessage = msg
+        }
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertEqual(factory.processes.count, 3, "Third attempt within 60s must be capped")
+        XCTAssertNotNil(failureMessage, "Failure message must be surfaced when recovery limit is reached")
+    }
+
+    func testRefreshTmuxClientCallsProbe() async throws {
+        let factory = RecordingProcessFactory()
+        let probe = MockTmuxClientProbe()
+        let manager = makeManager(factory: factory, probe: probe)
+
+        let session = Session(
+            title: "RefreshTest",
+            goal: "Test",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        _ = try manager.start(session: session, deliverGoal: false)
+
+        manager.refreshTmuxClient(for: session.id)
+
+        for _ in 0..<20 {
+            if !probe.refreshClientCalls.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(probe.refreshClientCalls.count, 1)
+        XCTAssertEqual(probe.refreshClientCalls.first?.sessionName, TmuxSessionWrapping.sessionName(for: session.id))
+    }
+}
+
+@MainActor
+final class TerminalControllerReflowTests: XCTestCase {
+    func testCustomReflowHandlerInvokedOnSizeChangedAndDisplay() async throws {
+        let process = MockPTYProcess()
+        try process.start(
+            executable: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+
+        var reflowCallCount = 0
+        var lastResizedSize: PTYSize?
+
+        let controller = TerminalController(
+            sessionID: UUID(),
+            process: process,
+            accessibilityIdentifier: "ReflowTest",
+            customReflowHandler: { _ in
+                reflowCallCount += 1
+            },
+            onPTYResize: { size in
+                lastResizedSize = size
+            }
+        )
+
+        let sessionView = controller.terminalView(for: .session)
+        controller.sizeChanged(source: sessionView, newCols: 120, newRows: 40)
+
+        // Wait for debounced resize and reflow
+        for _ in 0..<20 {
+            if reflowCallCount > 0 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+
+        XCTAssertEqual(lastResizedSize, PTYSize(cols: 120, rows: 40))
+        XCTAssertGreaterThanOrEqual(reflowCallCount, 1)
+    }
+
+    func testMakeAuthoritativeIgnoresDegenerateDimensions() async throws {
+        let process = MockPTYProcess()
+        try process.start(
+            executable: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+
+        var lastResizedSize: PTYSize?
+        let controller = TerminalController(
+            sessionID: UUID(),
+            process: process,
+            accessibilityIdentifier: "DegenerateTest",
+            onPTYResize: { size in
+                lastResizedSize = size
+            }
+        )
+
+        // Switch to grid before it has laid out (terminal.getDims() is default / unmeasured)
+        controller.makeAuthoritative(.grid)
+
+        // Default mock terminal in headless test reports 80x25 or valid, but if below 20x5 it's guarded.
+        // Verifies makeAuthoritative runs without crashing
+        XCTAssertNotNil(controller)
+    }
+}
+
+private final class MockTmuxSessionTerminator: TmuxSessionTerminating, @unchecked Sendable {
+    var killedSessions: [String] = []
+    var stubbedSessions: [String] = []
+
+    func killSession(named name: String, tmuxExecutable: URL) {
+        killedSessions.append(name)
+    }
+
+    func listSessions(tmuxExecutable: URL) -> [String] {
+        stubbedSessions
+    }
+}
+
+@MainActor
+final class OrphanReapingTests: XCTestCase {
+    func testOrphanTmuxSessionReapingKillsOnlyUnknownSessions() {
+        let terminator = MockTmuxSessionTerminator()
+        let knownUUID = UUID()
+        let orphanUUID = UUID()
+
+        terminator.stubbedSessions = [
+            "flotilla-\(knownUUID.uuidString)",
+            "flotilla-\(orphanUUID.uuidString)",
+            "other-user-session"
+        ]
+
+        let locator = FixedExecutableLocator(executable: URL(fileURLWithPath: "/bin/echo"), tmuxExecutable: URL(fileURLWithPath: "/usr/bin/tmux"))
+        let manager = SessionProcessManager(
+            locator: locator,
+            processFactory: RecordingProcessFactory(),
+            tmuxTerminator: terminator
+        )
+
+        manager.reapOrphanTmuxSessions(knownSessionIDs: [knownUUID])
+
+        XCTAssertEqual(terminator.killedSessions, ["flotilla-\(orphanUUID.uuidString)"])
+    }
+}
+
+@MainActor
+final class Batch2HardeningTests: XCTestCase {
+    func testTerminalControllerRebindSwapsProcess() async throws {
+        let proc1 = MockPTYProcess()
+        try proc1.start(
+            executable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+
+        let controller = TerminalController(
+            sessionID: UUID(),
+            process: proc1,
+            accessibilityIdentifier: "RebindTest"
+        )
+        XCTAssertEqual(controller.processID, proc1.id)
+
+        let proc2 = MockPTYProcess()
+        try proc2.start(
+            executable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+
+        controller.rebind(process: proc2)
+        XCTAssertEqual(controller.processID, proc2.id)
+    }
+
+    func testVisibleScreenTextReadsAuthoritativeView() {
+        let process = MockPTYProcess()
+        try? process.start(
+            executable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+
+        let controller = TerminalController(
+            sessionID: UUID(),
+            process: process,
+            accessibilityIdentifier: "VisibleTextTest"
+        )
+
+        controller.makeAuthoritative(.session)
+        XCTAssertNotNil(controller.visibleScreenText())
+    }
+
+    func testEnvironmentVariablesForwardedViaEFlags() {
+        let env = ["MY_API_KEY": "secret_val", "CUSTOM_PATH": "/custom/bin", "TMUX": "should_be_stripped"]
+        let launch = TmuxSessionWrapping.wrap(
+            agentExecutable: URL(fileURLWithPath: "/bin/sleep"),
+            arguments: ["10"],
+            environment: env,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            sessionID: UUID(),
+            tmuxExecutable: URL(fileURLWithPath: "/usr/bin/tmux")
+        )
+
+        XCTAssertTrue(launch.arguments.contains("-e"))
+        XCTAssertTrue(launch.arguments.contains("MY_API_KEY=secret_val"))
+        XCTAssertTrue(launch.arguments.contains("CUSTOM_PATH=/custom/bin"))
+        XCTAssertFalse(launch.arguments.contains("TMUX=should_be_stripped"))
+    }
+}
+
+@MainActor
+final class Batch3HardeningTests: XCTestCase {
+    func testFlushLiveScrollbackPersistsAllBuffersSynchronously() async throws {
+        let repo = try GRDBSessionRepository()
+        let session = Session(
+            title: "Flush Test",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working,
+            terminalScrollback: Data()
+        )
+        try repo.save(session)
+
+        let store = AppStore(
+            repository: repo,
+            gitService: MockGitService(),
+            processManager: SessionProcessManager(
+                locator: FixedExecutableLocator(executable: URL(fileURLWithPath: "/bin/echo")),
+                processFactory: RecordingProcessFactory()
+            ),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp") }
+        )
+
+        store.appendTerminalOutput(Data("output-to-flush\n".utf8), toSessionID: session.id)
+
+        // Calling flushLiveScrollback immediately forces persistence without waiting for debounce
+        store.flushLiveScrollback()
+
+        let (_, loadedSessions) = try repo.loadAll()
+        let loaded = try XCTUnwrap(loadedSessions.first(where: { $0.id == session.id }))
+        XCTAssertEqual(String(decoding: loaded.terminalScrollback, as: UTF8.self), "output-to-flush\n")
+    }
+
+    func testInitialLaunchPTYSizeIsStandard() throws {
+        let factory = RecordingProcessFactory()
+        let manager = SessionProcessManager(
+            locator: FixedExecutableLocator(executable: URL(fileURLWithPath: "/bin/echo")),
+            processFactory: factory
+        )
+
+        let session = Session(
+            title: "Size Test",
+            goal: "",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+
+        try manager.start(session: session, deliverGoal: false)
+        let started = try XCTUnwrap(factory.processes.first)
+        XCTAssertEqual(started.lastSize, PTYSize(cols: 100, rows: 30))
+    }
+}
+
+@MainActor
+final class Batch4HardeningTests: XCTestCase {
+    func testClipboardCopyWritesLossyUTF8Safely() {
+        let process = MockPTYProcess()
+        try? process.start(
+            executable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+        let controller = TerminalController(
+            sessionID: UUID(),
+            process: process,
+            accessibilityIdentifier: "ClipboardTest"
+        )
+        let terminalView = controller.terminalView(for: .session)
+
+        // Seed clipboard with a known string
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("initial-clip", forType: .string)
+
+        // Calling clipboardCopy with empty data should NOT clear the existing pasteboard
+        controller.clipboardCopy(source: terminalView, content: Data())
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "initial-clip")
+
+        // Calling clipboardCopy with valid data writes to pasteboard
+        controller.clipboardCopy(source: terminalView, content: Data("hello-terminal".utf8))
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "hello-terminal")
     }
 }

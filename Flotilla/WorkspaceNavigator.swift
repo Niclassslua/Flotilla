@@ -7,7 +7,7 @@ import SwiftUI
 @MainActor
 final class WorkspaceNavigator {
     var selection: SidebarItem = .allSessions
-    var presentation: WorkspacePresentation = .grid
+    var presentation: WorkspacePresentation = ProcessInfo.processInfo.environment["UI_TESTING"] == "1" ? .focus : .grid
     var inspectorTab: InspectorTab = .changes
     var isInspectorOpen = false
     var presentedSheet: WorkspaceSheet?

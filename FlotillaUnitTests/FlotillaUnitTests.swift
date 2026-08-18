@@ -10,6 +10,7 @@ final class AgentProviderTests: XCTestCase {
         XCTAssertEqual(registry.provider(for: .claudeCode).binaryName, "claude")
         XCTAssertEqual(registry.provider(for: .codexCLI).binaryName, "codex")
         XCTAssertEqual(registry.provider(for: .openCode).binaryName, "opencode")
+        XCTAssertEqual(registry.provider(for: .antigravity).binaryName, "agy")
     }
 
     func testLaunchPlanUsesConfiguredPathArgumentsAndInteractiveGoal() {
@@ -100,6 +101,18 @@ final class AgentProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.arguments, ["--config", "model_reasoning_effort=\"xhigh\""])
+    }
+
+    func testAntigravityLaunchPlanUsesNativeEffortFlag() {
+        let plan = AgentProviderRegistry().provider(for: .antigravity).launchPlan(
+            goal: nil,
+            model: "gemini-2.5-pro",
+            effort: .high,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, ["--model", "gemini-2.5-pro", "--effort", "high"])
     }
 
     func testOpenCodeLaunchPlanIgnoresUnsupportedEffort() {

@@ -132,7 +132,7 @@ public struct CLIAgentProvider: AgentProviding {
         // level carried over from a session created against another agent.
         if let effort, AgentEffortCatalog.supports(effort, agent: kind) {
             switch kind {
-            case .claudeCode:
+            case .claudeCode, .antigravity:
                 arguments += ["--effort", effort.rawValue]
             case .codexCLI:
                 arguments += ["--config", "model_reasoning_effort=\"\(effort.rawValue)\""]
@@ -155,6 +155,7 @@ public struct CLIAgentProvider: AgentProviding {
         case .claudeCode: paths.claudeCodePath
         case .codexCLI: paths.codexCLIPath
         case .openCode: paths.openCodePath
+        case .antigravity: paths.antigravityPath
         }
     }
 
@@ -163,6 +164,7 @@ public struct CLIAgentProvider: AgentProviding {
         case .claudeCode: arguments.claudeCodeArguments
         case .codexCLI: arguments.codexCLIArguments
         case .openCode: arguments.openCodeArguments
+        case .antigravity: arguments.antigravityArguments
         }
     }
 }
@@ -178,6 +180,8 @@ public struct AgentProviderRegistry: Sendable {
             CLIAgentProvider(kind: kind, binaryName: "codex")
         case .openCode:
             CLIAgentProvider(kind: kind, binaryName: "opencode")
+        case .antigravity:
+            CLIAgentProvider(kind: kind, binaryName: "agy")
         }
     }
 }

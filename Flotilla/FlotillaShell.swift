@@ -16,7 +16,6 @@ struct FlotillaShell: View {
     @Bindable var settingsViewModel: SettingsViewModel
     @State private var activityStore: SessionActivityStore
     @State private var workspaceRegistry: SessionWorkspaceRegistry
-    @State private var commandPaletteController: CommandPaletteWindowController?
 
     init(
         store: AppStore,
@@ -38,20 +37,15 @@ struct FlotillaShell: View {
     }
 
     var body: some View {
+        let _ = navigator.presentedSheet
         splitView
-            .sheet(item: sheetBinding) { sheet in
+            .sheet(item: $navigator.presentedSheet) { sheet in
                 sheetContent(sheet)
             }
             .task {
                 await restoreWorkspaceSelection()
                 syncSidebarColumn(for: facet)
                 applyTerminalPreferences()
-            }
-            .onChange(of: navigator.presentedSheet) { _, sheet in
-                if case .commandPalette = sheet {
-                    presentCommandPalette()
-                    navigator.presentedSheet = nil
-                }
             }
             .modifier(ShellLifecycleModifier(
                 navigator: navigator,
@@ -61,6 +55,15 @@ struct FlotillaShell: View {
                 settingsViewModel: settingsViewModel,
                 applyTerminalPreferences: applyTerminalPreferences
             ))
+            #if DEBUG
+            .overlay(alignment: .topLeading) {
+                Text(hookCoordinator?.lastNotifiedSessionTitle ?? "none")
+                    .accessibilityIdentifier("LastNotifiedSession")
+                    .frame(width: 1, height: 1)
+                    .opacity(0.001)
+                    .allowsHitTesting(false)
+            }
+            #endif
     }
 
     private var facet: SidebarFacet { SidebarFacet(navigator.selection) }
@@ -96,6 +99,7 @@ struct FlotillaShell: View {
                     store: store,
                     navigator: navigator,
                     settingsViewModel: settingsViewModel,
+                    startupCheck: startupCheck,
                     terminalManager: terminalManager,
                     workspaceRegistry: workspaceRegistry,
                     activityStore: activityStore,
@@ -107,7 +111,9 @@ struct FlotillaShell: View {
                         navigator.selection = .project(id)
                         store.selectedProjectID = id
                     },
-                    onCreateSession: { navigator.presentedSheet = .createSession }
+                    onCreateSession: { navigator.presentedSheet = .createSession },
+                    onCommandPalette: { navigator.presentedSheet = .commandPalette },
+                    onInspectorToggle: { navigator.isInspectorOpen.toggle() }
                 )
             }
         }
@@ -125,40 +131,6 @@ struct FlotillaShell: View {
         navigator.columnVisibility = facet == .sessions ? .all : .detailOnly
     }
 
-    /// Excludes `.commandPalette`, which is presented as a floating panel
-    /// (see `presentCommandPalette`), not a modal sheet — a sheet can't
-    /// dismiss itself when the user clicks outside it, but a panel can.
-    private var sheetBinding: Binding<WorkspaceSheet?> {
-        Binding(
-            get: {
-                if case .commandPalette = navigator.presentedSheet { return nil }
-                return navigator.presentedSheet
-            },
-            set: { navigator.presentedSheet = $0 }
-        )
-    }
-
-    private func presentCommandPalette() {
-        let controller = commandPaletteController ?? {
-            let controller = CommandPaletteWindowController { [weak navigator] in
-                navigator?.presentedSheet = nil
-            }
-            commandPaletteController = controller
-            return controller
-        }()
-        controller.setContent(
-            CommandPaletteView(
-                projects: store.projects,
-                sessions: store.sessions,
-                perform: perform,
-                openProject: openProject,
-                openSession: openSession,
-                onDismiss: { [weak controller] in controller?.close() }
-            )
-        )
-        controller.show(relativeTo: NSApp.keyWindow ?? NSApp.mainWindow)
-    }
-
     @ViewBuilder
     private func sheetContent(_ sheet: WorkspaceSheet) -> some View {
         switch sheet {
@@ -173,7 +145,14 @@ struct FlotillaShell: View {
                 }
             )
         case .commandPalette:
-            EmptyView()
+            CommandPaletteView(
+                projects: store.projects,
+                sessions: store.sessions,
+                perform: perform,
+                openProject: openProject,
+                openSession: openSession,
+                onDismiss: { navigator.presentedSheet = nil }
+            )
         case .shortcuts:
             KeyboardShortcutsView()
         case .restore:
@@ -181,10 +160,6 @@ struct FlotillaShell: View {
                 store.restartSession(sessionID: id)
             }
         case .deleteSession(let sessionID):
-            // Not force-unwrapped: the session can disappear between the sheet
-            // being requested and presented (deleted from another entry point,
-            // or the store reloading), and a missing one must dismiss rather
-            // than crash.
             if let session = store.sessions.first(where: { $0.id == sessionID }) {
                 DeleteSessionSheet(
                     session: session,
@@ -303,13 +278,24 @@ private struct ShellLifecycleModifier: ViewModifier {
             }
             .onChange(of: store.sessions.count) {
                 terminalManager.retainControllers(for: Set(store.sessions.map(\.id)))
-                hookCoordinator?.observeAll()
+                // Under UI testing each monitor's sub-second polling hop to
+                // the main actor keeps XCUITest's quiescence check from ever
+                // settling, adding ~1s to every query. Status simulation
+                // launches still observe via HookCoordinator.init.
+                if ProcessInfo.processInfo.environment["UI_TESTING"] != "1" {
+                    hookCoordinator?.observeAll()
+                }
             }
             .onChange(of: store.sessions.map(\.status)) {
-                hookCoordinator?.observeAll()
+                if ProcessInfo.processInfo.environment["UI_TESTING"] != "1" {
+                    hookCoordinator?.observeAll()
+                }
             }
             .onChange(of: settingsViewModel.settings.terminal) {
                 applyTerminalPreferences()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                store.flushLiveScrollback()
             }
     }
 }

@@ -48,10 +48,12 @@ final class HookCoordinator {
         self.screenReader = screenReader
         self.dispatcher = dispatcher
         self.notificationsEnabled = notificationsEnabled
-        if requestsAuthorization, notificationsEnabled() {
+        if requestsAuthorization, notificationsEnabled(), ProcessInfo.processInfo.environment["UI_TESTING"] != "1" {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
-        observeAll()
+        if !ProcessInfo.processInfo.environment.keys.contains("UI_TESTING") || ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_WAITING_SESSION"] != nil {
+            observeAll()
+        }
     }
 
     /// Starts watching any session that isn't being watched yet — safe to
@@ -90,6 +92,7 @@ final class HookCoordinator {
     private func handle(status: SessionStatus, sessionID: UUID, gate: WaitingNotificationGate) async {
         let shouldNotify = gate.shouldNotify(for: status)
         store.applyObservedStatus(status, toSessionID: sessionID)
+        await store.syncAgentTitle(forSessionID: sessionID)
         if shouldNotify,
            notificationsEnabled(),
            let session = store.sessions.first(where: { $0.id == sessionID }) {

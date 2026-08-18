@@ -79,6 +79,8 @@ public struct ModelCatalogFetcher: Sendable {
                 case .openCode:
                     try await self.fetchOpenCodeModels(executable: executable, subscription: openCodeSubscription)
                         .map { Self.profiles(forSlugs: $0, agent: .openCode) }
+                case .antigravity:
+                    try await self.fetchAntigravityProfiles(executable: executable)
                 }
             }
         } catch {
@@ -101,6 +103,7 @@ public struct ModelCatalogFetcher: Sendable {
         case .claudeCode: "claude"
         case .codexCLI: "codex"
         case .openCode: "opencode"
+        case .antigravity: "agy"
         }
     }
 
@@ -183,6 +186,104 @@ public struct ModelCatalogFetcher: Sendable {
         guard let open = output.firstIndex(of: "<"),
               let close = output[open...].firstIndex(of: ">") else { return [] }
         return output[output.index(after: open)..<close]
+            .split(separator: "|")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .compactMap(AgentEffort.init(rawValue:))
+            .sorted { $0.rank < $1.rank }
+    }
+
+    public struct AntigravityModelEntry: Equatable, Sendable {
+        public let slug: String
+        public let displayName: String?
+
+        public init(slug: String, displayName: String? = nil) {
+            self.slug = slug
+            self.displayName = displayName
+        }
+    }
+
+    private func fetchAntigravityProfiles(executable: URL) async throws -> [AgentModelProfile]? {
+        async let modelsTask = fetchAntigravityModelEntries(executable: executable)
+        async let levelsTask = fetchAntigravityEffortLevels(executable: executable)
+        guard let models = try await modelsTask, !models.isEmpty else {
+            _ = try? await levelsTask
+            return nil
+        }
+        let levels = (try? await levelsTask) ?? nil
+
+        let options: [AgentEffortOption] = levels.map { levels in
+            levels.map { level in
+                AgentEffortOption(
+                    level: level,
+                    label: AgentEffortCatalog.label(for: level, agent: .antigravity),
+                    summary: AgentEffortCatalog.summary(for: level, agent: .antigravity)
+                )
+            }
+        } ?? AgentEffortCatalog.staticOptions(for: .antigravity)
+
+        return models.map { AgentModelProfile(slug: $0.slug, displayName: $0.displayName, effortOptions: options) }
+    }
+
+    private func fetchAntigravityModelEntries(executable: URL) async throws -> [AntigravityModelEntry]? {
+        let result = try await runner.run(
+            ["models"],
+            executable: executable,
+            workingDirectory: FileManager.default.temporaryDirectory
+        )
+        guard result.exitCode == 0 else { return nil }
+        let models = Self.parseAntigravityModelEntries(result.stdout)
+        return models.isEmpty ? nil : models
+    }
+
+    private func fetchAntigravityModels(executable: URL) async throws -> [String]? {
+        try await fetchAntigravityModelEntries(executable: executable)?.map(\.slug)
+    }
+
+    public static func parseAntigravityModelEntries(_ output: String) -> [AntigravityModelEntry] {
+        output
+            .split(separator: "\n")
+            .compactMap { rawLine in
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !line.isEmpty,
+                      !line.lowercased().hasPrefix("usage"),
+                      !line.lowercased().hasPrefix("available"),
+                      !line.lowercased().hasPrefix("name"),
+                      !line.hasPrefix("-"),
+                      !line.hasPrefix("#"),
+                      !line.lowercased().hasPrefix("agy models"),
+                      !line.lowercased().hasPrefix("agy") else {
+                    return nil
+                }
+                let components = line.split(whereSeparator: \.isWhitespace).map(String.init)
+                guard let slug = components.first, !slug.isEmpty, !slug.hasPrefix("-") else { return nil }
+                let displayName = components.count > 1 ? components.dropFirst().joined(separator: " ") : nil
+                return AntigravityModelEntry(slug: slug, displayName: displayName)
+            }
+    }
+
+    public static func parseAntigravityModelList(_ output: String) -> [String] {
+        parseAntigravityModelEntries(output).map(\.slug)
+    }
+
+    private func fetchAntigravityEffortLevels(executable: URL) async throws -> [AgentEffort]? {
+        let result = try await runner.run(
+            ["--help"],
+            executable: executable,
+            workingDirectory: FileManager.default.temporaryDirectory
+        )
+        guard result.exitCode == 0 else { return nil }
+        let levels = Self.parseAntigravityEffortLevels(result.stdout)
+        return levels.isEmpty ? nil : levels
+    }
+
+    /// `agy --help` outputs e.g. "--effort  Reasoning effort for the current CLI session (low|medium|high)".
+    public static func parseAntigravityEffortLevels(_ output: String) -> [AgentEffort] {
+        guard let effortLine = output.split(separator: "\n").first(where: { $0.contains("--effort") }),
+              let open = effortLine.firstIndex(of: "("),
+              let close = effortLine[open...].firstIndex(of: ")") else {
+            return []
+        }
+        return effortLine[effortLine.index(after: open)..<close]
             .split(separator: "|")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .compactMap(AgentEffort.init(rawValue:))
@@ -297,11 +398,34 @@ public enum ModelCatalog {
         for agent: AgentKind,
         openCodeSubscription: OpenCodeSubscription = .none
     ) -> [AgentModelProfile] {
+        if agent == .antigravity {
+            let options = AgentEffortCatalog.staticOptions(for: .antigravity)
+            return antigravityFallbackModels.map { entry in
+                AgentModelProfile(slug: entry.slug, displayName: entry.displayName, effortOptions: options)
+            }
+        }
         let slugs = staticFallback(for: agent, openCodeSubscription: openCodeSubscription)
         return slugs.map { slug in
             AgentModelProfile(slug: slug, effortOptions: fallbackEffortOptions(for: agent, slug: slug))
         }
     }
+
+    private static let antigravityFallbackModels: [(slug: String, displayName: String)] = [
+        ("gemini-3.7-flash-high", "Gemini 3.7 Flash (High)"),
+        ("gemini-3.7-flash-medium", "Gemini 3.7 Flash (Medium)"),
+        ("gemini-3.7-flash-low", "Gemini 3.7 Flash (Low)"),
+        ("gemini-3.6-flash-high", "Gemini 3.6 Flash (High)"),
+        ("gemini-3.6-flash-medium", "Gemini 3.6 Flash (Medium)"),
+        ("gemini-3.6-flash-low", "Gemini 3.6 Flash (Low)"),
+        ("gemini-3.5-flash-high", "Gemini 3.5 Flash (High)"),
+        ("gemini-3.5-flash-medium", "Gemini 3.5 Flash (Medium)"),
+        ("gemini-3.5-flash-low", "Gemini 3.5 Flash (Low)"),
+        ("gemini-3.1-pro-high", "Gemini 3.1 Pro (High)"),
+        ("gemini-3.1-pro-low", "Gemini 3.1 Pro (Low)"),
+        ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)"),
+        ("claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)"),
+        ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"),
+    ]
 
     private static func fallbackEffortOptions(for agent: AgentKind, slug: String) -> [AgentEffortOption] {
         let all = AgentEffortCatalog.staticOptions(for: agent)
@@ -328,6 +452,7 @@ public enum ModelCatalog {
         switch agent {
         case .claudeCode: ["sonnet", "opus", "haiku", "fable", "best", "opusplan"]
         case .codexCLI: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"]
+        case .antigravity: antigravityFallbackModels.map(\.slug)
         case .openCode: [
             // opencode/* — built-in free models
             "opencode/nemotron-3-ultra-free",

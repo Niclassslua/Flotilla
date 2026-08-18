@@ -1,0 +1,329 @@
+import SwiftUI
+import AppKit
+import SessionKit
+import GitKit
+import DesignSystem
+
+/// High-density command card for a project in the Projects workspace.
+/// Displays live Git branch, diff stats, running agent telemetry, and
+/// 1-click action shortcuts (Quick Launch, Terminal, Editor, Finder).
+struct ProjectCommandCard: View {
+    let project: Project
+    let sessions: [Session]
+    let gitService: any GitServiceProtocol
+    let diffStatStore: DiffStatStore
+    let onSelect: () -> Void
+    let onQuickLaunch: () -> Void
+    let onRemove: () -> Void
+
+    @State private var currentBranch: String?
+    @State private var projectDiffStat: GitDiffStat?
+    @State private var worktreeCount: Int = 0
+    @State private var isHovered = false
+
+    private var activeSessions: [Session] {
+        sessions.filter { $0.status == .working || $0.status == .waitingForInput }
+    }
+
+    private var attentionSessions: [Session] {
+        sessions.filter { $0.status == .waitingForInput || $0.status == .crashed }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
+            headerRow
+            pathAndStatsRow
+            sessionTelemetrySection
+            Divider()
+                .foregroundStyle(FlotillaColors.separator)
+            actionBar
+        }
+        .padding(FlotillaSpacing.large)
+        .frame(maxWidth: .infinity, minHeight: 180, alignment: .leading)
+        .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card))
+        .overlay {
+            RoundedRectangle(cornerRadius: FlotillaRadius.card)
+                .strokeBorder(
+                    !attentionSessions.isEmpty
+                        ? FlotillaColors.statusWaitingForInput.opacity(0.6)
+                        : (isHovered ? FlotillaColors.accent.opacity(0.4) : FlotillaColors.separator),
+                    lineWidth: FlotillaBorderWidth.thin
+                )
+        }
+        .contentShape(.rect)
+        .onHover { isHovered = $0 }
+        .onTapGesture { onSelect() }
+        .task(id: project.id) {
+            await loadGitTelemetry()
+        }
+        .accessibilityIdentifier("ProjectRow-\(project.name)")
+    }
+
+    // MARK: - Header
+
+    private var headerRow: some View {
+        HStack(alignment: .center, spacing: FlotillaSpacing.small) {
+            ProjectMark(title: project.name, tint: ProjectMark.tint(for: project))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.name)
+                    .font(FlotillaTypography.headline)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            if let branch = currentBranch {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: FlotillaIconSize.small))
+                    Text(branch)
+                        .font(.system(size: 11, design: .monospaced))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, FlotillaSpacing.small)
+                .padding(.vertical, FlotillaSpacing.xSmall)
+                .background(FlotillaColors.surfaceElevated, in: Capsule())
+                .foregroundStyle(FlotillaColors.textSecondary)
+            }
+
+            if let stat = projectDiffStat, !stat.isEmpty {
+                HStack(spacing: 4) {
+                    if stat.additions > 0 {
+                        Text("+\(stat.additions)")
+                            .foregroundStyle(FlotillaColors.statusWorking)
+                    }
+                    if stat.deletions > 0 {
+                        Text("-\(stat.deletions)")
+                            .foregroundStyle(FlotillaColors.statusCrashed)
+                    }
+                }
+                .font(.system(size: 11, design: .monospaced))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
+            }
+
+            moreMenu
+        }
+    }
+
+    // MARK: - Path & Stats
+
+    private var pathAndStatsRow: some View {
+        HStack(spacing: FlotillaSpacing.medium) {
+            Text(project.rootPath.path)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: FlotillaSpacing.small) {
+                Label("\(sessions.count)", systemImage: "terminal")
+                    .help("\(sessions.count) total sessions")
+
+                if worktreeCount > 0 {
+                    Label("\(worktreeCount)", systemImage: "arrow.triangle.branch")
+                        .help("\(worktreeCount) active worktrees")
+                }
+            }
+            .font(FlotillaTypography.caption)
+            .foregroundStyle(FlotillaColors.textSecondary)
+        }
+    }
+
+    // MARK: - Session Telemetry
+
+    @ViewBuilder
+    private var sessionTelemetrySection: some View {
+        if sessions.isEmpty {
+            Text("No agent sessions active")
+                .font(FlotillaTypography.caption)
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .padding(.vertical, FlotillaSpacing.xSmall)
+        } else if !activeSessions.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(activeSessions.prefix(2)) { session in
+                    HStack(spacing: FlotillaSpacing.small) {
+                        StatusBadge(session.status, size: .micro, showLabel: false)
+
+                        Text(session.agent.displayName)
+                            .font(FlotillaTypography.caption.weight(.semibold))
+                            .foregroundStyle(FlotillaColors.textSecondary)
+
+                        Text(session.title)
+                            .font(FlotillaTypography.caption)
+                            .foregroundStyle(FlotillaColors.textPrimary)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 0)
+
+                        if session.status == .waitingForInput {
+                            Text("Needs Input")
+                                .font(FlotillaTypography.caption2.weight(.bold))
+                                .foregroundStyle(FlotillaColors.statusWaitingForInput)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(FlotillaColors.statusWaitingForInput.opacity(0.16), in: Capsule())
+                        }
+                    }
+                }
+            }
+        } else {
+            HStack(spacing: FlotillaSpacing.small) {
+                Circle()
+                    .fill(FlotillaColors.textTertiary)
+                    .frame(width: 6, height: 6)
+                Text("\(sessions.count) idle or completed session\(sessions.count == 1 ? "" : "s")")
+                    .font(FlotillaTypography.caption)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, FlotillaSpacing.xSmall)
+        }
+    }
+
+    // MARK: - Action Bar
+
+    private var actionBar: some View {
+        HStack(spacing: FlotillaSpacing.small) {
+            Button {
+                onQuickLaunch()
+            } label: {
+                Label("Launch", systemImage: "bolt.fill")
+                    .font(FlotillaTypography.caption.weight(.medium))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(FlotillaColors.accent)
+            .help("Start a new agent session in this project")
+            .accessibilityIdentifier("ProjectCard.QuickLaunch-\(project.name)")
+
+            Button {
+                openTerminal()
+            } label: {
+                Label("Terminal", systemImage: "terminal")
+                    .font(FlotillaTypography.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Open in Terminal")
+            .accessibilityIdentifier("ProjectCard.Terminal-\(project.name)")
+
+            Button {
+                openInEditor()
+            } label: {
+                Label("Editor", systemImage: "curlybraces")
+                    .font(FlotillaTypography.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Open in VS Code or Cursor")
+            .accessibilityIdentifier("ProjectCard.Editor-\(project.name)")
+
+            Button {
+                revealInFinder()
+            } label: {
+                Image(systemName: "folder")
+                    .font(.system(size: FlotillaIconSize.small))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Reveal in Finder")
+            .accessibilityIdentifier("ProjectCard.Finder-\(project.name)")
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - More Menu
+
+    private var moreMenu: some View {
+        Menu {
+            Button("Open Project View") { onSelect() }
+            Button("New Agent Session…") { onQuickLaunch() }
+            Divider()
+            Button("Open in Terminal") { openTerminal() }
+            Button("Open in VS Code") { openInVSCode() }
+            Button("Open in Cursor") { openInCursor() }
+            Button("Reveal in Finder") { revealInFinder() }
+            Divider()
+            Button("Copy Project Path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(project.rootPath.path, forType: .string)
+            }
+            if let branch = currentBranch {
+                Button("Copy Branch Name") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(branch, forType: .string)
+                }
+            }
+            Divider()
+            Button("Remove Project from Library", role: .destructive) {
+                onRemove()
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: FlotillaIconSize.small))
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .frame(width: 24, height: 24)
+                .contentShape(.rect)
+        }
+        .menuStyle(.borderlessButton)
+    }
+
+    // MARK: - Actions
+
+    private func loadGitTelemetry() async {
+        if let branch = try? await gitService.currentBranch(at: project.rootPath) {
+            currentBranch = branch
+        }
+        if let stat = try? await gitService.diffStat(at: project.rootPath) {
+            projectDiffStat = stat
+        }
+        if let worktrees = try? await gitService.listWorktrees(at: project.rootPath) {
+            worktreeCount = worktrees.filter { !$0.isMainWorktree }.count
+        }
+    }
+
+    private func openTerminal() {
+        let path = project.rootPath.path
+        let script = "tell application \"Terminal\" to do script \"cd \(path.replacingOccurrences(of: "\"", with: "\\\""))\""
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+            if let terminalURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") {
+                NSWorkspace.shared.openApplication(at: terminalURL, configuration: NSWorkspace.OpenConfiguration())
+            }
+        }
+    }
+
+    private func openInEditor() {
+        if let vscodeURL = URL(string: "vscode://file\(project.rootPath.path)") {
+            if NSWorkspace.shared.open(vscodeURL) { return }
+        }
+        if let cursorURL = URL(string: "cursor://file\(project.rootPath.path)") {
+            if NSWorkspace.shared.open(cursorURL) { return }
+        }
+        NSWorkspace.shared.open(project.rootPath)
+    }
+
+    private func openInVSCode() {
+        if let url = URL(string: "vscode://file\(project.rootPath.path)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func openInCursor() {
+        if let url = URL(string: "cursor://file\(project.rootPath.path)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func revealInFinder() {
+        NSWorkspace.shared.activateFileViewerSelecting([project.rootPath])
+    }
+}

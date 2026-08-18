@@ -103,7 +103,14 @@ public struct StatusBadge: View {
     }
 
     private var shouldPulse: Bool {
-        status == .working && !reduceMotion
+        // The `repeatForever` pulse never lets the app idle, and XCUITest
+        // waits for idleness before every snapshot and interaction — under
+        // UI testing each query would otherwise stall for seconds.
+        status == .working && !reduceMotion && !Self.uiTesting
+    }
+
+    private static var uiTesting: Bool {
+        ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
     }
 
     public var body: some View {

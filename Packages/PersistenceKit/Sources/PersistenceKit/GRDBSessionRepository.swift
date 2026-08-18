@@ -22,8 +22,13 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
             recoveredFromCorruption = false
         } else {
             let corruptPath = path.appendingPathExtension("corrupt-\(UUID().uuidString)")
-            if FileManager.default.fileExists(atPath: path.path) {
-                try FileManager.default.moveItem(at: path, to: corruptPath)
+            let fileManager = FileManager.default
+            for ext in ["", "-wal", "-shm"] {
+                let fileURL = URL(fileURLWithPath: path.path + ext)
+                let corruptURL = URL(fileURLWithPath: corruptPath.path + ext)
+                if fileManager.fileExists(atPath: fileURL.path) {
+                    try? fileManager.moveItem(at: fileURL, to: corruptURL)
+                }
             }
             dbQueue = try Self.openAndMigrate(at: path)
             recoveredFromCorruption = true
@@ -143,6 +148,12 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
     public func delete(sessionID: UUID) throws {
         _ = try dbQueue.write { db in
             try SessionRecord.deleteOne(db, key: sessionID.uuidString)
+        }
+    }
+
+    public func delete(projectID: UUID) throws {
+        _ = try dbQueue.write { db in
+            try ProjectRecord.deleteOne(db, key: projectID.uuidString)
         }
     }
 

@@ -19,7 +19,7 @@ struct CreateSessionView: View {
     @State private var agent: AgentKind
     @State private var model = ""
     @State private var effort: AgentEffort = .medium
-    @State private var checkoutMode: CheckoutMode = .mainCheckout
+    @State private var createWorktree: Bool = true
     @State private var isCreating = false
     @State private var openCodeSubscription: OpenCodeSubscription = .none
 
@@ -37,9 +37,13 @@ struct CreateSessionView: View {
         self.didCreateSession = didCreateSession
         _isGeneralSession = State(initialValue: initialProject == nil)
         _selectedFolder = State(initialValue: initialProject?.rootPath)
-        _checkoutMode = State(initialValue: createWorktreeByDefault ? .newWorktree : .mainCheckout)
+        _createWorktree = State(initialValue: createWorktreeByDefault)
         _openCodeSubscription = State(initialValue: openCodeSubscription)
         _agent = State(initialValue: defaultAgent)
+    }
+
+    private var checkoutMode: CheckoutMode {
+        createWorktree ? .newWorktree : .mainCheckout
     }
 
     private var isUITesting: Bool {
@@ -77,7 +81,7 @@ if let error = store.lastCreationError {
             Divider()
             footer
         }
-        .frame(minWidth: 560, idealWidth: 640, minHeight: 560, idealHeight: 640)
+        .frame(minWidth: 560, idealWidth: 640, minHeight: 720, idealHeight: 780)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -132,10 +136,8 @@ if let error = store.lastCreationError {
                 }
                 .padding(10)
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.snappy(duration: 0.22), value: isGeneralSession)
     }
 
     private var goalSection: some View {
@@ -204,11 +206,9 @@ if let error = store.lastCreationError {
 
     private var checkoutSection: some View {
         CreationSection(number: "04", title: "Choose isolation", subtitle: "A worktree keeps this agent’s edits separate from your main checkout.") {
-            Picker("Checkout", selection: $checkoutMode) {
-                Label("Main Checkout", systemImage: "shippingbox")
-                    .tag(CheckoutMode.mainCheckout)
-                Label("New Worktree", systemImage: "arrow.triangle.branch")
-                    .tag(CheckoutMode.newWorktree)
+            Picker("Isolation", selection: $createWorktree) {
+                Label("Main Checkout", systemImage: "shippingbox").tag(false)
+                Label("New Worktree", systemImage: "arrow.triangle.branch").tag(true)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -216,16 +216,16 @@ if let error = store.lastCreationError {
             .accessibilityIdentifier("CreateSession.CheckoutPicker")
 
             HStack(spacing: 8) {
-                Image(systemName: checkoutMode == .newWorktree ? "checkmark.shield.fill" : "exclamationmark.triangle")
-                    .foregroundStyle(checkoutMode == .newWorktree ? FlotillaColors.accent : Color.secondary)
-                Text(checkoutMode == .newWorktree
+                Image(systemName: createWorktree ? "checkmark.shield.fill" : "exclamationmark.triangle")
+                    .foregroundStyle(createWorktree ? FlotillaColors.accent : Color.secondary)
+                Text(createWorktree
                      ? "Creates a dedicated branch and worktree under your configured base directory."
                      : "The agent edits the selected checkout directly; concurrent sessions can conflict.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("CreateSession.CheckoutDescription")
             }
-            .animation(.easeInOut(duration: 0.16), value: checkoutMode)
+            .animation(.easeInOut(duration: 0.16), value: createWorktree)
         }
     }
 
@@ -291,6 +291,7 @@ if let error = store.lastCreationError {
         case .claudeCode: "Claude Code in an interactive terminal"
         case .codexCLI: "Codex CLI in an interactive terminal"
         case .openCode: "OpenCode in an interactive terminal"
+        case .antigravity: "Antigravity in an interactive terminal"
         }
     }
 
@@ -312,14 +313,7 @@ private struct CreationSection<Content: View>: View {
     let number: String
     let title: String
     let subtitle: String
-    let content: Content
-
-    init(number: String, title: String, subtitle: String, @ViewBuilder content: () -> Content) {
-        self.number = number
-        self.title = title
-        self.subtitle = subtitle
-        self.content = content()
-    }
+    @ViewBuilder let content: () -> Content
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -337,7 +331,7 @@ private struct CreationSection<Content: View>: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                content
+                content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

@@ -94,8 +94,11 @@ struct SessionCard<Terminal: View>: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .contextMenu { contextMenu }
+        // `.contain` keeps the row addressable by the identifier the call
+        // site assigns while still exposing children (status word, delete
+        // button) individually — without it SwiftUI collapses the row into
+        // a single element and drops them from the accessibility tree.
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("SessionRow-\(session.title)")
     }
 
     // MARK: - Tile Variant (Grid) — Dense status card + last output line
@@ -112,7 +115,7 @@ struct SessionCard<Terminal: View>: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .contextMenu { contextMenu }
-        .accessibilityIdentifier("GridTile-\(session.title)")
+        .accessibilityIdentifier(variant == .board ? "KanbanCard-\(session.title)" : "GridTile-\(session.title)")
     }
 
     private var tileHeader: some View {
@@ -140,7 +143,7 @@ struct SessionCard<Terminal: View>: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(StatusPresentation.label(for: session.status))
-            .accessibilityIdentifier("GridTile-\(session.title)-Status")
+            .accessibilityIdentifier(variant == .board ? "KanbanCard-\(session.title)-Status" : "GridTile-\(session.title)-Status")
 
             Button(action: onTap) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -149,7 +152,7 @@ struct SessionCard<Terminal: View>: View {
             }
             .buttonStyle(.plain)
             .help("Focus on this session")
-            .accessibilityIdentifier("GridTile-\(session.title)-FocusButton")
+            .accessibilityIdentifier(variant == .board ? "KanbanCard-\(session.title)-FocusButton" : "GridTile-\(session.title)-FocusButton")
         }
         .padding(.horizontal, 10)
         .frame(height: 34)
@@ -247,6 +250,8 @@ struct SessionCard<Terminal: View>: View {
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: onTap)
         .contextMenu { contextMenu }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("KanbanCard-\(session.title)")
     }
 
     private var cardHeader: some View {
@@ -265,6 +270,7 @@ struct SessionCard<Terminal: View>: View {
                     Text(session.agent.displayName)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("SessionCard.AgentName")
                 }
             }
 
@@ -291,6 +297,7 @@ struct SessionCard<Terminal: View>: View {
                     .font(.caption.monospaced())
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .accessibilityIdentifier("SessionCard.BranchName")
             }
 
             Spacer()
@@ -318,6 +325,7 @@ struct SessionCard<Terminal: View>: View {
                 .font(.caption)
                 .lineLimit(3)
                 .foregroundStyle(.primary)
+                .accessibilityIdentifier("SessionCard.GoalText")
         }
     }
 
@@ -421,6 +429,12 @@ struct SessionCard<Terminal: View>: View {
         .font(.caption2.weight(.semibold))
         .fixedSize()
         .animation(.easeInOut(duration: 0.18), value: session.status)
+        // Collapsed into one element so the word reports the status as its
+        // label; the UI suite asserts on exactly this (same pattern as the
+        // grid tile status dot).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(StatusPresentation.label(for: session.status))
+        .accessibilityIdentifier("SessionRow-\(session.title)-Status")
     }
 
     private var rowBackground: some View {

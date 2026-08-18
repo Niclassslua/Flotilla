@@ -1,4 +1,5 @@
 import Foundation
+import ProcessKit
 
 /// Wraps an agent launch in `tmux new-session -A`, which creates the named
 /// session if it doesn't exist or attaches to it if it already does. Because
@@ -15,7 +16,15 @@ enum TmuxSessionWrapping {
     /// server whose only clients are its own, with state it fully controls.
     /// `-L` resolves to `$TMUX_TMPDIR/flotilla`, which is already
     /// per-user (`/tmp/tmux-<uid>/flotilla`).
-    static let socketName = "flotilla"
+    static var socketName: String {
+        if let custom = ProcessInfo.processInfo.environment["FLOTILLA_TMUX_SOCKET"] {
+            return custom
+        }
+        if NSClassFromString("XCTestCase") != nil {
+            return "flotilla-test-\(ProcessInfo.processInfo.processIdentifier)"
+        }
+        return "flotilla"
+    }
 
     /// Client flags (`-L <socket>`) that must precede the tmux command.
     static func socketArguments() -> [String] {
@@ -111,24 +120,107 @@ enum TmuxSessionWrapping {
         // — or by a crash — otherwise pins the agent to that stale, usually
         // smaller size no matter how large the real terminal is.
         let configurationArguments = configurationFile.map { ["-f", $0.path] } ?? []
+        var envFlags: [String] = []
+        for (key, value) in environment.sorted(by: { $0.key < $1.key }) {
+            guard key != "TMUX", key != "TMUX_PANE" else { continue }
+            envFlags.append("-e")
+            envFlags.append("\(key)=\(value)")
+        }
         let wrapped = socketArguments() + configurationArguments + [
             "new-session", "-A", "-D", "-s", sessionName(for: sessionID),
-            "-c", workingDirectory.path,
+            "-c", workingDirectory.path
+        ] + envFlags + [
             "--", agentExecutable.path
         ] + arguments
         var wrappedEnvironment = environment
+        wrappedEnvironment.removeValue(forKey: "TMUX")
+        wrappedEnvironment.removeValue(forKey: "TMUX_PANE")
         wrappedEnvironment["TERM"] = outerClientTERM
         return (tmuxExecutable, wrapped, wrappedEnvironment)
     }
 }
 
+/// Seam for probing client dimensions and triggering client repaints on a tmux session.
+protocol TmuxClientProbing: Sendable {
+    /// Returns the width and height of the client attached to the named session,
+    /// or nil if no client is attached or the query fails.
+    func clientSize(sessionNamed name: String, tmuxExecutable: URL) -> PTYSize?
+
+    /// Instructs tmux to repaint the client attached to the named session.
+    func refreshClient(sessionNamed name: String, tmuxExecutable: URL)
+}
+
+struct ProcessTmuxClientProbe: TmuxClientProbing {
+    func clientSize(sessionNamed name: String, tmuxExecutable: URL) -> PTYSize? {
+        let process = Process()
+        process.executableURL = tmuxExecutable
+        process.arguments = TmuxSessionWrapping.socketArguments() + [
+            "list-clients", "-t", name, "-F", "#{client_width}x#{client_height}"
+        ]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let firstLine = output.components(separatedBy: .newlines).first(where: { !$0.isEmpty }) else {
+                return nil
+            }
+            let parts = firstLine.split(separator: "x")
+            guard parts.count == 2,
+                  let cols = Int(parts[0]),
+                  let rows = Int(parts[1]) else {
+                return nil
+            }
+            return PTYSize(cols: cols, rows: rows)
+        } catch {
+            return nil
+        }
+    }
+
+    func refreshClient(sessionNamed name: String, tmuxExecutable: URL) {
+        let listProcess = Process()
+        listProcess.executableURL = tmuxExecutable
+        listProcess.arguments = TmuxSessionWrapping.socketArguments() + [
+            "list-clients", "-t", name, "-F", "#{client_name}"
+        ]
+        let pipe = Pipe()
+        listProcess.standardOutput = pipe
+        listProcess.standardError = FileHandle.nullDevice
+        do {
+            try listProcess.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            listProcess.waitUntilExit()
+            guard listProcess.terminationStatus == 0 else { return }
+            let output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            let clientNames = output.components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            for clientName in clientNames {
+                let refreshProc = Process()
+                refreshProc.executableURL = tmuxExecutable
+                refreshProc.arguments = TmuxSessionWrapping.socketArguments() + [
+                    "refresh-client", "-t", clientName
+                ]
+                refreshProc.standardOutput = FileHandle.nullDevice
+                refreshProc.standardError = FileHandle.nullDevice
+                if (try? refreshProc.run()) != nil {
+                    refreshProc.waitUntilExit()
+                }
+            }
+        } catch {
+            return
+        }
+    }
+}
+
 /// Seam for explicitly destroying a session's tmux server-side state.
-/// Detaching the outer client (a plain `terminate()` on its `Process`) only
-/// disconnects that client — the tmux session and the agent inside it keep
-/// running, which is what we want on an ordinary app quit. Real session
-/// deletion needs this instead, or the tmux session leaks forever.
 protocol TmuxSessionTerminating: Sendable {
     func killSession(named name: String, tmuxExecutable: URL)
+    func listSessions(tmuxExecutable: URL) -> [String]
 }
 
 /// Seam for checking whether the tmux server Flotilla would talk to actually
@@ -179,8 +271,13 @@ struct ProcessTmuxServerProbe: TmuxServerProbing {
         }
 
         guard process.terminationStatus != 0 else { return true }
-        let stderr = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        return !stderr.contains("server exited unexpectedly")
+        let stderr = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).lowercased()
+        if stderr.contains("server exited unexpectedly")
+            || stderr.contains("lost server")
+            || stderr.contains("protocol version mismatch") {
+            return false
+        }
+        return true
     }
 
     /// The socket Flotilla's tmux invocations use: `$TMUX_TMPDIR/flotilla`,
@@ -210,6 +307,31 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         // `run()` threw blocks forever.
         if (try? process.run()) != nil {
             process.waitUntilExit()
+        }
+    }
+
+    func listSessions(tmuxExecutable: URL) -> [String] {
+        guard FileManager.default.fileExists(atPath: ProcessTmuxServerProbe.defaultSocketPath()) else {
+            return []
+        }
+        let process = Process()
+        process.executableURL = tmuxExecutable
+        process.arguments = TmuxSessionWrapping.socketArguments() + ["list-sessions", "-F", "#{session_name}"]
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return [] }
+            let output = String(decoding: data, as: UTF8.self)
+            return output
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        } catch {
+            return []
         }
     }
 }
@@ -242,32 +364,75 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         // delay that would either be too short for a slow boot or add
         // needless latency to a fast one.
         waitForPaneToStabilize(sessionName: name, tmuxExecutable: tmuxExecutable)
-
-        // Two separate invocations, matching the verified-working manual
-        // sequence: the literal text lands in the composer, then Enter — as
-        // its own distinct injection — is what actually submits it.
-        runSendKeys(["-t", name, "-l", goal], tmuxExecutable: tmuxExecutable)
+        if goal.contains("\n") || goal.contains("\r") {
+            pasteGoal(goal, toSessionNamed: name, tmuxExecutable: tmuxExecutable)
+        } else {
+            // Two separate invocations, matching the verified-working manual
+            // sequence: the literal text lands in the composer, then Enter — as
+            // its own distinct injection — is what actually submits it.
+            runSendKeys(["-t", name, "-l", goal], tmuxExecutable: tmuxExecutable)
+        }
         runSendKeys(["-t", name, "Enter"], tmuxExecutable: tmuxExecutable)
     }
 
+    private func pasteGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) {
+        let bufferName = "flotilla-paste-\(UUID().uuidString)"
+        let loadProcess = Process()
+        loadProcess.executableURL = tmuxExecutable
+        loadProcess.arguments = TmuxSessionWrapping.socketArguments() + ["load-buffer", "-b", bufferName, "-"]
+        let inPipe = Pipe()
+        loadProcess.standardInput = inPipe
+        loadProcess.standardOutput = FileHandle.nullDevice
+        loadProcess.standardError = FileHandle.nullDevice
+        do {
+            try loadProcess.run()
+            inPipe.fileHandleForWriting.write(Data(goal.utf8))
+            try? inPipe.fileHandleForWriting.close()
+            loadProcess.waitUntilExit()
+        } catch {
+            runSendKeys(["-t", name, "-l", goal], tmuxExecutable: tmuxExecutable)
+            return
+        }
+
+        let pasteProcess = Process()
+        pasteProcess.executableURL = tmuxExecutable
+        pasteProcess.arguments = TmuxSessionWrapping.socketArguments()
+            + ["paste-buffer", "-p", "-d", "-b", bufferName, "-t", name]
+        pasteProcess.standardOutput = FileHandle.nullDevice
+        pasteProcess.standardError = FileHandle.nullDevice
+        try? pasteProcess.run()
+        pasteProcess.waitUntilExit()
+    }
+
     private func waitForPaneToStabilize(sessionName: String, tmuxExecutable: URL) {
-        let deadline = Date().addingTimeInterval(10)
+        let deadline = Date().addingTimeInterval(6)
         var previous: String?
         var stableStreak = 0
         while Date() < deadline {
-            let current = capturePane(sessionName: sessionName, tmuxExecutable: tmuxExecutable)
-            if let current, current == previous {
+            guard let current = capturePane(sessionName: sessionName, tmuxExecutable: tmuxExecutable) else {
+                Thread.sleep(forTimeInterval: 0.1)
+                continue
+            }
+            // Fast-path: active prompt indicator is ready
+            if current.contains("❯") || current.contains("> ") || current.contains("cwd:")
+                || current.contains("? for help") || current.contains("What would you like") {
+                return
+            }
+            if current == previous {
                 stableStreak += 1
-                if stableStreak >= 2 { return } // unchanged across ~600ms
+                if stableStreak >= 3 { return } // unchanged across ~300ms
             } else {
                 stableStreak = 0
             }
             previous = current
-            Thread.sleep(forTimeInterval: 0.3)
+            Thread.sleep(forTimeInterval: 0.1)
         }
     }
 
     private func capturePane(sessionName: String, tmuxExecutable: URL) -> String? {
+        guard FileManager.default.fileExists(atPath: ProcessTmuxServerProbe.defaultSocketPath()) else {
+            return nil
+        }
         let process = Process()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments()
@@ -277,12 +442,23 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return String(decoding: data, as: UTF8.self)
         } catch {
             return nil
         }
+
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            process.waitUntilExit()
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + 2) == .success else {
+            process.terminate()
+            return nil
+        }
+
+        guard process.terminationStatus == 0 else { return nil }
+        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        return String(decoding: data, as: UTF8.self)
     }
 
     private func runSendKeys(_ arguments: [String], tmuxExecutable: URL) {

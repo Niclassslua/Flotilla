@@ -66,22 +66,9 @@ final class OutputBroadcaster: @unchecked Sendable {
         lock.lock()
         history.append(data)
         historyByteSize += data.count
-        if historyByteSize > maxHistoryBytes {
-            // Remove oldest chunks until we're under the byte limit
-            var writeIndex = 0
-            var readByteSize = 0
-            for i in 0..<history.count {
-                readByteSize += history[i].count
-                if readByteSize >= historyByteSize - maxHistoryBytes {
-                    writeIndex = i + 1
-                    break
-                }
-            }
-            history.removeFirst(writeIndex)
-            historyByteSize -= readByteSize - (historyByteSize - maxHistoryBytes)
-            if history.isEmpty {
-                historyByteSize = 0
-            }
+        while historyByteSize > maxHistoryBytes, !history.isEmpty {
+            let removed = history.removeFirst()
+            historyByteSize = max(0, historyByteSize - removed.count)
         }
         let subscribers = Array(continuations.values)
         lock.unlock()
