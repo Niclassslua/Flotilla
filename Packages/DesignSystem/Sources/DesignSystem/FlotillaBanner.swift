@@ -6,21 +6,21 @@ public enum FlotillaBannerStyle {
     case info
     case success
 
-    var backgroundColor: (FlotillaColors) -> Color {
+    var backgroundColor: Color {
         switch self {
-        case .error: return { $0.dangerSurface }
-        case .warning: return { $0.warningSurface }
-        case .info: return { $0.accent.opacity(0.12) }
-        case .success: return { $0.successSurface }
+        case .error: return FlotillaColors.dangerSurface
+        case .warning: return FlotillaColors.warningSurface
+        case .info: return FlotillaColors.accent.opacity(0.12)
+        case .success: return FlotillaColors.successSurface
         }
     }
 
-    var foregroundColor: (FlotillaColors) -> Color {
+    var foregroundColor: Color {
         switch self {
-        case .error: return { $0.danger }
-        case .warning: return { $0.warning }
-        case .info: return { $0.accent }
-        case .success: return { $0.success }
+        case .error: return FlotillaColors.danger
+        case .warning: return FlotillaColors.warning
+        case .info: return FlotillaColors.accent
+        case .success: return FlotillaColors.success
         }
     }
 
@@ -50,8 +50,6 @@ public struct FlotillaBanner: View {
     private let action: (() -> Void)?
     private let dismissAction: (() -> Void)?
 
-    @Environment(\.flotillaColors) private var colors
-
     public init(
         _ message: String,
         style: FlotillaBannerStyle = .info,
@@ -70,12 +68,12 @@ public struct FlotillaBanner: View {
         HStack(spacing: FlotillaSpacing.small) {
             Image(systemName: style.icon)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(style.foregroundColor(colors))
+                .foregroundStyle(style.foregroundColor)
                 .accessibilityHidden(true)
 
             Text(message)
                 .font(FlotillaTypography.callout)
-                .foregroundStyle(style.foregroundColor(colors))
+                .foregroundStyle(style.foregroundColor)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel(message)
 
@@ -84,17 +82,17 @@ public struct FlotillaBanner: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .font(FlotillaTypography.caption.weight(.medium))
-                    .foregroundStyle(style.foregroundColor(colors))
+                    .foregroundStyle(style.foregroundColor)
                     .padding(.horizontal, FlotillaSpacing.small)
                     .padding(.vertical, FlotillaSpacing.xSmall)
-                    .background(style.foregroundColor(colors).opacity(0.15), in: Capsule())
+                    .background(style.foregroundColor.opacity(0.15), in: Capsule())
             }
 
             if let dismissAction {
                 Button(action: dismissAction) {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(style.foregroundColor(colors).opacity(0.7))
+                        .foregroundStyle(style.foregroundColor.opacity(0.7))
                         .frame(width: 20, height: 20)
                         .contentShape(.rect)
                 }
@@ -105,10 +103,10 @@ public struct FlotillaBanner: View {
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .padding(.vertical, FlotillaSpacing.small)
-        .background(style.backgroundColor(colors), in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous))
+        .background(style.backgroundColor, in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                .strokeBorder(style.foregroundColor(colors).opacity(0.3), lineWidth: 0.5)
+                .strokeBorder(style.foregroundColor.opacity(0.3), lineWidth: 0.5)
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(style.accessibilityTrait)

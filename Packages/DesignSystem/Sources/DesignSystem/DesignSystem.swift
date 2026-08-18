@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Core Tokens
 public enum FlotillaSpacing: Sendable {
@@ -35,287 +36,222 @@ public let FlotillaRadiusMedium: CGFloat = 10
 @available(*, deprecated, renamed: "FlotillaRadius.panel")
 public let FlotillaRadiusLarge: CGFloat = 14
 
+// MARK: - Border Width
+public enum FlotillaBorderWidth: Sendable {
+    public static let hairline: CGFloat = 0.5
+    public static let thin: CGFloat = 1
+    public static let medium: CGFloat = 1.5
+    public static let thick: CGFloat = 2
+}
+
+// MARK: - Icon Size
+public enum FlotillaIconSize: Sendable {
+    public static let xSmall: CGFloat = 10
+    public static let small: CGFloat = 12
+    public static let medium: CGFloat = 16
+    public static let large: CGFloat = 20
+    public static let xLarge: CGFloat = 24
+    public static let xxLarge: CGFloat = 32
+}
+
+// MARK: - Control Height
+public enum FlotillaControlHeight: Sendable {
+    public static let xSmall: CGFloat = 20
+    public static let small: CGFloat = 28
+    public static let medium: CGFloat = 36
+    public static let large: CGFloat = 44
+    public static let xLarge: CGFloat = 56
+}
+
+// MARK: - Layout Widths
+public enum FlotillaLayoutWidth: Sendable {
+    public static let sidebarMin: CGFloat = 220
+    public static let sidebarIdeal: CGFloat = 260
+    public static let sidebarMax: CGFloat = 340
+    public static let inspectorMin: CGFloat = 280
+    public static let inspectorIdeal: CGFloat = 360
+    public static let inspectorMax: CGFloat = 520
+    public static let contentMax: CGFloat = 920
+    public static let windowMin: CGFloat = 1000
+    public static let windowHeightMin: CGFloat = 640
+}
+
+// MARK: - State Opacity
+public enum FlotillaStateOpacity: Sendable {
+    public static let hover: CGFloat = 0.08
+    public static let press: CGFloat = 0.12
+    public static let selected: CGFloat = 0.16
+    public static let disabled: CGFloat = 0.4
+    public static let focus: CGFloat = 0.2
+}
+
 // MARK: - Color System
 public struct FlotillaColors: Sendable {
-    public let colorScheme: ColorScheme
-
-    public init(colorScheme: ColorScheme = .dark) {
-        self.colorScheme = colorScheme
+    private static func dynamic(dark: NSColor, light: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        })
     }
 
     // MARK: - Surfaces
-    public var canvas: Color {
-        colorScheme == .dark
-            ? Color(red: 10/255, green: 10/255, blue: 12/255)
-            : Color(red: 250/255, green: 250/255, blue: 252/255)
-    }
+    public static let canvas = dynamic(
+        dark: NSColor(red: 10/255, green: 10/255, blue: 12/255, alpha: 1),
+        light: NSColor(red: 250/255, green: 250/255, blue: 252/255, alpha: 1)
+    )
 
-    public var sidebar: Color {
-        colorScheme == .dark
-            ? Color(red: 18/255, green: 18/255, blue: 22/255)
-            : Color(red: 242/255, green: 242/255, blue: 247/255)
-    }
+    public static let sidebar = dynamic(
+        dark: NSColor(red: 18/255, green: 18/255, blue: 22/255, alpha: 1),
+        light: NSColor(red: 242/255, green: 242/255, blue: 247/255, alpha: 1)
+    )
 
-    public var surface: Color {
-        colorScheme == .dark
-            ? Color(red: 22/255, green: 22/255, blue: 26/255)
-            : Color(red: 255/255, green: 255/255, blue: 255/255)
-    }
+    public static let surface = dynamic(
+        dark: NSColor(red: 22/255, green: 22/255, blue: 26/255, alpha: 1),
+        light: NSColor(red: 255/255, green: 255/255, blue: 255/255, alpha: 1)
+    )
 
-    public var surfaceElevated: Color {
-        colorScheme == .dark
-            ? Color(red: 30/255, green: 30/255, blue: 35/255)
-            : Color(red: 245/255, green: 245/255, blue: 250/255)
-    }
+    public static let surfaceElevated = dynamic(
+        dark: NSColor(red: 30/255, green: 30/255, blue: 35/255, alpha: 1),
+        light: NSColor(red: 245/255, green: 245/255, blue: 250/255, alpha: 1)
+    )
 
-    public var terminalCanvas: Color {
-        colorScheme == .dark
-            ? Color(red: 10/255, green: 10/255, blue: 12/255)
-            : Color(red: 28/255, green: 28/255, blue: 30/255)
-    }
+    public static let terminalCanvas = dynamic(
+        dark: NSColor(red: 10/255, green: 10/255, blue: 12/255, alpha: 1),
+        light: NSColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1)
+    )
 
     // MARK: - Content
-    public var textPrimary: Color {
-        colorScheme == .dark ? .white : .black
-    }
+    public static let textPrimary = dynamic(
+        dark: NSColor.white,
+        light: NSColor.black
+    )
 
-    public var textSecondary: Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.72)
-            : Color.black.opacity(0.68)
-    }
+    public static let textSecondary = dynamic(
+        dark: NSColor.white.withAlphaComponent(0.72),
+        light: NSColor.black.withAlphaComponent(0.68)
+    )
 
-    public var textTertiary: Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.44)
-            : Color.black.opacity(0.4)
-    }
+    public static let textTertiary = dynamic(
+        dark: NSColor.white.withAlphaComponent(0.44),
+        light: NSColor.black.withAlphaComponent(0.4)
+    )
 
     // MARK: - Lines
-    public var separator: Color {
-        colorScheme == .dark
-            ? Color(red: 50/255, green: 50/255, blue: 58/255)
-            : Color(red: 200/255, green: 200/255, blue: 205/255)
-    }
+    public static let separator = dynamic(
+        dark: NSColor(red: 50/255, green: 50/255, blue: 58/255, alpha: 1),
+        light: NSColor(red: 200/255, green: 200/255, blue: 205/255, alpha: 1)
+    )
 
-    public var separatorStrong: Color {
-        colorScheme == .dark
-            ? Color(red: 70/255, green: 70/255, blue: 80/255)
-            : Color(red: 170/255, green: 170/255, blue: 180/255)
-    }
+    public static let separatorStrong = dynamic(
+        dark: NSColor(red: 70/255, green: 70/255, blue: 80/255, alpha: 1),
+        light: NSColor(red: 170/255, green: 170/255, blue: 180/255, alpha: 1)
+    )
 
     // MARK: - Accent
-    public var accent: Color {
-        colorScheme == .dark
-            ? Color(red: 0.96, green: 0.36, blue: 0.16)
-            : Color(red: 0.85, green: 0.3, blue: 0.12)
-    }
+    public static let accent = dynamic(
+        dark: NSColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1),
+        light: NSColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
+    )
 
-    public var accentContent: Color {
-        .white
-    }
+    public static let accentContent = Color.white
 
     // MARK: - Status (one per SessionStatus)
-    public var statusWorking: Color {
-        colorScheme == .dark
-            ? Color(red: 0.19, green: 0.78, blue: 0.64)
-            : Color(red: 0.14, green: 0.62, blue: 0.5)
-    }
+    public static let statusWorking = dynamic(
+        dark: NSColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1),
+        light: NSColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1)
+    )
 
-    public var statusIdle: Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.44)
-            : Color.black.opacity(0.4)
-    }
+    public static let statusIdle = dynamic(
+        dark: NSColor.white.withAlphaComponent(0.44),
+        light: NSColor.black.withAlphaComponent(0.4)
+    )
 
-    public var statusWaitingForInput: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.58, blue: 0.0)
-            : Color(red: 0.85, green: 0.45, blue: 0.0)
-    }
+    public static let statusWaitingForInput = dynamic(
+        dark: NSColor(red: 1.0, green: 0.58, blue: 0.0, alpha: 1),
+        light: NSColor(red: 0.85, green: 0.45, blue: 0.0, alpha: 1)
+    )
 
-    public var statusReady: Color {
-        colorScheme == .dark
-            ? Color(red: 0.26, green: 0.72, blue: 0.92)
-            : Color(red: 0.0, green: 0.5, blue: 0.8)
-    }
+    public static let statusReady = dynamic(
+        dark: NSColor(red: 0.26, green: 0.72, blue: 0.92, alpha: 1),
+        light: NSColor(red: 0.0, green: 0.5, blue: 0.8, alpha: 1)
+    )
 
-    public var statusFinished: Color {
-        colorScheme == .dark
-            ? Color(red: 0.0, green: 0.48, blue: 1.0)
-            : Color(red: 0.0, green: 0.38, blue: 0.85)
-    }
+    public static let statusFinished = dynamic(
+        dark: NSColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1),
+        light: NSColor(red: 0.0, green: 0.38, blue: 0.85, alpha: 1)
+    )
 
-    public var statusCrashed: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.27, blue: 0.23)
-            : Color(red: 0.85, green: 0.18, blue: 0.14)
-    }
+    public static let statusCrashed = dynamic(
+        dark: NSColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1),
+        light: NSColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1)
+    )
 
     // MARK: - Feedback
-    public var danger: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.27, blue: 0.23)
-            : Color(red: 0.85, green: 0.18, blue: 0.14)
-    }
+    public static let danger = dynamic(
+        dark: NSColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1),
+        light: NSColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1)
+    )
 
-    public var dangerSurface: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.27, blue: 0.23).opacity(0.12)
-            : Color(red: 0.85, green: 0.18, blue: 0.14).opacity(0.1)
-    }
+    public static let dangerSurface = dynamic(
+        dark: NSColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1).withAlphaComponent(0.12),
+        light: NSColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1).withAlphaComponent(0.1)
+    )
 
-    public var warning: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.8, blue: 0.0)
-            : Color(red: 0.8, green: 0.6, blue: 0.0)
-    }
+    public static let warning = dynamic(
+        dark: NSColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1),
+        light: NSColor(red: 0.8, green: 0.6, blue: 0.0, alpha: 1)
+    )
 
-    public var warningSurface: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.8, blue: 0.0).opacity(0.12)
-            : Color(red: 0.8, green: 0.6, blue: 0.0).opacity(0.1)
-    }
+    public static let warningSurface = dynamic(
+        dark: NSColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1).withAlphaComponent(0.12),
+        light: NSColor(red: 0.8, green: 0.6, blue: 0.0, alpha: 1).withAlphaComponent(0.1)
+    )
 
-    public var success: Color {
-        colorScheme == .dark
-            ? Color(red: 0.19, green: 0.78, blue: 0.64)
-            : Color(red: 0.14, green: 0.62, blue: 0.5)
-    }
+    public static let success = dynamic(
+        dark: NSColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1),
+        light: NSColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1)
+    )
 
-    public var successSurface: Color {
-        colorScheme == .dark
-            ? Color(red: 0.19, green: 0.78, blue: 0.64).opacity(0.12)
-            : Color(red: 0.14, green: 0.62, blue: 0.5).opacity(0.1)
-    }
+    public static let successSurface = dynamic(
+        dark: NSColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1).withAlphaComponent(0.12),
+        light: NSColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1).withAlphaComponent(0.1)
+    )
 
     // MARK: - Diff (colorblind-safe)
-    public var diffAdded: Color {
-        colorScheme == .dark
-            ? Color(red: 0.2, green: 0.75, blue: 0.35)
-            : Color(red: 0.15, green: 0.6, blue: 0.25)
-    }
+    public static let diffAdded = dynamic(
+        dark: NSColor(red: 0.2, green: 0.75, blue: 0.35, alpha: 1),
+        light: NSColor(red: 0.15, green: 0.6, blue: 0.25, alpha: 1)
+    )
 
-    public var diffAddedSurface: Color {
-        colorScheme == .dark
-            ? Color(red: 0.2, green: 0.75, blue: 0.35).opacity(0.12)
-            : Color(red: 0.15, green: 0.6, blue: 0.25).opacity(0.1)
-    }
+    public static let diffAddedSurface = dynamic(
+        dark: NSColor(red: 0.2, green: 0.75, blue: 0.35, alpha: 1).withAlphaComponent(0.12),
+        light: NSColor(red: 0.15, green: 0.6, blue: 0.25, alpha: 1).withAlphaComponent(0.1)
+    )
 
-    public var diffRemoved: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.3, blue: 0.3)
-            : Color(red: 0.85, green: 0.2, blue: 0.2)
-    }
+    public static let diffRemoved = dynamic(
+        dark: NSColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1),
+        light: NSColor(red: 0.85, green: 0.2, blue: 0.2, alpha: 1)
+    )
 
-    public var diffRemovedSurface: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.3, blue: 0.3).opacity(0.12)
-            : Color(red: 0.85, green: 0.2, blue: 0.2).opacity(0.1)
-    }
-}
+    public static let diffRemovedSurface = dynamic(
+        dark: NSColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1).withAlphaComponent(0.12),
+        light: NSColor(red: 0.85, green: 0.2, blue: 0.2, alpha: 1).withAlphaComponent(0.1)
+    )
 
-// Dynamic environment value that resolves colors based on current colorScheme
-private struct FlotillaColorsKey: EnvironmentKey {
-    static var defaultValue: FlotillaColors {
-        FlotillaColors(colorScheme: .dark)
-    }
-}
-
-public extension EnvironmentValues {
-    var flotillaColors: FlotillaColors {
-        get {
-            // Resolve dynamically based on current colorScheme
-            FlotillaColors(colorScheme: self.colorScheme)
-        }
-        set {
-            // Not used - colors are resolved dynamically
-        }
-    }
-}
-
-public extension View {
-    func flotillaColors(_ colors: FlotillaColors) -> some View {
-        environment(\.flotillaColors, colors)
-    }
-}
-
-// MARK: - Deprecated FlotillaPalette aliases (source-compatible)
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.accent")
-public var FlotillaPaletteOcean: Color { Color(red: 0.96, green: 0.36, blue: 0.16) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.statusWorking")
-public var FlotillaPaletteSignal: Color { Color(red: 0.19, green: 0.78, blue: 0.64) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.statusReady")
-public var FlotillaPaletteCyan: Color { Color(red: 0.26, green: 0.72, blue: 0.92) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.canvas")
-public var FlotillaPaletteCanvas: Color { Color(red: 10/255, green: 10/255, blue: 12/255) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.sidebar")
-public var FlotillaPaletteSidebar: Color { Color(red: 18/255, green: 18/255, blue: 22/255) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.surface")
-public var FlotillaPalettePanel: Color { Color(red: 22/255, green: 22/255, blue: 26/255) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.surfaceElevated")
-public var FlotillaPaletteElevated: Color { Color(red: 30/255, green: 30/255, blue: 35/255) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.terminalCanvas")
-public var FlotillaPaletteTerminal: Color { Color(red: 10/255, green: 10/255, blue: 12/255) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.separator")
-public var FlotillaPaletteSubtleStroke: Color { Color(red: 50/255, green: 50/255, blue: 58/255) }
-
-@available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.textTertiary")
-public var FlotillaPaletteMutedText: Color { Color.white.opacity(0.52) }
-
-public enum FlotillaPalette {
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.accent")
-    public static let ocean = FlotillaPaletteOcean
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.statusWorking")
-    public static let signal = FlotillaPaletteSignal
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.statusReady")
-    public static let cyan = FlotillaPaletteCyan
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.canvas")
-    public static let canvas = FlotillaPaletteCanvas
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.sidebar")
-    public static let sidebar = FlotillaPaletteSidebar
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.surface")
-    public static let panel = FlotillaPalettePanel
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.surfaceElevated")
-    public static let elevated = FlotillaPaletteElevated
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.terminalCanvas")
-    public static let terminal = FlotillaPaletteTerminal
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.separator")
-    public static let subtleStroke = FlotillaPaletteSubtleStroke
-
-    @available(*, deprecated, message: "Use EnvironmentValues.flotillaColors.textTertiary")
-    public static let mutedText = FlotillaPaletteMutedText
+    @available(*, deprecated, message: "Use static properties directly, e.g. FlotillaColors.canvas")
+    public init(colorScheme: ColorScheme = .dark) {}
 }
 
 // MARK: - Shared Components
 public struct FlotillaPanel: ViewModifier {
-    @Environment(\.flotillaColors) private var colors
-
     public init() {}
 
     public func body(content: Content) -> some View {
         content
-            .background(colors.surface)
+            .background(FlotillaColors.surface)
             .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)
-                    .strokeBorder(colors.separator)
+                    .strokeBorder(FlotillaColors.separator)
             }
     }
 }
@@ -324,6 +260,59 @@ public extension View {
     func flotillaPanel() -> some View {
         modifier(FlotillaPanel())
     }
+}
+
+// MARK: - View Extensions for Spacing
+public extension View {
+    func flotillaPadding(_ edges: Edge.Set = .all, _ length: CGFloat = FlotillaSpacing.medium) -> some View {
+        padding(edges, length)
+    }
+
+    func flotillaPaddingXSmall() -> some View { padding(FlotillaSpacing.xSmall) }
+    func flotillaPaddingSmall() -> some View { padding(FlotillaSpacing.small) }
+    func flotillaPaddingMedium() -> some View { padding(FlotillaSpacing.medium) }
+    func flotillaPaddingLarge() -> some View { padding(FlotillaSpacing.large) }
+    func flotillaPaddingXLarge() -> some View { padding(FlotillaSpacing.xLarge) }
+    func flotillaPaddingXXLarge() -> some View { padding(FlotillaSpacing.xxLarge) }
+
+    func flotillaPaddingHorizontal(_ length: CGFloat = FlotillaSpacing.medium) -> some View {
+        padding(.horizontal, length)
+    }
+
+    func flotillaPaddingVertical(_ length: CGFloat = FlotillaSpacing.medium) -> some View {
+        padding(.vertical, length)
+    }
+}
+
+// MARK: - View Extensions for Border
+public extension View {
+    func flotillaBorder(_ color: Color = FlotillaColors.separator, width: CGFloat = FlotillaBorderWidth.thin) -> some View {
+        overlay(
+            RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                .strokeBorder(color, lineWidth: width)
+        )
+    }
+
+    func flotillaBorderHairline(_ color: Color = FlotillaColors.separator) -> some View {
+        flotillaBorder(color, width: FlotillaBorderWidth.hairline)
+    }
+
+    func flotillaBorderThin(_ color: Color = FlotillaColors.separator) -> some View {
+        flotillaBorder(color, width: FlotillaBorderWidth.thin)
+    }
+
+    func flotillaBorderMedium(_ color: Color = FlotillaColors.separator) -> some View {
+        flotillaBorder(color, width: FlotillaBorderWidth.medium)
+    }
+}
+
+// MARK: - View Extensions for State Opacity
+public extension View {
+    func flotillaHoverOpacity() -> some View { opacity(FlotillaStateOpacity.hover) }
+    func flotillaPressOpacity() -> some View { opacity(FlotillaStateOpacity.press) }
+    func flotillaSelectedOpacity() -> some View { opacity(FlotillaStateOpacity.selected) }
+    func flotillaDisabledOpacity() -> some View { opacity(FlotillaStateOpacity.disabled) }
+    func flotillaFocusOpacity() -> some View { opacity(FlotillaStateOpacity.focus) }
 }
 
 // Types are directly available in the module — no re-exports needed.

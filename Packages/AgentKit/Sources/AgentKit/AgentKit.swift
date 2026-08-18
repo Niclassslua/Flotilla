@@ -125,7 +125,12 @@ public struct CLIAgentProvider: AgentProviding {
         if !trimmedModel.isEmpty {
             arguments += ["--model", trimmedModel]
         }
-        if let effort {
+        // A level the CLI doesn't accept is dropped rather than passed
+        // through: Claude Code warns and silently falls back to its default,
+        // and Codex rejects the run outright. The picker already narrows the
+        // choice per agent and model — this is the last line of defence for a
+        // level carried over from a session created against another agent.
+        if let effort, AgentEffortCatalog.supports(effort, agent: kind) {
             switch kind {
             case .claudeCode:
                 arguments += ["--effort", effort.rawValue]

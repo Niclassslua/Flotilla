@@ -155,7 +155,7 @@ enum FileIconHelper {
                 return ("doc.text", .yellow)
             case "v", "vh":
                 return ("doc.text", .blue)
-            case "cr", "cr":
+            case "cr":
                 return ("doc.text", .red)
             case "d":
                 return ("doc.text", .blue)
@@ -173,8 +173,6 @@ enum FileIconHelper {
                 return ("doc.fill", .red)
             case "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "ico", "avif":
                 return ("photo", .purple)
-            case "svg":
-                return ("photo", .pink)
             case "mp4", "mov", "avi", "mkv", "webm", "flv":
                 return ("film", .purple)
             case "mp3", "wav", "flac", "ogg", "m4a", "aac":

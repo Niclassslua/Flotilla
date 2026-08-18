@@ -3,13 +3,12 @@ import SessionKit
 import DesignSystem
 
 struct CommandPaletteView: View {
-    @Environment(\.dismiss) private var dismiss
-
     let projects: [Project]
     let sessions: [Session]
     let perform: (WorkspaceCommand) -> Void
     let openProject: (UUID) -> Void
     let openSession: (UUID) -> Void
+    let onDismiss: () -> Void
 
     @State private var query = ""
     @FocusState private var isFocused: Bool
@@ -54,13 +53,20 @@ struct CommandPaletteView: View {
                     .font(.title3)
                     .focused($isFocused)
                     .focusable(true)
+                    .focusEffectDisabled()
                     .accessibilityIdentifier("CommandPalette.Search")
-                Text("esc")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 5))
+                Button {
+                    onDismiss()
+                } label: {
+                    Text("esc")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 5))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
@@ -68,19 +74,22 @@ struct CommandPaletteView: View {
                 if press.key == .return {
                     if selectedIndex < allMatchingCommands.count {
                         let command = allMatchingCommands[selectedIndex]
-                        dismiss()
+                        onDismiss()
                         perform(command)
                     } else if selectedIndex < allMatchingCommands.count + matchingProjects.count {
                         let idx = selectedIndex - allMatchingCommands.count
                         let project = matchingProjects[idx]
-                        dismiss()
+                        onDismiss()
                         openProject(project.id)
                     } else if selectedIndex < totalCount {
                         let idx = selectedIndex - allMatchingCommands.count - matchingProjects.count
                         let session = matchingSessions[idx]
-                        dismiss()
+                        onDismiss()
                         openSession(session.id)
                     }
+                    return .handled
+                } else if press.key == .escape {
+                    onDismiss()
                     return .handled
                 } else if press.key == .upArrow {
                     withAnimation { selectedIndex = max(0, selectedIndex - 1) }
@@ -103,7 +112,7 @@ struct CommandPaletteView: View {
                             subtitle: command.subtitle,
                             systemImage: command.systemImage
                         ) {
-                            dismiss()
+                            onDismiss()
                             perform(command)
                         }
                         .background(selectedIndex == idx ? Color.accentColor.opacity(0.2) : .clear)
@@ -117,7 +126,7 @@ struct CommandPaletteView: View {
                                 subtitle: project.rootPath.path,
                                 systemImage: "folder"
                             ) {
-                                dismiss()
+                                onDismiss()
                                 openProject(project.id)
                             }
                             .background(selectedIndex == allMatchingCommands.count + idx ? Color.accentColor.opacity(0.2) : .clear)
@@ -132,7 +141,7 @@ struct CommandPaletteView: View {
                                 subtitle: "\(session.agent.displayName) · \(session.goal)",
                                 systemImage: "terminal"
                             ) {
-                                dismiss()
+                                onDismiss()
                                 openSession(session.id)
                             }
                             .background(selectedIndex == allMatchingCommands.count + matchingProjects.count + idx ? Color.accentColor.opacity(0.2) : .clear)
@@ -149,9 +158,10 @@ struct CommandPaletteView: View {
             }
         }
         .frame(width: 680, height: 560)
-        .background(FlotillaColors().surface)
+        .background(FlotillaColors.surface)
         .onAppear { isFocused = true; selectedIndex = 0 }
         .onDisappear { isFocused = false }
+        .onExitCommand { onDismiss() }
     }
 }
 
@@ -226,6 +236,11 @@ struct KeyboardShortcutsView: View {
                     .keyboardShortcut(.defaultAction)
             }
             .padding(20)
+            .overlay {
+                Button("Close") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+            }
 
             Divider()
 
@@ -253,10 +268,10 @@ struct KeyboardShortcutsView: View {
                             }
                         }
                         .padding(16)
-                        .background(FlotillaColors().surface, in: RoundedRectangle(cornerRadius: 8))
+                        .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: 8))
                         .overlay {
                             RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(FlotillaColors().separator)
+                                .strokeBorder(FlotillaColors.separator)
                         }
                     }
                 }
@@ -264,7 +279,7 @@ struct KeyboardShortcutsView: View {
             }
         }
         .frame(width: 760, height: 500)
-        .background(FlotillaColors().canvas)
+        .background(FlotillaColors.canvas)
         .accessibilityIdentifier("KeyboardShortcuts")
     }
 

@@ -159,14 +159,14 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
         source.setEventHandler { [weak self] in
             var buffer = [UInt8](repeating: 0, count: 65536)
             let n = Darwin.read(master, &buffer, buffer.count)
-            if n <= 0, let self {
+            if n <= 0 {
                 // Master is permanently readable after child exit — cancel source
                 // to stop the source from re-firing continuously at utility QoS.
                 source.cancel()
                 return
             }
-            guard n > 0, let self else { return }
-            self.broadcaster.broadcast(Data(buffer[..<n]))
+            guard n > 0, let this = self else { return }
+            this.broadcaster.broadcast(Data(buffer[..<n]))
         }
         source.setCancelHandler {
             Darwin.close(master)

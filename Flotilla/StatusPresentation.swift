@@ -5,17 +5,14 @@ import DesignSystem
 /// Maps SessionKit's domain status into presentation — kept in the App
 /// layer so DesignSystem and SessionKit stay decoupled from each other.
 enum StatusPresentation {
-    // App is forced to dark mode, so we can use a static instance
-    private static let colors = FlotillaColors(colorScheme: .dark)
-
     static func color(for status: SessionStatus) -> Color {
         switch status {
-        case .working: return colors.statusWorking
-        case .idle: return colors.statusIdle
-        case .waitingForInput: return colors.statusWaitingForInput
-        case .ready: return colors.statusReady
-        case .finished: return colors.statusFinished
-        case .crashed: return colors.statusCrashed
+        case .working: return FlotillaColors.statusWorking
+        case .idle: return FlotillaColors.statusIdle
+        case .waitingForInput: return FlotillaColors.statusWaitingForInput
+        case .ready: return FlotillaColors.statusReady
+        case .finished: return FlotillaColors.statusFinished
+        case .crashed: return FlotillaColors.statusCrashed
         }
     }
 

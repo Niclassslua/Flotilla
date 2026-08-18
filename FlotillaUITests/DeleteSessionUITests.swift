@@ -18,7 +18,7 @@ final class DeleteSessionUITests: XCTestCase {
         let app = launchedApp()
 
         // Create a project session with a new worktree.
-        let newSessionButton = app.descendants(matching: .any)["NewSessionButton"].firstMatch
+        let newSessionButton = app.descendants(matching: .any)["Sidebar.NewSession"].firstMatch
         XCTAssertTrue(newSessionButton.waitForExistence(timeout: 8))
         newSessionButton.click()
 
@@ -82,8 +82,9 @@ final class DeleteSessionUITests: XCTestCase {
         let app = launchedApp()
 
         // The app launches on the Home destination; the sidebar (and its
-        // SessionRow elements) only renders under the Sessions tab.
-        let sessionsTab = app.descendants(matching: .any)["Global.Sessions"].firstMatch
+        // SessionRow elements) only renders under the Sessions facet of the
+        // rail.
+        let sessionsTab = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
         XCTAssertTrue(sessionsTab.waitForExistence(timeout: 8))
         sessionsTab.click()
 
@@ -94,7 +95,11 @@ final class DeleteSessionUITests: XCTestCase {
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 8))
         deleteButton.click()
 
-        let deleteSessionOnlyButton = app.descendants(matching: .any)["DeleteSessionDialog.DeleteSessionOnly"].firstMatch
+        // The fixture session has a worktree, so the dialog offers the
+        // keep-the-worktree variant. Worktree *cleanup* is covered by
+        // `testDeletingSessionWithWorktreeCleansUpDirectoryAndBranch`; this
+        // test is only about the row's delete button removing the session.
+        let deleteSessionOnlyButton = app.descendants(matching: .any)["DeleteSessionDialog.KeepWorktreeDeleteSession"].firstMatch
         XCTAssertTrue(deleteSessionOnlyButton.waitForExistence(timeout: 8))
         deleteSessionOnlyButton.click()
 

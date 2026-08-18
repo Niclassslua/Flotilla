@@ -96,76 +96,72 @@ struct FlotillaApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(
+            FlotillaShell(
                 store: store,
                 terminalManager: terminalManager,
                 navigator: navigator,
                 hookCoordinator: hookCoordinator,
                 startupCheck: startupCheck,
-                settingsViewModel: settingsViewModel
+                settingsViewModel: settingsViewModel,
+                screenReader: hookCoordinator.screenReader
             )
             .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
         }
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
         .commands {
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
                 Button("New Session…") {
-                    navigator.destination = .sessions
-                    navigator.layout = .focus
-                    navigator.selectedSessionID = nil
-                    // The sheet presentation is handled by ContentView's sheet(item:)
-                    // We'll need to trigger it differently - use a published property or similar
-                    // For now, just set the destination; the new session button in the global bar handles the sheet
+                    navigator.presentedSheet = .createSession
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
             CommandMenu("Workspace") {
                 Button("Overview") {
-                    navigator.destination = .overview
+                    navigator.selection = .overview
                 }
                 .keyboardShortcut("1", modifiers: .command)
-                Button("Sessions") {
-                    navigator.destination = .sessions
-                    navigator.layout = .focus
+                Button("All Sessions") {
+                    navigator.selection = .allSessions
+                    navigator.presentation = .focus
                 }
                 .keyboardShortcut("2", modifiers: .command)
-                Button("Projects") {
-                    navigator.destination = .projects
+                Button("All Projects") {
+                    navigator.selection = .allProjects
                 }
                 .keyboardShortcut("3", modifiers: .command)
                 Divider()
                 Button("Focus Layout") {
-                    navigator.destination = .sessions
-                    navigator.layout = .focus
+                    navigator.selection = .allSessions
+                    navigator.presentation = .focus
                 }
                 .keyboardShortcut("1", modifiers: [.command, .control])
                 Button("Grid Layout") {
-                    navigator.destination = .sessions
-                    navigator.layout = .grid
+                    navigator.selection = .allSessions
+                    navigator.presentation = .grid
                 }
                 .keyboardShortcut("2", modifiers: [.command, .control])
                 Button("Board Layout") {
-                    navigator.destination = .sessions
-                    navigator.layout = .board
+                    navigator.selection = .allSessions
+                    navigator.presentation = .board
                 }
                 .keyboardShortcut("3", modifiers: [.command, .control])
                 Divider()
                 Button("Terminal") {
-                    navigator.destination = .sessions
-                    navigator.layout = .focus
+                    navigator.selection = .allSessions
+                    navigator.presentation = .focus
                     navigator.sessionLens = .terminal
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
                 Button("Files") {
-                    navigator.destination = .sessions
-                    navigator.layout = .focus
+                    navigator.selection = .allSessions
+                    navigator.presentation = .focus
                     navigator.sessionLens = .files
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 Button("Instructions") {
-                    navigator.destination = .sessions
-                    navigator.layout = .focus
+                    navigator.selection = .allSessions
+                    navigator.presentation = .focus
                     navigator.sessionLens = .instructions
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
@@ -174,8 +170,44 @@ struct FlotillaApp: App {
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 Divider()
+                Button("Previous Session") {
+                    if let sessions = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt }).first,
+                       let current = store.selectedSession,
+                       let index = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt }).firstIndex(where: { $0.id == current.id }),
+                       index < store.sessions.count - 1 {
+                        let next = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt })[index + 1]
+                        navigator.selection = .session(next.id)
+                        store.selectedSessionID = next.id
+                    }
+                }
+                .keyboardShortcut("]", modifiers: [.command, .option])
+                Button("Next Session") {
+                    if let sessions = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt }).first,
+                       let current = store.selectedSession,
+                       let index = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt }).firstIndex(where: { $0.id == current.id }),
+                       index > 0 {
+                        let prev = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt })[index - 1]
+                        navigator.selection = .session(prev.id)
+                        store.selectedSessionID = prev.id
+                    }
+                }
+                .keyboardShortcut("[", modifiers: [.command, .option])
+                Divider()
+                Button("Restart Session") {
+                    if let session = store.selectedSession {
+                        store.restartSession(sessionID: session.id)
+                    }
+                }
+                .keyboardShortcut("r", modifiers: .command)
+                Button("Delete Session…") {
+                    if let session = store.selectedSession {
+                        navigator.presentedSheet = .deleteSession(session.id)
+                    }
+                }
+                .keyboardShortcut(.delete, modifiers: .command)
+                Divider()
                 Button("Command Palette…") {
-                    // ContentView handles this via sheet
+                    navigator.presentedSheet = .commandPalette
                 }
                 .keyboardShortcut("k", modifiers: .command)
             }
@@ -185,9 +217,9 @@ struct FlotillaApp: App {
 
         Settings {
             SettingsView(viewModel: settingsViewModel)
-.preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
-            .environment(navigator)
-                .tint(FlotillaColors().accent)
+                .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
+                .environment(navigator)
+                .tint(FlotillaColors.accent)
         }
         .defaultSize(width: 800, height: 620)
     }

@@ -2,6 +2,7 @@ import SwiftUI
 import Observation
 import SessionKit
 import GitKit
+import DesignSystem
 
 @Observable
 @MainActor
@@ -51,6 +52,10 @@ final class DiffPanelViewModel {
         }
     }
 
+    func cancelMonitoring() {
+        // Task will be cancelled by the parent
+    }
+
     /// The XCUITest runner is sandboxed away from the fixture checkout; this
     /// automation-only seam performs the edit in the app process, then the
     /// normal live Git pipeline observes it independently.
@@ -71,7 +76,18 @@ final class DiffPanelViewModel {
 
 struct DiffPanelView: View {
     let session: Session
-    @State private var viewModel: DiffPanelViewModel
+    @Bindable var viewModel: DiffPanelViewModel
+    @FocusState private var isRefreshButtonFocused: Bool
+
+    init(session: Session, gitService: any GitServiceProtocol) {
+        self.session = session
+        self._viewModel = Bindable(wrappedValue: DiffPanelViewModel(session: session, gitService: gitService))
+    }
+
+    init(viewModel: DiffPanelViewModel) {
+        self.session = viewModel.session
+        self._viewModel = Bindable(wrappedValue: viewModel)
+    }
 
     #if DEBUG
     private var isUITesting: Bool {
@@ -81,184 +97,136 @@ struct DiffPanelView: View {
     private var isUITesting: Bool { false }
     #endif
 
-    init(session: Session, gitService: any GitServiceProtocol) {
-        self.session = session
-        _viewModel = State(initialValue: DiffPanelViewModel(session: session, gitService: gitService))
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Working Changes")
-                        .font(.headline)
-                    Text(summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("DiffPanel.Summary")
-                }
-                Spacer()
-                #if DEBUG
-                if isUITesting {
-                    Button("Simulate Edit") {
-                        Task { await viewModel.simulateEditForAutomation() }
-                    }
-                    .accessibilityIdentifier("DiffPanel.SimulateEditButton")
-                }
-                #endif
-                Button {
-                    Task { await viewModel.refresh() }
-                } label: {
-                    Label("Refresh Changes", systemImage: "arrow.clockwise")
-                }
-                .labelStyle(.iconOnly)
-                .help("Refresh changes")
-                .accessibilityIdentifier("DiffPanel.RefreshButton")
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 8)
-            }
-
-            Divider()
-
+        VStack(spacing: 0) {
             if viewModel.isLoading && !viewModel.hasLoadedOnce {
-                ProgressView("Reading Git changes…")
+                ProgressView("Loading changes…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(FlotillaColors.canvas)
                     .accessibilityIdentifier("DiffPanel.Loading")
-            } else if viewModel.snapshot.allDiffs.isEmpty {
+            } else if let errorMessage = viewModel.errorMessage {
                 ContentUnavailableView(
-                    "Working Tree Clean",
+                    "Error Loading Changes",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(errorMessage)
+                )
+                .accessibilityIdentifier("DiffPanel.Error")
+                .background(FlotillaColors.canvas)
+            } else if viewModel.snapshot.staged.isEmpty &&
+                       viewModel.snapshot.unstaged.isEmpty &&
+                       viewModel.snapshot.untracked.isEmpty {
+                ContentUnavailableView(
+                    "No Changes",
                     systemImage: "checkmark.circle",
-                    description: Text("No staged, unstaged, or untracked changes.")
+                    description: Text("Working tree is clean.")
                 )
                 .accessibilityIdentifier("DiffPanel.Empty")
+                .background(FlotillaColors.canvas)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(Array(viewModel.snapshot.allDiffs.enumerated()), id: \.offset) { _, diff in
-                            DiffFileView(diff: diff)
+                List {
+                    Section("Staged (\(viewModel.snapshot.staged.count))") {
+                        ForEach(viewModel.snapshot.staged, id: \.path) { entry in
+                            DiffFileRow(entry: entry, isStaged: true)
                         }
                     }
-                    .padding(14)
+
+                    Section("Unstaged (\(viewModel.snapshot.unstaged.count))") {
+                        ForEach(viewModel.snapshot.unstaged, id: \.path) { entry in
+                            DiffFileRow(entry: entry, isStaged: false)
+                        }
+                    }
+
+                    if !viewModel.snapshot.untracked.isEmpty {
+                        Section("Untracked (\(viewModel.snapshot.untracked.count))") {
+                            ForEach(viewModel.snapshot.untracked, id: \.path) { entry in
+                                HStack {
+                                    Image(systemName: "doc")
+                                        .foregroundStyle(.secondary)
+                                    Text(entry.path)
+                                        .font(.system(.body, design: .monospaced))
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
                 }
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .background(FlotillaColors.canvas)
                 .accessibilityIdentifier("DiffPanel.List")
             }
         }
-        .task(id: session.id) { await viewModel.monitor() }
-    }
-
-    private var summary: String {
-        let snapshot = viewModel.snapshot
-        return "\(snapshot.staged.count) staged · \(snapshot.unstaged.count) unstaged · \(snapshot.untracked.count) untracked"
+        .background(FlotillaColors.canvas)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isUITesting {
+                HStack {
+                    Spacer()
+                    Button("Simulate Edit") {
+                        Task { await viewModel.simulateEditForAutomation() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("DiffPanel.SimulateEditButton")
+                    .padding(12)
+                }
+                .background(FlotillaColors.surface)
+            } else {
+                HStack {
+                    Spacer()
+                    Button {
+                        Task { await viewModel.refresh() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut("r", modifiers: .command)
+                    .accessibilityIdentifier("DiffPanel.RefreshButton")
+                    .focused($isRefreshButtonFocused)
+                    .padding(12)
+                }
+                .background(FlotillaColors.surface)
+            }
+        }
+        .task {
+            await viewModel.monitor()
+        }
     }
 }
 
-private struct DiffFileView: View {
-    let diff: FileDiff
+struct DiffFileRow: View {
+    let entry: FileDiff
+    let isStaged: Bool
+
+    private var additions: Int {
+        entry.hunks.flatMap(\.lines).filter { $0.hasPrefix("+") }.count
+    }
+
+    private var deletions: Int {
+        entry.hunks.flatMap(\.lines).filter { $0.hasPrefix("-") }.count
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: stageIcon)
-                    .foregroundStyle(stageColor)
-                Text(diff.path)
-                    .font(.system(.body, design: .monospaced, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .accessibilityIdentifier("DiffPanel.File-\(diff.path)")
-                Spacer()
-                Text(diff.stage.rawValue.capitalized)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(stageColor)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(stageColor.opacity(0.12), in: Capsule())
+        HStack(spacing: 8) {
+            Image(systemName: "doc")
+                .foregroundStyle(isStaged ? FlotillaColors.diffAdded : FlotillaColors.diffRemoved)
+                .font(.system(size: 14))
+
+            Text(entry.path)
+                .font(.system(.body, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            if additions > 0 || deletions > 0 {
+                Text("+\(additions) −\(deletions)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(isStaged ? FlotillaColors.diffAdded : FlotillaColors.diffRemoved)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(Color(nsColor: .controlBackgroundColor))
 
-            ForEach(diff.hunks.indices, id: \.self) { hunkIndex in
-                let hunk = diff.hunks[hunkIndex]
-                Text(hunk.header)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.accentColor.opacity(0.07))
-
-                ForEach(hunk.lines.indices, id: \.self) { lineIndex in
-                    let line = hunk.lines[lineIndex]
-                    Text(highlighted(line, path: diff.path))
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 1)
-                        .background(lineBackground(for: line))
-                }
-            }
+            Spacer()
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.7))
-        }
-    }
-
-    private var stageColor: Color {
-        switch diff.stage {
-        case .staged: .green
-        case .unstaged: .orange
-        case .untracked: .blue
-        }
-    }
-
-    private var stageIcon: String {
-        switch diff.stage {
-        case .staged: "checkmark.circle.fill"
-        case .unstaged: "pencil.circle.fill"
-        case .untracked: "plus.circle.fill"
-        }
-    }
-
-    private func lineBackground(for line: String) -> Color {
-        if line.hasPrefix("+") { return .green.opacity(0.08) }
-        if line.hasPrefix("-") { return .red.opacity(0.08) }
-        return .clear
-    }
-
-    private func highlighted(_ line: String, path: String) -> AttributedString {
-        let result = NSMutableAttributedString(string: line)
-        let fullRange = NSRange(location: 0, length: result.length)
-        let baseColor: NSColor = line.hasPrefix("+") ? .systemGreen : line.hasPrefix("-") ? .systemRed : .labelColor
-        result.addAttribute(.foregroundColor, value: baseColor, range: fullRange)
-
-        let codeExtensions = Set(["swift", "js", "ts", "tsx", "jsx", "py", "go", "rs", "java", "kt", "c", "h", "cpp"])
-        guard codeExtensions.contains(URL(fileURLWithPath: path).pathExtension.lowercased()) else {
-            return AttributedString(result)
-        }
-
-        let patterns: [(String, NSColor)] = [
-            (#"\b(class|struct|enum|protocol|func|let|var|if|else|switch|case|return|import|async|await|throws|throw|public|private|internal|extension|init|self|true|false|nil)\b"#, .systemPurple),
-            (#"\"(?:\\.|[^\"\\])*\""#, .systemOrange),
-            (#"\b\d+(?:\.\d+)?\b"#, .systemBlue),
-            (#"//.*$|#.*$"#, .secondaryLabelColor)
-        ]
-        for (pattern, color) in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else { continue }
-            for match in regex.matches(in: line, range: fullRange) {
-                result.addAttribute(.foregroundColor, value: color, range: match.range)
-            }
-        }
-        return AttributedString(result)
+        .padding(.vertical, 2)
+        .contentShape(.rect)
+        .accessibilityIdentifier("DiffPanel.File-\(entry.path)")
     }
 }

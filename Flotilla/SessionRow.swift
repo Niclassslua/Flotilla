@@ -86,10 +86,10 @@ struct SessionRow: View {
     private var providerTile: some View {
         ZStack(alignment: .bottomTrailing) {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(FlotillaColors().surface)
+                .fill(FlotillaColors.surface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(FlotillaColors().separator.opacity(0.6), lineWidth: 0.5)
+                        .strokeBorder(FlotillaColors.separator.opacity(0.6), lineWidth: 0.5)
                 }
                 .overlay {
                     ProviderLogo(agent: session.agent)
@@ -120,7 +120,7 @@ struct SessionRow: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 8, height: 8)
-                .overlay(Circle().strokeBorder(FlotillaColors().sidebar, lineWidth: 1.5))
+                .overlay(Circle().strokeBorder(FlotillaColors.sidebar, lineWidth: 1.5))
         }
         .frame(width: 16, height: 16)
         .animation(pulseAnimation, value: beaconPulses)
@@ -185,13 +185,13 @@ struct SessionRow: View {
             .overlay {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(FlotillaColors().separator, lineWidth: 0.5)
+                        .strokeBorder(FlotillaColors.separator, lineWidth: 0.5)
                 }
             }
     }
 
     private var backgroundFill: Color {
-        if isSelected { return FlotillaColors().surfaceElevated }
+        if isSelected { return FlotillaColors.surfaceElevated }
         // A whole-row attention wash for sessions that need input — signal
         // carried by shape and area, not by a colored edge stripe.
         if needsInput { return Color.orange.opacity(isHovering ? 0.13 : 0.08) }

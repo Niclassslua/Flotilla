@@ -4,6 +4,7 @@ import PersistenceKit
 import GitKit
 import SettingsKit
 import DesignSystem
+import HooksKit
 
 struct ContentView: View {
     @Environment(\.openSettings) private var openSettings
@@ -14,6 +15,7 @@ struct ContentView: View {
     var hookCoordinator: HookCoordinator?
     @Bindable var startupCheck: StartupCheckViewModel
     @Bindable var settingsViewModel: SettingsViewModel
+    @State private var activityStore: SessionActivityStore
 
     init(
         store: AppStore,
@@ -21,7 +23,8 @@ struct ContentView: View {
         navigator: WorkspaceNavigator,
         hookCoordinator: HookCoordinator? = nil,
         startupCheck: StartupCheckViewModel,
-        settingsViewModel: SettingsViewModel
+        settingsViewModel: SettingsViewModel,
+        screenReader: any SessionScreenReading
     ) {
         self.store = store
         self.terminalManager = terminalManager
@@ -29,6 +32,7 @@ struct ContentView: View {
         self.hookCoordinator = hookCoordinator
         self.startupCheck = startupCheck
         self.settingsViewModel = settingsViewModel
+        self._activityStore = State(initialValue: SessionActivityStore(screenReader: screenReader))
     }
 
     private var defaultAgent: AgentKind {
@@ -55,8 +59,7 @@ struct ContentView: View {
             workspace
         }
         .frame(minWidth: 900, minHeight: 620)
-        .background(FlotillaColors().canvas)
-        .environment(\.colorScheme, .dark)
+        .background(FlotillaColors.canvas)
         .animation(.snappy(duration: 0.22), value: navigator.destination)
         .animation(.snappy(duration: 0.18), value: navigator.sessionLens)
         .animation(.snappy(duration: 0.18), value: navigator.projectLens)
@@ -124,7 +127,7 @@ struct ContentView: View {
                 HStack(spacing: 7) {
                     ZStack {
                         RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                            .fill(FlotillaColors().accent)
+                            .fill(FlotillaColors.accent)
                         Image(systemName: "point.3.connected.trianglepath.dotted")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
@@ -135,7 +138,7 @@ struct ContentView: View {
                     Text("BETA")
                         .font(.system(size: 8, weight: .bold))
                         .tracking(0.7)
-                        .foregroundStyle(FlotillaColors().accent)
+                        .foregroundStyle(FlotillaColors.accent)
                 }
             }
             .buttonStyle(.plain)
@@ -190,7 +193,7 @@ struct ContentView: View {
 
             HStack(spacing: 5) {
                 Circle()
-                    .fill(FlotillaColors().statusWorking)
+                    .fill(FlotillaColors.statusWorking)
                     .frame(width: 6, height: 6)
                 Text("LOCAL")
                     .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -230,7 +233,7 @@ struct ContentView: View {
         .padding(.leading, trafficLightInset)
         .padding(.trailing, 10)
         .frame(height: 46)
-        .background(FlotillaColors().sidebar)
+        .background(FlotillaColors.sidebar)
     }
 
     private func globalDestinationButton(_ item: AppDestination) -> some View {
@@ -257,6 +260,7 @@ struct ContentView: View {
                 store: store,
                 openProject: openProject,
                 openSession: openSession,
+                settingsViewModel: settingsViewModel,
                 openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
                 defaultAgent: defaultAgent
             )
@@ -286,8 +290,8 @@ struct ContentView: View {
                         store: store,
                         terminalManager: terminalManager,
                         activeSessionID: $activeGridSessionID,
-                        minimumTileWidth: $settingsViewModel.settings.workspace.gridMinimumTileWidth,
-                        openSession: openSession
+                        openSession: openSession,
+                        settingsViewModel: settingsViewModel
                     )
                 case .board:
                     KanbanTabView(
@@ -295,12 +299,14 @@ struct ContentView: View {
                         terminalManager: terminalManager,
                         openSession: openSession
                     )
+                case .list:
+                    listView
                 }
             }
             .background(Color(nsColor: .textBackgroundColor).opacity(0.28))
         }
         .navigationSplitViewStyle(.balanced)
-        .background(FlotillaColors().canvas)
+        .background(FlotillaColors.canvas)
     }
 
     @State private var activeGridSessionID: UUID?
@@ -345,7 +351,7 @@ struct ContentView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(FlotillaColors().sidebar)
+        .background(FlotillaColors.sidebar)
         .safeAreaInset(edge: .top, spacing: 0) { minimapHeader }
         .navigationTitle("Sessions")
         .accessibilityIdentifier("SidebarList")
@@ -376,7 +382,7 @@ struct ContentView: View {
                     Text("LIVE SESSIONS")
                         .font(.caption2.weight(.bold))
                         .tracking(0.9)
-                        .foregroundStyle(FlotillaColors().accent)
+                        .foregroundStyle(FlotillaColors.accent)
                     Text("\(store.sessions.filter { $0.status == .working }.count) working · \(store.sessions.filter { $0.status == .waitingForInput }.count) need input · \(store.sessions.filter { $0.status == .ready }.count) ready")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -395,7 +401,7 @@ struct ContentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
-        .background(FlotillaColors().sidebar)
+        .background(FlotillaColors.sidebar)
         .overlay(alignment: .bottom) { Divider() }
     }
 
@@ -429,6 +435,37 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private var listView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(store.sessions) { session in
+                    Button {
+                        store.selectedSessionID = session.id
+                    } label: {
+                        SessionCard(
+                            session: session,
+                            variant: .row,
+                            diffStatStore: store.diffStatStore,
+                            activityStore: activityStore,
+                            isSelected: navigator.selectedSessionID == session.id,
+                            onTap: { store.selectedSessionID = session.id },
+                            onDelete: {},
+                            onRestart: {},
+                            onRevealInFinder: {},
+                            onCopyPath: {},
+                            onCopyBranch: {},
+                            terminal: { EmptyView() }
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(22)
+        }
+        .background(FlotillaColors.canvas)
+    }
+
+    @ViewBuilder
     private func sessionSurface(for session: Session) -> some View {
         switch navigator.sessionLens {
         case .terminal:
@@ -459,7 +496,7 @@ struct ContentView: View {
                 isFocused: true
             )
             .id(session.id)
-            .background(FlotillaColors().terminalCanvas)
+            .background(FlotillaColors.terminalCanvas)
         } else {
             ContentUnavailableView {
                 Label(
@@ -495,7 +532,8 @@ struct ContentView: View {
                 sessions: store.sessions,
                 perform: perform,
                 openProject: openProject,
-                openSession: openSession
+                openSession: openSession,
+                onDismiss: { presentedSheet = nil }
             )
         case .shortcuts:
             KeyboardShortcutsView()
@@ -503,15 +541,51 @@ struct ContentView: View {
             RestoreSessionsView(sessions: store.sessions) { id in
                 store.restartSession(sessionID: id)
             }
+        case .deleteSession(let sessionID):
+            if let session = store.sessions.first(where: { $0.id == sessionID }) {
+                DeleteSessionSheet(
+                    session: session,
+                    onCancel: { navigator.presentedSheet = nil },
+                    onDelete: { deleteWorktree in
+                        navigator.presentedSheet = nil
+                        Task {
+                            await store.deleteSession(
+                                sessionID: sessionID,
+                                deleteWorktree: deleteWorktree,
+                                deleteBranch: settingsViewModel.settings.git.deleteBranchWithWorktree
+                            )
+                        }
+                    }
+                )
+            }
         }
     }
 
     private func sessionRow(_ session: Session) -> some View {
-        SessionRow(
+        SessionCard(
             session: session,
+            variant: .row,
+            diffStatStore: store.diffStatStore,
+            activityStore: activityStore,
             isSelected: navigator.selectedSessionID == session.id,
-            onDeleteRequested: { sessionPendingDeletion = session },
-            diffStatStore: store.diffStatStore
+            onTap: { store.selectedSessionID = session.id },
+            onDelete: { sessionPendingDeletion = session },
+            onRestart: { store.restartSession(sessionID: session.id) },
+            onRevealInFinder: {
+                let path = session.worktree?.worktreePath ?? session.workingDirectory
+                NSWorkspace.shared.activateFileViewerSelecting([path])
+            },
+            onCopyPath: {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString((session.worktree?.worktreePath ?? session.workingDirectory).path, forType: .string)
+            },
+            onCopyBranch: {
+                if let branch = session.worktree?.branchName {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(branch, forType: .string)
+                }
+            },
+            terminal: { EmptyView() }
         )
         .tag(session.id)
         .accessibilityIdentifier("SessionRow-\(session.title)")
@@ -597,8 +671,6 @@ struct ContentView: View {
             openSettings()
         }
     }
-}
-
 private struct SessionGroupHeader: View {
     let title: String
     let count: Int
@@ -618,143 +690,6 @@ private struct SessionGroupHeader: View {
             .buttonStyle(.plain)
             .help("New session")
         }
-    }
-}
-
-private struct SessionActivityStrip: View {
-    let sessions: [Session]
-
-    var body: some View {
-        HStack(spacing: 3) {
-            let shown = Array(sessions.prefix(12))
-            if shown.isEmpty {
-                Capsule()
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(height: 3)
-            } else {
-                ForEach(shown) { session in
-                    StatusBadge(session.status, variant: .compact)
-                        .frame(height: 3)
-                }
-            }
-        }
-        .frame(height: 3)
-        .accessibilityHidden(true)
-    }
-}
-
-private struct DeleteSessionSheet: View {
-    let session: Session
-    let onCancel: () -> Void
-    let onDelete: (Bool) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "trash.circle.fill")
-                    .font(.system(size: 34))
-                    .foregroundStyle(.red)
-                    .symbolRenderingMode(.hierarchical)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Delete “\(session.title)”? ")
-                        .font(.title3.weight(.semibold))
-                    Text(explanation)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            if let worktree = session.worktree {
-                VStack(alignment: .leading, spacing: 4) {
-                    Label(worktree.branchName, systemImage: "arrow.triangle.branch")
-                    Text(worktree.worktreePath.path)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
-            }
-
-            HStack {
-                Button("Cancel", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("DeleteSessionDialog.Cancel")
-                Spacer()
-                if session.worktree != nil {
-                    Button("Keep Worktree, Delete Session") { onDelete(false) }
-                        .accessibilityIdentifier("DeleteSessionDialog.KeepWorktreeDeleteSession")
-                }
-                Button(session.worktree == nil ? "Delete Session" : "Delete Session & Worktree", role: .destructive) {
-                    onDelete(session.worktree != nil)
-                }
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier(
-                    session.worktree == nil
-                        ? "DeleteSessionDialog.DeleteSessionOnly"
-                        : "DeleteSessionDialog.DeleteWithWorktree"
-                )
-            }
-        }
-        .padding(24)
-        .frame(width: 500)
-    }
-
-    private var explanation: String {
-        session.worktree == nil
-            ? "Terminal history and session metadata will be permanently removed."
-            : "Remove only Flotilla's session record, or also clean up its isolated worktree and branch from Git."
-    }
-}
-
-private struct OperationErrorBanner: View {
-    let message: String
-    let dismiss: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "xmark.octagon.fill")
-                .foregroundStyle(.red)
-            Text(message)
-                .font(.callout)
-                .lineLimit(2)
-            Spacer()
-            Button("Dismiss", action: dismiss)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.red.opacity(0.09))
-    }
-}
-
-private struct EmptyWorkspaceView: View {
-    let hasSessions: Bool
-    let onCreate: () -> Void
-
-    var body: some View {
-        VStack(spacing: 22) {
-            Image(systemName: "point.3.connected.trianglepath.dotted")
-                .font(.system(size: 48, weight: .light))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(FlotillaColors().accent)
-                .accessibilityHidden(true)
-            VStack(spacing: 7) {
-                Text(hasSessions ? "Choose a session" : "Your agents, in formation")
-                    .font(.title2.weight(.semibold))
-                Text(hasSessions
-                    ? "Select an agent from the minimap to open its live terminal and workspace."
-                    : "Launch isolated coding sessions, watch their signals, and move between worktrees without losing context.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 430)
-            }
-            Button(hasSessions ? "New Session" : "Launch First Session", action: onCreate)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors().accent.opacity(0.025))
     }
 }
 
@@ -785,9 +720,9 @@ private struct GlobalBarButton: View {
 
     private var background: Color {
         switch style {
-        case .plain: isHovering ? FlotillaColors().surfaceElevated.opacity(0.6) : .clear
-        case .selected: FlotillaColors().surfaceElevated
-        case .accent: FlotillaColors().accent
+        case .plain: isHovering ? FlotillaColors.surfaceElevated.opacity(0.6) : .clear
+        case .selected: FlotillaColors.surfaceElevated
+        case .accent: FlotillaColors.accent
         }
     }
 
@@ -813,4 +748,5 @@ private struct GlobalBarButton: View {
         .help(help)
         .accessibilityIdentifier(identifier ?? "Global.\(help)")
     }
+}
 }

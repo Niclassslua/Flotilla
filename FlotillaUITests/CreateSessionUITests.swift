@@ -26,7 +26,7 @@ final class CreateSessionUITests: XCTestCase {
         XCTAssertTrue(effortGauge.waitForExistence(timeout: 8))
 
         // Default effort is Medium. The current level is folded into the
-        // accessibility label (see EffortGaugePicker) since this custom
+        // accessibility label (see EffortLevelPicker) since this custom
         // control's AX value isn't reliably surfaced to XCUITest on macOS.
         XCTAssertEqual(effortGauge.label, "Reasoning effort: Medium")
 

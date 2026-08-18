@@ -3,6 +3,28 @@ import SessionKit
 import ProcessKit
 import SettingsKit
 
+/// One model as the agent's CLI describes it, including which reasoning-effort
+/// levels it accepts. Codex narrows the levels per model (and publishes a
+/// per-level description plus its own default); Claude Code applies the same
+/// five levels to every model.
+public struct AgentModelProfile: Sendable, Equatable, Identifiable {
+    public let slug: String
+    public let displayName: String?
+    public let effortOptions: [AgentEffortOption]
+
+    public var id: String { slug }
+
+    public init(slug: String, displayName: String? = nil, effortOptions: [AgentEffortOption]) {
+        self.slug = slug
+        self.displayName = displayName
+        self.effortOptions = effortOptions
+    }
+
+    public var defaultEffort: AgentEffort? {
+        effortOptions.first(where: \.isModelDefault)?.level
+    }
+}
+
 /// Live-queries each agent's installed CLI for its current model list,
 /// instead of hardcoding one that inevitably goes stale. Resolution always
 /// uses `PATH` (not any configured `AgentPathOverrides` binary) — model
@@ -31,27 +53,47 @@ public struct ModelCatalogFetcher: Sendable {
         for agent: AgentKind,
         openCodeSubscription: OpenCodeSubscription = .none
     ) async -> [String] {
+        await fetchProfiles(for: agent, openCodeSubscription: openCodeSubscription).map(\.slug)
+    }
+
+    /// Same query as `fetchModels`, keeping the per-model reasoning-effort
+    /// levels the CLI reports. Only Codex publishes them; Claude Code's five
+    /// levels are attached from `AgentEffortCatalog`'s static table, and
+    /// OpenCode's profiles carry none.
+    public func fetchProfiles(
+        for agent: AgentKind,
+        openCodeSubscription: OpenCodeSubscription = .none
+    ) async -> [AgentModelProfile] {
         guard let executable = locator.locate(binaryName(for: agent)) else {
-            return ModelCatalog.staticFallback(for: agent, openCodeSubscription: openCodeSubscription)
+            return ModelCatalog.staticFallbackProfiles(for: agent, openCodeSubscription: openCodeSubscription)
         }
 
-        let models: [String]?
+        let profiles: [AgentModelProfile]?
         do {
-            models = try await withTimeout(seconds: timeoutSeconds) {
+            profiles = try await withTimeout(seconds: timeoutSeconds) {
                 switch agent {
-                case .claudeCode: try await self.fetchClaudeModels(executable: executable)
-                case .codexCLI: try await self.fetchCodexModels(executable: executable)
-                case .openCode: try await self.fetchOpenCodeModels(executable: executable, subscription: openCodeSubscription)
+                case .claudeCode:
+                    try await self.fetchClaudeProfiles(executable: executable)
+                case .codexCLI:
+                    try await self.fetchCodexProfiles(executable: executable)
+                case .openCode:
+                    try await self.fetchOpenCodeModels(executable: executable, subscription: openCodeSubscription)
+                        .map { Self.profiles(forSlugs: $0, agent: .openCode) }
                 }
             }
         } catch {
-            models = nil
+            profiles = nil
         }
 
-        guard let models, !models.isEmpty else {
-            return ModelCatalog.staticFallback(for: agent, openCodeSubscription: openCodeSubscription)
+        guard let profiles, !profiles.isEmpty else {
+            return ModelCatalog.staticFallbackProfiles(for: agent, openCodeSubscription: openCodeSubscription)
         }
-        return models
+        return profiles
+    }
+
+    static func profiles(forSlugs slugs: [String], agent: AgentKind) -> [AgentModelProfile] {
+        let options = AgentEffortCatalog.staticOptions(for: agent)
+        return slugs.map { AgentModelProfile(slug: $0, effortOptions: options) }
     }
 
     private func binaryName(for agent: AgentKind) -> String {
@@ -95,7 +137,59 @@ public struct ModelCatalogFetcher: Sendable {
         return Self.parseClaudeModelList(result.stdout)
     }
 
-    private func fetchCodexModels(executable: URL) async throws -> [String]? {
+    /// Claude Code applies `--effort` uniformly to every model, so one query
+    /// for the level list covers the whole catalog. The two queries run
+    /// concurrently because both shell out to the same CLI and neither
+    /// depends on the other.
+    private func fetchClaudeProfiles(executable: URL) async throws -> [AgentModelProfile]? {
+        async let modelsTask = fetchClaudeModels(executable: executable)
+        async let levelsTask = fetchClaudeEffortLevels(executable: executable)
+        guard let models = try await modelsTask, !models.isEmpty else {
+            _ = try? await levelsTask
+            return nil
+        }
+        let levels = (try? await levelsTask) ?? nil
+
+        let options: [AgentEffortOption] = levels.map { levels in
+            levels.map { level in
+                AgentEffortOption(
+                    level: level,
+                    label: AgentEffortCatalog.label(for: level, agent: .claudeCode),
+                    summary: AgentEffortCatalog.summary(for: level, agent: .claudeCode)
+                )
+            }
+        } ?? AgentEffortCatalog.staticOptions(for: .claudeCode)
+
+        return models.map { AgentModelProfile(slug: $0, effortOptions: options) }
+    }
+
+    private func fetchClaudeEffortLevels(executable: URL) async throws -> [AgentEffort]? {
+        let result = try await runner.run(
+            ["--print", "/effort"],
+            executable: executable,
+            workingDirectory: FileManager.default.temporaryDirectory
+        )
+        guard result.exitCode == 0 else { return nil }
+        let levels = Self.parseClaudeEffortLevels(result.stdout)
+        return levels.isEmpty ? nil : levels
+    }
+
+    /// `claude --print "/effort"` prints its own usage line, e.g.
+    /// "Usage: /effort <low|medium|high|xhigh|max|auto>". `auto` is dropped:
+    /// it is a slash-command-only option, and `--effort auto` warns and falls
+    /// back to the default. Unknown level names from a newer CLI are dropped
+    /// too rather than guessed at.
+    static func parseClaudeEffortLevels(_ output: String) -> [AgentEffort] {
+        guard let open = output.firstIndex(of: "<"),
+              let close = output[open...].firstIndex(of: ">") else { return [] }
+        return output[output.index(after: open)..<close]
+            .split(separator: "|")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .compactMap(AgentEffort.init(rawValue:))
+            .sorted { $0.rank < $1.rank }
+    }
+
+    private func fetchCodexProfiles(executable: URL) async throws -> [AgentModelProfile]? {
         let result = try await runner.run(
             ["debug", "models"],
             executable: executable,
@@ -106,7 +200,28 @@ public struct ModelCatalogFetcher: Sendable {
         return catalog.models
             .filter { $0.visibility == "list" }
             .sorted { $0.priority < $1.priority }
-            .map(\.slug)
+            .map(Self.profile(fromCodexEntry:))
+    }
+
+    /// Codex's catalog is the authority on which levels a model takes, so
+    /// unknown level strings from a newer CLI are dropped rather than guessed
+    /// at — the picker then simply doesn't offer them.
+    static func profile(fromCodexEntry entry: CodexModelEntry) -> AgentModelProfile {
+        let levels = entry.supportedReasoningLevels ?? []
+        let options: [AgentEffortOption] = levels.compactMap { level in
+            guard let effort = AgentEffort(rawValue: level.effort) else { return nil }
+            return AgentEffortOption(
+                level: effort,
+                label: AgentEffortCatalog.label(for: effort, agent: .codexCLI),
+                summary: level.description ?? AgentEffortCatalog.summary(for: effort, agent: .codexCLI),
+                isModelDefault: effort.rawValue == entry.defaultReasoningLevel
+            )
+        }
+        return AgentModelProfile(
+            slug: entry.slug,
+            displayName: entry.displayName,
+            effortOptions: options.isEmpty ? AgentEffortCatalog.staticOptions(for: .codexCLI) : options
+        )
     }
 
     /// `claude --print "/model"` (skips the workspace-trust dialog and any
@@ -124,14 +239,31 @@ public struct ModelCatalogFetcher: Sendable {
             .filter { !$0.isEmpty && !$0.contains(" ") && $0 != "default" && !$0.contains("[1m]") }
     }
 
-    private struct CodexModelCatalog: Decodable {
+    struct CodexModelCatalog: Decodable {
         let models: [CodexModelEntry]
     }
 
-    private struct CodexModelEntry: Decodable {
+    struct CodexModelEntry: Decodable {
         let slug: String
         let visibility: String
         let priority: Int
+        let displayName: String?
+        let defaultReasoningLevel: String?
+        let supportedReasoningLevels: [CodexReasoningLevel]?
+
+        enum CodingKeys: String, CodingKey {
+            case slug
+            case visibility
+            case priority
+            case displayName = "display_name"
+            case defaultReasoningLevel = "default_reasoning_level"
+            case supportedReasoningLevels = "supported_reasoning_levels"
+        }
+    }
+
+    struct CodexReasoningLevel: Decodable {
+        let effort: String
+        let description: String?
     }
 }
 
@@ -156,6 +288,42 @@ private func withTimeout<T: Sendable>(
 /// isn't installed, the query failed/timed out, or — as with OpenCode,
 /// which has no model-enumeration command — was never attempted.
 public enum ModelCatalog {
+    /// `staticFallback` plus the reasoning-effort levels each of those models
+    /// took at the time of writing. Codex's real per-model support comes from
+    /// `codex debug models`; this table only covers the case where that query
+    /// isn't possible, and is deliberately conservative — a model missing here
+    /// gets the agent's full level set rather than a guessed-narrow one.
+    public static func staticFallbackProfiles(
+        for agent: AgentKind,
+        openCodeSubscription: OpenCodeSubscription = .none
+    ) -> [AgentModelProfile] {
+        let slugs = staticFallback(for: agent, openCodeSubscription: openCodeSubscription)
+        return slugs.map { slug in
+            AgentModelProfile(slug: slug, effortOptions: fallbackEffortOptions(for: agent, slug: slug))
+        }
+    }
+
+    private static func fallbackEffortOptions(for agent: AgentKind, slug: String) -> [AgentEffortOption] {
+        let all = AgentEffortCatalog.staticOptions(for: agent)
+        guard agent == .codexCLI else { return all }
+        // `minimal` is in Codex's config schema but no shipped model has ever
+        // listed it, so it stays out of the offline set; the live catalog will
+        // surface it if that ever changes.
+        let ceiling = codexFallbackCeiling[slug] ?? .ultra
+        return all.filter { $0.level.rank >= AgentEffort.low.rank && $0.level.rank <= ceiling.rank }
+    }
+
+    /// Deepest level each known Codex model accepted as of Codex CLI 0.147.
+    /// Newer models are absent on purpose — they fall through to the full set.
+    private static let codexFallbackCeiling: [String: AgentEffort] = [
+        "gpt-5.6-sol": .ultra,
+        "gpt-5.6-terra": .ultra,
+        "gpt-5.6-luna": .max,
+        "gpt-5.5": .xhigh,
+        "gpt-5.4": .xhigh,
+        "gpt-5.4-mini": .xhigh,
+    ]
+
     public static func staticFallback(for agent: AgentKind, openCodeSubscription: OpenCodeSubscription = .none) -> [String] {
         switch agent {
         case .claudeCode: ["sonnet", "opus", "haiku", "fable", "best", "opusplan"]
@@ -227,7 +395,7 @@ public enum ModelCatalog {
 public actor ModelCatalogCache {
     public static let shared = ModelCatalogCache()
 
-    private var cache: [AgentKind: [String]] = [:]
+    private var cache: [AgentKind: [AgentModelProfile]] = [:]
     private let fetcher: ModelCatalogFetcher
 
     public init(fetcher: ModelCatalogFetcher = ModelCatalogFetcher()) {
@@ -235,11 +403,15 @@ public actor ModelCatalogCache {
     }
 
     public func models(for agent: AgentKind, openCodeSubscription: OpenCodeSubscription = .none) async -> [String] {
+        await profiles(for: agent, openCodeSubscription: openCodeSubscription).map(\.slug)
+    }
+
+    public func profiles(for agent: AgentKind, openCodeSubscription: OpenCodeSubscription = .none) async -> [AgentModelProfile] {
         if let cached = cache[agent] {
             return cached
         }
-        let models = await fetcher.fetchModels(for: agent, openCodeSubscription: openCodeSubscription)
-        cache[agent] = models
-        return models
+        let profiles = await fetcher.fetchProfiles(for: agent, openCodeSubscription: openCodeSubscription)
+        cache[agent] = profiles
+        return profiles
     }
 }

@@ -46,7 +46,7 @@ final class DiffAndFilesUITests: XCTestCase {
 
     private func selectPanel(_ app: XCUIApplication, label: String) {
         let command = switch label {
-        case "Diff": "Review Git changes"
+        case "Diff": "Review changes"
         case "Files": "Browse project files"
         default: label
         }

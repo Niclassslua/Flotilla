@@ -85,13 +85,13 @@ if let error = store.lastCreationError {
         HStack(spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(FlotillaColors().accent)
+                    .fill(FlotillaColors.accent)
                 Image(systemName: "point.3.connected.trianglepath.dotted")
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(.white)
             }
             .frame(width: 48, height: 48)
-            .shadow(color: FlotillaColors().accent.opacity(0.25), radius: 10, y: 4)
+            .shadow(color: FlotillaColors.accent.opacity(0.25), radius: 10, y: 4)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Launch a Session")
@@ -120,7 +120,7 @@ if let error = store.lastCreationError {
             if !isGeneralSession {
                 HStack(spacing: 10) {
                     Image(systemName: selectedFolder == nil ? "folder.badge.questionmark" : "folder.fill")
-                        .foregroundStyle(selectedFolder == nil ? Color.secondary : FlotillaColors().accent)
+                        .foregroundStyle(selectedFolder == nil ? Color.secondary : FlotillaColors.accent)
                     Text(selectedFolder?.path ?? "No project folder selected")
                         .foregroundStyle(selectedFolder == nil ? .secondary : .primary)
                         .lineLimit(1)
@@ -192,8 +192,9 @@ if let error = store.lastCreationError {
                 ModelPickerView(agent: agent, openCodeSubscription: openCodeSubscription, model: $model)
                     .accessibilityIdentifier("CreateSession.ModelField")
 
-                EffortGaugePicker(
+                EffortLevelPicker(
                     agent: agent,
+                    model: model,
                     effort: $effort,
                     accessibilityIdentifier: "CreateSession.EffortPicker"
                 )
@@ -216,7 +217,7 @@ if let error = store.lastCreationError {
 
             HStack(spacing: 8) {
                 Image(systemName: checkoutMode == .newWorktree ? "checkmark.shield.fill" : "exclamationmark.triangle")
-                    .foregroundStyle(checkoutMode == .newWorktree ? FlotillaColors().accent : Color.secondary)
+                    .foregroundStyle(checkoutMode == .newWorktree ? FlotillaColors.accent : Color.secondary)
                 Text(checkoutMode == .newWorktree
                      ? "Creates a dedicated branch and worktree under your configured base directory."
                      : "The agent edits the selected checkout directly; concurrent sessions can conflict.")
@@ -324,9 +325,9 @@ private struct CreationSection<Content: View>: View {
         HStack(alignment: .top, spacing: 14) {
             Text(number)
                 .font(.caption2.monospacedDigit().weight(.bold))
-                .foregroundStyle(FlotillaColors().accent)
+                .foregroundStyle(FlotillaColors.accent)
                 .frame(width: 24, height: 24)
-                .background(FlotillaColors().accent.opacity(0.12), in: Circle())
+                .background(FlotillaColors.accent.opacity(0.12), in: Circle())
 
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -343,141 +344,7 @@ private struct CreationSection<Content: View>: View {
     }
 }
 
-/// A compact, self-labeled control for choosing reasoning effort. Renders as a
-/// small equalizer-style bar gauge (rather than a bare `Slider`) so its
-/// purpose reads at a glance even when squeezed into a dense toolbar row, and
-/// so all four discrete levels are visible simultaneously instead of hidden
-/// behind a continuous thumb position.
-struct EffortGaugePicker: View {
-    let agent: AgentKind
-    @Binding var effort: AgentEffort
-    var accessibilityIdentifier: String? = nil
-
-    @State private var isHovering = false
-    @State private var controlWidth: CGFloat = 0
-
-    private var levels: [AgentEffort] { AgentEffort.allCases }
-
-    var body: some View {
-        if agent.supportsEffortSelection {
-            HStack(spacing: 6) {
-                Image(systemName: "gauge.with.dots.needle.67percent")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(effort.tintColor)
-                    .frame(width: 12)
-
-                barsRow
-
-                Text(effort.displayName)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(effort.tintColor)
-                    .frame(minWidth: 34, alignment: .leading)
-                    .contentTransition(.opacity)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(FlotillaColors().surfaceElevated, in: Capsule())
-            .overlay {
-                Capsule().strokeBorder(isHovering ? effort.tintColor.opacity(0.6) : FlotillaColors().separator)
-            }
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.onAppear { controlWidth = proxy.size.width }
-                        .onChange(of: proxy.size.width) { _, newValue in controlWidth = newValue }
-                }
-            )
-            .contentShape(Capsule())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        select(atX: value.location.x, width: controlWidth)
-                    }
-            )
-            .onTapGesture { location in
-                select(atX: location.x, width: controlWidth)
-            }
-            .onHover { isHovering = $0 }
-            .animation(.snappy(duration: 0.18), value: effort)
-            .animation(.easeOut(duration: 0.12), value: isHovering)
-            .help("Reasoning effort: \(effort.displayName). \(effort.detail)")
-            .accessibilityElement(children: .ignore)
-            // The current level is folded into the label (rather than relying
-            // solely on `.accessibilityValue`) because this custom control's
-            // AX value isn't reliably surfaced to assistive clients on macOS.
-            .accessibilityLabel("Reasoning effort: \(effort.displayName)")
-            .accessibilityValue(effort.displayName)
-            .accessibilityHint("Choose how much reasoning the coding agent should use.")
-            .accessibilityAdjustableAction(adjustEffort)
-            .accessibilityIdentifier(accessibilityIdentifier ?? "EffortGaugeSlider")
-        }
-    }
-
-    private var barsRow: some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            ForEach(levels) { level in
-                bar(for: level)
-            }
-        }
-        .frame(height: 16, alignment: .bottom)
-    }
-
-    private func bar(for level: AgentEffort) -> some View {
-        let isFilled = level.rank <= effort.rank
-        return Capsule()
-            .fill(isFilled ? level.tintColor : Color.secondary.opacity(0.25))
-            .frame(width: 4, height: 6 + CGFloat(level.rank) * 3.5)
-    }
-
-    private func select(atX x: CGFloat, width: CGFloat) {
-        let clampedX = min(max(x, 0), width)
-        let index = min(levels.count - 1, Int(clampedX / width * CGFloat(levels.count)))
-        let target = levels[index]
-        guard target != effort else { return }
-        withAnimation(.snappy(duration: 0.15)) { effort = target }
-    }
-
-    private func adjustEffort(_ direction: AccessibilityAdjustmentDirection) {
-        switch direction {
-        case .increment:
-            let next = min(effort.rank + 1, levels.count - 1)
-            effort = levels[next]
-        case .decrement:
-            let previous = max(effort.rank - 1, 0)
-            effort = levels[previous]
-        @unknown default:
-            break
-        }
-    }
-}
-
-private extension AgentEffort {
-    var rank: Int {
-        switch self {
-        case .low: 0
-        case .medium: 1
-        case .high: 2
-        case .xhigh: 3
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .low: "Faster responses for straightforward work."
-        case .medium: "A balanced default for most coding tasks."
-        case .high: "More reasoning for complex implementation work."
-        case .xhigh: "The deepest reasoning for the hardest tasks."
-        }
-    }
-
-    var tintColor: Color {
-        switch self {
-        case .low: .secondary
-        case .medium: FlotillaColors().statusReady
-        case .high: FlotillaColors().accent
-        case .xhigh: FlotillaColors().accent
-        }
-    }
-}
+// `EffortLevelPicker` lives in EffortLevelPicker.swift.
 
 /// A dropdown of the current `agent`'s available models — fetched live from
 /// the installed CLI (`AgentKit.ModelCatalogCache`), falling back to a small

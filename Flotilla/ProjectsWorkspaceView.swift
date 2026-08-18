@@ -77,7 +77,7 @@ struct ProjectsWorkspaceView: View {
                     }
                     .listStyle(.sidebar)
                     .scrollContentBackground(.hidden)
-                    .background(FlotillaColors().sidebar)
+                    .background(FlotillaColors.sidebar)
                     .searchable(text: $searchText, placement: .sidebar, prompt: "Projects")
                     .safeAreaInset(edge: .top, spacing: 0) { projectSidebarHeader }
                     .navigationSplitViewColumnWidth(min: 210, ideal: 245, max: 320)
@@ -102,7 +102,7 @@ struct ProjectsWorkspaceView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .background(FlotillaColors().canvas)
+        .background(FlotillaColors.canvas)
         .sheet(item: $projectSheet) { sheet in
             ProjectPathSheet(importsWorkspace: sheet == .importWorkspace) { paths in
                 for path in paths { store.addProject(at: path) }
@@ -117,7 +117,7 @@ struct ProjectsWorkspaceView: View {
                 Text("PROJECTS")
                     .font(.caption2.weight(.bold))
                     .tracking(0.9)
-                    .foregroundStyle(FlotillaColors().accent)
+                    .foregroundStyle(FlotillaColors.accent)
                 Text("\(store.projects.count) local workspaces")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -141,7 +141,7 @@ struct ProjectsWorkspaceView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
-        .background(FlotillaColors().sidebar)
+        .background(FlotillaColors.sidebar)
         .overlay(alignment: .bottom) { Divider() }
     }
 
@@ -230,7 +230,7 @@ private struct ProjectCollectionView: View {
                                 .padding(.horizontal, 9)
                                 .frame(height: 26)
                                 .background(
-                                    sortOrder == option ? FlotillaColors().surfaceElevated : .clear,
+                                    sortOrder == option ? FlotillaColors.surfaceElevated : .clear,
                                     in: RoundedRectangle(cornerRadius: 5)
                                 )
                                 .foregroundStyle(sortOrder == option ? .primary : .secondary)
@@ -252,7 +252,7 @@ private struct ProjectCollectionView: View {
             }
             .padding(24)
         }
-        .background(FlotillaColors().canvas)
+        .background(FlotillaColors.canvas)
     }
 }
 
@@ -305,7 +305,7 @@ private struct ProjectWorkspaceDetail: View {
             HStack(alignment: .center, spacing: 12) {
                 Image(systemName: "folder.fill")
                     .font(.title2)
-                    .foregroundStyle(FlotillaColors().accent)
+                    .foregroundStyle(FlotillaColors.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(project.name)
                         .font(.title2.weight(.semibold))
@@ -398,7 +398,7 @@ private struct ProjectOverviewView: View {
                 }
                 .frame(width: 150)
                 ModelPickerView(agent: agent, openCodeSubscription: openCodeSubscription, model: $model)
-                EffortGaugePicker(agent: agent, effort: $effort)
+                EffortLevelPicker(agent: agent, model: model, effort: $effort)
                 Toggle("New worktree", isOn: $useWorktree)
                     .toggleStyle(.switch)
                 Spacer()
@@ -538,9 +538,9 @@ private struct ProjectPathSheet: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: importsWorkspace ? "square.stack.3d.down.right" : "folder.badge.plus")
                     .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(FlotillaColors().accent)
+                    .foregroundStyle(FlotillaColors.accent)
                     .frame(width: 40, height: 40)
-                    .background(FlotillaColors().accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                    .background(FlotillaColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(importsWorkspace ? "Import a workspace" : "Add a project")
                         .font(.title3.weight(.semibold))
@@ -591,7 +591,7 @@ private struct ProjectPathSheet: View {
             .padding(16)
         }
         .frame(width: 520)
-        .background(FlotillaColors().surface)
+        .background(FlotillaColors.surface)
     }
 
     private var resolvedPaths: [URL] {

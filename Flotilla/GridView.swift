@@ -2,24 +2,35 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 
+/// Dispatches to one of the candidate grid designs and owns everything they
+/// share: which sessions are visible, their order, and the per-tile actions.
+///
+/// The layout controls live in `WorkspaceToolbar`, not here — an inline
+/// control bar cost vertical space on every render of a view whose whole job
+/// is showing terminals.
 struct GridView: View {
     let store: AppStore
     let terminalManager: TerminalManager
     @Binding var activeSessionID: UUID?
-    @Binding var minimumTileWidth: Double
     let openSession: (UUID) -> Void
-    @State private var selectedProjectID: UUID?
+    var projectFilter: UUID? = nil
+    @Bindable var settingsViewModel: SettingsViewModel
+
+    @State private var pendingDeletion: Session?
+
+    private var zoom: GridZoom {
+        GridZoom(setting: settingsViewModel.settings.workspace.gridMinimumTileWidth)
+    }
 
     private var visibleSessions: [Session] {
-        guard let selectedProjectID else { return store.sessions }
-        return store.sessions.filter { $0.projectID == selectedProjectID }
+        let scoped = projectFilter.map { filter in
+            store.sessions.filter { $0.projectID == filter }
+        } ?? store.sessions
+        return scoped.ordered(by: settingsViewModel.settings.workspace.gridSessionOrder)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            gridToolbar
-            Divider()
-
+        Group {
             if visibleSessions.isEmpty {
                 ContentUnavailableView(
                     store.sessions.isEmpty ? "No Live Sessions" : "No Sessions in This Project",
@@ -30,73 +41,93 @@ struct GridView: View {
                 )
                 .accessibilityIdentifier("GridEmptyState")
             } else {
-                GeometryReader { proxy in
-                    let metrics = gridMetrics(for: proxy.size)
-                    LazyVGrid(columns: metrics.columns, spacing: 12) {
-                        ForEach(visibleSessions) { session in
-                            GridTileView(
-                                session: session,
-                                store: store,
-                                terminalManager: terminalManager,
-                                isActive: activeSessionID == session.id,
-                                onActivate: { activeSessionID = session.id },
-                                onOpenSession: { openSession(session.id) }
-                            )
-                            .frame(height: metrics.tileHeight)
-                        }
+                grid
+                    .accessibilityIdentifier("GridView")
+                    .gridZoomGestures(isEnabled: true) { factor in
+                        apply(zoom.scaled(by: factor))
                     }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                }
-                .accessibilityIdentifier("GridView")
+                    .onAppear(perform: ensureActiveSession)
+                    .onChange(of: visibleSessions.map(\.id)) { ensureActiveSession() }
             }
         }
-        .background(FlotillaColors().canvas)
-        .onAppear(perform: ensureActiveSession)
-        .onChange(of: visibleSessions.map(\.id)) {
-            ensureActiveSession()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(FlotillaColors.canvas)
+        .sheet(item: $pendingDeletion) { session in
+            DeleteSessionSheet(
+                session: session,
+                onCancel: { pendingDeletion = nil },
+                onDelete: { deleteWorktree in
+                    pendingDeletion = nil
+                    Task {
+                        await store.deleteSession(
+                            sessionID: session.id,
+                            deleteWorktree: deleteWorktree,
+                            deleteBranch: settingsViewModel.settings.git.deleteBranchWithWorktree
+                        )
+                    }
+                }
+            )
         }
     }
 
-    private var gridToolbar: some View {
-        HStack(spacing: 12) {
-            Label("Session Grid", systemImage: "square.grid.2x2.fill")
-                .font(.headline)
-            Text("\(visibleSessions.count) sessions")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-
-            Menu {
-                Button("All projects") { selectedProjectID = nil }
-                Divider()
-                ForEach(store.projects) { project in
-                    Button(project.name) { selectedProjectID = project.id }
-                }
-            } label: {
-                Label(selectedProjectName, systemImage: "line.3.horizontal.decrease.circle")
-            }
-            Spacer()
-            Image(systemName: "rectangle.grid.3x2")
-                .foregroundStyle(.secondary)
-            Slider(value: $minimumTileWidth, in: 280...560, step: 20)
-                .frame(width: 120)
-                .help("Grid tile size")
-                .accessibilityLabel("Grid tile size")
-            Image(systemName: "rectangle.grid.2x2")
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .background(FlotillaColors().surface)
+    private var grid: some View {
+        MissionControlGrid(
+            sessions: visibleSessions,
+            store: store,
+            terminalManager: terminalManager,
+            zoom: zoom,
+            activeSessionID: activeSessionID,
+            actions: actions(for:)
+        )
     }
 
-    private var selectedProjectName: String {
-        guard let selectedProjectID,
-              let project = store.projects.first(where: { $0.id == selectedProjectID }) else {
-            return "All projects"
-        }
-        return project.name
+    private func apply(_ newZoom: GridZoom) {
+        guard newZoom != zoom else { return }
+        settingsViewModel.settings.workspace.gridMinimumTileWidth = newZoom.setting
+    }
+
+    private func actions(for session: Session) -> SessionTileActions {
+        SessionTileActions(
+            onActivate: { activeSessionID = session.id },
+            onOpenSession: { openSession(session.id) },
+            onDelete: { pendingDeletion = session },
+            onRestart: { store.restartSession(sessionID: session.id) },
+            onRevealInFinder: {
+                let path = session.worktree?.worktreePath ?? session.workingDirectory
+                NSWorkspace.shared.activateFileViewerSelecting([path])
+            },
+            onCopyPath: {
+                let path = session.worktree?.worktreePath ?? session.workingDirectory
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(path.path, forType: .string)
+            },
+            onCopyBranch: {
+                guard let branch = session.worktree?.branchName else { return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(branch, forType: .string)
+            },
+            onDropSession: { draggedID in
+                move(draggedID, toPositionOf: session.id)
+            }
+        )
+    }
+
+    /// Persists the full visible order rather than a delta, so the saved order
+    /// stays meaningful even when the grid is filtered to one project.
+    private func move(_ draggedID: UUID, toPositionOf targetID: UUID) {
+        var ordered = visibleSessions.map(\.id)
+        guard let from = ordered.firstIndex(of: draggedID),
+              let to = ordered.firstIndex(of: targetID),
+              from != to
+        else { return }
+        ordered.remove(at: from)
+        ordered.insert(draggedID, at: to)
+
+        let reordered = ordered.map(\.uuidString)
+        // Sessions outside the current filter keep their saved position.
+        let untouched = settingsViewModel.settings.workspace.gridSessionOrder
+            .filter { !reordered.contains($0) }
+        settingsViewModel.settings.workspace.gridSessionOrder = reordered + untouched
     }
 
     private func ensureActiveSession() {
@@ -104,8 +135,7 @@ struct GridView: View {
             activeSessionID = nil
             return
         }
-        if let activeSessionID,
-           visibleSessions.contains(where: { $0.id == activeSessionID }) {
+        if let activeSessionID, visibleSessions.contains(where: { $0.id == activeSessionID }) {
             return
         }
         if let selectedSessionID = store.selectedSessionID,
@@ -115,24 +145,4 @@ struct GridView: View {
             activeSessionID = visibleSessions[0].id
         }
     }
-
-    private func gridMetrics(for size: CGSize) -> GridMetrics {
-        let availableWidth = max(1, size.width - 24)
-        let availableHeight = max(1, size.height - 24)
-        let requestedMinimumWidth = max(280, minimumTileWidth)
-        let maximumColumns = max(1, Int((availableWidth + 12) / (requestedMinimumWidth + 12)))
-        let columnCount = min(visibleSessions.count, maximumColumns)
-        let rowCount = max(1, Int(ceil(Double(visibleSessions.count) / Double(columnCount))))
-        let tileHeight = max(1, (availableHeight - CGFloat(rowCount - 1) * 12) / CGFloat(rowCount))
-        let columns = Array(
-            repeating: GridItem(.flexible(minimum: 1), spacing: 12),
-            count: columnCount
-        )
-        return GridMetrics(columns: columns, tileHeight: tileHeight)
-    }
-}
-
-private struct GridMetrics {
-    let columns: [GridItem]
-    let tileHeight: CGFloat
 }

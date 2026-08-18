@@ -12,22 +12,34 @@ struct TerminalHostView: NSViewRepresentable {
     var contentInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
 
     func makeNSView(context: Context) -> NSView {
-        XirpTerminalContainerView(
+        let view = XirpTerminalContainerView(
             controller: controller,
             terminalView: controller.terminalView(for: presentation),
             isFocused: isFocused,
             contentInsets: contentInsets
         )
+        // This renderer may have spent the agent's last burst of output
+        // off-screen or in a differently sized container, in which case its
+        // history is wrapped for the wrong width.
+        controller.makeAuthoritative(presentation)
+        controller.reflowOnDisplay(presentation)
+        return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         guard let container = nsView as? XirpTerminalContainerView else { return }
+        let terminalView = controller.terminalView(for: presentation)
+        let isRemount = container.mountedTerminalView !== terminalView
         container.attach(
             controller: controller,
-            terminalView: controller.terminalView(for: presentation),
+            terminalView: terminalView,
             isFocused: isFocused,
             contentInsets: contentInsets
         )
+        if isRemount {
+            controller.makeAuthoritative(presentation)
+        controller.reflowOnDisplay(presentation)
+        }
     }
 }
 
@@ -35,7 +47,7 @@ struct TerminalHostView: NSViewRepresentable {
 /// same eight-point breathing room without changing its PTY sizing logic.
 private final class XirpTerminalContainerView: NSView {
     private weak var controller: TerminalController?
-    private weak var mountedTerminalView: NSView?
+    private(set) weak var mountedTerminalView: NSView?
     private var terminalConstraints: [NSLayoutConstraint] = []
     private var shouldFocusTerminal = false
     private var hasRequestedFocus = false

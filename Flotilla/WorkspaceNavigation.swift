@@ -4,22 +4,6 @@ import SessionKit
 // Shared navigation types are now in WorkspaceNavigator.swift
 // This file only contains the command enum for the command palette
 
-enum WorkspaceSheet: Identifiable {
-    case createSession
-    case commandPalette
-    case shortcuts
-    case restore
-
-    var id: String {
-        switch self {
-        case .createSession: "create-session"
-        case .commandPalette: "command-palette"
-        case .shortcuts: "shortcuts"
-        case .restore: "restore"
-        }
-    }
-}
-
 enum WorkspaceCommand: String, CaseIterable, Identifiable {
     case newSession
     case showOverview

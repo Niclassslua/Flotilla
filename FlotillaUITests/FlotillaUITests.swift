@@ -62,12 +62,18 @@ final class FlotillaUITests: XCTestCase {
     func testGlobalHomeCommandPaletteAndProjectNavigation() {
         let app = launchedApp()
 
-        let homeButton = app.descendants(matching: .any)["Global.Home"].firstMatch
+        // "Global.Overview" belonged to the pre-FlotillaShell global bar; the
+        // live rail publishes "Sidebar.Overview". Asserting on the dashboard's
+        // identifier rather than its headline copy keeps this test valid across
+        // the four home designs, which do not share a headline.
+        let homeButton = app.descendants(matching: .any)["Sidebar.Overview"].firstMatch
         XCTAssertTrue(homeButton.waitForExistence(timeout: 5))
         homeButton.click()
-        XCTAssertTrue(app.staticTexts["What should an agent build?"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["HomeDashboard"].firstMatch.waitForExistence(timeout: 5))
 
-        let paletteButton = app.descendants(matching: .any)["CommandPaletteButton"].firstMatch
+        // Same drift as "Global.Overview" above: the legacy global bar's
+        // "CommandPaletteButton" is now the toolbar's "Toolbar.CommandPalette".
+        let paletteButton = app.descendants(matching: .any)["Toolbar.CommandPalette"].firstMatch
         XCTAssertTrue(paletteButton.waitForExistence(timeout: 5))
         paletteButton.click()
 

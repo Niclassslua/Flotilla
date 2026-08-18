@@ -2,7 +2,6 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 import GitKit
-import ProcessKit
 
 enum SessionCardVariant {
     case row
@@ -11,45 +10,49 @@ enum SessionCardVariant {
     case compact
 }
 
-struct SessionCard: View {
+struct SessionCard<Terminal: View>: View {
     let session: Session
     let variant: SessionCardVariant
     let diffStatStore: DiffStatStore?
+    let activityStore: SessionActivityStore?
+    let isSelected: Bool
+    let isActive: Bool
     let onTap: () -> Void
     let onDelete: () -> Void
     let onRestart: () -> Void
     let onRevealInFinder: () -> Void
     let onCopyPath: () -> Void
     let onCopyBranch: () -> Void
-    let isSelected: Bool
-    let isActive: Bool
-
-    @Environment(\.flotillaColors) private var colors
+    @ViewBuilder let terminal: () -> Terminal
 
     init(
         session: Session,
         variant: SessionCardVariant = .row,
         diffStatStore: DiffStatStore? = nil,
+        activityStore: SessionActivityStore? = nil,
+        isSelected: Bool = false,
+        isActive: Bool = false,
         onTap: @escaping () -> Void = {},
         onDelete: @escaping () -> Void = {},
         onRestart: @escaping () -> Void = {},
         onRevealInFinder: @escaping () -> Void = {},
         onCopyPath: @escaping () -> Void = {},
         onCopyBranch: @escaping () -> Void = {},
-        isSelected: Bool = false,
-        isActive: Bool = false
+        @ViewBuilder terminal: @escaping () -> Terminal = { EmptyView() }
     ) {
         self.session = session
         self.variant = variant
         self.diffStatStore = diffStatStore
+        self.activityStore = activityStore
+        self.isSelected = isSelected
+        self.isActive = isActive
         self.onTap = onTap
         self.onDelete = onDelete
         self.onRestart = onRestart
         self.onRevealInFinder = onRevealInFinder
         self.onCopyPath = onCopyPath
         self.onCopyBranch = onCopyBranch
-        self.isSelected = isSelected
-        self.isActive = isActive
+        self.terminal = terminal
     }
 
     var body: some View {
@@ -76,7 +79,7 @@ struct SessionCard: View {
                         .font(.callout.weight(.medium))
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    Text(SessionRow.compactTimestamp(for: session.lastActiveAt))
+                    Text(compactTimestamp(for: session.lastActiveAt))
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.tertiary)
                     deleteButton
@@ -92,9 +95,10 @@ struct SessionCard: View {
         .onTapGesture(perform: onTap)
         .contextMenu { contextMenu }
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("SessionRow-\(session.title)")
     }
 
-    // MARK: - Tile Variant (Grid)
+    // MARK: - Tile Variant (Grid) — Dense status card + last output line
 
     private var tileView: some View {
         VStack(spacing: 0) {
@@ -102,19 +106,20 @@ struct SessionCard: View {
             Divider()
             tileContent
         }
-        .background(colors.terminalCanvas)
+        .background(FlotillaColors.terminalCanvas)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(tileBorder)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .contextMenu { contextMenu }
+        .accessibilityIdentifier("GridTile-\(session.title)")
     }
 
     private var tileHeader: some View {
         HStack(spacing: 8) {
             Text(session.title)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(colors.statusReady)
+                .foregroundStyle(FlotillaColors.textPrimary)
                 .lineLimit(1)
             Text("/")
                 .font(.caption2)
@@ -148,28 +153,73 @@ struct SessionCard: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 34)
-        .background(colors.surface)
+        .background(FlotillaColors.surface)
     }
 
     @ViewBuilder
     private var tileContent: some View {
-        ContentUnavailableView(
-            "Agent Stopped",
-            systemImage: "exclamationmark.terminal",
-            description: Text("Open this session to restart it.")
-        )
+        VStack(alignment: .leading, spacing: 8) {
+            // Branch / Diff stat
+            HStack(spacing: 8) {
+                if let branch = session.worktree?.branchName {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(branch)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                if let diffStatStore {
+                    Spacer(minLength: 2)
+                    SessionDiffStatView(session: session, diffStatStore: diffStatStore)
+                }
+            }
+
+            // Last output line
+            if let activityStore,
+               let lastLine = activityStore.lastOutputLine(for: session.id) {
+                Text(lastLine)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            // Elapsed time
+            HStack {
+                Text(elapsedTime)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var tileBorder: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .strokeBorder(
                 isActive
-                    ? colors.accent.opacity(0.75)
+                    ? FlotillaColors.accent.opacity(0.75)
                     : session.status == .waitingForInput
-                    ? colors.statusWaitingForInput.opacity(0.8)
-                    : colors.separator.opacity(0.75),
+                    ? FlotillaColors.statusWaitingForInput.opacity(0.8)
+                    : FlotillaColors.separator.opacity(0.75),
                 lineWidth: isActive || session.status == .waitingForInput ? 1.5 : 1
             )
+    }
+
+    private var elapsedTime: String {
+        let elapsed = Date().timeIntervalSince(session.createdAt)
+        switch elapsed {
+        case ..<60: return "\(Int(elapsed))s"
+        case ..<3600: return "\(Int(elapsed/60))m"
+        case ..<86400: return "\(Int(elapsed/3600))h"
+        default: return "\(Int(elapsed/86400))d"
+        }
     }
 
     // MARK: - Board Variant (Kanban)
@@ -189,10 +239,10 @@ struct SessionCard: View {
             }
         }
         .padding(10)
-        .background(colors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+        .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                .strokeBorder(colors.separator)
+                .strokeBorder(FlotillaColors.separator)
         )
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: onTap)
@@ -227,18 +277,7 @@ struct SessionCard: View {
     }
 
     private var terminalPlaceholder: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "terminal")
-                .font(.system(size: 24))
-                .foregroundStyle(.tertiary)
-
-            Text("No terminal output")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 120)
-        .background(colors.terminalCanvas, in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous))
+        terminal()
     }
 
     private var gitDiffBadge: some View {
@@ -266,7 +305,7 @@ struct SessionCard: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(colors.surface, in: Capsule())
+        .background(FlotillaColors.surface, in: Capsule())
     }
 
     private var goalProgress: some View {
@@ -293,10 +332,10 @@ struct SessionCard: View {
     private var providerTile: some View {
         ZStack(alignment: .bottomTrailing) {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(colors.surface)
+                .fill(FlotillaColors.surface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(colors.separator.opacity(0.6), lineWidth: 0.5)
+                        .strokeBorder(FlotillaColors.separator.opacity(0.6), lineWidth: 0.5)
                 }
                 .overlay {
                     ProviderLogo(agent: session.agent)
@@ -317,19 +356,19 @@ struct SessionCard: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 8, height: 8)
-                .overlay(Circle().strokeBorder(colors.sidebar, lineWidth: 1.5))
+                .overlay(Circle().strokeBorder(FlotillaColors.sidebar, lineWidth: 1.5))
         }
         .frame(width: 16, height: 16)
     }
 
     private var statusColor: Color {
         switch session.status {
-        case .working: return colors.statusWorking
-        case .idle: return colors.statusIdle
-        case .waitingForInput: return colors.statusWaitingForInput
-        case .ready: return colors.statusReady
-        case .finished: return colors.statusFinished
-        case .crashed: return colors.statusCrashed
+        case .working: return FlotillaColors.statusWorking
+        case .idle: return FlotillaColors.statusIdle
+        case .waitingForInput: return FlotillaColors.statusWaitingForInput
+        case .ready: return FlotillaColors.statusReady
+        case .finished: return FlotillaColors.statusFinished
+        case .crashed: return FlotillaColors.statusCrashed
         }
     }
 
@@ -390,15 +429,25 @@ struct SessionCard: View {
             .overlay {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(colors.separator, lineWidth: 0.5)
+                        .strokeBorder(FlotillaColors.separator, lineWidth: 0.5)
                 }
             }
     }
 
     private var backgroundFill: Color {
-        if isSelected { return colors.surfaceElevated }
-        if session.status == .waitingForInput { return colors.statusWaitingForInput.opacity(isSelected ? 0.13 : 0.08) }
+        if isSelected { return FlotillaColors.surfaceElevated }
+        if session.status == .waitingForInput { return FlotillaColors.statusWaitingForInput.opacity(isSelected ? 0.13 : 0.08) }
         return isSelected ? Color.white.opacity(0.035) : .clear
+    }
+
+    private func compactTimestamp(for date: Date, relativeTo now: Date = Date()) -> String {
+        let seconds = max(0, now.timeIntervalSince(date))
+        switch seconds {
+        case ..<90: return "now"
+        case ..<3_600: return "\(Int(seconds / 60))m"
+        case ..<86_400: return "\(Int(seconds / 3_600))h"
+        default: return "\(Int(seconds / 86_400))d"
+        }
     }
 
     @ViewBuilder

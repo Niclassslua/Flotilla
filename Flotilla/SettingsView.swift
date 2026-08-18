@@ -121,7 +121,7 @@ struct SettingsView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 720, idealWidth: 800, minHeight: 540, idealHeight: 620)
-        .tint(FlotillaColors().accent)
+        .tint(FlotillaColors.accent)
         #if DEBUG
         .overlay(alignment: .topLeading) {
             Text("Settings")
@@ -262,6 +262,16 @@ private struct GeneralSettingsPane: View {
                     .foregroundStyle(.secondary)
             } header: {
                 SettingsSectionHeader("Grid Workspace", systemImage: "rectangle.3.group")
+            }
+
+            Section {
+                Toggle("Show labels on sidebar icons", isOn: $viewModel.settings.workspace.sidebarRailLabels)
+                    .toggleStyle(.switch)
+                Text("Labels make Overview, Sessions, and Projects easier to tell apart at a glance, at the cost of a wider rail.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                SettingsSectionHeader("Sidebar", systemImage: "sidebar.left")
             }
         }
         .flotillaSettingsFormLayout()
@@ -619,7 +629,7 @@ private struct ToolStatusRow: View {
         LabeledContent(name) {
             HStack(spacing: 7) {
                 Circle()
-                    .fill(location == nil ? Color.orange : FlotillaColors().accent)
+                    .fill(location == nil ? Color.orange : FlotillaColors.accent)
                     .frame(width: 7, height: 7)
                 Text(location?.path ?? "Not found")
                     .font(.system(.caption, design: .monospaced))

@@ -7,7 +7,6 @@ struct SyntaxHighlightedTextEditor: View {
     let font: Font
     let onTextChange: (String) -> Void
     @FocusState private var isFocused: Bool
-    @Environment(\.flotillaColors) private var colors
     @State private var highlightedText: AttributedString = AttributedString()
 
     init(
@@ -46,7 +45,7 @@ struct SyntaxHighlightedTextEditor: View {
                     .colorMultiply(.clear)
             }
         }
-        .background(colors.terminalCanvas)
+        .background(FlotillaColors.terminalCanvas)
         .onAppear {
             updateHighlighting()
         }
@@ -60,7 +59,7 @@ struct SyntaxHighlightedTextEditor: View {
         var result = AttributedString(text)
         let baseFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         result.font = baseFont
-        result.foregroundColor = colors.textPrimary
+        result.foregroundColor = FlotillaColors.textPrimary
 
         let patterns = highlightingPatterns(for: language)
 
@@ -70,12 +69,15 @@ struct SyntaxHighlightedTextEditor: View {
             let matches = regex?.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length)) ?? []
 
             for match in matches.reversed() {
-                if let range = Range(match.range(at: 0), in: text),
-                   let attrRange = Range(match.range(at: 0), in: result) {
+                if let attrRange = Range(match.range(at: 0), in: result) {
                     result[attrRange].foregroundColor = attributes.color
                     if let weight = attributes.weight {
-                        let fontManager = NSFontManager.shared
-                        let newFont = fontManager.convert(baseFont, toHaveTrait: weight == .bold ? .boldFontMask : .unboldFontMask)
+                        let newFont: NSFont
+                        if weight == .bold {
+                            newFont = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
+                        } else {
+                            newFont = baseFont
+                        }
                         result[attrRange].font = newFont
                     }
                 }
@@ -86,12 +88,12 @@ struct SyntaxHighlightedTextEditor: View {
     }
 
     private func highlightingPatterns(for language: Language) -> [(String, (color: Color, weight: NSFont.Weight?))] {
-        let keywordColor = colors.accent
-        let commentColor = colors.textTertiary
-        let stringColor = colors.success
-        let numberColor = colors.statusReady
-        let typeColor = colors.statusReady
-        let functionColor = colors.warning
+        let keywordColor = FlotillaColors.accent
+        let commentColor = FlotillaColors.textTertiary
+        let stringColor = FlotillaColors.success
+        let numberColor = FlotillaColors.statusReady
+        let typeColor = FlotillaColors.statusReady
+        let functionColor = FlotillaColors.warning
 
         switch language {
         case .swift:

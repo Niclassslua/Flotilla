@@ -1,14 +1,20 @@
 import SwiftUI
 import DesignSystem
+import MarkdownParser
 
 struct FileBrowserView: View {
     let rootURL: URL
-    @State private var viewModel: FileBrowserViewModel
+    @Bindable var viewModel: FileBrowserViewModel
     @FocusState private var isEditorFocused: Bool
 
     init(rootURL: URL, service: any WorkspaceFileServicing = WorkspaceFileService()) {
         self.rootURL = rootURL
-        _viewModel = State(initialValue: FileBrowserViewModel(root: rootURL, service: service))
+        self._viewModel = Bindable(wrappedValue: FileBrowserViewModel(root: rootURL, service: service))
+    }
+
+    init(viewModel: FileBrowserViewModel) {
+        self.rootURL = viewModel.rootURL
+        self._viewModel = Bindable(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -43,14 +49,14 @@ struct FileBrowserView: View {
             }
             .padding(.horizontal, FlotillaSpacing.medium)
             .padding(.vertical, FlotillaSpacing.small)
-            .background(FlotillaColors().surface)
+            .background(FlotillaColors.surface)
 
             Divider()
 
             if viewModel.isLoading && viewModel.nodes.isEmpty {
                 ProgressView("Loading files…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(FlotillaColors().surface)
+                    .background(FlotillaColors.surface)
             } else if let errorMessage = viewModel.errorMessage, viewModel.nodes.isEmpty {
                 ContentUnavailableView(
                     "Error Loading Files",
@@ -58,7 +64,7 @@ struct FileBrowserView: View {
                     description: Text(errorMessage)
                 )
                 .accessibilityIdentifier("FileBrowser.Error")
-                .background(FlotillaColors().surface)
+                .background(FlotillaColors.surface)
             } else if viewModel.nodes.isEmpty {
                 ContentUnavailableView(
                     "No Files",
@@ -66,7 +72,7 @@ struct FileBrowserView: View {
                     description: Text("This worktree is empty.")
                 )
                 .accessibilityIdentifier("FileBrowser.Empty")
-                .background(FlotillaColors().surface)
+                .background(FlotillaColors.surface)
             } else {
                 List {
                     OutlineGroup(viewModel.nodes, children: \.children) { node in
@@ -88,85 +94,33 @@ struct FileBrowserView: View {
                         .disabled(node.isDirectory)
                         .listRowBackground(
                             RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                                .fill(viewModel.selectedNode == node ? FlotillaColors().accent.opacity(0.09) : .clear)
+                                .fill(viewModel.selectedNode == node ? FlotillaColors.accent.opacity(0.09) : .clear)
                         )
                         .accessibilityIdentifier("FileBrowser.Row-\(node.name)")
                     }
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
-                .background(FlotillaColors().surface)
+                .background(FlotillaColors.surface)
                 .accessibilityIdentifier("FileBrowser.List")
             }
         }
-        .background(FlotillaColors().surface)
+        .background(FlotillaColors.surface)
         .frame(maxHeight: .infinity)
     }
 
     @ViewBuilder
     private var editor: some View {
-        @Bindable var bindableViewModel = viewModel
         if let node = viewModel.selectedNode {
-            VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    Image(systemName: node.iconInfo.systemName)
-                        .foregroundStyle(node.iconInfo.color)
-                        .font(.system(size: 16))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(node.name)
-                            .font(.headline)
-                        Text(node.url.path.replacingOccurrences(of: rootURL.path + "/", with: ""))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if let message = viewModel.message {
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("Save") {
-                        isEditorFocused = false
-                        Task {
-                            await Task.yield()
-                            await viewModel.save()
-                        }
-                    }
-                    .keyboardShortcut("s", modifiers: .command)
-                    .disabled(viewModel.isSaving)
-                    .accessibilityIdentifier("FileBrowser.SaveButton")
-                }
-                .padding(.horizontal, FlotillaSpacing.medium)
-                .padding(.vertical, FlotillaSpacing.small)
-                .background(FlotillaColors().surface)
+            let isMarkdown = node.url.pathExtension.lowercased() == "md"
+                || node.url.pathExtension.lowercased() == "markdown"
+                || node.url.pathExtension.lowercased() == "mdx"
 
-                if let errorMessage = viewModel.errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, FlotillaSpacing.medium)
-                        .padding(.vertical, FlotillaSpacing.xSmall)
-                        .background(Color.red.opacity(0.08))
-                        .accessibilityIdentifier("FileBrowser.ErrorMessage")
-                }
-
-                Divider()
-
-                SyntaxHighlightedTextEditor(
-                    text: $bindableViewModel.content,
-                    language: SyntaxHighlightedTextEditor.Language.from(url: node.url),
-                    font: .system(.body, design: .monospaced),
-                    onTextChange: { newValue in
-                        bindableViewModel.content = newValue
-                    }
-                )
-                .focused($isEditorFocused)
-                .padding(FlotillaSpacing.small)
-                .accessibilityIdentifier("FileBrowser.Editor")
-                .accessibilityLabel("File editor for \(node.name)")
+            if isMarkdown {
+                MarkdownFileEditor(node: node)
+            } else {
+                SyntaxHighlightedFileEditor(node: node)
             }
-            .frame(maxHeight: .infinity)
         } else {
             ContentUnavailableView(
                 "Select a File",
@@ -174,8 +128,86 @@ struct FileBrowserView: View {
                 description: Text("Open a text file to inspect or edit it in place.")
             )
             .accessibilityIdentifier("FileBrowser.NoSelection")
-            .background(FlotillaColors().terminalCanvas)
+            .background(FlotillaColors.terminalCanvas)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+extension FileBrowserView {
+    @ViewBuilder
+    private func MarkdownFileEditor(node: FileNode) -> some View {
+        let markdownContent = viewModel.content
+        let attributed = MarkdownParser(markdownContent).attributedString()
+
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "doc.text")
+                    .foregroundStyle(Color.secondary)
+                    .font(.system(size: 16))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(node.name)
+                        .font(.headline)
+                    Text(node.url.path.replacingOccurrences(of: "", with: ""))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let message = viewModel.message {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button("Save") {
+                    isEditorFocused = false
+                    Task {
+                        await Task.yield()
+                        await viewModel.save()
+                    }
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(viewModel.isSaving)
+                .accessibilityIdentifier("FileBrowser.SaveButton")
+            }
+            .padding(.horizontal, FlotillaSpacing.medium)
+            .padding(.vertical, FlotillaSpacing.small)
+            .background(FlotillaColors.surface)
+
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, FlotillaSpacing.medium)
+                    .padding(.vertical, FlotillaSpacing.xSmall)
+                    .background(Color.red.opacity(0.08))
+                    .accessibilityIdentifier("FileBrowser.ErrorMessage")
+            }
+
+            Divider()
+
+            Text(AttributedString(attributed))
+                .font(.system(.body, design: .monospaced))
+                .focused($isEditorFocused)
+                .padding(FlotillaSpacing.small)
+                .accessibilityIdentifier("FileBrowser.MarkdownEditor")
+                .accessibilityLabel("Markdown editor for \(node.name)")
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func SyntaxHighlightedFileEditor(node: FileNode) -> some View {
+        SyntaxHighlightedTextEditor(
+            text: $viewModel.content,
+            language: SyntaxHighlightedTextEditor.Language.from(url: node.url),
+            font: .system(.body, design: .monospaced),
+            onTextChange: { newValue in
+                viewModel.content = newValue
+            }
+        )
+        .focused($isEditorFocused)
+        .padding(FlotillaSpacing.small)
+        .accessibilityIdentifier("FileBrowser.Editor")
     }
 }

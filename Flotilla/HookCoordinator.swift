@@ -19,7 +19,7 @@ import HooksKit
 @MainActor
 final class HookCoordinator {
     private let store: AppStore
-    private let screenReader: any SessionScreenReading
+    let screenReader: any SessionScreenReading
     private let dispatcher: NotificationDispatching
     private let notificationsEnabled: @MainActor () -> Bool
     private var monitors: [UUID: SessionScreenMonitor] = [:]

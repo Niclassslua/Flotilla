@@ -549,6 +549,7 @@ final class AppStore {
     /// Creates (and immediately starts) a new session: saves the project if
     /// it's new, resolves main-checkout-vs-new-worktree via `WorktreePlanner`,
     /// starts the selected agent's real PTY-backed process, and selects it.
+    /// Returns the ID of the created session, or nil if creation failed.
     func createSession(
         title: String,
         goal: String,
@@ -558,7 +559,7 @@ final class AppStore {
         projectFolder: URL?,
         checkoutMode: CheckoutMode,
         deliverGoal: Bool = true
-    ) async {
+    ) async -> UUID? {
         lastCreationError = nil
         var createdWorktree: WorktreeInfo?
         do {
@@ -615,6 +616,7 @@ final class AppStore {
 
             reload()
             selectedSessionID = session.id
+            return session.id
         } catch {
             var message = error.localizedDescription
             if let createdWorktree {
@@ -630,6 +632,7 @@ final class AppStore {
                 }
             }
             lastCreationError = message
+            return nil
         }
     }
 

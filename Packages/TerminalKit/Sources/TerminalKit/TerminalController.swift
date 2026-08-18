@@ -1,6 +1,6 @@
 import Foundation
 import AppKit
-import SwiftTerm
+@preconcurrency import SwiftTerm
 import ProcessKit
 
 /// A distinct renderer for each place a session can appear. Xirp keeps its
@@ -46,7 +46,19 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     private var outputTask: Task<Void, Never>?
     private var accessibilityTask: Task<Void, Never>?
     private var resizeTask: Task<Void, Never>?
+    private var reflowTask: Task<Void, Never>?
     private var hasSentInitialResize = false
+
+    /// Which renderer is allowed to drive the PTY size.
+    ///
+    /// There is one PTY per session but several renderers of it, and every one
+    /// of them reports `sizeChanged` to this same controller. Without this
+    /// gate the last renderer to lay out wins, so a 23-row grid tile laying
+    /// out after the 59-row focused view resizes the agent down to 23 rows —
+    /// and a Kanban peek card resizes it smaller still. The agent then draws
+    /// into a fraction of the visible terminal, which is what "the resize
+    /// sometimes doesn't work" looks like from the outside.
+    private var authoritativePresentation: TerminalPresentation = .session
     private let pendingOutput = CoalescingOutputBuffer()
     private var lastPublishedAccessibleText: [ObjectIdentifier: String] = [:]
 
@@ -54,6 +66,11 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// as opposed to the number of PTY reads received. Exposed so tests can
     /// assert that a burst of reads collapses into far fewer flushes.
     public private(set) var outputFlushCount = 0
+
+    /// Below this, a reported size is a layout artefact rather than a window
+    /// anyone is looking at — see `sizeChanged`.
+    private static let minimumUsableCols = 20
+    private static let minimumUsableRows = 5
 
     private static let maximumReplayBytes = 2 * 1_024 * 1_024
     private static let replayTrimSlack = 256 * 1_024
@@ -84,14 +101,16 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         self.replayBuffer = initialScrollback
         super.init()
         configure(sessionTerminalView)
-        if !initialScrollback.isEmpty {
+if !initialScrollback.isEmpty {
             let bytes = [UInt8](initialScrollback)
             TerminalPerfLog.measure(
                 "TerminalController.replayInitialScrollback",
                 "\(accessibilityIdentifier) \(bytes.count)B"
             ) {
                 sessionTerminalView.feed(byteArray: bytes[...])
-                publishAccessibleContent()
+                Task { @MainActor in
+                    await publishAccessibleContent()
+                }
             }
         }
         consumeOutput()
@@ -116,9 +135,64 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
             if !replayBuffer.isEmpty {
                 let bytes = [UInt8](replayBuffer)
                 view.feed(byteArray: bytes[...])
-                publishAccessibleContent(for: view)
+                Task { @MainActor in
+                    await publishAccessibleContent(for: view)
+                }
             }
             return view
+        }
+    }
+
+    /// Marks a renderer as the one the user is looking at, so it — and only it
+    /// — drives the PTY size from here on.
+    ///
+    /// `.peek` is never authoritative: a Kanban card is a thumbnail, and
+    /// letting one resize the agent to card dimensions would wreck the session
+    /// for every other view of it.
+    @MainActor
+    public func makeAuthoritative(_ presentation: TerminalPresentation) {
+        guard presentation != .peek, authoritativePresentation != presentation else { return }
+        authoritativePresentation = presentation
+        TerminalPerfLog.event("authoritative \(accessibilityIdentifier) → \(presentation)")
+        // The renderer taking over may already be at its final size, in which
+        // case no further `sizeChanged` is coming and the PTY would keep the
+        // size the previous renderer left behind.
+        if let view = terminalViews[presentation] {
+            let terminal = view.getTerminal()
+            let size = terminal.getDims()
+            process.resize(PTYSize(cols: size.cols, rows: size.rows))
+        }
+    }
+
+    /// Re-wraps one renderer's history at the size it currently has.
+    ///
+    /// Each presentation keeps its own emulator, and an emulator only wraps
+    /// text at the width it had when the bytes arrived — resizing re-lays out
+    /// the screen but does not re-flow what is already in it. So a renderer
+    /// that was off-screen, or sitting in a narrow grid tile, while the agent
+    /// was writing shows its transcript wrapped for the *old* width the moment
+    /// it becomes the visible one: open a tile full-screen and the text stays
+    /// hard-wrapped to the tile's column count.
+    ///
+    /// Replaying the transcript into it is the same path already used when a
+    /// renderer is first created, so the emulator ends up in the state it
+    /// would have been in had it been this size all along.
+    ///
+    /// Debounced, because the mount that triggers this is immediately followed
+    /// by the layout pass that gives the renderer its real size — replaying
+    /// before that lands would just re-wrap at the stale width again.
+    @MainActor
+    public func reflowOnDisplay(_ presentation: TerminalPresentation) {
+        guard let view = terminalViews[presentation] else { return }
+        reflowTask?.cancel()
+        reflowTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled, let self, !self.replayBuffer.isEmpty else { return }
+            TerminalPerfLog.event("reflow \(self.accessibilityIdentifier) presentation=\(presentation)")
+            view.getTerminal().resetToInitialState()
+            let bytes = [UInt8](self.replayBuffer)
+            view.feed(byteArray: bytes[...])
+            self.publishAccessibleContent(for: view)
         }
     }
 
@@ -266,6 +340,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     deinit {
         outputTask?.cancel()
         accessibilityTask?.cancel()
+        reflowTask?.cancel()
         resizeTask?.cancel()
     }
 
@@ -318,7 +393,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         accessibilityTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
-            self?.publishAccessibleContent()
+            await self?.publishAccessibleContent()
         }
     }
 
@@ -334,6 +409,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         }
     }
 
+@MainActor
     private func publishAccessibleContent() {
         for view in terminalViews.values {
             publishAccessibleContent(for: view)
@@ -344,6 +420,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// `setAccessibilityValue` call entirely when the serialized buffer text
     /// hasn't changed since the last publish — both `getBufferAsData` and the
     /// AX write are otherwise paid on every debounce tick per renderer.
+    @MainActor
     private func publishAccessibleContent(for terminalView: TerminalView) {
         guard terminalView.window != nil, let terminal = terminalView.terminal else { return }
         let text = String(decoding: terminal.getBufferAsData(), as: UTF8.self)
@@ -361,6 +438,27 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     }
 
     public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+        // Only the renderer the user is actually looking at may resize the
+        // agent — see `authoritativePresentation`.
+        guard let presentation = terminalViews.first(where: { $0.value === source })?.key,
+              presentation == authoritativePresentation
+        else {
+            TerminalPerfLog.event("sizeChanged ignored (not authoritative) \(accessibilityIdentifier) → \(newCols)x\(newRows)")
+            return
+        }
+
+        // A renderer measured mid-layout, before its frame is real, reports an
+        // absurd size — a near-zero frame comes through as 5x11. Forwarding
+        // that resizes the agent to five columns, and a TUI does not re-flow
+        // what it has already drawn: one transient bad measurement leaves the
+        // session permanently mangled, its UI wrapped into a narrow ribbon
+        // long after the window is large again. No real window is this small,
+        // so there is nothing to lose by waiting for the next measurement.
+        guard newCols >= Self.minimumUsableCols, newRows >= Self.minimumUsableRows else {
+            TerminalPerfLog.event("sizeChanged ignored (degenerate) \(accessibilityIdentifier) → \(newCols)x\(newRows)")
+            return
+        }
+
         // The process starts at a deliberately narrow guessed size (see
         // SessionProcessManager) before any terminal view has laid out. The
         // first real measurement corrects that mismatch immediately, so the

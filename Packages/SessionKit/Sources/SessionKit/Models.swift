@@ -15,6 +15,10 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Whether the CLI accepts a reasoning-effort flag at all. OpenCode has
+    /// no equivalent knob — effort is a property of the upstream model there,
+    /// not something the CLI exposes. Which *levels* an agent accepts (and
+    /// which of those a given model accepts) is `AgentEffortCatalog`'s job.
     public var supportsEffortSelection: Bool {
         switch self {
         case .claudeCode, .codexCLI: true
@@ -23,20 +27,42 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
     }
 }
 
+/// The union of reasoning-effort levels across the supported CLIs, ordered
+/// from cheapest to deepest.
+///
+/// No single agent accepts all of them: Claude Code's `--effort` tops out at
+/// `max` and has no `minimal`/`ultra`, while Codex's `model_reasoning_effort`
+/// accepts the full set but restricts it further *per model*. `AgentEffort` is
+/// therefore only the vocabulary — availability comes from
+/// `AgentKit.AgentEffortCatalog`, and the human-facing name for a level is
+/// agent-specific (`AgentEffortCatalog.label(for:agent:)`); `displayName` is
+/// the neutral fallback used for persisted values and accessibility.
 public enum AgentEffort: String, Codable, CaseIterable, Sendable, Identifiable {
+    case minimal
     case low
     case medium
     case high
     case xhigh
+    case max
+    case ultra
 
     public var id: String { rawValue }
 
+    /// Rank along the cheap → deep ramp. Stable across agents, so a level can
+    /// be clamped into another agent's or model's supported set.
+    public var rank: Int {
+        AgentEffort.allCases.firstIndex(of: self) ?? 0
+    }
+
     public var displayName: String {
         switch self {
+        case .minimal: "Minimal"
         case .low: "Low"
         case .medium: "Medium"
         case .high: "High"
         case .xhigh: "X-High"
+        case .max: "Max"
+        case .ultra: "Ultra"
         }
     }
 }

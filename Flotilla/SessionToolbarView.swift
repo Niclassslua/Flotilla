@@ -53,7 +53,7 @@ struct SessionToolbarView: View {
         HStack(spacing: 8) {
             Text(project?.name ?? "Quick session")
                 .font(.caption.weight(.medium))
-                .foregroundStyle(FlotillaColors().statusReady)
+                .foregroundStyle(FlotillaColors.textPrimary)
                 .lineLimit(1)
 
             Text("/")
@@ -68,7 +68,7 @@ struct SessionToolbarView: View {
             compactMetadata(
                 icon: "arrow.triangle.branch",
                 value: viewModel.branchName,
-                tint: FlotillaColors().statusWorking,
+                tint: FlotillaColors.statusWorking,
                 accessibilityIdentifier: "SessionToolbar.Branch"
             )
 
@@ -143,10 +143,10 @@ struct SessionToolbarView: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 44)
-        .background(FlotillaColors().surface)
+        .background(FlotillaColors.surface)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(FlotillaColors().separator)
+                .fill(FlotillaColors.separator)
                 .frame(height: 1)
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -203,7 +203,7 @@ struct SessionToolbarView: View {
                 .frame(width: 28, height: 28)
                 .contentShape(.rect)
                 .background(
-                    isSelected ? FlotillaColors().surfaceElevated : Color.clear,
+                    isSelected ? FlotillaColors.surfaceElevated : Color.clear,
                     in: .rect(cornerRadius: 5)
                 )
         }

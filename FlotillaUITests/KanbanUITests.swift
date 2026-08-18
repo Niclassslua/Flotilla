@@ -11,9 +11,15 @@ final class KanbanUITests: XCTestCase {
     }
 
     private func openKanbanTab(_ app: XCUIApplication) {
-        let kanbanButton = app.descendants(matching: .any)["Global.Kanban"].firstMatch
-        XCTAssertTrue(kanbanButton.waitForExistence(timeout: 8))
-        kanbanButton.click()
+        // Kanban is accessed via the view mode picker in the sessions view
+        let sessionsButton = app.descendants(matching: .any)["Global.Sessions"].firstMatch
+        XCTAssertTrue(sessionsButton.waitForExistence(timeout: 8))
+        sessionsButton.click()
+
+        // Select Board layout from the segmented picker
+        let boardSegment = app.segmentedControls.buttons["Kanban"].firstMatch
+        XCTAssertTrue(boardSegment.waitForExistence(timeout: 5))
+        boardSegment.click()
     }
 
     func testKanbanTabExistsAndNavigable() {

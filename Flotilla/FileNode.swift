@@ -185,6 +185,8 @@ final class FileBrowserViewModel {
     private(set) var errorMessage: String?
     private(set) var message: String?
 
+    var rootURL: URL { root }
+
     init(root: URL, service: any WorkspaceFileServicing = WorkspaceFileService()) {
         self.root = root
         self.service = service
@@ -279,6 +281,8 @@ final class RulesPanelViewModel {
     private(set) var isLoading = false
     private(set) var isSaving = false
     private(set) var message: String?
+
+    var rootURL: URL { root }
 
     init(root: URL, service: any WorkspaceFileServicing = WorkspaceFileService()) {
         self.root = root

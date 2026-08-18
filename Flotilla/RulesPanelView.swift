@@ -28,7 +28,7 @@ enum InstructionFileFilter: Equatable {
 struct RulesPanelView: View {
     let rootURL: URL
     let filter: InstructionFileFilter
-    @State private var viewModel: RulesPanelViewModel
+    @Bindable var viewModel: RulesPanelViewModel
     @FocusState private var isEditorFocused: Bool
     @State private var showLoadError = false
 
@@ -39,7 +39,13 @@ struct RulesPanelView: View {
     ) {
         self.rootURL = rootURL
         self.filter = filter
-        _viewModel = State(initialValue: RulesPanelViewModel(root: rootURL, service: service))
+        self._viewModel = Bindable(wrappedValue: RulesPanelViewModel(root: rootURL, service: service))
+    }
+
+    init(viewModel: RulesPanelViewModel) {
+        self.rootURL = viewModel.rootURL
+        self.filter = .all
+        self._viewModel = Bindable(wrappedValue: viewModel)
     }
 
     private var entries: [RuleFileEntry] {
@@ -80,14 +86,14 @@ struct RulesPanelView: View {
             }
             .padding(.horizontal, FlotillaSpacing.medium)
             .padding(.vertical, FlotillaSpacing.small)
-            .background(FlotillaColors().surface)
+            .background(FlotillaColors.surface)
 
             Divider()
 
             if viewModel.isLoading && entries.isEmpty {
                 ProgressView("Loading instructions…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(FlotillaColors().surface)
+                    .background(FlotillaColors.surface)
             } else if entries.isEmpty, !viewModel.isLoading {
                 ContentUnavailableView(
                     filter == .skills ? "No Skills" : "No Instructions",
@@ -95,7 +101,7 @@ struct RulesPanelView: View {
                     description: Text(emptyDescription)
                 )
                 .accessibilityIdentifier("RulesPanel.Empty")
-                .background(FlotillaColors().surface)
+                .background(FlotillaColors.surface)
             } else {
                 List(entries, selection: $viewModel.selectedEntry) { entry in
                     Button {
@@ -107,16 +113,16 @@ struct RulesPanelView: View {
                     .buttonStyle(.plain)
                     .listRowBackground(
                         RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                            .fill(viewModel.selectedEntry == entry ? FlotillaColors().accent.opacity(0.09) : .clear)
+                            .fill(viewModel.selectedEntry == entry ? FlotillaColors.accent.opacity(0.09) : .clear)
                     )
                     .accessibilityIdentifier("RulesPanel.File-\(entry.relativePath)")
                 }
                 .scrollContentBackground(.hidden)
-                .background(FlotillaColors().surface)
+                .background(FlotillaColors.surface)
                 .accessibilityIdentifier("RulesPanel.FileList")
             }
         }
-        .background(FlotillaColors().surface)
+        .background(FlotillaColors.surface)
     }
 
     private var emptyDescription: String {
@@ -147,7 +153,7 @@ struct RulesPanelView: View {
                             systemImage: message.hasPrefix("Saved") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                         )
                         .font(.caption)
-                        .foregroundStyle(message.hasPrefix("Saved") ? FlotillaColors().success : Color.red)
+                        .foregroundStyle(message.hasPrefix("Saved") ? FlotillaColors.success : Color.red)
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(message)
                         .accessibilityIdentifier("RulesPanel.SaveConfirmation")
@@ -169,13 +175,13 @@ struct RulesPanelView: View {
                 }
                 .padding(.horizontal, FlotillaSpacing.medium)
                 .padding(.vertical, FlotillaSpacing.small)
-                .background(FlotillaColors().surface)
+                .background(FlotillaColors.surface)
                 Divider()
                 TextEditor(text: $bindableViewModel.content)
                     .font(.system(.body, design: .monospaced))
                     .scrollContentBackground(.hidden)
                     .padding(FlotillaSpacing.small)
-                    .background(FlotillaColors().terminalCanvas)
+                    .background(FlotillaColors.terminalCanvas)
                     .focused($isEditorFocused)
                     .accessibilityIdentifier("RulesPanel.Editor")
             }
@@ -186,7 +192,7 @@ struct RulesPanelView: View {
                 description: Text("Review and edit the rules this project gives its agents.")
             )
             .accessibilityIdentifier("RulesPanel.NoSelection")
-            .background(FlotillaColors().terminalCanvas)
+            .background(FlotillaColors.terminalCanvas)
         }
     }
 }

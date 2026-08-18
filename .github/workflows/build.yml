@@ -1,4 +1,4 @@
-name: Build Flotilla
+name: Build
 
 on:
   push:
@@ -6,31 +6,20 @@ on:
   pull_request:
     branches: [main]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  DEVELOPER_DIR: /Applications/Xcode_16.3.app/Contents/Developer
 
 jobs:
   build:
-    name: Build & Test
-    runs-on: macos-15
-    timeout-minutes: 30
+    runs-on: macos-26
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
-
-      - name: Cache Xcode build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData/Flotilla-*
-          key: xcode-${{ runner.os }}-${{ hashFiles('**/*.swift', 'project.yml') }}
-          restore-keys: |
-            xcode-${{ runner.os }}-
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -39,72 +28,36 @@ jobs:
         run: xcodegen generate
 
       - name: Build (Debug)
-        run: |
-          xcodebuild \
-            -project Flotilla.xcodeproj \
-            -scheme Flotilla \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath build/DerivedData \
-            build
+        run: make build
 
-      - name: Run Unit Tests
-        run: |
-          xcodebuild \
-            -project Flotilla.xcodeproj \
-            -scheme Flotilla \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath build/DerivedData \
-            test -only-testing:FlotillaUnitTests
+      - name: Run unit tests
+        run: make test
+
+      - name: Run UI tests
+        run: make test-ui
 
       - name: Build (Release)
-        run: |
-          xcodebuild \
-            -project Flotilla.xcodeproj \
-            -scheme Flotilla \
-            -configuration Release \
-            -destination 'platform=macOS' \
-            -derivedDataPath build/DerivedData \
-            build
+        run: make build-release
 
-      - name: Locate .app
-        id: app
-        run: |
-          APP_PATH=$(find build/DerivedData -name "Flotilla.app" -type d | head -1)
-          echo "path=$APP_PATH" >> "$GITHUB_OUTPUT"
-          echo "Found app at: $APP_PATH"
-
-      - name: Upload .app artifact
+      - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Flotilla-${{ github.sha }}
-          path: ${{ steps.app.outputs.path }}
-          if-no-files-found: error
-          retention-days: 14
+          name: Flotilla-Debug
+          path: build/DerivedData/Build/Products/Debug/Flotilla.app
+          retention-days: 7
 
   archive:
-    name: Archive Release Build
-    runs-on: macos-15
-    timeout-minutes: 30
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
-
-      - name: Cache Xcode build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData/Flotilla-*
-          key: xcode-${{ runner.os }}-${{ hashFiles('**/*.swift', 'project.yml') }}
-          restore-keys: |
-            xcode-${{ runner.os }}-
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -113,47 +66,18 @@ jobs:
         run: xcodegen generate
 
       - name: Archive
+        run: make archive
+
+      - name: Export (Developer ID)
         run: |
-          xcodebuild \
-            -project Flotilla.xcodeproj \
-            -scheme Flotilla \
-            -configuration Release \
-            -destination 'generic/platform=macOS' \
-            -derivedDataPath build/DerivedData \
+          xcodebuild -exportArchive \
             -archivePath build/Flotilla.xcarchive \
-            archive
+            -exportPath build/Export \
+            -exportOptionsPlist ExportOptions.plist
 
-      - name: Export archive
-        run: |
-          mkdir -p build/export
-          cat > build/export/ExportOptions.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>developer-id</string>
-            <key>destination</key>
-            <string>export</string>
-          </dict>
-          </plist>
-          EOF
-
-          xcodebuild \
-            -exportArchive \
-            -archivePath build/Flotilla.xcarchive \
-            -exportOptionsPlist build/export/ExportOptions.plist \
-            -exportPath build/export
-
-      - name: Create zip
-        run: |
-          cd build/export
-          zip -r Flotilla.zip Flotilla.app
-
-      - name: Upload archive artifact
+      - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Flotilla-archive-${{ github.sha }}
-          path: build/export/Flotilla.zip
-          if-no-files-found: error
+          name: Flotilla-Release
+          path: build/Export/Flotilla.app
           retention-days: 30

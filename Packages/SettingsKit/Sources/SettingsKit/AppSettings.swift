@@ -191,19 +191,54 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
     public var selectedSessionID: String?
     public var viewMode: String
     public var detailPanel: String
+    /// The grid's single layout knob: how wide a tile wants to be. The column
+    /// count follows from it, so there is no separate column setting.
     public var gridMinimumTileWidth: Double
+    public var gridSessionOrder: [String]
+    /// Shows a text label under each sidebar rail icon (Overview/Sessions/
+    /// Projects/New) instead of icon-only with a hover tooltip.
+    public var sidebarRailLabels: Bool
 
     public init(
         selectedSessionID: String? = nil,
         viewMode: String = "single",
         detailPanel: String = "terminal",
-        gridMinimumTileWidth: Double = 420
+        gridMinimumTileWidth: Double = 410,
+        gridSessionOrder: [String] = [],
+        sidebarRailLabels: Bool = false
     ) {
         self.selectedSessionID = selectedSessionID
         self.viewMode = viewMode
         self.detailPanel = detailPanel
         self.gridMinimumTileWidth = gridMinimumTileWidth
+        self.gridSessionOrder = gridSessionOrder
+        self.sidebarRailLabels = sidebarRailLabels
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case selectedSessionID, viewMode, detailPanel, gridMinimumTileWidth, gridSessionOrder, sidebarRailLabels
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        selectedSessionID = try container.decodeIfPresent(String.self, forKey: .selectedSessionID)
+        viewMode = try container.decodeIfPresent(String.self, forKey: .viewMode) ?? "single"
+        detailPanel = try container.decodeIfPresent(String.self, forKey: .detailPanel) ?? "terminal"
+        gridMinimumTileWidth = try container.decodeIfPresent(Double.self, forKey: .gridMinimumTileWidth) ?? 410
+        gridSessionOrder = try container.decodeIfPresent([String].self, forKey: .gridSessionOrder) ?? []
+        sidebarRailLabels = try container.decodeIfPresent(Bool.self, forKey: .sidebarRailLabels) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(selectedSessionID, forKey: .selectedSessionID)
+        try container.encodeIfPresent(viewMode, forKey: .viewMode)
+        try container.encodeIfPresent(detailPanel, forKey: .detailPanel)
+        try container.encodeIfPresent(gridMinimumTileWidth, forKey: .gridMinimumTileWidth)
+        try container.encodeIfPresent(gridSessionOrder, forKey: .gridSessionOrder)
+        try container.encodeIfPresent(sidebarRailLabels, forKey: .sidebarRailLabels)
+    }
+
 }
 
 public struct AppSettings: Codable, Equatable, Sendable {

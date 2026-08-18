@@ -54,7 +54,6 @@ public struct StatusBadge: View {
     private let showLabel: Bool
     private let showGlyph: Bool
 
-    @Environment(\.flotillaColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isPulsing = false
 
@@ -72,12 +71,12 @@ public struct StatusBadge: View {
 
     private var statusColor: Color {
         switch status {
-        case .working: return colors.statusWorking
-        case .idle: return colors.statusIdle
-        case .waitingForInput: return colors.statusWaitingForInput
-        case .ready: return colors.statusReady
-        case .finished: return colors.statusFinished
-        case .crashed: return colors.statusCrashed
+        case .working: return FlotillaColors.statusWorking
+        case .idle: return FlotillaColors.statusIdle
+        case .waitingForInput: return FlotillaColors.statusWaitingForInput
+        case .ready: return FlotillaColors.statusReady
+        case .finished: return FlotillaColors.statusFinished
+        case .crashed: return FlotillaColors.statusCrashed
         }
     }
 

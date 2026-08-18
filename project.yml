@@ -2,7 +2,7 @@ name: Flotilla
 options:
   bundleIdPrefix: com.niclassslua
   deploymentTarget:
-    macOS: "15.0"
+    macOS: "26.0"
   createIntermediateGroups: true
 
 packages:
@@ -24,11 +24,13 @@ packages:
     path: Packages/PersistenceKit
   SettingsKit:
     path: Packages/SettingsKit
+  MarkdownParser:
+    path: Packages/MarkdownParser
 
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: YES
@@ -60,6 +62,7 @@ targets:
       - package: TerminalKit
       - package: PersistenceKit
       - package: SettingsKit
+      - package: MarkdownParser
 
   FlotillaUnitTests:
     type: bundle.unit-test
@@ -77,6 +80,7 @@ targets:
       - package: TerminalKit
       - package: PersistenceKit
       - package: SettingsKit
+      - package: MarkdownParser
     settings:
       ENABLE_HARDENED_RUNTIME: NO
 
@@ -87,6 +91,7 @@ targets:
       - path: FlotillaUITests
     dependencies:
       - target: Flotilla
+      - package: MarkdownParser
     settings:
       ENABLE_HARDENED_RUNTIME: NO
 

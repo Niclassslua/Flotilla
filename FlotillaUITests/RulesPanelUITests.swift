@@ -58,9 +58,9 @@ final class RulesPanelUITests: XCTestCase {
         let search = app.descendants(matching: .any)["CommandPalette.Search"].firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 8))
         search.click()
-        search.typeText("Edit agent rules")
+        search.typeText("View instructions")
 
-        let rulesCommand = app.descendants(matching: .any)["CommandPalette.Row-Edit agent rules"].firstMatch
+        let rulesCommand = app.descendants(matching: .any)["CommandPalette.Row-View instructions"].firstMatch
         XCTAssertTrue(rulesCommand.waitForExistence(timeout: 8))
         rulesCommand.click()
 
