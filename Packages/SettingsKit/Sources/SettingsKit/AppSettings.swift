@@ -102,6 +102,22 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
         self.createWorktreeByDefault = createWorktreeByDefault
         self.defaultAgentRawValue = defaultAgentRawValue
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case createWorktreeByDefault
+        case defaultAgentRawValue
+    }
+
+    // Hand-written rather than synthesized: `SettingsStoring` decodes the
+    // whole `AppSettings` tree with `try?`, so a throwing `Decodable` for a
+    // key added after a user's settings file was already written would
+    // silently reset every setting. `decodeIfPresent` with an explicit
+    // default keeps old files decoding successfully.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        createWorktreeByDefault = try container.decodeIfPresent(Bool.self, forKey: .createWorktreeByDefault) ?? true
+        defaultAgentRawValue = try container.decodeIfPresent(Int.self, forKey: .defaultAgentRawValue) ?? 0
+    }
 }
 
 public struct TerminalPreferences: Codable, Equatable, Sendable {

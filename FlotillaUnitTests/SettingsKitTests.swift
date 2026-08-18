@@ -72,4 +72,17 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.appearance, .dark)
         XCTAssertEqual(decoded.worktreeBaseDirectory, "/tmp/worktrees")
     }
+
+    /// `SessionDefaults` decodes key-by-key: a payload written before any
+    /// later-added key must still decode without resetting the rest.
+    func testSettingsWrittenBeforeLaterSessionDefaultsStillDecode() throws {
+        let oldJSON = Data(
+            #"{"worktreeBaseDirectory":"/tmp/worktrees","sessionDefaults":{"createWorktreeByDefault":false}}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
+
+        XCTAssertEqual(decoded.sessionDefaults.createWorktreeByDefault, false)
+        XCTAssertEqual(decoded.sessionDefaults.defaultAgentRawValue, 0)
+    }
 }

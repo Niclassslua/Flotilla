@@ -26,6 +26,57 @@ enum TmuxSessionWrapping {
         "flotilla-\(sessionID.uuidString)"
     }
 
+    /// Server-wide options applied before any session is created.
+    ///
+    /// `status off` hides tmux's own status bar. Flotilla already draws the
+    /// session's name, branch, and agent in its chrome, so the bar was a
+    /// duplicate — and being tmux's, it rendered as a black-on-green strip
+    /// pinned to the window's bottom row, redrawn every minute by its clock.
+    /// Turning it off also hands that row back to the agent.
+    static let globalOptions: [[String]] = [
+        ["default-terminal", "tmux-256color"],
+        ["status", "off"],
+    ]
+
+    /// `set-option -g` needs a server that is already running, and on a cold
+    /// socket there is no way to pre-start one to receive the options: a tmux
+    /// server with no sessions exits immediately, taking them with it. The
+    /// options therefore have to reach the very invocation that creates the
+    /// first session, which is what `-f` does — tmux reads the file when it
+    /// starts the server. Without this, the first session after a reboot (or
+    /// after `kill-server`) launched with the green status bar still visible.
+    ///
+    /// `-f` is ignored when the server is already up; the `set-option -g`
+    /// calls in `SessionProcessManager.start()` cover that case.
+    static func configurationFileContents() -> String {
+        globalOptions
+            .map { "set-option -g " + $0.joined(separator: " ") }
+            .joined(separator: "\n") + "\n"
+    }
+
+    /// Writes the server config next to Flotilla's other support files and
+    /// returns its path, or `nil` if it could not be written — callers then
+    /// fall back to the `set-option -g` path alone rather than failing a
+    /// launch over a cosmetic option.
+    static func writeConfigurationFile(
+        in supportDirectory: URL = defaultSupportDirectory()
+    ) -> URL? {
+        let file = supportDirectory.appendingPathComponent("tmux.conf", isDirectory: false)
+        do {
+            try FileManager.default.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
+            try Data(configurationFileContents().utf8).write(to: file, options: .atomic)
+            return file
+        } catch {
+            return nil
+        }
+    }
+
+    static func defaultSupportDirectory() -> URL {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Flotilla", isDirectory: true)
+    }
+
     /// tmux — unlike the agent CLIs it hosts — needs a `TERM` it can
     /// actually resolve to know how to draw itself; an inherited value like
     /// `dumb` (which e.g. Xcode's own build/test tooling sets, and which
@@ -44,7 +95,8 @@ enum TmuxSessionWrapping {
         environment: [String: String],
         workingDirectory: URL,
         sessionID: UUID,
-        tmuxExecutable: URL?
+        tmuxExecutable: URL?,
+        configurationFile: URL? = nil
     ) -> (executable: URL, arguments: [String], environment: [String: String]) {
         guard let tmuxExecutable else {
             return (agentExecutable, arguments, environment)
@@ -53,8 +105,14 @@ enum TmuxSessionWrapping {
         // `tmux set-option -g default-terminal tmux-256color` call in
         // `SessionProcessManager.start()` before this wrapper is invoked.
         // This avoids unreliable `;` command chaining in argv.
-        let wrapped = socketArguments() + [
-            "new-session", "-A", "-s", sessionName(for: sessionID),
+        // `-D` (which `-A` turns into attach-session's `-d`) detaches any
+        // client already on this session. tmux sizes a window to the smallest
+        // attached client, so a client left behind by a previous Flotilla run
+        // — or by a crash — otherwise pins the agent to that stale, usually
+        // smaller size no matter how large the real terminal is.
+        let configurationArguments = configurationFile.map { ["-f", $0.path] } ?? []
+        let wrapped = socketArguments() + configurationArguments + [
+            "new-session", "-A", "-D", "-s", sessionName(for: sessionID),
             "-c", workingDirectory.path,
             "--", agentExecutable.path
         ] + arguments

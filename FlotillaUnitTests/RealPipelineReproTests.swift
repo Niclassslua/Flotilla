@@ -53,6 +53,34 @@ final class RealPipelineReproTests: XCTestCase {
         )
     }
 
+    /// `set-option -g` cannot reach a cold socket (a sessionless tmux server
+    /// exits immediately), so the server options must ride along on the
+    /// invocation that creates the first session — otherwise the first
+    /// session after a reboot comes up with tmux's green status bar.
+    func testColdServerLaunchCarriesGlobalOptionsAsConfigFile() throws {
+        let configuration = URL(fileURLWithPath: "/tmp/flotilla-test/tmux.conf")
+        let launch = TmuxSessionWrapping.wrap(
+            agentExecutable: URL(fileURLWithPath: "/usr/local/bin/claude"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            sessionID: UUID(),
+            tmuxExecutable: URL(fileURLWithPath: "/usr/local/bin/tmux"),
+            configurationFile: configuration
+        )
+
+        // `-f` is a client flag: it must precede the command, not follow it.
+        let flagIndex = try XCTUnwrap(launch.arguments.firstIndex(of: "-f"))
+        let commandIndex = try XCTUnwrap(launch.arguments.firstIndex(of: "new-session"))
+        XCTAssertLessThan(flagIndex, commandIndex)
+        XCTAssertEqual(launch.arguments[flagIndex + 1], configuration.path)
+        XCTAssertEqual(Array(launch.arguments.prefix(2)), ["-L", TmuxSessionWrapping.socketName])
+
+        let contents = TmuxSessionWrapping.configurationFileContents()
+        XCTAssertTrue(contents.contains("set-option -g status off"))
+        XCTAssertTrue(contents.contains("set-option -g default-terminal tmux-256color"))
+    }
+
     func testDirectLaunchStaysRunning() async throws {
         let manager = makeManager(useTmux: false)
         let session = Session(

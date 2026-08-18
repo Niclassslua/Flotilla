@@ -118,18 +118,24 @@ final class SessionProcessManager {
         let tmuxExecutable = usableTmuxExecutable(for: session.id)
         tmuxWrappedSessions[session.id] = tmuxExecutable
 
+        // Covers an already-running server; the `-f` config passed to
+        // `new-session` below covers the cold-socket case this cannot.
+        var tmuxConfigurationFile: URL?
         if let tmuxExecutable {
-            let setOptionProcess = Process()
-            setOptionProcess.executableURL = tmuxExecutable
-            setOptionProcess.arguments = TmuxSessionWrapping.socketArguments()
-                + ["set-option", "-g", "default-terminal", "tmux-256color"]
-            setOptionProcess.standardOutput = FileHandle.nullDevice
-            setOptionProcess.standardError = FileHandle.nullDevice
-            // Only wait when the process actually started: `waitUntilExit`
-            // on a process whose `run()` threw (binary vanished, wrong arch)
-            // blocks forever — there is no child to wait for.
-            if (try? setOptionProcess.run()) != nil {
-                setOptionProcess.waitUntilExit()
+            tmuxConfigurationFile = TmuxSessionWrapping.writeConfigurationFile()
+            for option in TmuxSessionWrapping.globalOptions {
+                let setOptionProcess = Process()
+                setOptionProcess.executableURL = tmuxExecutable
+                setOptionProcess.arguments = TmuxSessionWrapping.socketArguments()
+                    + ["set-option", "-g"] + option
+                setOptionProcess.standardOutput = FileHandle.nullDevice
+                setOptionProcess.standardError = FileHandle.nullDevice
+                // Only wait when the process actually started: `waitUntilExit`
+                // on a process whose `run()` threw (binary vanished, wrong arch)
+                // blocks forever — there is no child to wait for.
+                if (try? setOptionProcess.run()) != nil {
+                    setOptionProcess.waitUntilExit()
+                }
             }
         }
 
@@ -139,7 +145,8 @@ final class SessionProcessManager {
             environment: plan.environment,
             workingDirectory: session.workingDirectory,
             sessionID: session.id,
-            tmuxExecutable: tmuxExecutable
+            tmuxExecutable: tmuxExecutable,
+            configurationFile: tmuxConfigurationFile
         )
 
         let process = processFactory.makeProcess()
