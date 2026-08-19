@@ -41,18 +41,20 @@ final class GitGraphLayoutTests: XCTestCase {
         XCTAssertEqual(rows.map(\.lane), [0, 0, 0])
         XCTAssertEqual(rows.map(\.laneCount), [1, 1, 1])
 
-        // c3 connects to c2
+        // c3 connects down to c2
         XCTAssertEqual(rows[0].segments.count, 1)
-        XCTAssertEqual(rows[0].segments[0].kind, .passThrough)
+        XCTAssertEqual(rows[0].segments[0].kind, .outgoing)
         XCTAssertEqual(rows[0].segments[0].fromLane, 0)
         XCTAssertEqual(rows[0].segments[0].toLane, 0)
 
-        // c2 connects to c1
-        XCTAssertEqual(rows[1].segments.count, 1)
-        XCTAssertEqual(rows[1].segments[0].kind, .passThrough)
+        // c2 connects from c3 above and to c1 below
+        XCTAssertEqual(rows[1].segments.count, 2)
+        XCTAssertEqual(rows[1].segments[0].kind, .incoming)
+        XCTAssertEqual(rows[1].segments[1].kind, .outgoing)
 
-        // c1 is root, no downward parent segments
-        XCTAssertEqual(rows[2].segments.count, 0)
+        // c1 is root, incoming from c2 above, no downward parent segments
+        XCTAssertEqual(rows[2].segments.count, 1)
+        XCTAssertEqual(rows[2].segments[0].kind, .incoming)
     }
 
     // MARK: - Branch and Merge
@@ -77,8 +79,8 @@ final class GitGraphLayoutTests: XCTestCase {
         // M is at lane 0, first parent B1 continues in lane 0, second parent B2 branches to lane 1
         XCTAssertEqual(rows[0].commit.sha, "M")
         XCTAssertEqual(rows[0].lane, 0)
-        XCTAssertTrue(rows[0].segments.contains(where: { $0.fromLane == 0 && $0.toLane == 0 && $0.kind == .passThrough }))
-        XCTAssertTrue(rows[0].segments.contains(where: { $0.fromLane == 0 && $0.toLane == 1 && $0.kind == .branchOut }))
+        XCTAssertTrue(rows[0].segments.contains(where: { $0.fromLane == 0 && $0.toLane == 0 && $0.kind == .outgoing }))
+        XCTAssertTrue(rows[0].segments.contains(where: { $0.fromLane == 0 && $0.toLane == 1 && $0.kind == .outgoing }))
 
         // B2 is at lane 1, parent A is not yet in activeLanes, so B2 continues expecting A in lane 1, while B1 passes through in lane 0
         XCTAssertEqual(rows[1].commit.sha, "B2")
@@ -108,9 +110,9 @@ final class GitGraphLayoutTests: XCTestCase {
         XCTAssertEqual(rows[0].lane, 0)
         XCTAssertGreaterThanOrEqual(rows[0].laneCount, 3)
 
-        // Must have at least 2 branchOut segments for P2 and P3
-        let branchOuts = rows[0].segments.filter { $0.kind == .branchOut }
-        XCTAssertEqual(branchOuts.count, 2)
+        // Must have 3 outgoing segments for P1, P2, and P3
+        let outgoings = rows[0].segments.filter { $0.kind == .outgoing }
+        XCTAssertEqual(outgoings.count, 3)
     }
 
     // MARK: - Multiple Roots / Orphan Branch

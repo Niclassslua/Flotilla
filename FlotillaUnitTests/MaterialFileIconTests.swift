@@ -45,6 +45,25 @@ final class MaterialFileIconTests: XCTestCase {
             return XCTFail("Expected symbol for Dockerfile")
         }
         XCTAssertEqual(name, "shippingbox.fill")
+
+        // AI Rule files
+        let claudeMd = MaterialIconProvider.fileIcon(for: URL(fileURLWithPath: "/project/CLAUDE.md"))
+        guard case .badge(let claudeText, _, _, _) = claudeMd else {
+            return XCTFail("Expected badge for CLAUDE.md")
+        }
+        XCTAssertEqual(claudeText, "CC")
+
+        let agentsMd = MaterialIconProvider.fileIcon(for: URL(fileURLWithPath: "/project/AGENTS.md"))
+        guard case .badge(let agentsText, _, _, _) = agentsMd else {
+            return XCTFail("Expected badge for AGENTS.md")
+        }
+        XCTAssertEqual(agentsText, "AG")
+
+        let cursorRules = MaterialIconProvider.fileIcon(for: URL(fileURLWithPath: "/project/.cursorrules"))
+        guard case .badge(let cursorText, _, _, _) = cursorRules else {
+            return XCTFail("Expected badge for .cursorrules")
+        }
+        XCTAssertEqual(cursorText, "CR")
     }
 
     func testLanguageBadgesAndSymbols() {

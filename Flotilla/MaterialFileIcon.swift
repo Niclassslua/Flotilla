@@ -63,11 +63,26 @@ public struct MaterialIconProvider {
 
         // 1. Exact Filename Matches
         switch name {
+        // AI Coding Assistant Rules & Skills
+        case "claude.md", "claude.json":
+            return .badge(text: "CC", background: Color(hex: 0xD97757), foreground: .white, fontSize: 8.5)
+        case "agents.md", "agent.md":
+            return .badge(text: "AG", background: Color(hex: 0x7C4DFF), foreground: .white, fontSize: 8.5)
+        case "gemini.md":
+            return .badge(text: "GEM", background: Color(hex: 0x4E88D4), foreground: .white, fontSize: 6.5)
+        case "skill.md", "skills.md":
+            return .badge(text: "SK", background: Color(hex: 0xFFB300), foreground: Color(hex: 0x212121), fontSize: 8.5)
+        case ".cursorrules", ".cursorignore":
+            return .badge(text: "CR", background: Color(hex: 0x212121), foreground: .white, fontSize: 8.5)
+        case "copilot-instructions.md", ".copilot":
+            return .symbol(name: "sparkles", color: Color(hex: 0x6E40C9))
+
+        // Package Managers & Configs
         case "package.json":
             return .badge(text: "npm", background: Color(hex: 0xCB3837), foreground: .white, fontSize: 7.5)
         case "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "cargo.lock", "gemfile.lock", "composer.lock", "podfile.lock", "package.resolved":
             return .symbol(name: "lock.fill", color: Color(hex: 0xFDD835))
-        case "dockerfile", "dockerfile.dev", "dockerfile.prod", "docker-compose.yml", "docker-compose.yaml":
+        case "dockerfile", "dockerfile.dev", "dockerfile.prod", "docker-compose.yml", "docker-compose.yaml", ".dockerignore":
             return .symbol(name: "shippingbox.fill", color: Color(hex: 0x2496ED))
         case "makefile", "gnumakefile", "makefile.am", "makefile.in":
             return .badge(text: "MAKE", background: Color(hex: 0x6D4C41), foreground: .white, fontSize: 6.5)
@@ -85,6 +100,24 @@ public struct MaterialIconProvider {
             return .badge(text: "XCG", background: Color(hex: 0x7E57C2), foreground: .white, fontSize: 7)
         case "package.swift":
             return .symbol(name: "swift", color: Color(hex: 0xF05138))
+        case "cargo.toml":
+            return .symbol(name: "gearshape.fill", color: Color(hex: 0xDEA584))
+        case "gemfile":
+            return .symbol(name: "suit.diamond.fill", color: Color(hex: 0xCC342D))
+        case "podfile":
+            return .badge(text: "POD", background: Color(hex: 0xEE3322), foreground: .white, fontSize: 6.5)
+        case ".editorconfig":
+            return .badge(text: "EC", background: Color(hex: 0x455A64), foreground: .white, fontSize: 8)
+        case ".prettierrc", ".prettierrc.json", ".prettierrc.js", ".prettierrc.yaml", ".prettierrc.yml", ".prettierignore":
+            return .badge(text: "P", background: Color(hex: 0xEA5E5E), foreground: .white, fontSize: 8.5)
+        case ".eslintrc", ".eslintrc.json", ".eslintrc.js", ".eslintrc.yaml", ".eslintrc.yml", ".eslintignore":
+            return .badge(text: "ES", background: Color(hex: 0x4B32C3), foreground: .white, fontSize: 8)
+        case "vite.config.js", "vite.config.ts", "vite.config.mjs":
+            return .badge(text: "VITE", background: Color(hex: 0x646CFF), foreground: Color(hex: 0xFFD43B), fontSize: 6)
+        case "next.config.js", "next.config.mjs", "next.config.ts":
+            return .badge(text: "NEXT", background: Color(hex: 0x000000), foreground: .white, fontSize: 6)
+        case "tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs":
+            return .badge(text: "TW", background: Color(hex: 0x06B6D4), foreground: .white, fontSize: 7.5)
         default:
             break
         }
