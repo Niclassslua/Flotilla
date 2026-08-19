@@ -273,6 +273,12 @@ func testWorktreeCreationFailureDoesNotCreateSession() { ... }
 
 ### UI Tests (`FlotillaUITests`)
 
+> **⚠️ Slow — run only when needed.** The full UI test suite takes ~5 minutes (12 test classes, 12 app launches) and launches the actual app repeatedly. Do **not** run it as a routine verification step (e.g., after every change). Only run UI tests when:
+> - The change affects UI structure, navigation, or accessibility identifiers
+> - The change touches session lifecycle, terminal, or process handling
+> - You are explicitly asked to run or verify UI tests
+> For most changes, a Debug build + unit tests is sufficient verification. When running UI tests, prefer the minimal targeted set of test classes over the full suite (`-only-testing:FlotillaUITests/<SpecificClass>`).
+
 - All UI tests set `UI_TESTING=1` environment variable
 - Element lookup uses accessibility identifiers: `app.descendants(matching: .any)["CreateSession.GoalField"]`
 - Use `waitForExistence(timeout:)` for async UI state
