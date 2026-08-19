@@ -28,9 +28,12 @@ struct ProjectFilesView: View {
         HSplitView {
             fileTreePane
                 .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
+                .frame(maxHeight: .infinity)
             editorPane
-                .frame(minWidth: 400)
+                .frame(minWidth: 400, maxWidth: .infinity)
+                .frame(maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: rootURL) {
             await viewModel.refresh()
         }
@@ -175,6 +178,7 @@ struct ProjectFilesView: View {
                     )
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(FlotillaColors.terminalCanvas)
         } else {
             ContentUnavailableView(
@@ -182,6 +186,7 @@ struct ProjectFilesView: View {
                 systemImage: "doc.text.magnifyingglass",
                 description: Text("Choose a file from the tree on the left to inspect or edit.")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(FlotillaColors.terminalCanvas)
         }
     }

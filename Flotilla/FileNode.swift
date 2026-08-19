@@ -428,10 +428,39 @@ final class FileBrowserViewModel {
         do {
             nodes = try await service.fileTree(at: root)
             errorMessage = nil
+            if selectedNode == nil || !contains(node: selectedNode, in: nodes) {
+                if let first = firstFile(in: nodes) {
+                    await select(first)
+                }
+            }
         } catch {
             nodes = []
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func contains(node: FileNode?, in list: [FileNode]) -> Bool {
+        guard let node else { return false }
+        for item in list {
+            if item.id == node.id { return true }
+            if let children = item.children, contains(node: node, in: children) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func firstFile(in list: [FileNode]) -> FileNode? {
+        if let readme = list.first(where: { !$0.isDirectory && $0.name.lowercased().hasPrefix("readme") }) {
+            return readme
+        }
+        for item in list {
+            if !item.isDirectory { return item }
+            if let children = item.children, let child = firstFile(in: children) {
+                return child
+            }
+        }
+        return nil
     }
 
     func select(_ node: FileNode) async {
