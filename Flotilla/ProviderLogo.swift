@@ -1,14 +1,10 @@
 import SwiftUI
 import SessionKit
+import AgentKit
 
 extension AgentKind {
     var logoImageName: String {
-        switch self {
-        case .claudeCode: "ProviderLogoClaude"
-        case .codexCLI: "ProviderLogoCodex"
-        case .openCode: "ProviderLogoOpenCode"
-        case .antigravity: "ProviderLogoAntigravity"
-        }
+        AgentCatalog.descriptor(for: self).logoAssetName
     }
 }
 

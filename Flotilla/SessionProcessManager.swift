@@ -125,12 +125,30 @@ final class SessionProcessManager {
 
         intentionallyTerminating.remove(session.id)
 
+        let descriptor = AgentCatalog.descriptor(for: session.agent)
+        let resumeIntent: ResumeIntent
+        if let agentSessionID = session.agentSessionID, !agentSessionID.isEmpty {
+            resumeIntent = .resume(agentSessionID)
+        } else if case .assignable = descriptor.resume {
+            resumeIntent = .freshWithAssignedIdentity(session.id.uuidString)
+        } else {
+            resumeIntent = .none
+        }
+
+        let effectiveDeliverGoal: Bool
+        if case .resume = resumeIntent {
+            effectiveDeliverGoal = false
+        } else {
+            effectiveDeliverGoal = deliverGoal
+        }
+
         let provider = providers.provider(for: session.agent)
         let settings = settingsProvider()
         let plan = provider.launchPlan(
-            goal: deliverGoal ? session.goal : nil,
+            goal: effectiveDeliverGoal ? session.goal : nil,
             model: session.model,
             effort: session.effort,
+            resumeIntent: resumeIntent,
             settings: settings,
             baseEnvironment: ProcessInfo.processInfo.environment
         )

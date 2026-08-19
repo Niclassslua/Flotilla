@@ -99,12 +99,7 @@ public struct ModelCatalogFetcher: Sendable {
     }
 
     private func binaryName(for agent: AgentKind) -> String {
-        switch agent {
-        case .claudeCode: "claude"
-        case .codexCLI: "codex"
-        case .openCode: "opencode"
-        case .antigravity: "agy"
-        }
+        AgentCatalog.descriptor(for: agent).binaryName
     }
 
     /// `opencode models <provider>` prints the subscription's models, one
@@ -449,68 +444,7 @@ public enum ModelCatalog {
     ]
 
     public static func staticFallback(for agent: AgentKind, openCodeSubscription: OpenCodeSubscription = .none) -> [String] {
-        switch agent {
-        case .claudeCode: ["sonnet", "opus", "haiku", "fable", "best", "opusplan"]
-        case .codexCLI: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"]
-        case .antigravity: antigravityFallbackModels.map(\.slug)
-        case .openCode: [
-            // opencode/* — built-in free models
-            "opencode/nemotron-3-ultra-free",
-            "opencode/nemotron-3.5-lightning-free",
-            "opencode/big-pickle",
-            "opencode/deepseek-v4-flash-free",
-            "opencode/hy3-free",
-            "opencode/laguna-s-2.1-free",
-            "opencode/mimo-v2.5-free",
-            // opencode-go/* — additional free models
-            "opencode-go/deepseek-v4-flash",
-            "opencode-go/deepseek-v4-pro",
-            "opencode-go/glm-5.1",
-            "opencode-go/glm-5.2",
-            "opencode-go/glm-5.3",
-            "opencode-go/gpt-5.6-luna",
-            "opencode-go/grok-4.5",
-            "opencode-go/hy3",
-            "opencode-go/kimi-k2.6",
-            "opencode-go/kimi-k2.7-code",
-            "opencode-go/kimi-k3",
-            "opencode-go/mimo-v2.5",
-            "opencode-go/mimo-v2.5-pro",
-            "opencode-go/minimax-m2.7",
-            "opencode-go/minimax-m3",
-            "opencode-go/qwen3.6-plus",
-            "opencode-go/qwen3.7-max",
-            "opencode-go/qwen3.7-plus",
-            "opencode-go/qwen3.8-max",
-            // openrouter/~ — latest aliases for popular models
-            "openrouter/~anthropic/claude-sonnet-latest",
-            "openrouter/~anthropic/claude-opus-latest",
-            "openrouter/~anthropic/claude-haiku-latest",
-            "openrouter/~openai/gpt-latest",
-            "openrouter/~openai/gpt-mini-latest",
-            "openrouter/~x-ai/grok-latest",
-            "openrouter/~deepseek/deepseek-v4-flash-latest",
-            "openrouter/~moonshotai/kimi-latest",
-            // openrouter/ — popular specific models
-            "openrouter/anthropic/claude-3.5-sonnet",
-            "openrouter/anthropic/claude-3.5-haiku",
-            "openrouter/anthropic/claude-3-opus",
-            "openrouter/openai/gpt-4o",
-            "openrouter/openai/gpt-4o-mini",
-            "openrouter/openai/o1",
-            "openrouter/openai/o3-mini",
-            "openrouter/x-ai/grok-4.5",
-            "openrouter/meta-llama/llama-3.3-70b-instruct",
-            "openrouter/mistralai/mistral-large",
-            "openrouter/deepseek/deepseek-chat",
-            "openrouter/deepseek/deepseek-r1",
-            "openrouter/qwen/qwen-2.5-coder-32b-instruct",
-            "openrouter/qwen/qwen3-coder",
-            "openrouter/nvidia/nemotron-3-ultra-550b-a55b",
-            "openrouter/anthropic/claude-opus-4",
-            "openrouter/anthropic/claude-sonnet-4",
-        ]
-        }
+        AgentCatalog.descriptor(for: agent).fallbackModels
     }
 }
 

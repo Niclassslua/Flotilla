@@ -145,4 +145,24 @@ final class PersistenceKitTests: XCTestCase {
 
         try? FileManager.default.removeItem(at: dbPath.deletingLastPathComponent())
     }
+
+    func testAgentSessionIDPersistsAndRoundTrips() throws {
+        let repo = try GRDBSessionRepository()
+        let session = Session(
+            title: "Resume test",
+            goal: "Goal",
+            agent: .antigravity,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .idle,
+            agentSessionID: "agy-conv-12345",
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        )
+        try repo.save(session)
+
+        let (_, sessions) = try repo.loadAll()
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.agentSessionID, "agy-conv-12345")
+    }
 }

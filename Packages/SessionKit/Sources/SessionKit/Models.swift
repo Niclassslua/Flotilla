@@ -166,6 +166,7 @@ public struct KanbanColumn: Codable, Hashable, Sendable, Identifiable {
             KanbanColumn(id: builtInID(kind: 2, index: 0), title: "Claude Code", order: 0, agentFilter: .claudeCode),
             KanbanColumn(id: builtInID(kind: 2, index: 1), title: "Codex CLI", order: 1, agentFilter: .codexCLI),
             KanbanColumn(id: builtInID(kind: 2, index: 2), title: "OpenCode", order: 2, agentFilter: .openCode),
+            KanbanColumn(id: builtInID(kind: 2, index: 3), title: "Antigravity", order: 3, agentFilter: .antigravity),
         ]
     }
 
@@ -249,6 +250,8 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public var kanbanColumnID: UUID?
     /// Workflow stage (for workflow column mode)
     public var workflowStage: WorkflowStage?
+    /// Native agent session ID for session resumption across launches
+    public var agentSessionID: String?
     /// Raw PTY byte stream retained across launches and replayed into
     /// SwiftTerm. Capped by the app before persistence.
     public var terminalScrollback: Data
@@ -268,6 +271,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         status: SessionStatus = .idle,
         kanbanColumnID: UUID? = nil,
         workflowStage: WorkflowStage? = nil,
+        agentSessionID: String? = nil,
         terminalScrollback: Data = Data(),
         createdAt: Date = Date(),
         lastActiveAt: Date = Date()
@@ -284,6 +288,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         self.status = status
         self.kanbanColumnID = kanbanColumnID
         self.workflowStage = workflowStage
+        self.agentSessionID = agentSessionID
         self.terminalScrollback = terminalScrollback
         self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt

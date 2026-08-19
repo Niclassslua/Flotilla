@@ -72,7 +72,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .terminal: "terminal editor font size scroll option meta"
         case .git: "git branch worktree delete lifecycle"
         case .notifications: "notifications waiting input sound privacy"
-        case .agents: "claude codex opencode executable arguments authentication"
+        case .agents: "claude codex opencode agy antigravity executable arguments authentication"
         // case .appearance: "appearance theme system light dark"
         case .projects: "projects paths rules skills local"
         case .environment: "developer tools git github gh tmux path"
@@ -463,53 +463,34 @@ private struct AgentSettingsPane: View {
     }
 
     private func pathBinding(for agent: AgentKind) -> Binding<String> {
-        Binding {
-            switch agent {
-            case .claudeCode: viewModel.settings.agentPaths.claudeCodePath
-            case .codexCLI: viewModel.settings.agentPaths.codexCLIPath
-            case .openCode: viewModel.settings.agentPaths.openCodePath
-            case .antigravity: viewModel.settings.agentPaths.antigravityPath
-            }
+        let key = AgentCatalog.descriptor(for: agent).settingsKey
+        return Binding {
+            viewModel.settings.agentOverrides.paths[key] ?? ""
         } set: { value in
-            switch agent {
-            case .claudeCode: viewModel.settings.agentPaths.claudeCodePath = value
-            case .codexCLI: viewModel.settings.agentPaths.codexCLIPath = value
-            case .openCode: viewModel.settings.agentPaths.openCodePath = value
-            case .antigravity: viewModel.settings.agentPaths.antigravityPath = value
+            if value.isEmpty {
+                viewModel.settings.agentOverrides.paths.removeValue(forKey: key)
+            } else {
+                viewModel.settings.agentOverrides.paths[key] = value
             }
         }
     }
 
     private func argumentsBinding(for agent: AgentKind) -> Binding<String> {
-        Binding {
-            arguments(for: agent).joined(separator: "\n")
+        let key = AgentCatalog.descriptor(for: agent).settingsKey
+        return Binding {
+            (viewModel.settings.agentOverrides.arguments[key] ?? []).joined(separator: "\n")
         } set: { value in
             let parsed = value.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-            switch agent {
-            case .claudeCode: viewModel.settings.agentArguments.claudeCodeArguments = parsed
-            case .codexCLI: viewModel.settings.agentArguments.codexCLIArguments = parsed
-            case .openCode: viewModel.settings.agentArguments.openCodeArguments = parsed
-            case .antigravity: viewModel.settings.agentArguments.antigravityArguments = parsed
+            if parsed.isEmpty {
+                viewModel.settings.agentOverrides.arguments.removeValue(forKey: key)
+            } else {
+                viewModel.settings.agentOverrides.arguments[key] = parsed
             }
         }
     }
 
-    private func arguments(for agent: AgentKind) -> [String] {
-        switch agent {
-        case .claudeCode: viewModel.settings.agentArguments.claudeCodeArguments
-        case .codexCLI: viewModel.settings.agentArguments.codexCLIArguments
-        case .openCode: viewModel.settings.agentArguments.openCodeArguments
-        case .antigravity: viewModel.settings.agentArguments.antigravityArguments
-        }
-    }
-
     private func pathIdentifier(for agent: AgentKind) -> String {
-        switch agent {
-        case .claudeCode: "Settings.ClaudeCodePath"
-        case .codexCLI: "Settings.CodexCLIPath"
-        case .openCode: "Settings.OpenCodePath"
-        case .antigravity: "Settings.AntigravityPath"
-        }
+        "\(AgentCatalog.descriptor(for: agent).accessibilityIDPrefix)Path"
     }
 
     private func chooseExecutable(for agent: AgentKind) {

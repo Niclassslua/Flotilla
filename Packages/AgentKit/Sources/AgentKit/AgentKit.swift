@@ -27,6 +27,12 @@ public struct AgentLaunchPlan: Equatable, Sendable {
     }
 }
 
+public enum ResumeIntent: Equatable, Sendable {
+    case freshWithAssignedIdentity(String)  // Claude, first launch
+    case resume(String)                     // any agent, known id
+    case none                               // discoverable agent, first launch
+}
+
 public protocol AgentProviding: Sendable {
     var kind: AgentKind { get }
     var binaryName: String { get }
@@ -34,12 +40,48 @@ public protocol AgentProviding: Sendable {
         goal: String?,
         model: String?,
         effort: AgentEffort?,
+        resumeIntent: ResumeIntent,
         settings: AppSettings,
         baseEnvironment: [String: String]
     ) -> AgentLaunchPlan
 }
 
 extension AgentProviding {
+    public func launchPlan(
+        goal: String? = nil,
+        model: String? = nil,
+        effort: AgentEffort? = nil,
+        resumeIntent: ResumeIntent = .none,
+        settings: AppSettings = AppSettings(),
+        baseEnvironment: [String: String] = [:]
+    ) -> AgentLaunchPlan {
+        launchPlan(
+            goal: goal,
+            model: model,
+            effort: effort,
+            resumeIntent: resumeIntent,
+            settings: settings,
+            baseEnvironment: baseEnvironment
+        )
+    }
+
+    public func launchPlan(
+        goal: String?,
+        model: String?,
+        effort: AgentEffort?,
+        settings: AppSettings,
+        baseEnvironment: [String: String]
+    ) -> AgentLaunchPlan {
+        launchPlan(
+            goal: goal,
+            model: model,
+            effort: effort,
+            resumeIntent: .none,
+            settings: settings,
+            baseEnvironment: baseEnvironment
+        )
+    }
+
     /// Convenience overload for callers that don't need to set effort.
     public func launchPlan(
         goal: String?,
@@ -51,6 +93,7 @@ extension AgentProviding {
             goal: goal,
             model: model,
             effort: nil,
+            resumeIntent: .none,
             settings: settings,
             baseEnvironment: baseEnvironment
         )
@@ -66,6 +109,7 @@ extension AgentProviding {
             goal: goal,
             model: nil,
             effort: nil,
+            resumeIntent: .none,
             settings: settings,
             baseEnvironment: baseEnvironment
         )
@@ -74,17 +118,18 @@ extension AgentProviding {
 
 public struct CLIAgentProvider: AgentProviding {
     public let kind: AgentKind
-    public let binaryName: String
+    public var binaryName: String { descriptor.binaryName }
+    public var descriptor: AgentDescriptor { AgentCatalog.descriptor(for: kind) }
 
-    public init(kind: AgentKind, binaryName: String) {
+    public init(kind: AgentKind, binaryName: String? = nil) {
         self.kind = kind
-        self.binaryName = binaryName
     }
 
     public func launchPlan(
         goal: String?,
         model: String?,
         effort: AgentEffort?,
+        resumeIntent: ResumeIntent,
         settings: AppSettings,
         baseEnvironment: [String: String]
     ) -> AgentLaunchPlan {
@@ -120,52 +165,59 @@ public struct CLIAgentProvider: AgentProviding {
         // fallback for sessions launched without tmux.
         let input = trimmedGoal.isEmpty ? nil : Data("\(trimmedGoal)\r".utf8)
 
-        var arguments = configuredArguments(in: settings.agentArguments)
+        var arguments = settings.agentOverrides.arguments[descriptor.settingsKey] ?? []
         let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !trimmedModel.isEmpty {
-            arguments += ["--model", trimmedModel]
+        if !trimmedModel.isEmpty, let modelFlag = descriptor.modelFlag {
+            arguments += modelFlag.arguments(for: trimmedModel)
         }
         // A level the CLI doesn't accept is dropped rather than passed
         // through: Claude Code warns and silently falls back to its default,
         // and Codex rejects the run outright. The picker already narrows the
         // choice per agent and model — this is the last line of defence for a
         // level carried over from a session created against another agent.
-        if let effort, AgentEffortCatalog.supports(effort, agent: kind) {
-            switch kind {
-            case .claudeCode, .antigravity:
-                arguments += ["--effort", effort.rawValue]
-            case .codexCLI:
-                arguments += ["--config", "model_reasoning_effort=\"\(effort.rawValue)\""]
-            case .openCode:
-                break
-            }
+        if let effort, descriptor.effortLevels.contains(effort), let effortFlag = descriptor.effortFlag {
+            arguments += effortFlag.arguments(for: effort)
         }
 
+        var leadingSubcommands: [String] = []
+        switch resumeIntent {
+        case .freshWithAssignedIdentity(let id):
+            if case .assignable(let assignSpec, _, let placement) = descriptor.resume {
+                let flags = assignSpec.arguments(for: id)
+                switch placement {
+                case .appendFlags:
+                    arguments += flags
+                case .leadingSubcommand(let subcommand):
+                    leadingSubcommands = [subcommand] + flags
+                }
+            }
+        case .resume(let id):
+            switch descriptor.resume {
+            case .assignable(_, let resumeSpec, let placement),
+                 .discoverable(let resumeSpec, let placement):
+                let flags = resumeSpec.arguments(for: id)
+                switch placement {
+                case .appendFlags:
+                    arguments += flags
+                case .leadingSubcommand(let subcommand):
+                    leadingSubcommands = [subcommand] + flags
+                }
+            case .unsupported:
+                break
+            }
+        case .none:
+            break
+        }
+
+        let fullArguments = leadingSubcommands + arguments
+
         return AgentLaunchPlan(
-            binaryName: binaryName,
-            configuredPath: configuredPath(in: settings.agentPaths),
-            arguments: arguments,
+            binaryName: descriptor.binaryName,
+            configuredPath: settings.agentOverrides.paths[descriptor.settingsKey] ?? "",
+            arguments: fullArguments,
             environment: environment,
             initialInput: input
         )
-    }
-
-    private func configuredPath(in paths: AgentPathOverrides) -> String {
-        switch kind {
-        case .claudeCode: paths.claudeCodePath
-        case .codexCLI: paths.codexCLIPath
-        case .openCode: paths.openCodePath
-        case .antigravity: paths.antigravityPath
-        }
-    }
-
-    private func configuredArguments(in arguments: AgentArgumentOverrides) -> [String] {
-        switch kind {
-        case .claudeCode: arguments.claudeCodeArguments
-        case .codexCLI: arguments.codexCLIArguments
-        case .openCode: arguments.openCodeArguments
-        case .antigravity: arguments.antigravityArguments
-        }
     }
 }
 
@@ -173,15 +225,6 @@ public struct AgentProviderRegistry: Sendable {
     public init() {}
 
     public func provider(for kind: AgentKind) -> any AgentProviding {
-        switch kind {
-        case .claudeCode:
-            CLIAgentProvider(kind: kind, binaryName: "claude")
-        case .codexCLI:
-            CLIAgentProvider(kind: kind, binaryName: "codex")
-        case .openCode:
-            CLIAgentProvider(kind: kind, binaryName: "opencode")
-        case .antigravity:
-            CLIAgentProvider(kind: kind, binaryName: "agy")
-        }
+        CLIAgentProvider(kind: kind)
     }
 }

@@ -140,4 +140,67 @@ final class AgentProviderTests: XCTestCase {
         XCTAssertNil(plan.environment["OPENAI_API_KEY"])
         XCTAssertNil(plan.initialInput)
     }
+
+    func testClaudeLaunchPlanWithResumeIntent() {
+        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let freshPlan = provider.launchPlan(
+            goal: nil,
+            resumeIntent: .freshWithAssignedIdentity("test-uuid-123"),
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+        XCTAssertEqual(freshPlan.arguments, ["--session-id", "test-uuid-123"])
+
+        let resumePlan = provider.launchPlan(
+            goal: nil,
+            resumeIntent: .resume("test-uuid-123"),
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+        XCTAssertEqual(resumePlan.arguments, ["--resume", "test-uuid-123"])
+    }
+
+    func testCodexLaunchPlanWithResumeIntent() {
+        let provider = AgentProviderRegistry().provider(for: .codexCLI)
+        var settings = AppSettings()
+        settings.agentOverrides.arguments["codexCLI"] = ["--verbose"]
+
+        let plainPlan = provider.launchPlan(
+            goal: nil,
+            resumeIntent: .none,
+            settings: settings,
+            baseEnvironment: [:]
+        )
+        XCTAssertEqual(plainPlan.arguments, ["--verbose"])
+
+        let resumePlan = provider.launchPlan(
+            goal: nil,
+            resumeIntent: .resume("01932f14-0000-7000-8000-000000000000"),
+            settings: settings,
+            baseEnvironment: [:]
+        )
+        XCTAssertEqual(resumePlan.arguments, ["resume", "01932f14-0000-7000-8000-000000000000", "--verbose"])
+    }
+
+    func testOpenCodeLaunchPlanWithResumeIntent() {
+        let provider = AgentProviderRegistry().provider(for: .openCode)
+        let resumePlan = provider.launchPlan(
+            goal: nil,
+            resumeIntent: .resume("ses_abc123"),
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+        XCTAssertEqual(resumePlan.arguments, ["--session", "ses_abc123"])
+    }
+
+    func testAntigravityLaunchPlanWithResumeIntent() {
+        let provider = AgentProviderRegistry().provider(for: .antigravity)
+        let resumePlan = provider.launchPlan(
+            goal: nil,
+            resumeIntent: .resume("conv-xyz789"),
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+        XCTAssertEqual(resumePlan.arguments, ["--conversation", "conv-xyz789"])
+    }
 }

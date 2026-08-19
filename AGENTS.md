@@ -209,9 +209,9 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
     public var title: String
     public var goal: String
-    public var agent: AgentKind           // .claudeCode, .codexCLI, .openCode
+    public var agent: AgentKind           // .claudeCode, .codexCLI, .openCode, .antigravity
     public var model: String?             // Optional model override
-    public var effort: AgentEffort?       // .low, .medium, .high, .xhigh
+    public var effort: AgentEffort?       // .low, .medium, .high, .xhigh, etc.
     public var projectID: UUID?           // nil = general session
     public var workingDirectory: URL
     public var worktree: WorktreeInfo?
@@ -219,6 +219,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public var terminalScrollback: Data   // Ring buffer (256 KB max)
     public var createdAt: Date
     public var lastActiveAt: Date
+    public var agentSessionID: String?    // Native agent conversation/session identifier
 }
 ```
 
@@ -234,13 +235,14 @@ crashed       → working (restart only)
 
 Illegal transitions are silently ignored by `SessionStatusMachine`. Always use `SessionStatusMachine.transition()` — never set `.status` directly.
 
-### AgentKind
+### AgentKind & AgentDescriptor
 
-| Case | CLI | Supports Effort |
-|------|-----|-----------------|
-| `.claudeCode` | `claude` | Yes |
-| `.codexCLI` | `codex` | No |
-| `.openCode` | `opencode` | No |
+| Case | CLI | Supports Effort | Resume Strategy |
+|------|-----|-----------------|-----------------|
+| `.claudeCode` | `claude` | Yes (`--effort`) | Assignable (`--session-id` / `--resume`) |
+| `.codexCLI` | `codex` | Yes (`--config model_reasoning_effort`) | Discoverable (`codex resume <id>`) |
+| `.openCode` | `opencode` | No | Discoverable (`--session <id>`) |
+| `.antigravity` | `agy` | Yes (`--effort`) | Discoverable (`--conversation <id>`) |
 
 ## Testing
 
@@ -467,3 +469,4 @@ Import only what you need. Package modules are imported by product name.
 | `SessionKit/Models.swift` | Core domain types — Session, Project, AgentKind, SessionStatus |
 | `ProcessKit/PTYProcessProtocol.swift` | Core process abstraction — read to understand PTY protocol |
 | `PersistenceKit/GRDBSessionRepository.swift` | Database layer — migrations, CRUD operations |
+| `make test-ui` | Run UI tests (~5 min, 12 test classes, 12 app launches) |

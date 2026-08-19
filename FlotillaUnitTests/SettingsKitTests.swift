@@ -83,6 +83,37 @@ final class SettingsKitTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
 
         XCTAssertEqual(decoded.sessionDefaults.createWorktreeByDefault, false)
-        XCTAssertEqual(decoded.sessionDefaults.defaultAgentRawValue, 0)
+        XCTAssertEqual(decoded.sessionDefaults.defaultAgentRawValue, "claudeCode")
+    }
+
+    func testLegacySessionDefaultsPositionalIntDecodesToString() throws {
+        let json = Data(#"{"sessionDefaults":{"defaultAgentRawValue":1}}"#.utf8)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: json)
+        XCTAssertEqual(decoded.sessionDefaults.defaultAgentRawValue, "codexCLI")
+
+        let jsonAntigravity = Data(#"{"sessionDefaults":{"defaultAgentRawValue":3}}"#.utf8)
+        let decodedAntigravity = try JSONDecoder().decode(AppSettings.self, from: jsonAntigravity)
+        XCTAssertEqual(decodedAntigravity.sessionDefaults.defaultAgentRawValue, "antigravity")
+    }
+
+    func testLegacyAgentOverridesMigration() throws {
+        let legacyJSON = Data(#"""
+        {
+            "agentPaths": {
+                "claudeCodePath": "/bin/claude",
+                "codexCLIPath": "/bin/codex"
+            },
+            "agentArguments": {
+                "claudeCodeArguments": ["--verbose"],
+                "openCodeArguments": ["--log-level", "debug"]
+            }
+        }
+        """#.utf8)
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: legacyJSON)
+        XCTAssertEqual(decoded.agentOverrides.paths["claudeCode"], "/bin/claude")
+        XCTAssertEqual(decoded.agentOverrides.paths["codexCLI"], "/bin/codex")
+        XCTAssertEqual(decoded.agentOverrides.arguments["claudeCode"], ["--verbose"])
+        XCTAssertEqual(decoded.agentOverrides.arguments["openCode"], ["--log-level", "debug"])
     }
 }

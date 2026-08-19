@@ -60,6 +60,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var status: String
     var kanbanColumnID: String?
     var workflowStage: String?
+    var agentSessionID: String?
     var terminalScrollback: Data
     var createdAt: Date
     var lastActiveAt: Date
@@ -79,6 +80,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         status = session.status.rawValue
         kanbanColumnID = session.kanbanColumnID?.uuidString
         workflowStage = session.workflowStage?.rawValue
+        agentSessionID = session.agentSessionID
         terminalScrollback = session.terminalScrollback
         createdAt = session.createdAt
         lastActiveAt = session.lastActiveAt
@@ -149,6 +151,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             status: sessionStatus,
             kanbanColumnID: kanbanColumnUUID,
             workflowStage: workflowStageValue,
+            agentSessionID: agentSessionID,
             terminalScrollback: terminalScrollback,
             createdAt: createdAt,
             lastActiveAt: lastActiveAt

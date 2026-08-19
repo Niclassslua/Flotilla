@@ -32,6 +32,10 @@ final class AppStore {
     private static let maximumScrollbackBytes = 256 * 1_024  // 256 KB ring buffer
     private static let scrollbackTrimSlack = 64 * 1_024
     private static let scrollbackSaveDebounce = Duration.milliseconds(2000) // 2 s
+    @ObservationIgnored
+    private var sessionResumeStarts: [UUID: Date] = [:]
+    @ObservationIgnored
+    private var sessionResumeRetried: Set<UUID> = []
 
     /// Live terminal output, kept out of the observed `sessions` array.
     ///
@@ -116,11 +120,26 @@ final class AppStore {
 
         for index in sessions.indices where !sessions[index].status.isTerminal {
             do {
+                if sessions[index].agentSessionID != nil {
+                    sessionResumeStarts[sessions[index].id] = Date()
+                }
                 // A restored CLI gets a fresh interactive process, but the
                 // original goal is not sent again; replaying it could repeat
                 // destructive work after every app launch.
                 try processManager.start(session: sessions[index], deliverGoal: false)
             } catch {
+                if sessions[index].agentSessionID != nil {
+                    sessions[index].agentSessionID = nil
+                    try? repository.save(mergingLiveScrollback(sessions[index]))
+                    do {
+                        try processManager.start(session: sessions[index], deliverGoal: false)
+                        lastOperationError = "Previous conversation could not be restored — starting a fresh context."
+                        scheduleTitleSync(forSessionID: sessions[index].id)
+                        continue
+                    } catch {
+                        // proceed to crash transition
+                    }
+                }
                 sessions[index] = statusMachine.transition(sessions[index], to: .crashed)
                 do {
                     try repository.save(mergingLiveScrollback(sessions[index]))
@@ -405,8 +424,8 @@ final class AppStore {
     }
 
     /// Asynchronously queries the active agent's native storage/API for an
-    /// auto-generated session title and applies it if found.
-    func syncAgentTitle(forSessionID sessionID: UUID) async {
+    /// auto-generated session title and session ID, applying both if found.
+    func syncAgentSessionMetadata(forSessionID sessionID: UUID) async {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         // Only look for native agent sessions active around or after this session was launched
         let searchSince = session.createdAt.addingTimeInterval(-30)
@@ -415,6 +434,13 @@ final class AppStore {
             workingDirectory: session.workingDirectory,
             since: searchSince
         ) {
+            // Pin the discovered native session ID before title guards
+            if let index = sessions.firstIndex(where: { $0.id == sessionID }),
+               sessions[index].agentSessionID != discovered.id {
+                sessions[index].agentSessionID = discovered.id
+                try? repository.save(mergingLiveScrollback(sessions[index]))
+            }
+
             let discoveredTitle = discovered.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !discoveredTitle.isEmpty else { return }
             guard !discoveredTitle.contains("\n"), discoveredTitle.count <= 120 else { return }
@@ -423,10 +449,14 @@ final class AppStore {
         }
     }
 
+    /// Backwards-compatible forwarder
+    func syncAgentTitle(forSessionID sessionID: UUID) async {
+        await syncAgentSessionMetadata(forSessionID: sessionID)
+    }
+
     /// Spawns a lightweight background retry loop that checks the agent's
     /// native session storage at progressively spaced intervals (1s, 2.5s, 5s, 9s, 15s, 25s)
-    /// to pick up auto-generated titles (e.g. Claude's ai-title, OpenCode's prompt/title,
-    /// Codex's name/prompt, Antigravity's objective) as soon as the agent produces them.
+    /// to pick up auto-generated titles and session IDs as soon as the agent produces them.
     func scheduleTitleSync(forSessionID sessionID: UUID) {
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -435,7 +465,7 @@ final class AppStore {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 guard let currentSession = self.sessions.first(where: { $0.id == sessionID }) else { break }
                 guard currentSession.status == .working || currentSession.status == .waitingForInput || currentSession.status == .idle else { break }
-                await self.syncAgentTitle(forSessionID: sessionID)
+                await self.syncAgentSessionMetadata(forSessionID: sessionID)
             }
         }
     }
@@ -512,6 +542,12 @@ final class AppStore {
         // its dead or superseded agent) instead of launching a fresh one.
         processManager.terminate(sessionID: sessionID)
         processManager.killServerSideSession(sessionID: sessionID)
+        // Clear agentSessionID before restart to ensure a completely fresh conversation
+        sessions[index].agentSessionID = nil
+        let descriptor = AgentCatalog.descriptor(for: sessions[index].agent)
+        if case .assignable = descriptor.resume {
+            sessions[index].agentSessionID = sessions[index].id.uuidString
+        }
         do {
             try processManager.start(session: sessions[index], deliverGoal: false)
             let updated = statusMachine.transition(sessions[index], to: .working)
@@ -719,6 +755,10 @@ final class AppStore {
                 status: .idle
             )
             try processManager.start(session: session, deliverGoal: deliverGoal)
+            let descriptor = AgentCatalog.descriptor(for: agent)
+            if case .assignable = descriptor.resume {
+                session.agentSessionID = session.id.uuidString
+            }
             session = statusMachine.transition(session, to: .working)
             do {
                 try repository.save(session)
@@ -753,6 +793,30 @@ final class AppStore {
     private func handleProcessEvent(_ event: SessionProcessManager.SessionProcessEvent) {
         switch event {
         case let .terminated(sessionID, exitCode):
+            if exitCode != 0,
+               let index = sessions.firstIndex(where: { $0.id == sessionID }),
+               sessions[index].agentSessionID != nil,
+               !sessionResumeRetried.contains(sessionID),
+               let start = sessionResumeStarts[sessionID],
+               Date().timeIntervalSince(start) < 4.0 {
+                // Self-heal: retry once with fresh context
+                sessionResumeRetried.insert(sessionID)
+                sessionResumeStarts.removeValue(forKey: sessionID)
+                sessions[index].agentSessionID = nil
+                try? repository.save(mergingLiveScrollback(sessions[index]))
+                processManager.killServerSideSession(sessionID: sessionID)
+                do {
+                    try processManager.start(session: sessions[index], deliverGoal: false)
+                    sessions[index] = statusMachine.transition(sessions[index], to: .working)
+                    try repository.save(mergingLiveScrollback(sessions[index]))
+                    scheduleTitleSync(forSessionID: sessionID)
+                    lastOperationError = "Previous conversation could not be restored — starting a fresh context."
+                    return
+                } catch {
+                    // fall through
+                }
+            }
+            sessionResumeStarts.removeValue(forKey: sessionID)
             applyObservedStatus(exitCode == 0 ? .finished : .crashed, toSessionID: sessionID)
         case .launchedWithoutTmux:
             lastOperationError = "tmux is running but not answering clients, so the session was started without it. It will work normally, but will not survive quitting Flotilla."

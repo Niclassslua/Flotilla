@@ -36,11 +36,7 @@ struct ContentView: View {
     }
 
     private var defaultAgent: AgentKind {
-        let agentStrings = AgentKind.allCases.map { $0.rawValue }
-        if settingsViewModel.settings.sessionDefaults.defaultAgentRawValue >= 0 && settingsViewModel.settings.sessionDefaults.defaultAgentRawValue < agentStrings.count {
-            return AgentKind(rawValue: agentStrings[settingsViewModel.settings.sessionDefaults.defaultAgentRawValue]) ?? AgentKind.claudeCode
-        }
-        return AgentKind.claudeCode
+        AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode
     }
 
     var body: some View {

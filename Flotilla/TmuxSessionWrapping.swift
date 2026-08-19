@@ -45,6 +45,8 @@ enum TmuxSessionWrapping {
     static let globalOptions: [[String]] = [
         ["default-terminal", "tmux-256color"],
         ["status", "off"],
+        ["history-limit", "50000"],
+        ["mouse", "on"],
     ]
 
     /// `set-option -g` needs a server that is already running, and on a cold

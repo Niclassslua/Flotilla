@@ -43,12 +43,7 @@ public struct AgentEffortOption: Sendable, Equatable, Identifiable {
 public enum AgentEffortCatalog {
     /// Levels the agent's CLI accepts at all, ignoring per-model narrowing.
     public static func supportedLevels(for agent: AgentKind) -> [AgentEffort] {
-        switch agent {
-        case .claudeCode: [.low, .medium, .high, .xhigh, .max]
-        case .codexCLI: [.minimal, .low, .medium, .high, .xhigh, .max, .ultra]
-        case .openCode: []
-        case .antigravity: [.low, .medium, .high]
-        }
+        AgentCatalog.descriptor(for: agent).effortLevels
     }
 
     public static func supports(_ level: AgentEffort, agent: AgentKind) -> Bool {
@@ -57,15 +52,7 @@ public enum AgentEffortCatalog {
 
     /// The agent's own name for a level.
     public static func label(for level: AgentEffort, agent: AgentKind) -> String {
-        switch agent {
-        case .codexCLI:
-            switch level {
-            case .xhigh: "Extra High"
-            default: level.displayName
-            }
-        case .claudeCode, .openCode, .antigravity:
-            level.displayName
-        }
+        AgentCatalog.descriptor(for: agent).effortLabel(for: level)
     }
 
     /// The levels to offer for `agent` + `model`.
@@ -152,11 +139,6 @@ public enum AgentEffortCatalog {
     /// How the level reaches the CLI, shown in the picker so the mapping from
     /// this control to the agent's own flag stays visible.
     public static func invocationHint(for level: AgentEffort, agent: AgentKind) -> String? {
-        switch agent {
-        case .claudeCode: "claude --effort \(level.rawValue)"
-        case .codexCLI: "codex -c model_reasoning_effort=\"\(level.rawValue)\""
-        case .antigravity: "agy --effort \(level.rawValue)"
-        case .openCode: nil
-        }
+        AgentCatalog.descriptor(for: agent).invocationHint(for: level)
     }
 }

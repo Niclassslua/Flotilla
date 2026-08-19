@@ -111,6 +111,11 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
             }
             try db.create(index: "idx_kanban_column_boardID", on: "kanban_column", columns: ["boardID"])
         }
+        migrator.registerMigration("v5_addAgentSessionID") { db in
+            try db.alter(table: "session") { table in
+                table.add(column: "agentSessionID", .text)
+            }
+        }
         return migrator
     }
 

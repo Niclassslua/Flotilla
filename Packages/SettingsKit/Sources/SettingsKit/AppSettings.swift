@@ -1,8 +1,32 @@
 import Foundation
 
-/// Explicit per-agent binary path overrides. Kept as plain strings (not
-/// keyed by SessionKit's `AgentKind`) so SettingsKit stays standalone —
-/// AgentKit maps between the two where both are in scope.
+/// Explicit per-agent binary path and argument overrides, keyed by the agent's
+/// raw value string so SettingsKit stays independent of SessionKit.
+public struct AgentOverrides: Codable, Equatable, Sendable {
+    public var paths: [String: String]
+    public var arguments: [String: [String]]
+
+    public init(
+        paths: [String: String] = [:],
+        arguments: [String: [String]] = [:]
+    ) {
+        self.paths = paths
+        self.arguments = arguments
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case paths
+        case arguments
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        paths = try container.decodeIfPresent([String: String].self, forKey: .paths) ?? [:]
+        arguments = try container.decodeIfPresent([String: [String]].self, forKey: .arguments) ?? [:]
+    }
+}
+
+/// Explicit per-agent binary path overrides (legacy DTO kept for migration and compatibility).
 public struct AgentPathOverrides: Codable, Equatable, Sendable {
     public var claudeCodePath: String
     public var codexCLIPath: String
@@ -37,8 +61,7 @@ public struct AgentPathOverrides: Codable, Equatable, Sendable {
     }
 }
 
-/// Arguments are stored as an array so they are passed directly to
-/// `Process` without invoking a shell or reinterpreting user input.
+/// Legacy DTO kept for migration and compatibility.
 public struct AgentArgumentOverrides: Codable, Equatable, Sendable {
     public var claudeCodeArguments: [String]
     public var codexCLIArguments: [String]
@@ -110,9 +133,9 @@ public enum OpenCodeSubscription: String, Codable, CaseIterable, Sendable, Ident
 
 public struct SessionDefaults: Codable, Equatable, Sendable {
     public var createWorktreeByDefault: Bool
-    public var defaultAgentRawValue: Int = 0
+    public var defaultAgentRawValue: String = "claudeCode"
 
-    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: Int = 0) {
+    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: String = "claudeCode") {
         self.createWorktreeByDefault = createWorktreeByDefault
         self.defaultAgentRawValue = defaultAgentRawValue
     }
@@ -130,7 +153,18 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         createWorktreeByDefault = try container.decodeIfPresent(Bool.self, forKey: .createWorktreeByDefault) ?? true
-        defaultAgentRawValue = try container.decodeIfPresent(Int.self, forKey: .defaultAgentRawValue) ?? 0
+        if let stringValue = try? container.decode(String.self, forKey: .defaultAgentRawValue) {
+            defaultAgentRawValue = stringValue
+        } else if let intValue = try? container.decode(Int.self, forKey: .defaultAgentRawValue) {
+            let legacyKinds = ["claudeCode", "codexCLI", "openCode", "antigravity"]
+            if intValue >= 0 && intValue < legacyKinds.count {
+                defaultAgentRawValue = legacyKinds[intValue]
+            } else {
+                defaultAgentRawValue = "claudeCode"
+            }
+        } else {
+            defaultAgentRawValue = "claudeCode"
+        }
     }
 }
 
@@ -256,8 +290,7 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
 }
 
 public struct AppSettings: Codable, Equatable, Sendable {
-    public var agentPaths: AgentPathOverrides
-    public var agentArguments: AgentArgumentOverrides
+    public var agentOverrides: AgentOverrides
     public var openCodeSubscription: OpenCodeSubscription
     public var worktreeBaseDirectory: String
     public var appearance: AppearanceMode
@@ -267,8 +300,64 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var notifications: NotificationPreferences
     public var git: GitPreferences
 
+    public var agentPaths: AgentPathOverrides {
+        get {
+            AgentPathOverrides(
+                claudeCodePath: agentOverrides.paths["claudeCode"] ?? "",
+                codexCLIPath: agentOverrides.paths["codexCLI"] ?? "",
+                openCodePath: agentOverrides.paths["openCode"] ?? "",
+                antigravityPath: agentOverrides.paths["antigravity"] ?? ""
+            )
+        }
+        set {
+            if newValue.claudeCodePath.isEmpty { agentOverrides.paths.removeValue(forKey: "claudeCode") } else { agentOverrides.paths["claudeCode"] = newValue.claudeCodePath }
+            if newValue.codexCLIPath.isEmpty { agentOverrides.paths.removeValue(forKey: "codexCLI") } else { agentOverrides.paths["codexCLI"] = newValue.codexCLIPath }
+            if newValue.openCodePath.isEmpty { agentOverrides.paths.removeValue(forKey: "openCode") } else { agentOverrides.paths["openCode"] = newValue.openCodePath }
+            if newValue.antigravityPath.isEmpty { agentOverrides.paths.removeValue(forKey: "antigravity") } else { agentOverrides.paths["antigravity"] = newValue.antigravityPath }
+        }
+    }
+
+    public var agentArguments: AgentArgumentOverrides {
+        get {
+            AgentArgumentOverrides(
+                claudeCodeArguments: agentOverrides.arguments["claudeCode"] ?? [],
+                codexCLIArguments: agentOverrides.arguments["codexCLI"] ?? [],
+                openCodeArguments: agentOverrides.arguments["openCode"] ?? [],
+                antigravityArguments: agentOverrides.arguments["antigravity"] ?? []
+            )
+        }
+        set {
+            if newValue.claudeCodeArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "claudeCode") } else { agentOverrides.arguments["claudeCode"] = newValue.claudeCodeArguments }
+            if newValue.codexCLIArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "codexCLI") } else { agentOverrides.arguments["codexCLI"] = newValue.codexCLIArguments }
+            if newValue.openCodeArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "openCode") } else { agentOverrides.arguments["openCode"] = newValue.openCodeArguments }
+            if newValue.antigravityArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "antigravity") } else { agentOverrides.arguments["antigravity"] = newValue.antigravityArguments }
+        }
+    }
+
     public init(
-        agentPaths: AgentPathOverrides = AgentPathOverrides(),
+        agentOverrides: AgentOverrides = AgentOverrides(),
+        openCodeSubscription: OpenCodeSubscription = .none,
+        worktreeBaseDirectory: String = "",
+        appearance: AppearanceMode = .system,
+        workspace: WorkspacePreferences = WorkspacePreferences(),
+        sessionDefaults: SessionDefaults = SessionDefaults(),
+        terminal: TerminalPreferences = TerminalPreferences(),
+        notifications: NotificationPreferences = NotificationPreferences(),
+        git: GitPreferences = GitPreferences()
+    ) {
+        self.agentOverrides = agentOverrides
+        self.openCodeSubscription = openCodeSubscription
+        self.worktreeBaseDirectory = worktreeBaseDirectory
+        self.appearance = appearance
+        self.workspace = workspace
+        self.sessionDefaults = sessionDefaults
+        self.terminal = terminal
+        self.notifications = notifications
+        self.git = git
+    }
+
+    public init(
+        agentPaths: AgentPathOverrides,
         agentArguments: AgentArgumentOverrides = AgentArgumentOverrides(),
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
@@ -279,8 +368,19 @@ public struct AppSettings: Codable, Equatable, Sendable {
         notifications: NotificationPreferences = NotificationPreferences(),
         git: GitPreferences = GitPreferences()
     ) {
-        self.agentPaths = agentPaths
-        self.agentArguments = agentArguments
+        var paths: [String: String] = [:]
+        if !agentPaths.claudeCodePath.isEmpty { paths["claudeCode"] = agentPaths.claudeCodePath }
+        if !agentPaths.codexCLIPath.isEmpty { paths["codexCLI"] = agentPaths.codexCLIPath }
+        if !agentPaths.openCodePath.isEmpty { paths["openCode"] = agentPaths.openCodePath }
+        if !agentPaths.antigravityPath.isEmpty { paths["antigravity"] = agentPaths.antigravityPath }
+
+        var arguments: [String: [String]] = [:]
+        if !agentArguments.claudeCodeArguments.isEmpty { arguments["claudeCode"] = agentArguments.claudeCodeArguments }
+        if !agentArguments.codexCLIArguments.isEmpty { arguments["codexCLI"] = agentArguments.codexCLIArguments }
+        if !agentArguments.openCodeArguments.isEmpty { arguments["openCode"] = agentArguments.openCodeArguments }
+        if !agentArguments.antigravityArguments.isEmpty { arguments["antigravity"] = agentArguments.antigravityArguments }
+
+        self.agentOverrides = AgentOverrides(paths: paths, arguments: arguments)
         self.openCodeSubscription = openCodeSubscription
         self.worktreeBaseDirectory = worktreeBaseDirectory
         self.appearance = appearance
@@ -292,6 +392,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case agentOverrides
         case agentPaths
         case agentArguments
         case openCodeSubscription
@@ -306,8 +407,25 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        agentPaths = try container.decodeIfPresent(AgentPathOverrides.self, forKey: .agentPaths) ?? AgentPathOverrides()
-        agentArguments = try container.decodeIfPresent(AgentArgumentOverrides.self, forKey: .agentArguments) ?? AgentArgumentOverrides()
+        if let overrides = try container.decodeIfPresent(AgentOverrides.self, forKey: .agentOverrides) {
+            self.agentOverrides = overrides
+        } else {
+            var paths: [String: String] = [:]
+            var arguments: [String: [String]] = [:]
+            if let legacyPaths = try container.decodeIfPresent(AgentPathOverrides.self, forKey: .agentPaths) {
+                if !legacyPaths.claudeCodePath.isEmpty { paths["claudeCode"] = legacyPaths.claudeCodePath }
+                if !legacyPaths.codexCLIPath.isEmpty { paths["codexCLI"] = legacyPaths.codexCLIPath }
+                if !legacyPaths.openCodePath.isEmpty { paths["openCode"] = legacyPaths.openCodePath }
+                if !legacyPaths.antigravityPath.isEmpty { paths["antigravity"] = legacyPaths.antigravityPath }
+            }
+            if let legacyArgs = try container.decodeIfPresent(AgentArgumentOverrides.self, forKey: .agentArguments) {
+                if !legacyArgs.claudeCodeArguments.isEmpty { arguments["claudeCode"] = legacyArgs.claudeCodeArguments }
+                if !legacyArgs.codexCLIArguments.isEmpty { arguments["codexCLI"] = legacyArgs.codexCLIArguments }
+                if !legacyArgs.openCodeArguments.isEmpty { arguments["openCode"] = legacyArgs.openCodeArguments }
+                if !legacyArgs.antigravityArguments.isEmpty { arguments["antigravity"] = legacyArgs.antigravityArguments }
+            }
+            self.agentOverrides = AgentOverrides(paths: paths, arguments: arguments)
+        }
         openCodeSubscription = try container.decodeIfPresent(OpenCodeSubscription.self, forKey: .openCodeSubscription) ?? .none
         worktreeBaseDirectory = try container.decodeIfPresent(String.self, forKey: .worktreeBaseDirectory) ?? ""
         appearance = try container.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
@@ -316,5 +434,18 @@ public struct AppSettings: Codable, Equatable, Sendable {
         terminal = try container.decodeIfPresent(TerminalPreferences.self, forKey: .terminal) ?? TerminalPreferences()
         notifications = try container.decodeIfPresent(NotificationPreferences.self, forKey: .notifications) ?? NotificationPreferences()
         git = try container.decodeIfPresent(GitPreferences.self, forKey: .git) ?? GitPreferences()
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(agentOverrides, forKey: .agentOverrides)
+        try container.encode(openCodeSubscription, forKey: .openCodeSubscription)
+        try container.encode(worktreeBaseDirectory, forKey: .worktreeBaseDirectory)
+        try container.encode(appearance, forKey: .appearance)
+        try container.encode(workspace, forKey: .workspace)
+        try container.encode(sessionDefaults, forKey: .sessionDefaults)
+        try container.encode(terminal, forKey: .terminal)
+        try container.encode(notifications, forKey: .notifications)
+        try container.encode(git, forKey: .git)
     }
 }

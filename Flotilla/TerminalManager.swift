@@ -1,5 +1,6 @@
 import Foundation
 import SessionKit
+import AgentKit
 import ProcessKit
 import TerminalKit
 
@@ -99,11 +100,6 @@ final class TerminalManager {
     /// Matches Xirp's agent-specific multiline input profiles. Claude's
     /// terminal UI expects Escape+Return; Codex and OpenCode accept a line feed.
     private func multilineNewlineSequence(for agent: AgentKind) -> Data {
-        switch agent {
-        case .claudeCode:
-            Data([0x1B, 0x0D])
-        case .codexCLI, .openCode, .antigravity:
-            Data([0x0A])
-        }
+        AgentCatalog.descriptor(for: agent).multilineNewline
     }
 }
