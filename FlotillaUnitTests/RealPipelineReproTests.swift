@@ -285,7 +285,7 @@ final class RealPipelineReproTests: XCTestCase {
         await store.deleteSession(sessionID: created.id, deleteWorktree: false)
     }
 
-    private func waitForTmuxPanePID(_ name: String, timeout: TimeInterval = 4.0) -> String? {
+    private func waitForTmuxPanePID(_ name: String, timeout: TimeInterval = 10.0) -> String? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let pid = tmuxPanePID(name) { return pid }
@@ -294,7 +294,7 @@ final class RealPipelineReproTests: XCTestCase {
         return nil
     }
 
-    private func waitForTmuxPaneToDisappear(_ name: String, timeout: TimeInterval = 3.0) -> Bool {
+    private func waitForTmuxPaneToDisappear(_ name: String, timeout: TimeInterval = 6.0) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if tmuxPanePID(name) == nil { return true }

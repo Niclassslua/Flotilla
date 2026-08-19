@@ -51,19 +51,17 @@ final class FlotillaUITests: XCTestCase {
         let updatedBranch = "\(updatedBranchLabel.label) \(updatedBranchLabel.value as? String ?? "")"
         XCTAssertTrue(updatedBranch.contains("main"))
 
-        // 2. Global Home and Projects navigation
+        // 2. Global Overview and Project drilldown navigation
         let homeButton = app.descendants(matching: .any)["Sidebar.Overview"].firstMatch
         XCTAssertTrue(fastWait(homeButton, timeout: 3))
         homeButton.click()
         XCTAssertTrue(fastWait(app.descendants(matching: .any)["HomeDashboard"].firstMatch, timeout: 3))
 
-        let projectsButton = app.descendants(matching: .any)["Sidebar.AllProjects"].firstMatch
-        XCTAssertTrue(fastWait(projectsButton, timeout: 3))
-        projectsButton.click()
+        let projectCard = app.descendants(matching: .any)["ProjectRow-Flotilla"].firstMatch
+        XCTAssertTrue(fastWait(projectCard, timeout: 3))
+        projectCard.click()
 
-        let project = app.descendants(matching: .any)["ProjectRow-Flotilla"].firstMatch
-        XCTAssertTrue(fastWait(project, timeout: 3))
-        project.click()
-        XCTAssertTrue(fastWait(app.staticTexts["Start something new"], timeout: 3))
+        let backButton = app.descendants(matching: .any)["ProjectDetail.BackButton"].firstMatch
+        XCTAssertTrue(fastWait(backButton, timeout: 3))
     }
 }

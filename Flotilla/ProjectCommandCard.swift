@@ -34,12 +34,9 @@ struct ProjectCommandCard: View {
             headerRow
             pathAndStatsRow
             sessionTelemetrySection
-            Divider()
-                .foregroundStyle(FlotillaColors.separator)
-            actionBar
         }
         .padding(FlotillaSpacing.large)
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
         .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card))
         .overlay {
             RoundedRectangle(cornerRadius: FlotillaRadius.card)
@@ -65,14 +62,13 @@ struct ProjectCommandCard: View {
         HStack(alignment: .center, spacing: FlotillaSpacing.small) {
             ProjectMark(title: project.name, tint: ProjectMark.tint(for: project))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(project.name)
-                    .font(FlotillaTypography.headline)
-                    .foregroundStyle(FlotillaColors.textPrimary)
-                    .lineLimit(1)
-            }
+            Text(project.name)
+                .font(FlotillaTypography.headline)
+                .foregroundStyle(FlotillaColors.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: FlotillaSpacing.small)
 
             if let branch = currentBranch {
                 HStack(spacing: 4) {
@@ -81,28 +77,17 @@ struct ProjectCommandCard: View {
                     Text(branch)
                         .font(.system(size: 11, design: .monospaced))
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 .padding(.horizontal, FlotillaSpacing.small)
                 .padding(.vertical, FlotillaSpacing.xSmall)
                 .background(FlotillaColors.surfaceElevated, in: Capsule())
                 .foregroundStyle(FlotillaColors.textSecondary)
+                .frame(maxWidth: 150, alignment: .trailing)
             }
 
             if let stat = projectDiffStat, !stat.isEmpty {
-                HStack(spacing: 4) {
-                    if stat.additions > 0 {
-                        Text("+\(stat.additions)")
-                            .foregroundStyle(FlotillaColors.statusWorking)
-                    }
-                    if stat.deletions > 0 {
-                        Text("-\(stat.deletions)")
-                            .foregroundStyle(FlotillaColors.statusCrashed)
-                    }
-                }
-                .font(.system(size: 11, design: .monospaced))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
+                DiffStatBadge(stat: stat)
             }
 
             moreMenu
@@ -119,15 +104,17 @@ struct ProjectCommandCard: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: FlotillaSpacing.small)
 
             HStack(spacing: FlotillaSpacing.small) {
                 Label("\(sessions.count)", systemImage: "terminal")
                     .help("\(sessions.count) total sessions")
+                    .fixedSize(horizontal: true, vertical: false)
 
                 if worktreeCount > 0 {
                     Label("\(worktreeCount)", systemImage: "arrow.triangle.branch")
                         .help("\(worktreeCount) active worktrees")
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
             .font(FlotillaTypography.caption)
@@ -153,6 +140,7 @@ struct ProjectCommandCard: View {
                         Text(session.agent.displayName)
                             .font(FlotillaTypography.caption.weight(.semibold))
                             .foregroundStyle(FlotillaColors.textSecondary)
+                            .fixedSize(horizontal: true, vertical: false)
 
                         Text(session.title)
                             .font(FlotillaTypography.caption)
@@ -168,6 +156,7 @@ struct ProjectCommandCard: View {
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
                                 .background(FlotillaColors.statusWaitingForInput.opacity(0.16), in: Capsule())
+                                .fixedSize()
                         }
                     }
                 }
@@ -186,58 +175,6 @@ struct ProjectCommandCard: View {
         }
     }
 
-    // MARK: - Action Bar
-
-    private var actionBar: some View {
-        HStack(spacing: FlotillaSpacing.small) {
-            Button {
-                onQuickLaunch()
-            } label: {
-                Label("Launch", systemImage: "bolt.fill")
-                    .font(FlotillaTypography.caption.weight(.medium))
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .tint(FlotillaColors.accent)
-            .help("Start a new agent session in this project")
-            .accessibilityIdentifier("ProjectCard.QuickLaunch-\(project.name)")
-
-            Button {
-                openTerminal()
-            } label: {
-                Label("Terminal", systemImage: "terminal")
-                    .font(FlotillaTypography.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("Open in Terminal")
-            .accessibilityIdentifier("ProjectCard.Terminal-\(project.name)")
-
-            Button {
-                openInEditor()
-            } label: {
-                Label("Editor", systemImage: "curlybraces")
-                    .font(FlotillaTypography.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("Open in VS Code or Cursor")
-            .accessibilityIdentifier("ProjectCard.Editor-\(project.name)")
-
-            Button {
-                revealInFinder()
-            } label: {
-                Image(systemName: "folder")
-                    .font(.system(size: FlotillaIconSize.small))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("Reveal in Finder")
-            .accessibilityIdentifier("ProjectCard.Finder-\(project.name)")
-
-            Spacer(minLength: 0)
-        }
-    }
 
     // MARK: - More Menu
 

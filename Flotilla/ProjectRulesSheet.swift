@@ -3,45 +3,24 @@ import AppKit
 import SessionKit
 import DesignSystem
 
-/// Codebase Context & Agent Rules Studio (Design 2).
-/// Inspects and edits project rules (AGENTS.md, CLAUDE.md, .cursorrules),
-/// skills, and codebase architecture to prime AI agents with high-quality context.
-struct ProjectContextStudioView: View {
+/// Dedicated rules, instructions, and skills sheet for a project.
+/// Wraps RulesPanelView with 1-click template file creation (AGENTS.md, CLAUDE.md, .cursorrules).
+struct ProjectRulesSheet: View {
+    @Environment(\.dismiss) private var dismiss
     let project: Project
     @Bindable var store: AppStore
 
-    @State private var studioTab: StudioTab = .rules
     @State private var showCreatedNotification = false
     @State private var createdFileName = ""
 
-    private enum StudioTab: String, CaseIterable, Identifiable {
-        case rules = "Rules & Instructions"
-        case files = "Codebase Browser"
-
-        var id: Self { self }
-
-        var icon: String {
-            switch self {
-            case .rules: "doc.badge.gearshape"
-            case .files: "folder"
-            }
-        }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            topControlBar
+            headerBar
             Divider()
-
-            switch studioTab {
-            case .rules:
-                RulesPanelView(rootURL: project.rootPath, filter: .all)
-                    .id(project.id.uuidString + "-rules")
-            case .files:
-                FileBrowserView(rootURL: project.rootPath)
-                    .id(project.id.uuidString + "-files")
-            }
+            RulesPanelView(rootURL: project.rootPath, filter: .all)
+                .id(project.id.uuidString + "-rules")
         }
+        .frame(minWidth: 800, minHeight: 540)
         .background(FlotillaColors.canvas)
         .overlay(alignment: .bottomTrailing) {
             if showCreatedNotification {
@@ -64,18 +43,24 @@ struct ProjectContextStudioView: View {
         }
     }
 
-    // MARK: - Top Control Bar
+    // MARK: - Header Bar
 
-    private var topControlBar: some View {
+    private var headerBar: some View {
         HStack(spacing: FlotillaSpacing.medium) {
-            Picker("Context View", selection: $studioTab) {
-                ForEach(StudioTab.allCases) { tab in
-                    Label(tab.rawValue, systemImage: tab.icon).tag(tab)
-                }
+            Image(systemName: "doc.badge.gearshape")
+                .font(.system(size: FlotillaIconSize.medium))
+                .foregroundStyle(FlotillaColors.accent)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(project.name) — Rules & Instructions")
+                    .font(FlotillaTypography.headline)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                Text(project.rootPath.path)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 320)
 
             Spacer()
 
@@ -104,10 +89,17 @@ struct ProjectContextStudioView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .help("Reveal project in Finder")
+            .help("Reveal in Finder")
+
+            Button("Done") {
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .keyboardShortcut(.defaultAction)
         }
-        .padding(.horizontal, FlotillaSpacing.medium)
-        .padding(.vertical, FlotillaSpacing.small)
+        .padding(.horizontal, FlotillaSpacing.large)
+        .padding(.vertical, FlotillaSpacing.medium)
         .background(FlotillaColors.surfaceElevated)
     }
 

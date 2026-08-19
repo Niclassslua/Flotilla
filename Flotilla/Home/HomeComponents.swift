@@ -394,104 +394,225 @@ private struct HomeSessionRow: View {
     }
 }
 
-// MARK: - Recent Projects
+// MARK: - Projects Gallery & Command Center
 
-struct HomeRecentProjectsGrid: View {
-    let context: HomeContext
-    var limit: Int = 4
-    var minimumTileWidth: CGFloat = 200
+public enum ProjectSort: String, CaseIterable, Identifiable, Sendable {
+    case active = "Active"
+    case recent = "Last Used"
+    case name = "Name"
 
-    private var projects: [Project] { context.recentProjects(limit: limit) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-            HomeSectionHeader(title: "Projects", count: context.store.projects.count)
-            if projects.isEmpty {
-                HomeEmptyHint(text: "Projects appear here once you launch a project-scoped session.")
-            } else {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: minimumTileWidth), spacing: FlotillaSpacing.medium)],
-                    spacing: FlotillaSpacing.medium
-                ) {
-                    ForEach(projects) { project in
-                        HomeProjectTile(project: project, context: context)
-                    }
-                }
-            }
-        }
-        .accessibilityIdentifier(AXID.homeRecentProjects.rawValue)
-    }
+    public var id: Self { self }
 }
 
-struct HomeProjectTile: View {
-    let project: Project
-    let context: HomeContext
-    @State private var isHovering = false
+public enum ProjectFilter: String, CaseIterable, Identifiable, Sendable {
+    case all = "All"
+    case activeOnly = "Active Agents"
+    case attention = "Needs Attention"
 
-    private var sessions: [Session] { context.store.sessions(for: project) }
-    private var tint: Color { ProjectMark.tint(for: project) }
-    private var activeCount: Int {
-        sessions.filter { $0.status == .working || $0.status == .waitingForInput }.count
+    public var id: Self { self }
+}
+
+struct HomeProjectsGallery: View {
+    let context: HomeContext
+    let onSelectProject: (UUID) -> Void
+
+    @State private var searchText = ""
+    @State private var sortOrder: ProjectSort = .active
+    @State private var filterMode: ProjectFilter = .all
+    @State private var presentedSheet: ProjectSheetType?
+
+    private var projects: [Project] {
+        var list = context.store.projects
+        if !searchText.isEmpty {
+            list = list.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText)
+                    || $0.rootPath.path.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+        switch filterMode {
+        case .all:
+            break
+        case .activeOnly:
+            list = list.filter { project in
+                context.store.sessions(for: project).contains { $0.status == .working || $0.status == .waitingForInput }
+            }
+        case .attention:
+            list = list.filter { project in
+                context.store.sessions(for: project).contains { $0.status == .waitingForInput || $0.status == .crashed }
+            }
+        }
+        switch sortOrder {
+        case .active:
+            return list.sorted {
+                let countA = context.store.sessions(for: $0).filter { $0.status == .working || $0.status == .waitingForInput }.count
+                let countB = context.store.sessions(for: $1).filter { $0.status == .working || $0.status == .waitingForInput }.count
+                if countA != countB { return countA > countB }
+                return context.store.sessions(for: $0).count > context.store.sessions(for: $1).count
+            }
+        case .recent:
+            return list.sorted {
+                let lastA = context.store.sessions(for: $0).map(\.lastActiveAt).max() ?? Date.distantPast
+                let lastB = context.store.sessions(for: $1).map(\.lastActiveAt).max() ?? Date.distantPast
+                return lastA > lastB
+            }
+        case .name:
+            return list.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-            HStack(spacing: FlotillaSpacing.small) {
-                ProjectMark(title: project.name, tint: tint)
-                Text(project.name)
-                    .font(FlotillaTypography.body.weight(.semibold))
-                    .foregroundStyle(FlotillaColors.textPrimary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
+            headerRow
+            controlsAndFilterBar
+            projectsGrid
+        }
+        .accessibilityIdentifier(AXID.homeRecentProjects.rawValue)
+        .sheet(item: $presentedSheet) { sheet in
+            ProjectPathSheet(importsWorkspace: sheet == .importWorkspace) { paths in
+                for path in paths { context.store.addProject(at: path) }
+                presentedSheet = nil
             }
+        }
+    }
 
-            Text(project.rootPath.path)
-                .font(FlotillaTypography.caption3.monospaced())
+    private var headerRow: some View {
+        HStack(alignment: .center, spacing: FlotillaSpacing.small) {
+            HomeSectionHeader(title: "Repositories & Projects", count: context.store.projects.count)
+
+            Spacer(minLength: FlotillaSpacing.medium)
+
+            Button {
+                presentedSheet = .importWorkspace
+            } label: {
+                Label("Import Workspace", systemImage: "square.and.arrow.down")
+                    .font(FlotillaTypography.caption)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Scan a folder for local Git repositories")
+
+            Button {
+                presentedSheet = .add
+            } label: {
+                Label("Add Project", systemImage: "plus")
+                    .font(FlotillaTypography.caption.weight(.medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(FlotillaColors.accent)
+            .help("Add a repository to Flotilla")
+            .accessibilityIdentifier("Projects.ImportButton")
+        }
+    }
+
+    private var controlsAndFilterBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: FlotillaSpacing.medium) {
+                searchField
+                filterSegmented
+                Spacer(minLength: FlotillaSpacing.small)
+                sortControls
+            }
+            VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
+                HStack(spacing: FlotillaSpacing.medium) {
+                    searchField
+                    Spacer(minLength: FlotillaSpacing.small)
+                    sortControls
+                }
+                filterSegmented
+            }
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
                 .foregroundStyle(FlotillaColors.textTertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            TextField("Filter projects by name or path…", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(FlotillaTypography.body)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(minWidth: 180, maxWidth: 320)
+        .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
+        .overlay {
+            RoundedRectangle(cornerRadius: FlotillaRadius.control)
+                .strokeBorder(FlotillaColors.separator)
+        }
+    }
 
-            Spacer(minLength: FlotillaSpacing.xSmall)
+    private var filterSegmented: some View {
+        Picker("Filter", selection: $filterMode) {
+            ForEach(ProjectFilter.allCases) { filter in
+                Text(filter.rawValue).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(minWidth: 180, maxWidth: 260)
+        .fixedSize(horizontal: false, vertical: true)
+    }
 
-            HStack(spacing: FlotillaSpacing.small) {
-                Text("\(sessions.count) session\(sessions.count == 1 ? "" : "s")")
-                    .font(FlotillaTypography.caption2)
-                    .foregroundStyle(FlotillaColors.textSecondary)
-                Spacer(minLength: 0)
-                if activeCount > 0 {
-                    HStack(spacing: FlotillaSpacing.xSmall) {
-                        Circle()
-                            .fill(FlotillaColors.statusWorking)
-                            .frame(width: 5, height: 5)
-                        Text("\(activeCount) active")
-                            .font(FlotillaTypography.caption2.weight(.medium))
-                            .foregroundStyle(FlotillaColors.statusWorking)
+    private var sortControls: some View {
+        HStack(spacing: 5) {
+            Text("SORT")
+                .font(FlotillaTypography.caption2.weight(.bold))
+                .tracking(0.8)
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .fixedSize()
+            ForEach(ProjectSort.allCases) { option in
+                Button(option.rawValue) { sortOrder = option }
+                    .buttonStyle(.plain)
+                    .font(FlotillaTypography.caption.weight(sortOrder == option ? .semibold : .regular))
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .background(
+                        sortOrder == option ? FlotillaColors.surfaceElevated : .clear,
+                        in: RoundedRectangle(cornerRadius: 5)
+                    )
+                    .foregroundStyle(sortOrder == option ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
+                    .fixedSize()
+            }
+        }
+    }
+
+    private var projectsGrid: some View {
+        Group {
+            if projects.isEmpty {
+                if context.store.projects.isEmpty {
+                    HomeEmptyHint(text: "Add your first Git repository above to start managing worktrees and project-scoped agent sessions.")
+                } else {
+                    ContentUnavailableView(
+                        "No Matching Projects",
+                        systemImage: "folder.badge.questionmark",
+                        description: Text("Try adjusting your search query or filter.")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 160)
+                }
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 360, maximum: .infinity), spacing: FlotillaSpacing.large)],
+                    spacing: FlotillaSpacing.large
+                ) {
+                    ForEach(projects) { project in
+                        ProjectCommandCard(
+                            project: project,
+                            sessions: context.store.sessions(for: project),
+                            gitService: context.store.gitService,
+                            diffStatStore: context.store.diffStatStore,
+                            onSelect: { onSelectProject(project.id) },
+                            onQuickLaunch: { onSelectProject(project.id) },
+                            onRemove: { context.store.removeProject(id: project.id) }
+                        )
                     }
                 }
             }
         }
-        .padding(FlotillaSpacing.medium)
-        .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
-        .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                .strokeBorder(isHovering ? tint.opacity(0.55) : FlotillaColors.separator, lineWidth: FlotillaBorderWidth.thin)
-        }
-        .contentShape(.rect)
-        .onTapGesture { context.openProject(project.id) }
-        .onHover { isHovering = $0 }
-        .contextMenu {
-            Button("Open Project") { context.openProject(project.id) }
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([project.rootPath])
-            }
-            Button("Copy Path") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(project.rootPath.path, forType: .string)
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AXID.projectCompactCard.rawValue + project.name)
     }
 }
 

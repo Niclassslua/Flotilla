@@ -16,8 +16,11 @@ struct HomeDashboardView: View {
     let openSession: (UUID) -> Void
     @Bindable var settingsViewModel: SettingsViewModel
     let activityStore: SessionActivityStore?
+    let terminalManager: TerminalManager?
     let openCodeSubscription: OpenCodeSubscription
     let defaultAgent: AgentKind
+
+    @State private var selectedProjectID: UUID?
 
     init(
         store: AppStore,
@@ -25,6 +28,7 @@ struct HomeDashboardView: View {
         openSession: @escaping (UUID) -> Void,
         settingsViewModel: SettingsViewModel,
         activityStore: SessionActivityStore? = nil,
+        terminalManager: TerminalManager? = nil,
         openCodeSubscription: OpenCodeSubscription = .none,
         defaultAgent: AgentKind = .claudeCode
     ) {
@@ -33,6 +37,7 @@ struct HomeDashboardView: View {
         self.openSession = openSession
         self.settingsViewModel = settingsViewModel
         self.activityStore = activityStore
+        self.terminalManager = terminalManager
         self.openCodeSubscription = openCodeSubscription
         self.defaultAgent = defaultAgent
     }
@@ -44,57 +49,85 @@ struct HomeDashboardView: View {
             activityStore: activityStore,
             openCodeSubscription: openCodeSubscription,
             defaultAgent: defaultAgent,
-            openProject: openProject,
+            openProject: { id in
+                withAnimation(.snappy(duration: 0.2)) {
+                    selectedProjectID = id
+                }
+                openProject(id)
+            },
             openSession: openSession
         )
     }
 
     private var stats: HomeFleetStats { context.fleetStats }
 
+    private var activeDrilldownProject: Project? {
+        if let id = selectedProjectID ?? store.selectedProjectID {
+            return store.projects.first { $0.id == id }
+        }
+        return nil
+    }
+
     var body: some View {
+        Group {
+            if let project = activeDrilldownProject {
+                ProjectDetailView(
+                    project: project,
+                    sessions: store.sessions(for: project),
+                    store: store,
+                    terminalManager: terminalManager ?? TerminalManager(),
+                    openSession: openSession,
+                    openCodeSubscription: openCodeSubscription,
+                    onBackToOverview: {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            selectedProjectID = nil
+                            store.selectedProjectID = nil
+                        }
+                    }
+                )
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .trailing)),
+                    removal: .opacity.combined(with: .move(edge: .trailing))
+                ))
+            } else {
+                overviewDashboard
+                    .transition(.opacity)
+            }
+        }
+        .accessibilityIdentifier(AXID.homeDashboard.rawValue)
+    }
+
+    private var overviewDashboard: some View {
         ScrollView {
-            VStack(spacing: FlotillaSpacing.xxLarge) {
+            VStack(spacing: FlotillaSpacing.xLarge) {
+                FlotillaHeroTitleView(stats: stats)
                 composer
                 fleet
             }
             .padding(.horizontal, FlotillaSpacing.xxLarge)
-            .padding(.top, FlotillaSpacing.xxLarge)
+            .padding(.top, FlotillaSpacing.medium)
             .padding(.bottom, FlotillaSpacing.xxLarge)
-            .frame(maxWidth: 1_040, alignment: .center)
+            .frame(maxWidth: 1_440, alignment: .center)
             .frame(maxWidth: .infinity)
         }
         .background {
             harborGradient.ignoresSafeArea()
         }
-        .accessibilityIdentifier(AXID.homeDashboard.rawValue)
     }
 
     // MARK: - Composer
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
-            HStack(spacing: FlotillaSpacing.small) {
-                Image(systemName: "sailboat.fill")
-                    .font(.system(size: FlotillaIconSize.medium, weight: .medium))
-                    .foregroundStyle(FlotillaColors.accent)
-                    .accessibilityHidden(true)
-                Text(stats.total == 0 ? "Launch the first agent" : stats.summary)
-                    .font(FlotillaTypography.callout)
-                    .foregroundStyle(FlotillaColors.textSecondary)
-                Spacer(minLength: 0)
-            }
-
-            SessionLaunchForm(
-                store: store,
-                settings: settingsViewModel.settings,
-                defaultAgent: defaultAgent,
-                initialProject: nil,
-                openCodeSubscription: openCodeSubscription,
-                density: .chromeless,
-                onLaunch: openSession,
-                onCancel: {}
-            )
-        }
+        SessionLaunchForm(
+            store: store,
+            settings: settingsViewModel.settings,
+            defaultAgent: defaultAgent,
+            initialProject: nil,
+            openCodeSubscription: openCodeSubscription,
+            density: .chromeless,
+            onLaunch: openSession,
+            onCancel: {}
+        )
         .padding(FlotillaSpacing.large)
         .glassEffect(
             .regular,
@@ -110,18 +143,20 @@ struct HomeDashboardView: View {
     // MARK: - Fleet
 
     private var fleet: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.xLarge) {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.xxLarge) {
             HomeAttentionQueue(context: context, style: .panel)
             HomeRecentSessionsList(context: context, limit: 6)
-            HomeRecentProjectsGrid(context: context, limit: 4, minimumTileWidth: 210)
+            HomeProjectsGallery(context: context) { id in
+                withAnimation(.snappy(duration: 0.2)) {
+                    selectedProjectID = id
+                    store.selectedProjectID = id
+                }
+            }
+            .padding(.top, FlotillaSpacing.small)
         }
     }
 
     private var harborGradient: some View {
-        // Explicit stops rather than evenly-spaced colors: the sunset holds
-        // through the upper half and only settles into the canvas past the
-        // midpoint, so the warmth carries the composer instead of stopping
-        // right beneath it.
         LinearGradient(
             stops: [
                 .init(color: FlotillaColors.accent.opacity(0.18), location: 0),

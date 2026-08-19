@@ -15,7 +15,7 @@ struct WorkspaceToolbar: ToolbarContent {
     private var isFleetScope: Bool {
         switch navigator.selection {
         case .allSessions, .project: true
-        case .overview, .allProjects, .session: false
+        case .overview, .session: false
         }
     }
 
@@ -24,7 +24,7 @@ struct WorkspaceToolbar: ToolbarContent {
     private var showsPresentationPicker: Bool {
         switch navigator.selection {
         case .allSessions, .project, .session: true
-        case .overview, .allProjects: false
+        case .overview: false
         }
     }
 
