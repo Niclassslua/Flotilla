@@ -14,17 +14,19 @@ struct WorkspaceToolbar: ToolbarContent {
     /// the only ones where the grid's own options mean anything.
     private var isFleetScope: Bool {
         switch navigator.selection {
-        case .allSessions, .project: true
-        case .overview, .session: false
+        case .allSessions: true
+        case .overview, .session, .project: false
         }
     }
 
     /// The picker also shows while a single session is focused — that is the
     /// only way back to the fleet without going through the sidebar.
+    /// Hidden for project scope: the five-tab strip already fills the
+    /// principal area, and two competing tab bars confuse the hierarchy.
     private var showsPresentationPicker: Bool {
         switch navigator.selection {
-        case .allSessions, .project, .session: true
-        case .overview: false
+        case .allSessions, .session: true
+        case .overview, .project: false
         }
     }
 

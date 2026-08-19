@@ -20,20 +20,31 @@ struct FileNode: Identifiable, Hashable, Sendable {
 struct RuleFileEntry: Identifiable, Hashable, Sendable {
     let url: URL
     let relativePath: String
+    let scope: RuleScope
 
     var id: URL { url }
     var name: String { relativePath }
 }
 
+enum RuleScope: String, Sendable, Hashable {
+    case global
+    case project
+}
+
 protocol WorkspaceFileServicing: Sendable {
     func fileTree(at root: URL) async throws -> [FileNode]
     func instructionFiles(in root: URL) async throws -> [RuleFileEntry]
+    func globalInstructionFiles() async throws -> [RuleFileEntry]
     func readText(at url: URL) async throws -> String
     func writeText(_ text: String, to url: URL) async throws
 }
 
 struct WorkspaceFileService: WorkspaceFileServicing {
-    init() {}
+    let homeDirectoryProvider: @Sendable () -> URL
+
+    init(homeDirectoryProvider: @escaping @Sendable () -> URL = { FileManager.default.homeDirectoryForCurrentUser }) {
+        self.homeDirectoryProvider = homeDirectoryProvider
+    }
 
     func fileTree(at root: URL) async throws -> [FileNode] {
         return try await Task.detached {
@@ -56,6 +67,13 @@ struct WorkspaceFileService: WorkspaceFileServicing {
     func writeText(_ text: String, to url: URL) async throws {
         try await Task.detached {
             try text.write(to: url, atomically: true, encoding: .utf8)
+        }.value
+    }
+
+    func globalInstructionFiles() async throws -> [RuleFileEntry] {
+        let home = homeDirectoryProvider()
+        return try await Task.detached {
+            Self.discoverGlobalInstructionFiles(home: home, fileManager: .default)
         }.value
     }
 
@@ -164,7 +182,31 @@ struct WorkspaceFileService: WorkspaceFileServicing {
                 || relative.contains(".agents/skills/")
                 || relative.contains(".codex/skills/")
             guard isKnownInstruction || isSkill else { continue }
-            results.append(RuleFileEntry(url: url, relativePath: relative))
+            results.append(RuleFileEntry(url: url, relativePath: relative, scope: .project))
+        }
+        return results.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
+    }
+
+    /// Scans well-known global rule file locations. Non-recursive, existence-only
+    /// checks — no enumerator, so no TCC surprises.
+    private static func discoverGlobalInstructionFiles(
+        home: URL,
+        fileManager: FileManager
+    ) -> [RuleFileEntry] {
+        let candidates: [(dir: String, file: String)] = [
+            (".claude", "CLAUDE.md"),
+            (".codex", "AGENTS.md"),
+            (".agents", "AGENTS.md"),
+            (".gemini", "GEMINI.md"),
+        ]
+        var results: [RuleFileEntry] = []
+        for (dir, file) in candidates {
+            let url = home.appendingPathComponent(dir).appendingPathComponent(file)
+            fileScanLog.notice("globalInstructionFiles: checking \(url.path, privacy: .public)")
+            if fileManager.fileExists(atPath: url.path) {
+                let relative = "~/\(dir)/\(file)"
+                results.append(RuleFileEntry(url: url, relativePath: relative, scope: .global))
+            }
         }
         return results.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
     }

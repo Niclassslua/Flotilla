@@ -13,34 +13,90 @@ struct ProjectDetailView: View {
     let terminalManager: TerminalManager
     let openSession: (UUID) -> Void
     let openCodeSubscription: OpenCodeSubscription
+    let highlightUnseenCommits: Bool
     let onBackToOverview: () -> Void
 
     @State private var currentBranch: String?
     @State private var projectDiffStat: GitDiffStat?
-    @State private var isShowingRulesSheet = false
     @State private var isShowingCreateSessionSheet = false
+    @State private var selectedTab: ProjectTab = .overview
+
+    /// The five surfaces a project workspace provides.
+    enum ProjectTab: String, CaseIterable, Identifiable {
+        case overview, git, files, skills, rules
+
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .overview: return "Overview"
+            case .git:      return "Git"
+            case .files:    return "Files"
+            case .skills:   return "Skills"
+            case .rules:    return "Rules"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .overview: return "square.grid.2x2"
+            case .git:      return "arrow.triangle.branch"
+            case .files:    return "folder"
+            case .skills:   return "sparkles"
+            case .rules:    return "doc.badge.gearshape"
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             projectHeader
             Divider()
-            ProjectWorktreeMatrixView(
-                project: project,
-                sessions: sessions,
-                store: store,
-                openSession: openSession
-            )
+            modeTabs
+            Divider()
+
+            switch selectedTab {
+            case .overview:
+                ProjectOverviewView(
+                    project: project,
+                    sessions: sessions,
+                    store: store,
+                    openSession: openSession,
+                    onOpenInGit: { _ in
+                        withAnimation(FlotillaMotion.fast.curve) { selectedTab = .git }
+                    }
+                )
+            case .git:
+                // Phase 2 — Git sub-tabs (Changes / Commits / Graph)
+                ProjectHistoryView(
+                    repoPath: project.rootPath,
+                    gitService: store.gitService,
+                    sessions: sessions,
+                    highlightUnseenCommits: highlightUnseenCommits
+                )
+                .id(project.id)
+            case .files:
+                // Phase 4 — Monaco editor
+                FileBrowserView(rootURL: project.rootPath)
+            case .skills:
+                // Phase 3 — Skills discovery
+                ContentUnavailableView(
+                    "Skills",
+                    systemImage: "sparkles",
+                    description: Text("Skills discovery coming soon.")
+                )
+            case .rules:
+                ProjectRulesView(project: project, store: store)
+            }
         }
         .task(id: project.id) {
+            selectedTab = .overview
             if let branch = try? await store.gitService.currentBranch(at: project.rootPath) {
                 currentBranch = branch
             }
             if let stat = try? await store.gitService.diffStat(at: project.rootPath) {
                 projectDiffStat = stat
             }
-        }
-        .sheet(isPresented: $isShowingRulesSheet) {
-            ProjectRulesSheet(project: project, store: store)
         }
         .sheet(isPresented: $isShowingCreateSessionSheet) {
             CreateSessionView(
@@ -50,6 +106,47 @@ struct ProjectDetailView: View {
                 didCreateSession: openSession
             )
         }
+    }
+
+    /// A slim underline strip rather than a segmented picker: this switches
+    /// the whole workspace, and native control chrome would break the
+    /// continuous-surface feel the rest of the app keeps.
+    private var modeTabs: some View {
+        HStack(spacing: 0) {
+            ForEach(ProjectTab.allCases) { candidate in
+                modeTab(candidate)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, FlotillaSpacing.large)
+        .background(FlotillaColors.surface)
+    }
+
+    private func modeTab(_ candidate: ProjectTab) -> some View {
+        let isActive = selectedTab == candidate
+        return Button {
+            withAnimation(FlotillaMotion.fast.curve) { selectedTab = candidate }
+        } label: {
+            VStack(spacing: 5) {
+                HStack(spacing: 5) {
+                    Image(systemName: candidate.systemImage)
+                        .font(.system(size: FlotillaIconSize.small))
+                    Text(candidate.title)
+                        .font(FlotillaTypography.caption.weight(isActive ? .semibold : .regular))
+                }
+                .foregroundStyle(isActive ? FlotillaColors.textPrimary : FlotillaColors.textTertiary)
+                .padding(.top, FlotillaSpacing.small)
+
+                Rectangle()
+                    .fill(isActive ? FlotillaColors.accent : .clear)
+                    .frame(height: 2)
+            }
+            .padding(.horizontal, FlotillaSpacing.medium)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("ProjectDetail.ModeTab-\(candidate.title)")
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
     private var projectHeader: some View {
@@ -118,16 +215,6 @@ struct ProjectDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(FlotillaColors.accent)
                     .accessibilityIdentifier("ProjectDetail.NewSessionButton")
-
-                    Button {
-                        isShowingRulesSheet = true
-                    } label: {
-                        Label("Rules & Context", systemImage: "doc.badge.gearshape")
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("ProjectDetail.RulesButton")
                 }
             }
         }

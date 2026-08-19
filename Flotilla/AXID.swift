@@ -118,6 +118,15 @@ public enum AXID: String, Sendable {
     case worktreePruneButton = "Worktree.PruneButton-"
     case worktreeMergeButton = "Worktree.MergeButton-"
 
+    // MARK: - Project Tabs
+    case projectTabOverview = "ProjectDetail.ModeTab-Overview"
+    case projectTabGit = "ProjectDetail.ModeTab-Git"
+    case projectTabFiles = "ProjectDetail.ModeTab-Files"
+    case projectTabSkills = "ProjectDetail.ModeTab-Skills"
+    case projectTabRules = "ProjectDetail.ModeTab-Rules"
+    case projectFiles = "ProjectFiles"
+    case projectSkills = "ProjectSkills"
+
     // MARK: - Home Dashboard
     case homeDashboard = "HomeDashboard"
     case homeGoalField = "Home.GoalField"

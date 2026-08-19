@@ -4,30 +4,40 @@ import SessionKit
 import GitKit
 import DesignSystem
 
-/// High-density interactive Git Worktree & Branch Matrix (Design 4).
-/// Displays all active worktrees, attached agent sessions, live diff stats,
-/// and provides 1-click Prune, Merge, and Diff Inspection capabilities.
-struct ProjectWorktreeMatrixView: View {
+/// Worktree list section extracted from ProjectWorktreeMatrixView.
+/// Used by ProjectOverviewView as one of its three sections and by
+/// the Git tab for worktree-scoped Changes.
+struct ProjectWorktreeSection: View {
     let project: Project
     let sessions: [Session]
     @Bindable var store: AppStore
     let openSession: (UUID) -> Void
+    let onOpenInGit: (GitWorktree) -> Void
 
     @State private var worktrees: [GitWorktree] = []
     @State private var isLoading = false
-    @State private var selectedWorktree: GitWorktree?
     @State private var worktreeToPrune: GitWorktree?
     @State private var showPruneConfirmation = false
     @State private var isPruning = false
     @State private var errorMessage: String?
 
     var body: some View {
-        HSplitView {
-            worktreeTableSection
-                .frame(minWidth: 420, idealWidth: 540)
-            
-            diffInspectorSection
-                .frame(minWidth: 360, idealWidth: 460)
+        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
+            HomeSectionHeader(title: "Worktrees", count: worktrees.count)
+
+            if isLoading && worktrees.isEmpty {
+                ProgressView("Scanning worktrees…")
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else if worktrees.isEmpty {
+                HomeEmptyHint(text: "No isolated worktrees found. Launch a session with \"New worktree\" enabled to create one.")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(worktrees.enumerated()), id: \.element.path) { index, wt in
+                        if index > 0 { Divider().opacity(0.5) }
+                        worktreeRow(for: wt)
+                    }
+                }
+            }
         }
         .task(id: project.id) {
             await loadWorktrees()
@@ -59,71 +69,10 @@ struct ProjectWorktreeMatrixView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .accessibilityIdentifier(AXID.projectWorktreesSection.rawValue)
     }
 
-    // MARK: - Worktree Table Section
-
-    private var worktreeTableSection: some View {
-        VStack(spacing: 0) {
-            tableHeader
-            Divider()
-
-            if isLoading && worktrees.isEmpty {
-                ProgressView("Scanning worktrees…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if worktrees.isEmpty {
-                ContentUnavailableView(
-                    "No Worktrees",
-                    systemImage: "arrow.triangle.branch",
-                    description: Text("No isolated worktrees found. Launch a session with 'New worktree' enabled to create one.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(selection: $selectedWorktree) {
-                    ForEach(worktrees, id: \.path) { wt in
-                        worktreeRow(for: wt)
-                            .tag(wt)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                            .listRowBackground(
-                                selectedWorktree?.path == wt.path
-                                    ? FlotillaColors.surfaceElevated
-                                    : Color.clear
-                            )
-                    }
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-            }
-        }
-        .background(FlotillaColors.surface)
-    }
-
-    private var tableHeader: some View {
-        HStack(spacing: FlotillaSpacing.small) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("WORKTREES & BRANCHES")
-                    .font(FlotillaTypography.caption2.weight(.bold))
-                    .tracking(0.8)
-                    .foregroundStyle(FlotillaColors.accent)
-                Text("\(worktrees.count) total (\(worktrees.filter { !$0.isMainWorktree }.count) isolated)")
-                    .font(FlotillaTypography.caption)
-                    .foregroundStyle(FlotillaColors.textSecondary)
-            }
-
-            Spacer()
-
-            Button {
-                Task { await loadWorktrees() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.plain)
-            .help("Refresh worktrees")
-        }
-        .padding(.horizontal, FlotillaSpacing.medium)
-        .padding(.vertical, FlotillaSpacing.small)
-        .background(FlotillaColors.surfaceElevated)
-    }
+    // MARK: - Row
 
     private func worktreeRow(for wt: GitWorktree) -> some View {
         let session = matchingSession(for: wt)
@@ -187,9 +136,9 @@ struct ProjectWorktreeMatrixView: View {
                 }
 
                 Button {
-                    selectedWorktree = wt
+                    onOpenInGit(wt)
                 } label: {
-                    Label("Inspect Diff", systemImage: "doc.text.magnifyingglass")
+                    Label("Open in Git", systemImage: "arrow.triangle.branch")
                         .font(FlotillaTypography.caption)
                 }
                 .buttonStyle(.bordered)
@@ -228,55 +177,13 @@ struct ProjectWorktreeMatrixView: View {
         .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card))
         .overlay {
             RoundedRectangle(cornerRadius: FlotillaRadius.card)
-                .strokeBorder(
-                    selectedWorktree?.path == wt.path
-                        ? FlotillaColors.accent.opacity(0.4)
-                        : FlotillaColors.separator.opacity(0.5)
-                )
+                .strokeBorder(FlotillaColors.separator.opacity(0.5))
         }
-    }
-
-    // MARK: - Diff Inspector Section
-
-    private var diffInspectorSection: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(selectedWorktree != nil ? "DIFF: \(selectedWorktree!.branch)" : "DIFF INSPECTOR")
-                    .font(FlotillaTypography.caption2.weight(.bold))
-                    .tracking(0.8)
-                    .foregroundStyle(FlotillaColors.accent)
-                Spacer()
-                if let wt = selectedWorktree {
-                    Text(wt.path.lastPathComponent)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                }
-            }
-            .padding(.horizontal, FlotillaSpacing.medium)
-            .padding(.vertical, FlotillaSpacing.small)
-            .background(FlotillaColors.surfaceElevated)
-
-            Divider()
-
-            if let targetWorktree = selectedWorktree ?? worktrees.first {
-                let targetSession = matchingSession(for: targetWorktree) ?? dummySession(for: targetWorktree)
-                DiffPanelView(session: targetSession, gitService: store.gitService, ghService: store.ghService)
-                    .id(targetWorktree.path)
-            } else {
-                ContentUnavailableView(
-                    "No Worktree Selected",
-                    systemImage: "arrow.triangle.branch",
-                    description: Text("Select a worktree to inspect its live unstaged and staged git changes.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .background(FlotillaColors.canvas)
     }
 
     // MARK: - Helpers
 
-    private func matchingSession(for wt: GitWorktree) -> Session? {
+    func matchingSession(for wt: GitWorktree) -> Session? {
         sessions.first { session in
             if let worktree = session.worktree {
                 return worktree.worktreePath.standardizedFileURL == wt.path.standardizedFileURL
@@ -288,7 +195,7 @@ struct ProjectWorktreeMatrixView: View {
         }
     }
 
-    private func dummySession(for wt: GitWorktree) -> Session {
+    func dummySession(for wt: GitWorktree) -> Session {
         Session(
             title: wt.branch,
             goal: "Worktree: \(wt.branch)",
@@ -298,14 +205,11 @@ struct ProjectWorktreeMatrixView: View {
         )
     }
 
-    private func loadWorktrees() async {
+    func loadWorktrees() async {
         isLoading = true
         defer { isLoading = false }
         if let list = try? await store.gitService.listWorktrees(at: project.rootPath) {
             worktrees = list
-            if selectedWorktree == nil {
-                selectedWorktree = list.first
-            }
         }
     }
 
@@ -315,7 +219,7 @@ struct ProjectWorktreeMatrixView: View {
             isPruning = false
             worktreeToPrune = nil
         }
-        
+
         if let session = matchingSession(for: wt) {
             await store.deleteSession(sessionID: session.id, deleteWorktree: true, deleteBranch: deleteBranch)
         } else {
@@ -330,7 +234,7 @@ struct ProjectWorktreeMatrixView: View {
                 errorMessage = "Failed to remove worktree: \(error.localizedDescription)"
             }
         }
-        
+
         await loadWorktrees()
     }
 }

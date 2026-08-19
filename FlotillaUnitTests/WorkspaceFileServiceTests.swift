@@ -50,4 +50,22 @@ final class WorkspaceFileServiceTests: XCTestCase {
         XCTAssertEqual(nodes.map(\.name), ["Sources", "README.md"])
         XCTAssertTrue(nodes[0].isDirectory)
     }
+
+    func testDiscoversGlobalInstructionFilesFromConfiguredHome() async throws {
+        let fakeHome = root.appendingPathComponent("fake-home", isDirectory: true)
+        let claudeDir = fakeHome.appendingPathComponent(".claude", isDirectory: true)
+        let agentsDir = fakeHome.appendingPathComponent(".agents", isDirectory: true)
+        try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+
+        try "# Global Claude".write(to: claudeDir.appendingPathComponent("CLAUDE.md"), atomically: true, encoding: .utf8)
+        try "# Global Agents".write(to: agentsDir.appendingPathComponent("AGENTS.md"), atomically: true, encoding: .utf8)
+
+        let service = WorkspaceFileService(homeDirectoryProvider: { fakeHome })
+        let entries = try await service.globalInstructionFiles()
+
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(entries.map(\.relativePath), ["~/.agents/AGENTS.md", "~/.claude/CLAUDE.md"])
+        XCTAssertTrue(entries.allSatisfy { $0.scope == .global })
+    }
 }
