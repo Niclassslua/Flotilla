@@ -21,6 +21,7 @@
 		1D4E8803E7662F52088203AA /* ProjectOverviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B41054091FCCC2049FDE7864 /* ProjectOverviewTests.swift */; };
 		1F80AF067A699281E6A7A7EE /* SessionActivityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 469A8232853C9CCE2523CF26 /* SessionActivityStore.swift */; };
 		2000992625E8D2C5A880060B /* SessionTileChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D3A8FC1C2EF8D9579E60F2 /* SessionTileChrome.swift */; };
+		21E0B603FB479FAFFE3C75B7 /* ProjectGitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C4D6DAA264F497DDD90922 /* ProjectGitView.swift */; };
 		2300252E82CA383375D3427B /* SessionKit in Frameworks */ = {isa = PBXBuildFile; productRef = B5259CCE5A5E0280938816DA /* SessionKit */; };
 		246D26AC8F1C9A0C0A70905E /* AXID.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2979D8F1026858FB7D2AB39 /* AXID.swift */; };
 		27E06878B9691AB3BC33AD6F /* GridLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2DF974C708FB5E2495E820 /* GridLayoutEngine.swift */; };
@@ -28,6 +29,7 @@
 		2BA26BB6D80906243929CE44 /* CommandPalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A1347BB96D8C5EC75983D8 /* CommandPalettePanel.swift */; };
 		2C0356CBB7194B666D217C23 /* GridZoomGestures.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DF4A9D37F882915627EE76 /* GridZoomGestures.swift */; };
 		2C15A78E3C6B06BEBAC35D2E /* GitKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 874C07585626CF8D03699AB0 /* GitKitTests.swift */; };
+		3207925FB855499C27F595DE /* ProjectGraphViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7540AC89ADA72855220C41 /* ProjectGraphViewModelTests.swift */; };
 		33122EC6940D7D2F88D871FC /* ProjectOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2FF30BBE9519D001D160302 /* ProjectOverviewView.swift */; };
 		33B9BA58809C8D4F63DA78FC /* FlotillaShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6C7F1B2B6C9A1A52B243C46 /* FlotillaShell.swift */; };
 		33E7BC8246F45B60B017DB5C /* PerfLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A185A326325E0657CB0E93B1 /* PerfLog.swift */; };
@@ -74,6 +76,7 @@
 		84C68B40AF60011958E9D451 /* FileIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C12A015B53DF3BC9C8ED273 /* FileIconHelper.swift */; };
 		881B0898525A29000C30C8C2 /* SessionLaunchForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B7F21F2BDE75CC6ED1E661 /* SessionLaunchForm.swift */; };
 		88C3ED6C4E5C2692B278643A /* WorkspaceNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F46E12016C9EAC9CBBF8830 /* WorkspaceNavigation.swift */; };
+		8B161966235D6188DD797669 /* ProjectGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78A6553CA399F2ECA7E4E96 /* ProjectGraphView.swift */; };
 		8BD8492768B3EC20D5A9C56A /* SessionKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6D93705F55A5D34EE54781 /* SessionKitTests.swift */; };
 		8EB6E4E9C649E2A2BCA59007 /* ProcessKit in Frameworks */ = {isa = PBXBuildFile; productRef = 638E85CFF2EF3D34E8D9BA60 /* ProcessKit */; };
 		91B0E5BA42C6F688B6211D7B /* AgentKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2FD6C4FBCC83492877EE5F3 /* AgentKit */; };
@@ -91,6 +94,7 @@
 		AB0B85DD8EEA104338115116 /* DeleteSessionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C186BA700EF1B3AEE94CE07 /* DeleteSessionUITests.swift */; };
 		ABA38C4193540B602C78FD9C /* GitKit in Frameworks */ = {isa = PBXBuildFile; productRef = D6CE1D6AC9DA029A3F2D8667 /* GitKit */; };
 		ADEEF4AC55A9B07EEEA2956C /* StartupCheckViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81A37262602A1AB77027769 /* StartupCheckViewModel.swift */; };
+		B28B43FA19D996E532BAA240 /* GitGraphLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9CA216025ED610FE445F0B8 /* GitGraphLayoutTests.swift */; };
 		B68881F0B8EF22038ABF2E47 /* TerminalHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A1806EC634D70E024ECD45F /* TerminalHostView.swift */; };
 		B6AF8ABBAC65073305536C8F /* SessionProcessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BC83D1E94B12F65DD5E1E2 /* SessionProcessManager.swift */; };
 		B6FD9BB6FD9231765AE6870D /* EffortLevelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81B941953D11E51D23403D1 /* EffortLevelPicker.swift */; };
@@ -152,6 +156,7 @@
 		0EFB55909CF830A56BBBB51B /* ProjectCommandCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandCard.swift; sourceTree = "<group>"; };
 		111AE97ABDD11A49D71BC4BB /* WorkspaceNavigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceNavigator.swift; sourceTree = "<group>"; };
 		12E68DCCDCE28F08096D13BE /* Flotilla.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Flotilla.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13C4D6DAA264F497DDD90922 /* ProjectGitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectGitView.swift; sourceTree = "<group>"; };
 		1540B4BC11EF8F61BC039B74 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		18295747B6538E5931B709FE /* KanbanUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanUITests.swift; sourceTree = "<group>"; };
 		1A1806EC634D70E024ECD45F /* TerminalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalHostView.swift; sourceTree = "<group>"; };
@@ -224,9 +229,11 @@
 		A81869BA04B1A4E358E9D943 /* TerminalManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalManager.swift; sourceTree = "<group>"; };
 		A9636EB3D64BE7F5FB20A38D /* AppLayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLayerTests.swift; sourceTree = "<group>"; };
 		A96A3D2D1468CDFA948B0E1E /* FlotillaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaApp.swift; sourceTree = "<group>"; };
+		AB7540AC89ADA72855220C41 /* ProjectGraphViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectGraphViewModelTests.swift; sourceTree = "<group>"; };
 		B41054091FCCC2049FDE7864 /* ProjectOverviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectOverviewTests.swift; sourceTree = "<group>"; };
 		B45CE7CA41906B3B47E8C51E /* ProjectPathSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectPathSheet.swift; sourceTree = "<group>"; };
 		B6C7F1B2B6C9A1A52B243C46 /* FlotillaShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaShell.swift; sourceTree = "<group>"; };
+		B78A6553CA399F2ECA7E4E96 /* ProjectGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectGraphView.swift; sourceTree = "<group>"; };
 		B8034B27D7FF60ED84FD5A58 /* GitLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitLogTests.swift; sourceTree = "<group>"; };
 		BC6D93705F55A5D34EE54781 /* SessionKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionKitTests.swift; sourceTree = "<group>"; };
 		BD24ACC6FE42CAC4547A58DE /* FlotillaUnitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FlotillaUnitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -249,6 +256,7 @@
 		E2979D8F1026858FB7D2AB39 /* AXID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXID.swift; sourceTree = "<group>"; };
 		E4A98AEF98A101073B3ECE81 /* SettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsUITests.swift; sourceTree = "<group>"; };
 		E66DA9DABD1725C0E701BD2A /* RestartSessionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestartSessionUITests.swift; sourceTree = "<group>"; };
+		E9CA216025ED610FE445F0B8 /* GitGraphLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitGraphLayoutTests.swift; sourceTree = "<group>"; };
 		E9DCBD80E1B4F78415924591 /* WorkspaceFileServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileServiceTests.swift; sourceTree = "<group>"; };
 		EB25ABE36F82A35C66B86520 /* GridViewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridViewUITests.swift; sourceTree = "<group>"; };
 		ECC9A7AB155793EE6C596001 /* PersistenceKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PersistenceKit; path = Packages/PersistenceKit; sourceTree = SOURCE_ROOT; };
@@ -369,6 +377,8 @@
 				A185A326325E0657CB0E93B1 /* PerfLog.swift */,
 				0EFB55909CF830A56BBBB51B /* ProjectCommandCard.swift */,
 				802C8C7F071E28BCFDCDB62E /* ProjectDetailView.swift */,
+				13C4D6DAA264F497DDD90922 /* ProjectGitView.swift */,
+				B78A6553CA399F2ECA7E4E96 /* ProjectGraphView.swift */,
 				CC67931A95E75E40C7DE306C /* ProjectHistoryView.swift */,
 				39EA549F39B605D08B736383 /* ProjectMark.swift */,
 				C2FF30BBE9519D001D160302 /* ProjectOverviewView.swift */,
@@ -451,6 +461,7 @@
 				A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */,
 				935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */,
 				51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */,
+				E9CA216025ED610FE445F0B8 /* GitGraphLayoutTests.swift */,
 				874C07585626CF8D03699AB0 /* GitKitTests.swift */,
 				B8034B27D7FF60ED84FD5A58 /* GitLogTests.swift */,
 				D81A7626DA67303D0C7CD01F /* HooksKitTests.swift */,
@@ -458,6 +469,7 @@
 				F0FC0E7A5D4334D57338B01E /* ModelCatalogTests.swift */,
 				7A61B9F980C1F13B20C49816 /* PersistenceKitTests.swift */,
 				D4E3398E0DBBE2055AA3506D /* ProcessKitTests.swift */,
+				AB7540AC89ADA72855220C41 /* ProjectGraphViewModelTests.swift */,
 				990734B770659EDF562881F7 /* ProjectHistoryViewModelTests.swift */,
 				B41054091FCCC2049FDE7864 /* ProjectOverviewTests.swift */,
 				7BBC083783BD10EC9D3923E7 /* RealPipelineReproTests.swift */,
@@ -638,6 +650,7 @@
 				5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */,
 				7666CEF06B123CCB5B58E56A /* FlotillaNotificationDelegateTests.swift in Sources */,
 				723875E0AA69C129B1AA034F /* FlotillaUnitTests.swift in Sources */,
+				B28B43FA19D996E532BAA240 /* GitGraphLayoutTests.swift in Sources */,
 				2C15A78E3C6B06BEBAC35D2E /* GitKitTests.swift in Sources */,
 				EAEB8C12F2DB24CAE6443071 /* GitLogTests.swift in Sources */,
 				4691198A8C6D5C9AA79A10D2 /* HooksKitTests.swift in Sources */,
@@ -645,6 +658,7 @@
 				0BFC04E001C343E474DCDC70 /* ModelCatalogTests.swift in Sources */,
 				E78CCDC78DB4736082465172 /* PersistenceKitTests.swift in Sources */,
 				E76DDCBA01511749C21BB8EF /* ProcessKitTests.swift in Sources */,
+				3207925FB855499C27F595DE /* ProjectGraphViewModelTests.swift in Sources */,
 				44FFA323E32F45E845E7D7A6 /* ProjectHistoryViewModelTests.swift in Sources */,
 				1D4E8803E7662F52088203AA /* ProjectOverviewTests.swift in Sources */,
 				195CD176EEA524BA2246BA0C /* RealPipelineReproTests.swift in Sources */,
@@ -692,6 +706,8 @@
 				33E7BC8246F45B60B017DB5C /* PerfLog.swift in Sources */,
 				9A561446247EC3977621834E /* ProjectCommandCard.swift in Sources */,
 				6F63B9224CB47317310DA680 /* ProjectDetailView.swift in Sources */,
+				21E0B603FB479FAFFE3C75B7 /* ProjectGitView.swift in Sources */,
+				8B161966235D6188DD797669 /* ProjectGraphView.swift in Sources */,
 				9D4FF71EF64B305D8F339D7F /* ProjectHistoryView.swift in Sources */,
 				670D703D1EE25BC44EFCE9ED /* ProjectMark.swift in Sources */,
 				33122EC6940D7D2F88D871FC /* ProjectOverviewView.swift in Sources */,

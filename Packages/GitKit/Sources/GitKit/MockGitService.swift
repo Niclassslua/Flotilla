@@ -8,6 +8,18 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public var diffToReturn: [FileDiff] = []
     public var diffStatToReturn = GitDiffStat(additions: 0, deletions: 0)
     public var worktreesToReturn: [GitWorktree] = []
+    public var logToReturn: [GitCommit] = []
+    public var graphLogToReturn: [GitCommit] = []
+    public var branchesToReturn: [GitBranch] = []
+    /// When `nil`, `commitDetail` synthesizes a file-less detail from
+    /// `logToReturn`, so tests that only care about selection don't have to
+    /// script a whole detail payload.
+    public var commitDetailToReturn: GitCommitDetail?
+    public var unpushedSHAsToReturn: Set<String> = []
+    public var remoteURLToReturn: String?
+    public var hooksPathToReturn = ".git/hooks"
+    /// Keyed by branch name — the SHAs that branch owns exclusively.
+    public var commitsOnBranchToReturn: [String: Set<String>] = [:]
     public var errorToThrow: Error?
 
     public private(set) var createWorktreeCalls: [(basePath: URL, branch: String, destination: URL)] = []
@@ -18,6 +30,11 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public private(set) var commitCalls: [(message: String, repoPath: URL)] = []
     public private(set) var pushCalls: [(branch: String, repoPath: URL)] = []
     public private(set) var fetchCalls: [URL] = []
+    public private(set) var logCalls: [(repoPath: URL, ref: String?, skip: Int, maxCount: Int)] = []
+    public private(set) var logGraphCalls: [(repoPath: URL, maxCount: Int)] = []
+    public private(set) var branchesCalls: [URL] = []
+    public private(set) var commitDetailCalls: [(sha: String, repoPath: URL)] = []
+    public private(set) var commitsOnBranchCalls: [(branch: String, base: String, repoPath: URL)] = []
 
     public init() {}
 
@@ -85,6 +102,58 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public func fetch(at repoPath: URL) async throws {
         fetchCalls.append(repoPath)
         if let errorToThrow { throw errorToThrow }
+    }
+
+    public func log(at repoPath: URL, ref: String?, skip: Int, maxCount: Int) async throws -> [GitCommit] {
+        logCalls.append((repoPath, ref, skip, maxCount))
+        if let errorToThrow { throw errorToThrow }
+        // Paged the way the real service pages, so tests can exercise
+        // load-more without scripting each page by hand.
+        guard skip < logToReturn.count else { return [] }
+        return Array(logToReturn[skip..<min(skip + maxCount, logToReturn.count)])
+    }
+
+    public func commitDetail(sha: String, at repoPath: URL) async throws -> GitCommitDetail {
+        commitDetailCalls.append((sha, repoPath))
+        if let errorToThrow { throw errorToThrow }
+        if let scripted = commitDetailToReturn { return scripted }
+        guard let commit = logToReturn.first(where: { $0.sha == sha }) else {
+            throw GitServiceError.commitNotFound(sha)
+        }
+        return GitCommitDetail(commit: commit, files: [])
+    }
+
+    public func unpushedSHAs(at repoPath: URL, ref: String?) async throws -> Set<String> {
+        if let errorToThrow { throw errorToThrow }
+        return unpushedSHAsToReturn
+    }
+
+    public func remoteURL(at repoPath: URL) async throws -> String? {
+        if let errorToThrow { throw errorToThrow }
+        return remoteURLToReturn
+    }
+
+    public func currentHooksPath(at repoPath: URL) async throws -> String {
+        if let errorToThrow { throw errorToThrow }
+        return hooksPathToReturn
+    }
+
+    public func commitsOnBranch(_ branch: String, notOn base: String, at repoPath: URL) async throws -> Set<String> {
+        commitsOnBranchCalls.append((branch, base, repoPath))
+        if let errorToThrow { throw errorToThrow }
+        return commitsOnBranchToReturn[branch] ?? []
+    }
+
+    public func logGraph(at repoPath: URL, maxCount: Int) async throws -> [GitCommit] {
+        logGraphCalls.append((repoPath, maxCount))
+        if let errorToThrow { throw errorToThrow }
+        return graphLogToReturn
+    }
+
+    public func branches(at repoPath: URL) async throws -> [GitBranch] {
+        branchesCalls.append(repoPath)
+        if let errorToThrow { throw errorToThrow }
+        return branchesToReturn
     }
 }
 

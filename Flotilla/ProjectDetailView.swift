@@ -20,6 +20,7 @@ struct ProjectDetailView: View {
     @State private var projectDiffStat: GitDiffStat?
     @State private var isShowingCreateSessionSheet = false
     @State private var selectedTab: ProjectTab = .overview
+    @State private var gitScopeURL: URL?
 
     /// The five surfaces a project workspace provides.
     enum ProjectTab: String, CaseIterable, Identifiable {
@@ -62,17 +63,18 @@ struct ProjectDetailView: View {
                     sessions: sessions,
                     store: store,
                     openSession: openSession,
-                    onOpenInGit: { _ in
+                    onOpenInGit: { wt in
+                        gitScopeURL = wt.path
                         withAnimation(FlotillaMotion.fast.curve) { selectedTab = .git }
                     }
                 )
             case .git:
-                // Phase 2 — Git sub-tabs (Changes / Commits / Graph)
-                ProjectHistoryView(
-                    repoPath: project.rootPath,
-                    gitService: store.gitService,
+                ProjectGitView(
+                    project: project,
                     sessions: sessions,
-                    highlightUnseenCommits: highlightUnseenCommits
+                    store: store,
+                    highlightUnseenCommits: highlightUnseenCommits,
+                    initialScopeURL: gitScopeURL
                 )
                 .id(project.id)
             case .files:

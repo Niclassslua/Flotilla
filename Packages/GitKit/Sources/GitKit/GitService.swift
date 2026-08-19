@@ -12,6 +12,20 @@ public struct GitWorktree: Hashable, Equatable, Sendable {
     }
 }
 
+public struct GitBranch: Hashable, Equatable, Sendable {
+    public var name: String
+    public var isCurrent: Bool
+    public var isRemote: Bool
+    public var tipSHA: String
+
+    public init(name: String, isCurrent: Bool, isRemote: Bool, tipSHA: String) {
+        self.name = name
+        self.isCurrent = isCurrent
+        self.isRemote = isRemote
+        self.tipSHA = tipSHA
+    }
+}
+
 public struct GitStatusEntry: Equatable, Sendable {
     public var path: String
     public var indexStatus: Character
@@ -108,6 +122,7 @@ public enum GitServiceError: Error, Equatable, LocalizedError {
     case noRemoteConfigured
     case ghNotFound
     case prCreationFailed(exitCode: Int32, stderr: String)
+    case commitNotFound(String)
 
     public var errorDescription: String? {
         switch self {
@@ -130,6 +145,8 @@ public enum GitServiceError: Error, Equatable, LocalizedError {
         case .prCreationFailed(let exitCode, let stderr):
             let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return detail.isEmpty ? "gh exited with code \(exitCode)" : "gh exited with code \(exitCode): \(detail)"
+        case .commitNotFound(let sha):
+            return "No commit found for '\(sha)'."
         }
     }
 }
@@ -162,6 +179,43 @@ public protocol GitServiceProtocol: Sendable {
     /// `git fetch`, used to refresh remote-tracking refs before creating a
     /// worktree from them.
     func fetch(at repoPath: URL) async throws
+
+    /// One page of `git log`, newest first. `ref` defaults to `HEAD` when
+    /// `nil`. A repository with no commits yet returns `[]` rather than
+    /// throwing — an empty history is a state, not a failure.
+    func log(at repoPath: URL, ref: String?, skip: Int, maxCount: Int) async throws -> [GitCommit]
+
+    /// The files a single commit touched, with their diff hunks.
+    func commitDetail(sha: String, at repoPath: URL) async throws -> GitCommitDetail
+
+    /// SHAs reachable from `ref` but not from its upstream — the commits that
+    /// exist only locally. Best-effort: a branch with no upstream configured
+    /// yields `[]` rather than an error, since "no upstream" is normal.
+    func unpushedSHAs(at repoPath: URL, ref: String?) async throws -> Set<String>
+
+    /// The `origin` remote's URL, or `nil` when the repo has no origin.
+    /// Fetched once per repo and paired with the pure
+    /// `GitService.webURL(forRemote:commitSHA:)` to build per-commit links.
+    func remoteURL(at repoPath: URL) async throws -> String?
+
+    /// `git rev-parse --git-path hooks` — the hooks directory git will
+    /// actually consult, which is *not* `.git/hooks` when `core.hooksPath`
+    /// is set at any scope.
+    func currentHooksPath(at repoPath: URL) async throws -> String
+
+    /// SHAs reachable from `branch` but not from `base` — i.e. the commits
+    /// made on that branch since it diverged. Used to attribute commits to
+    /// the agent session working in that branch's worktree.
+    ///
+    /// Best-effort: an unknown ref yields `[]` rather than an error, because
+    /// a session's branch may have been pruned already.
+    func commitsOnBranch(_ branch: String, notOn base: String, at repoPath: URL) async throws -> Set<String>
+
+    /// Retrieves commits across all branches with topological ordering for graph visualization.
+    func logGraph(at repoPath: URL, maxCount: Int) async throws -> [GitCommit]
+
+    /// Lists all local and remote branches with tip SHAs and current checkout status.
+    func branches(at repoPath: URL) async throws -> [GitBranch]
 }
 
 public extension GitServiceProtocol {
@@ -411,6 +465,147 @@ public struct GitService: GitServiceProtocol {
 
     public func fetch(at repoPath: URL) async throws {
         _ = try await run(["fetch"], at: repoPath)
+    }
+
+    public func log(at repoPath: URL, ref: String? = nil, skip: Int = 0, maxCount: Int = 100) async throws -> [GitCommit] {
+        var args = [
+            "log",
+            "--no-color",
+            "--decorate=full",
+            "--numstat",
+            "--skip=\(max(0, skip))",
+            "--max-count=\(max(1, maxCount))",
+            "--format=\(Self.logFormat)",
+        ]
+        if let ref, !ref.isEmpty { args.append(ref) }
+        // Disambiguates a ref that shares its name with a file on disk.
+        args.append("--")
+
+        // Raw, not the throwing wrapper: a repository with no commits makes
+        // `git log` exit non-zero, and that is an empty history rather than
+        // an error worth showing the user.
+        let result = try await runRaw(args, at: repoPath)
+        guard result.exitCode == 0 else {
+            if Self.indicatesEmptyHistory(result.stderr) { return [] }
+            throw GitServiceError.commandFailed(exitCode: result.exitCode, stderr: result.stderr)
+        }
+        return Self.parseLog(result.stdout)
+    }
+
+    public func commitDetail(sha: String, at repoPath: URL) async throws -> GitCommitDetail {
+        // Three independent reads of the same commit — concurrent for the
+        // same reason `changes(at:)` is.
+        async let logRequest = run(
+            ["log", "--no-color", "--decorate=full", "--numstat", "--max-count=1",
+             "--format=\(Self.logFormat)", sha, "--"],
+            at: repoPath
+        )
+        async let patchRequest = run(
+            ["show", "--no-color", "--format=", "--patch", "--find-renames", sha, "--"],
+            at: repoPath
+        )
+        async let nameStatusRequest = run(
+            ["show", "--no-color", "--format=", "--name-status", "--find-renames", sha, "--"],
+            at: repoPath
+        )
+        let (logResult, patchResult, nameStatusResult) =
+            try await (logRequest, patchRequest, nameStatusRequest)
+
+        guard let commit = Self.parseLog(logResult.stdout).first else {
+            throw GitServiceError.commitNotFound(sha)
+        }
+
+        // `--name-status` is authoritative for *what happened* to each file;
+        // the patch supplies the hunks. Keyed on the post-change path, which
+        // is what both report for renames.
+        let hunksByPath = Dictionary(
+            Self.parseUnifiedDiff(patchResult.stdout).map { ($0.path, $0.hunks) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let files = Self.parseNameStatus(nameStatusResult.stdout).map { change -> GitCommitFileChange in
+            var resolved = change
+            resolved.hunks = hunksByPath[change.path] ?? []
+            return resolved
+        }
+        return GitCommitDetail(commit: commit, files: files)
+    }
+
+    public func unpushedSHAs(at repoPath: URL, ref: String? = nil) async throws -> Set<String> {
+        let target = ref.flatMap { $0.isEmpty ? nil : $0 } ?? "HEAD"
+        let result = try await runRaw(["rev-list", "\(target)@{u}..\(target)"], at: repoPath)
+        guard result.exitCode == 0 else { return [] }
+        return Set(result.stdout.split(separator: "\n").map(String.init))
+    }
+
+    public func commitsOnBranch(_ branch: String, notOn base: String, at repoPath: URL) async throws -> Set<String> {
+        guard !branch.isEmpty, !base.isEmpty, branch != base else { return [] }
+        let result = try await runRaw(["rev-list", "\(base)..\(branch)"], at: repoPath)
+        guard result.exitCode == 0 else { return [] }
+        return Set(result.stdout.split(separator: "\n").map(String.init))
+    }
+
+    public func currentHooksPath(at repoPath: URL) async throws -> String {
+        let result = try await run(["rev-parse", "--git-path", "hooks"], at: repoPath)
+        return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public func remoteURL(at repoPath: URL) async throws -> String? {
+        let result = try await runRaw(["remote", "get-url", "origin"], at: repoPath)
+        guard result.exitCode == 0 else { return nil }
+        let trimmed = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    public func logGraph(at repoPath: URL, maxCount: Int = 500) async throws -> [GitCommit] {
+        let args = [
+            "log",
+            "--all",
+            "--topo-order",
+            "--no-color",
+            "--decorate=full",
+            "--max-count=\(max(1, maxCount))",
+            "--format=\(Self.logFormat)",
+            "--",
+        ]
+        let result = try await runRaw(args, at: repoPath)
+        guard result.exitCode == 0 else {
+            if Self.indicatesEmptyHistory(result.stderr) { return [] }
+            throw GitServiceError.commandFailed(exitCode: result.exitCode, stderr: result.stderr)
+        }
+        return Self.parseLog(result.stdout)
+    }
+
+    public func branches(at repoPath: URL) async throws -> [GitBranch] {
+        let format = "%(refname:short)%09%(HEAD)%09%(objectname)%09%(refname)"
+        let args = ["for-each-ref", "--format=\(format)", "refs/heads", "refs/remotes"]
+        let result = try await runRaw(args, at: repoPath)
+        guard result.exitCode == 0 else { return [] }
+        return Self.parseBranches(result.stdout)
+    }
+
+    public static func parseBranches(_ output: String) -> [GitBranch] {
+        var branches: [GitBranch] = []
+        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard parts.count >= 4 else { continue }
+            let name = parts[0]
+            let isCurrent = parts[1] == "*"
+            let tipSHA = parts[2]
+            let fullRef = parts[3]
+            let isRemote = fullRef.hasPrefix("refs/remotes/")
+            if name.hasSuffix("/HEAD") { continue }
+            branches.append(GitBranch(name: name, isCurrent: isCurrent, isRemote: isRemote, tipSHA: tipSHA))
+        }
+        return branches
+    }
+
+    /// git words this differently depending on whether HEAD is an unborn
+    /// branch or the revision is simply unresolvable, so both are matched.
+    private static func indicatesEmptyHistory(_ stderr: String) -> Bool {
+        let lowered = stderr.lowercased()
+        return lowered.contains("does not have any commits")
+            || lowered.contains("bad default revision")
+            || lowered.contains("unknown revision")
     }
 
     /// Runs git and returns the raw result regardless of exit code — for

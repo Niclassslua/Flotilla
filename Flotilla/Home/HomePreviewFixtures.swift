@@ -63,6 +63,129 @@ struct PreviewGitService: GitServiceProtocol {
     func commit(message: String, at repoPath: URL) async throws {}
     func push(branch: String, at repoPath: URL) async throws {}
     func fetch(at repoPath: URL) async throws {}
+
+    func log(at repoPath: URL, ref: String?, skip: Int, maxCount: Int) async throws -> [GitCommit] {
+        guard skip < Self.previewCommits.count else { return [] }
+        return Array(Self.previewCommits[skip..<min(skip + maxCount, Self.previewCommits.count)])
+    }
+
+    func commitDetail(sha: String, at repoPath: URL) async throws -> GitCommitDetail {
+        guard let commit = Self.previewCommits.first(where: { $0.sha == sha }) else {
+            throw GitServiceError.commitNotFound(sha)
+        }
+        return GitCommitDetail(commit: commit, files: Self.previewFiles)
+    }
+
+    func unpushedSHAs(at repoPath: URL, ref: String?) async throws -> Set<String> {
+        [Self.previewCommits[0].sha]
+    }
+
+    func remoteURL(at repoPath: URL) async throws -> String? {
+        "git@github.com:Niclassslua/Flotilla.git"
+    }
+
+    /// Attributes the two newest preview commits to a session's branch, so
+    /// previews exercise the agent-attribution row rather than only the
+    /// plain-author fallback.
+    func currentHooksPath(at repoPath: URL) async throws -> String { ".git/hooks" }
+
+    func commitsOnBranch(_ branch: String, notOn base: String, at repoPath: URL) async throws -> Set<String> {
+        Set(Self.previewCommits.prefix(2).map(\.sha))
+    }
+
+    func logGraph(at repoPath: URL, maxCount: Int) async throws -> [GitCommit] {
+        Array(Self.previewCommits.prefix(maxCount))
+    }
+
+    func branches(at repoPath: URL) async throws -> [GitBranch] {
+        [
+            GitBranch(name: "main", isCurrent: true, isRemote: false, tipSHA: Self.previewCommits.first?.sha ?? "main"),
+            GitBranch(name: "origin/main", isCurrent: false, isRemote: true, tipSHA: Self.previewCommits.first?.sha ?? "main")
+        ]
+    }
+
+    /// Spread across day boundaries so previews exercise the date grouping,
+    /// and deliberately mixed — a merge, an unpushed tip, a second author.
+    private static let previewCommits: [GitCommit] = [
+        previewCommit(
+            sha: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0", short: "a1b2c3d",
+            subject: "fix(git): drain the pipe without racing termination",
+            body: "The readability handler and the termination handler could both\nread the same fd, truncating large diffs.",
+            hoursAgo: 2, refs: [GitCommitRef(name: "HEAD", kind: .head),
+                                GitCommitRef(name: "main", kind: .localBranch)],
+            stat: GitDiffStat(additions: 40, deletions: 12), files: 2
+        ),
+        previewCommit(
+            sha: "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3", short: "d4e5f6a",
+            subject: "style(home): center the ambient glow behind the hero icon",
+            hoursAgo: 5, refs: [GitCommitRef(name: "origin/main", kind: .remoteBranch)],
+            stat: GitDiffStat(additions: 8, deletions: 8), files: 1
+        ),
+        previewCommit(
+            sha: "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b", short: "7a8b9cd",
+            subject: "Merge branch 'feat/settings'",
+            hoursAgo: 26, parents: ["d4e5f6a7", "0f1e2db3"],
+            stat: GitDiffStat(additions: 0, deletions: 0), files: 0
+        ),
+        previewCommit(
+            sha: "0f1e2db3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9", short: "0f1e2db",
+            subject: "feat(settings): move keyboard shortcuts into the settings pane",
+            authorName: "Ada Lovelace", authorEmail: "ada@example.com",
+            hoursAgo: 30, stat: GitDiffStat(additions: 120, deletions: 34), files: 6
+        ),
+        previewCommit(
+            sha: "3c4d5ea6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2", short: "3c4d5ea",
+            subject: "chore: bump dependencies",
+            hoursAgo: 74, refs: [GitCommitRef(name: "v1.2.0", kind: .tag)],
+            stat: GitDiffStat(additions: 11, deletions: 9), files: 3
+        ),
+    ]
+
+    private static let previewFiles: [GitCommitFileChange] = [
+        GitCommitFileChange(
+            path: "Packages/GitKit/Sources/GitKit/CommandRunning.swift",
+            kind: .modified,
+            hunks: [FileDiffHunk(header: "@@ -118,7 +118,9 @@", lines: [
+                " private let handle: FileHandle",
+                "-    private var hasFinished = false",
+                "+    private var isEOF = false",
+                "+    private let eofSemaphore = DispatchSemaphore(value: 0)",
+                " ",
+            ])]
+        ),
+        GitCommitFileChange(
+            path: "Flotilla/DiffPanelView.swift",
+            kind: .modified,
+            hunks: [FileDiffHunk(header: "@@ -48,6 +48,7 @@", lines: [
+                " func monitor() async {",
+                "+        await refresh()",
+                " }",
+            ])]
+        ),
+    ]
+
+    private static func previewCommit(
+        sha: String,
+        short: String,
+        subject: String,
+        body: String = "",
+        authorName: String = "Niclassslua",
+        authorEmail: String = "niclassslua@users.noreply.github.com",
+        hoursAgo: Double,
+        parents: [String] = ["parent0000"],
+        refs: [GitCommitRef] = [],
+        stat: GitDiffStat,
+        files: Int
+    ) -> GitCommit {
+        let date = Date().addingTimeInterval(-hoursAgo * 3600)
+        return GitCommit(
+            sha: sha, shortSHA: short, parents: parents,
+            authorName: authorName, authorEmail: authorEmail, authorDate: date,
+            committerName: authorName, committerEmail: authorEmail, committerDate: date,
+            refs: refs, subject: subject, body: body,
+            stat: stat, changedFileCount: files
+        )
+    }
 }
 
 enum HomePreviewData {
