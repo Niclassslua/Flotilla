@@ -71,6 +71,7 @@ struct DetailColumn: View {
             activityStore: activityStore,
             terminalManager: terminalManager,
             openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
+            highlightUnseenCommits: settingsViewModel.settings.git.highlightUnseenCommits,
             defaultAgent: .claudeCode
         )
     }
@@ -178,6 +179,7 @@ case .grid:
                 terminalManager: terminalManager,
                 openSession: onOpenSession,
                 openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
+                highlightUnseenCommits: settingsViewModel.settings.git.highlightUnseenCommits,
                 onBackToOverview: { navigator.selection = .overview }
             )
         } else {

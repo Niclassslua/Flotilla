@@ -18,6 +18,7 @@ struct HomeDashboardView: View {
     let activityStore: SessionActivityStore?
     let terminalManager: TerminalManager?
     let openCodeSubscription: OpenCodeSubscription
+    let highlightUnseenCommits: Bool
     let defaultAgent: AgentKind
 
     @State private var selectedProjectID: UUID?
@@ -30,6 +31,7 @@ struct HomeDashboardView: View {
         activityStore: SessionActivityStore? = nil,
         terminalManager: TerminalManager? = nil,
         openCodeSubscription: OpenCodeSubscription = .none,
+        highlightUnseenCommits: Bool = true,
         defaultAgent: AgentKind = .claudeCode
     ) {
         self.store = store
@@ -39,6 +41,7 @@ struct HomeDashboardView: View {
         self.activityStore = activityStore
         self.terminalManager = terminalManager
         self.openCodeSubscription = openCodeSubscription
+        self.highlightUnseenCommits = highlightUnseenCommits
         self.defaultAgent = defaultAgent
     }
 
@@ -78,6 +81,7 @@ struct HomeDashboardView: View {
                     terminalManager: terminalManager ?? TerminalManager(),
                     openSession: openSession,
                     openCodeSubscription: openCodeSubscription,
+                    highlightUnseenCommits: highlightUnseenCommits,
                     onBackToOverview: {
                         withAnimation(.snappy(duration: 0.2)) {
                             selectedProjectID = nil

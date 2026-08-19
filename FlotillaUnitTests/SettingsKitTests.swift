@@ -73,6 +73,34 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.worktreeBaseDirectory, "/tmp/worktrees")
     }
 
+    /// `GitPreferences` gained `highlightUnseenCommits`. It decodes key-by-key
+    /// precisely so an older payload keeps its other git settings — `SettingsStore`
+    /// discards the whole file on any decode error, so a single missing key
+    /// would otherwise silently reset every unrelated preference.
+    func testSettingsWrittenBeforeUnseenCommitHighlightingStillDecode() throws {
+        let oldJSON = Data(
+            #"{"worktreeBaseDirectory":"/tmp/worktrees","appearance":"dark","git":{"deleteBranchWithWorktree":false,"fetchBeforeCreatingWorktree":true}}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
+
+        XCTAssertTrue(decoded.git.highlightUnseenCommits, "a new preference defaults to on")
+        XCTAssertFalse(decoded.git.deleteBranchWithWorktree, "the existing choice must survive")
+        XCTAssertTrue(decoded.git.fetchBeforeCreatingWorktree)
+        XCTAssertEqual(decoded.appearance, .dark, "unrelated settings must not be reset")
+        XCTAssertEqual(decoded.worktreeBaseDirectory, "/tmp/worktrees")
+    }
+
+    func testUnseenCommitHighlightingRoundTrips() throws {
+        var settings = AppSettings(worktreeBaseDirectory: "/tmp/worktrees")
+        settings.git.highlightUnseenCommits = false
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertFalse(decoded.git.highlightUnseenCommits)
+    }
+
     /// `SessionDefaults` decodes key-by-key: a payload written before any
     /// later-added key must still decode without resetting the rest.
     func testSettingsWrittenBeforeLaterSessionDefaultsStillDecode() throws {

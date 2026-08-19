@@ -10,25 +10,31 @@ struct ProjectMark: View {
     let title: String
     let tint: Color
     var systemImage: String? = nil
+    /// Defaults to the sidebar size; commit history uses a larger mark in the
+    /// detail pane, where the author is the subject rather than a list hint.
+    var size: CGFloat = 17
+
+    private var cornerRadius: CGFloat { size * 5 / 17 }
+    private var glyphSize: CGFloat { size * 9 / 17 }
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(tint.opacity(0.16))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .strokeBorder(tint.opacity(0.38), lineWidth: 0.5)
                 }
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: glyphSize, weight: .bold))
             } else {
                 Text(title.prefix(1).uppercased())
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .font(.system(size: glyphSize, weight: .bold, design: .rounded))
             }
         }
         .foregroundStyle(tint)
-        .frame(width: 17, height: 17)
+        .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 
@@ -44,9 +50,16 @@ struct ProjectMark: View {
     ]
 
     static func tint(for project: Project) -> Color {
-        // Stable polynomial hash — Hasher is launch-seeded and would reshuffle
-        // project colors on every start.
-        let hash = project.name.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }
+        tint(forKey: project.name)
+    }
+
+    /// Any stable string works as the key — a project name, a commit author's
+    /// email — so the same identity always draws the same color.
+    ///
+    /// Stable polynomial hash: `Hasher` is launch-seeded and would reshuffle
+    /// the colors on every start.
+    static func tint(forKey key: String) -> Color {
+        let hash = key.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }
         return tints[Int(hash.magnitude % UInt(tints.count))]
     }
 }

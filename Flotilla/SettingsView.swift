@@ -394,6 +394,24 @@ private struct GitSettingsPane: View {
             } header: {
                 SettingsSectionHeader("Worktree Creation", systemImage: "arrow.down.circle")
             }
+
+            Section {
+                Toggle("Highlight commits you haven't seen", isOn: $viewModel.settings.git.highlightUnseenCommits)
+                    .toggleStyle(.switch)
+                    .accessibilityIdentifier("Settings.HighlightUnseenCommits")
+                Text("Marks commits in a project's History that landed since you last opened it — useful when agents commit while you're away. The marker advances when you leave the History view.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Record which agent made each commit", isOn: $viewModel.settings.git.stampAgentTrailer)
+                    .toggleStyle(.switch)
+                    .accessibilityIdentifier("Settings.StampAgentTrailer")
+                Text("Adds a Flotilla-Agent trailer to commits made inside an agent session, so History can still attribute them after the branch is merged. Authorship is unchanged — the commit stays yours. Installs a prepare-commit-msg hook, and never replaces one you already have.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                SettingsSectionHeader("Commit History", systemImage: "clock.arrow.circlepath")
+            }
         }
         .flotillaSettingsFormLayout()
     }

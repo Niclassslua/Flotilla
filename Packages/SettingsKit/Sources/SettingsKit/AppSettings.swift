@@ -223,10 +223,37 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
 public struct GitPreferences: Codable, Equatable, Sendable {
     public var deleteBranchWithWorktree: Bool
     public var fetchBeforeCreatingWorktree: Bool
+    /// Flags commits that landed since the last time a project's History view
+    /// was opened. Off means the timeline treats every commit the same.
+    public var highlightUnseenCommits: Bool
+    /// Adds `Flotilla-Agent` / `Flotilla-Session` trailers to commits made
+    /// inside an agent session, so history stays attributable after the
+    /// session's branch is merged away. Never changes commit authorship.
+    public var stampAgentTrailer: Bool
 
-    public init(deleteBranchWithWorktree: Bool = true, fetchBeforeCreatingWorktree: Bool = false) {
+    public init(
+        deleteBranchWithWorktree: Bool = true,
+        fetchBeforeCreatingWorktree: Bool = false,
+        highlightUnseenCommits: Bool = true,
+        stampAgentTrailer: Bool = true
+    ) {
         self.deleteBranchWithWorktree = deleteBranchWithWorktree
         self.fetchBeforeCreatingWorktree = fetchBeforeCreatingWorktree
+        self.highlightUnseenCommits = highlightUnseenCommits
+        self.stampAgentTrailer = stampAgentTrailer
+    }
+
+    /// Decoded key by key rather than by the synthesized initializer: a
+    /// settings file written by an older build has no `highlightUnseenCommits`
+    /// key, and `SettingsStore` falls back to a default `AppSettings` on *any*
+    /// decode error — so one missing key would silently reset every unrelated
+    /// preference too.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        deleteBranchWithWorktree = try container.decodeIfPresent(Bool.self, forKey: .deleteBranchWithWorktree) ?? true
+        fetchBeforeCreatingWorktree = try container.decodeIfPresent(Bool.self, forKey: .fetchBeforeCreatingWorktree) ?? false
+        highlightUnseenCommits = try container.decodeIfPresent(Bool.self, forKey: .highlightUnseenCommits) ?? true
+        stampAgentTrailer = try container.decodeIfPresent(Bool.self, forKey: .stampAgentTrailer) ?? true
     }
 }
 

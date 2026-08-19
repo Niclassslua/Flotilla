@@ -5,6 +5,7 @@ import SessionKit
 import ProcessKit
 import SettingsKit
 import HooksKit
+import GitKit
 
 /// Owns the live `PTYProcessProtocol` for every session that has been
 /// started, keyed by session id. Sessions keep running here across sidebar
@@ -18,6 +19,10 @@ final class SessionProcessManager {
     private var reattachTimestamps: [UUID: [Date]] = [:]
     private var verifyResizeTasks: [UUID: Task<Void, Never>] = [:]
     private var goalDeliveryTasks: [UUID: Task<Void, Never>] = [:]
+    private let gitService: any GitServiceProtocol
+    /// Repos the attribution hook has already been offered this launch, so a
+    /// burst of session starts doesn't re-stat the same hooks directory.
+    private var trailerHookInstalledRepos: Set<URL> = []
     private var hasConfiguredGlobalOptions = false
     private let locator: ExecutableLocating
     private let processFactory: any PTYProcessCreating
@@ -69,9 +74,11 @@ final class SessionProcessManager {
         tmuxServerProbe: any TmuxServerProbing = ProcessTmuxServerProbe(),
         tmuxClientProbe: any TmuxClientProbing = ProcessTmuxClientProbe(),
         hookConfigurationWriter: HookConfigurationWriter = HookConfigurationWriter(),
-        hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory()
+        hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
+        gitService: any GitServiceProtocol = GitService()
     ) {
         self.locator = locator
+        self.gitService = gitService
         self.processFactory = processFactory
         self.providers = providers
         self.settingsProvider = settingsProvider
@@ -163,13 +170,23 @@ final class SessionProcessManager {
 
         let provider = providers.provider(for: session.agent)
         let settings = settingsProvider()
+
+        // Scoped to the agent's own process tree, which is what makes the
+        // attribution hook safe to leave installed: without these variables it
+        // no-ops, so the user's own commits are never stamped.
+        var baseEnvironment = ProcessInfo.processInfo.environment
+        if settings.git.stampAgentTrailer,
+           let attributionEnvironment = agentAttributionEnvironment(for: session, base: baseEnvironment) {
+            baseEnvironment = attributionEnvironment
+        }
+
         let plan = provider.launchPlan(
             goal: effectiveDeliverGoal ? session.goal : nil,
             model: session.model,
             effort: session.effort,
             resumeIntent: resumeIntent,
             settings: settings,
-            baseEnvironment: ProcessInfo.processInfo.environment
+            baseEnvironment: baseEnvironment
         )
         guard let resolvedExecutable = resolveExecutable(plan: plan) else {
             throw LaunchError.executableNotFound(
@@ -442,4 +459,38 @@ final class SessionProcessManager {
         // Do NOT remove processes[sessionID] here — the process's
         // terminationHandler will clear it once the exit callback fires.
     }
+
+    /// Points the agent's git at Flotilla's own hooks directory so its commits
+    /// get an attribution trailer, without touching the repository or the
+    /// user's global git configuration.
+    ///
+    /// Returns `nil` when anything can't be resolved — attribution is a
+    /// convenience and must never be a reason a session fails to start.
+    private func agentAttributionEnvironment(
+        for session: Session,
+        base: [String: String]
+    ) -> [String: String]? {
+        let hooksDirectory = TmuxSessionWrapping.defaultSupportDirectory()
+            .appendingPathComponent("githooks", isDirectory: true)
+
+        do {
+            try AgentTrailerHooks().prepare(directory: hooksDirectory)
+        } catch {
+            Logger(subsystem: "com.niclassslua.flotilla", category: "GitAttribution")
+                .notice("Could not prepare the agent hooks directory: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+
+        // The hooks the repo would otherwise have run are resolved by the
+        // shims themselves at commit time, which keeps this synchronous and
+        // stays correct if the user's git config changes mid-session.
+        return AgentTrailerHooks.environment(
+            base: base,
+            agentRawValue: session.agent.rawValue,
+            sessionID: session.id.uuidString,
+            flotillaHooksDirectory: hooksDirectory,
+            originalHooksDirectory: nil
+        )
+    }
+
 }
