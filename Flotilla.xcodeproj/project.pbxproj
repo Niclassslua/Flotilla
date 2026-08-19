@@ -64,6 +64,7 @@
 		6BC68209B5F1E3F03FE69E04 /* MarkdownParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D0CFBB2B0ECE30A6EF115F /* MarkdownParserTests.swift */; };
 		6C9D4BCCDEB0251DF659F48E /* TerminalManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A81869BA04B1A4E358E9D943 /* TerminalManager.swift */; };
 		6E8FB4027ABCC9D8A9D8A325 /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79AB3C3C89DD228310CF8D26 /* CommandPaletteView.swift */; };
+		6F06FCB7764350DA76BE81CC /* MaterialFileIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D1E044C6E9E2B02A9834BB2 /* MaterialFileIcon.swift */; };
 		6F63B9224CB47317310DA680 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802C8C7F071E28BCFDCDB62E /* ProjectDetailView.swift */; };
 		6FFF6FC63964B46959BB6765 /* ProjectRulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0353C16566A859CC1A8412E /* ProjectRulesView.swift */; };
 		722BCF7EE2884F961D1414DD /* HooksKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3C04B541BCABB66405B1C847 /* HooksKit */; };
@@ -78,6 +79,7 @@
 		81C78C6DD775CB433EF6872E /* RestartSessionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66DA9DABD1725C0E701BD2A /* RestartSessionUITests.swift */; };
 		83D47B1BF7FE7A2BA393ECAE /* FileBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70CFCC9AFA6C9AF54E0E7CC7 /* FileBrowserView.swift */; };
 		84C68B40AF60011958E9D451 /* FileIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C12A015B53DF3BC9C8ED273 /* FileIconHelper.swift */; };
+		86C85E4BEC1283DF930F454F /* MaterialFileIconTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36694C982342171E13852132 /* MaterialFileIconTests.swift */; };
 		881B0898525A29000C30C8C2 /* SessionLaunchForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B7F21F2BDE75CC6ED1E661 /* SessionLaunchForm.swift */; };
 		88C3ED6C4E5C2692B278643A /* WorkspaceNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F46E12016C9EAC9CBBF8830 /* WorkspaceNavigation.swift */; };
 		898E0363CFDA00161E6395C4 /* SkillFrontmatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E981131F173F30668314C97 /* SkillFrontmatterTests.swift */; };
@@ -179,6 +181,7 @@
 		30C225401714B2AE9A8518DE /* ProviderLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderLogo.swift; sourceTree = "<group>"; };
 		317375274369CC35C23D6991 /* SettingsKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsKitTests.swift; sourceTree = "<group>"; };
 		317A5649FF8296228C30CA4A /* SessionToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionToolbarView.swift; sourceTree = "<group>"; };
+		36694C982342171E13852132 /* MaterialFileIconTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaterialFileIconTests.swift; sourceTree = "<group>"; };
 		39CFA31237D9E77EDAAFD2A4 /* WorkspaceInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceInspector.swift; sourceTree = "<group>"; };
 		39EA549F39B605D08B736383 /* ProjectMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMark.swift; sourceTree = "<group>"; };
 		3A3A4F59A625E483E65C9C03 /* DiffStatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffStatStore.swift; sourceTree = "<group>"; };
@@ -214,6 +217,7 @@
 		7BBC083783BD10EC9D3923E7 /* RealPipelineReproTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealPipelineReproTests.swift; sourceTree = "<group>"; };
 		7C108C482AF3ECF378B0A813 /* WorkspaceToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceToolbar.swift; sourceTree = "<group>"; };
 		7C3E4FF1906A236364331113 /* CreateSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSessionView.swift; sourceTree = "<group>"; };
+		7D1E044C6E9E2B02A9834BB2 /* MaterialFileIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaterialFileIcon.swift; sourceTree = "<group>"; };
 		7F15D545EF64036535A2F93F /* TerminalKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TerminalKit; path = Packages/TerminalKit; sourceTree = SOURCE_ROOT; };
 		8007B7DFF42E35CB2C584727 /* KanbanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanTests.swift; sourceTree = "<group>"; };
 		802C8C7F071E28BCFDCDB62E /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
@@ -389,6 +393,7 @@
 				FEA60550ED266054906FF36F /* HookCoordinator.swift */,
 				DFE4986BBB637873F3E8994A /* KanbanViews.swift */,
 				00D312E07B95A6308BF78589 /* MarkdownView.swift */,
+				7D1E044C6E9E2B02A9834BB2 /* MaterialFileIcon.swift */,
 				8C580B54272187880C0A94A4 /* MonacoHostView.swift */,
 				A185A326325E0657CB0E93B1 /* PerfLog.swift */,
 				0EFB55909CF830A56BBBB51B /* ProjectCommandCard.swift */,
@@ -485,6 +490,7 @@
 				D81A7626DA67303D0C7CD01F /* HooksKitTests.swift */,
 				8007B7DFF42E35CB2C584727 /* KanbanTests.swift */,
 				60D0CFBB2B0ECE30A6EF115F /* MarkdownParserTests.swift */,
+				36694C982342171E13852132 /* MaterialFileIconTests.swift */,
 				F0FC0E7A5D4334D57338B01E /* ModelCatalogTests.swift */,
 				F7647E6E3F8217B4210D6634 /* MonacoLanguageMappingTests.swift */,
 				7A61B9F980C1F13B20C49816 /* PersistenceKitTests.swift */,
@@ -677,6 +683,7 @@
 				4691198A8C6D5C9AA79A10D2 /* HooksKitTests.swift in Sources */,
 				C7F772DB0DC0620BA9347B66 /* KanbanTests.swift in Sources */,
 				6BC68209B5F1E3F03FE69E04 /* MarkdownParserTests.swift in Sources */,
+				86C85E4BEC1283DF930F454F /* MaterialFileIconTests.swift in Sources */,
 				0BFC04E001C343E474DCDC70 /* ModelCatalogTests.swift in Sources */,
 				C8EB697F01CA679EF2319C7A /* MonacoLanguageMappingTests.swift in Sources */,
 				E78CCDC78DB4736082465172 /* PersistenceKitTests.swift in Sources */,
@@ -727,6 +734,7 @@
 				D9BE37FD65A706EB5E74527B /* HookCoordinator.swift in Sources */,
 				28A257FBC4273E235E2C12B8 /* KanbanViews.swift in Sources */,
 				253F3CF2CB5E7FA704101F31 /* MarkdownView.swift in Sources */,
+				6F06FCB7764350DA76BE81CC /* MaterialFileIcon.swift in Sources */,
 				BBDB8D8C32BB9F15EE1DE377 /* MissionControlGrid.swift in Sources */,
 				8CD20572CFEFAE128CCE5CFD /* MonacoHostView.swift in Sources */,
 				33E7BC8246F45B60B017DB5C /* PerfLog.swift in Sources */,

@@ -80,9 +80,7 @@ struct FileBrowserView: View {
                             Task { await viewModel.select(node) }
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: node.iconInfo.systemName)
-                                    .foregroundStyle(node.iconInfo.color)
-                                    .font(.system(size: 13))
+                                MaterialFileIcon(node: node, size: 16)
                                 Text(node.name)
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
@@ -139,9 +137,7 @@ extension FileBrowserView {
     private func MarkdownFileEditor(node: FileNode) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "doc.text")
-                    .foregroundStyle(Color.secondary)
-                    .font(.system(size: 16))
+                MaterialFileIcon(node: node, size: 18)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(node.name)
                         .font(.headline)

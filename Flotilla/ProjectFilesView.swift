@@ -63,9 +63,7 @@ struct ProjectFilesView: View {
                         }
                     } label: {
                         HStack(spacing: FlotillaSpacing.small) {
-                            Image(systemName: iconName(for: node))
-                                .foregroundStyle(iconColor(for: node))
-                                .font(.system(size: 13))
+                            MaterialFileIcon(node: node, size: 16)
                             Text(node.name)
                                 .font(FlotillaTypography.body)
                                 .lineLimit(1)
@@ -130,28 +128,6 @@ struct ProjectFilesView: View {
         return filtered
     }
 
-    private func iconName(for node: FileNode) -> String {
-        if node.isDirectory { return "folder.fill" }
-        let ext = node.url.pathExtension.lowercased()
-        switch ext {
-        case "swift": return "swift"
-        case "md", "markdown": return "doc.text"
-        case "json", "yaml", "yml", "toml": return "curlybraces"
-        case "png", "jpg", "jpeg", "gif", "svg": return "photo"
-        default: return "doc"
-        }
-    }
-
-    private func iconColor(for node: FileNode) -> Color {
-        if node.isDirectory { return FlotillaColors.accent }
-        let ext = node.url.pathExtension.lowercased()
-        switch ext {
-        case "swift": return FlotillaColors.accent
-        case "md": return FlotillaColors.textPrimary
-        default: return FlotillaColors.textSecondary
-        }
-    }
-
     // MARK: - Editor Pane
 
     @ViewBuilder
@@ -212,9 +188,7 @@ struct ProjectFilesView: View {
 
     private func editorHeader(_ node: FileNode) -> some View {
         HStack(spacing: FlotillaSpacing.small) {
-            Image(systemName: iconName(for: node))
-                .foregroundStyle(iconColor(for: node))
-                .font(.system(size: FlotillaIconSize.small))
+            MaterialFileIcon(node: node, size: 18)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(node.name)
