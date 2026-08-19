@@ -1,0 +1,266 @@
+import SwiftUI
+import AppKit
+import SessionKit
+import DesignSystem
+
+/// Files tab for a project repository workspace: file tree on the left,
+/// Monaco-backed code editor on the right with rendered Markdown preview toggle.
+struct ProjectFilesView: View {
+    let rootURL: URL
+    @State private var viewModel: FileBrowserViewModel
+
+    @State private var markdownMode: MarkdownMode = .preview
+    @State private var searchText = ""
+
+    enum MarkdownMode: String, CaseIterable, Identifiable {
+        case preview = "Preview"
+        case edit = "Edit"
+
+        var id: Self { self }
+    }
+
+    init(rootURL: URL, service: any WorkspaceFileServicing = WorkspaceFileService()) {
+        self.rootURL = rootURL
+        self._viewModel = State(initialValue: FileBrowserViewModel(root: rootURL, service: service))
+    }
+
+    var body: some View {
+        HSplitView {
+            fileTreePane
+                .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
+            editorPane
+                .frame(minWidth: 400)
+        }
+        .task(id: rootURL) {
+            await viewModel.refresh()
+        }
+        .accessibilityIdentifier(AXID.projectFiles.rawValue)
+    }
+
+    // MARK: - File Tree Pane
+
+    private var fileTreePane: some View {
+        VStack(spacing: 0) {
+            searchBar
+            Divider()
+
+            if viewModel.isLoading && viewModel.nodes.isEmpty {
+                ProgressView("Loading files…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(FlotillaColors.surface)
+            } else if viewModel.nodes.isEmpty {
+                ContentUnavailableView(
+                    "Empty Folder",
+                    systemImage: "folder",
+                    description: Text("No files found in this workspace.")
+                )
+                .background(FlotillaColors.surface)
+            } else {
+                List(filteredNodes, children: \.children) { node in
+                    Button {
+                        if !node.isDirectory {
+                            Task { await viewModel.select(node) }
+                        }
+                    } label: {
+                        HStack(spacing: FlotillaSpacing.small) {
+                            Image(systemName: iconName(for: node))
+                                .foregroundStyle(iconColor(for: node))
+                                .font(.system(size: 13))
+                            Text(node.name)
+                                .font(FlotillaTypography.body)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(
+                        RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                            .fill(viewModel.selectedNode?.id == node.id ? FlotillaColors.accent.opacity(0.12) : Color.clear)
+                    )
+                }
+                .scrollContentBackground(.hidden)
+                .background(FlotillaColors.surface)
+            }
+        }
+        .background(FlotillaColors.surface)
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .font(.system(size: FlotillaIconSize.small))
+            TextField("Filter files…", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(FlotillaTypography.caption)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, FlotillaSpacing.small + 2)
+        .padding(.vertical, 6)
+        .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
+        .padding(FlotillaSpacing.small)
+    }
+
+    private var filteredNodes: [FileNode] {
+        guard !searchText.isEmpty else { return viewModel.nodes }
+        return filterNodes(viewModel.nodes, query: searchText)
+    }
+
+    private func filterNodes(_ nodes: [FileNode], query: String) -> [FileNode] {
+        var filtered: [FileNode] = []
+        for node in nodes {
+            if node.isDirectory {
+                let matchingChildren = filterNodes(node.children ?? [], query: query)
+                if !matchingChildren.isEmpty || node.name.localizedCaseInsensitiveContains(query) {
+                    var copy = node
+                    copy.children = matchingChildren
+                    filtered.append(copy)
+                }
+            } else if node.name.localizedCaseInsensitiveContains(query) {
+                filtered.append(node)
+            }
+        }
+        return filtered
+    }
+
+    private func iconName(for node: FileNode) -> String {
+        if node.isDirectory { return "folder.fill" }
+        let ext = node.url.pathExtension.lowercased()
+        switch ext {
+        case "swift": return "swift"
+        case "md", "markdown": return "doc.text"
+        case "json", "yaml", "yml", "toml": return "curlybraces"
+        case "png", "jpg", "jpeg", "gif", "svg": return "photo"
+        default: return "doc"
+        }
+    }
+
+    private func iconColor(for node: FileNode) -> Color {
+        if node.isDirectory { return FlotillaColors.accent }
+        let ext = node.url.pathExtension.lowercased()
+        switch ext {
+        case "swift": return FlotillaColors.accent
+        case "md": return FlotillaColors.textPrimary
+        default: return FlotillaColors.textSecondary
+        }
+    }
+
+    // MARK: - Editor Pane
+
+    @ViewBuilder
+    private var editorPane: some View {
+        if let node = viewModel.selectedNode {
+            VStack(spacing: 0) {
+                editorHeader(node)
+                Divider()
+
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(FlotillaTypography.caption)
+                        .foregroundStyle(Color.red)
+                        .padding(.horizontal, FlotillaSpacing.medium)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.red.opacity(0.08))
+                }
+
+                if node.url.pathExtension.lowercased() == "md" {
+                    if markdownMode == .preview {
+                        ScrollView {
+                            MarkdownView(markdown: viewModel.content)
+                                .padding(FlotillaSpacing.large)
+                        }
+                        .background(FlotillaColors.canvas)
+                    } else {
+                        MonacoHostView(
+                            content: $viewModel.content,
+                            language: .markdown,
+                            fileURL: node.url,
+                            onSave: { _ in
+                                Task { await viewModel.save() }
+                            }
+                        )
+                    }
+                } else {
+                    MonacoHostView(
+                        content: $viewModel.content,
+                        language: MonacoLanguage.from(url: node.url),
+                        fileURL: node.url,
+                        onSave: { _ in
+                            Task { await viewModel.save() }
+                        }
+                    )
+                }
+            }
+            .background(FlotillaColors.terminalCanvas)
+        } else {
+            ContentUnavailableView(
+                "No File Selected",
+                systemImage: "doc.text.magnifyingglass",
+                description: Text("Choose a file from the tree on the left to inspect or edit.")
+            )
+            .background(FlotillaColors.terminalCanvas)
+        }
+    }
+
+    private func editorHeader(_ node: FileNode) -> some View {
+        HStack(spacing: FlotillaSpacing.small) {
+            Image(systemName: iconName(for: node))
+                .foregroundStyle(iconColor(for: node))
+                .font(.system(size: FlotillaIconSize.small))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(node.name)
+                    .font(FlotillaTypography.headline)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                Text(node.url.path)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer()
+
+            if node.url.pathExtension.lowercased() == "md" {
+                Picker("Mode", selection: $markdownMode) {
+                    ForEach(MarkdownMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 130)
+            }
+
+            if let message = viewModel.message {
+                Label(
+                    message,
+                    systemImage: message.hasPrefix("Saved") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                )
+                .font(FlotillaTypography.caption2)
+                .foregroundStyle(message.hasPrefix("Saved") ? FlotillaColors.success : Color.red)
+            }
+
+            Button("Save") {
+                Task {
+                    await viewModel.save()
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .keyboardShortcut("s", modifiers: .command)
+            .disabled(viewModel.isSaving)
+        }
+        .padding(.horizontal, FlotillaSpacing.medium)
+        .padding(.vertical, FlotillaSpacing.small)
+        .background(FlotillaColors.surface)
+    }
+}

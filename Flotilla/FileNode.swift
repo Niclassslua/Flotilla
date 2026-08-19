@@ -11,7 +11,7 @@ let fileScanLog = Logger(subsystem: "com.niclassslua.flotilla", category: "FileS
 struct FileNode: Identifiable, Hashable, Sendable {
     let url: URL
     let isDirectory: Bool
-    let children: [FileNode]?
+    var children: [FileNode]?
 
     var id: URL { url }
     var name: String { url.lastPathComponent }

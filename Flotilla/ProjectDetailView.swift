@@ -78,8 +78,7 @@ struct ProjectDetailView: View {
                 )
                 .id(project.id)
             case .files:
-                // Phase 4 — Monaco editor
-                FileBrowserView(rootURL: project.rootPath)
+                ProjectFilesView(rootURL: project.rootPath)
             case .skills:
                 ProjectSkillsView(project: project, store: store)
             case .rules:
