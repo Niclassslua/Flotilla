@@ -202,6 +202,7 @@ struct DiffPanelView: View {
                     systemImage: "exclamationmark.triangle",
                     description: Text(errorMessage)
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("DiffPanel.Error")
                 .background(FlotillaColors.canvas)
             } else if viewModel.snapshot.staged.isEmpty &&
@@ -212,6 +213,7 @@ struct DiffPanelView: View {
                     systemImage: "checkmark.circle",
                     description: Text("Working tree is clean.")
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("DiffPanel.Empty")
                 .background(FlotillaColors.canvas)
             } else {
@@ -257,6 +259,7 @@ struct DiffPanelView: View {
                 .accessibilityIdentifier("DiffPanel.List")
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FlotillaColors.canvas)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {

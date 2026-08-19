@@ -56,35 +56,39 @@ struct ProjectDetailView: View {
             modeTabs
             Divider()
 
-            switch selectedTab {
-            case .overview:
-                ProjectOverviewView(
-                    project: project,
-                    sessions: sessions,
-                    store: store,
-                    openSession: openSession,
-                    onOpenInGit: { wt in
-                        gitScopeURL = wt.path
-                        withAnimation(FlotillaMotion.fast.curve) { selectedTab = .git }
-                    }
-                )
-            case .git:
-                ProjectGitView(
-                    project: project,
-                    sessions: sessions,
-                    store: store,
-                    highlightUnseenCommits: highlightUnseenCommits,
-                    initialScopeURL: gitScopeURL
-                )
-                .id(project.id)
-            case .files:
-                ProjectFilesView(rootURL: project.rootPath)
-            case .skills:
-                ProjectSkillsView(project: project, store: store)
-            case .rules:
-                ProjectRulesView(project: project, store: store)
+            Group {
+                switch selectedTab {
+                case .overview:
+                    ProjectOverviewView(
+                        project: project,
+                        sessions: sessions,
+                        store: store,
+                        openSession: openSession,
+                        onOpenInGit: { wt in
+                            gitScopeURL = wt.path
+                            withAnimation(FlotillaMotion.fast.curve) { selectedTab = .git }
+                        }
+                    )
+                case .git:
+                    ProjectGitView(
+                        project: project,
+                        sessions: sessions,
+                        store: store,
+                        highlightUnseenCommits: highlightUnseenCommits,
+                        initialScopeURL: gitScopeURL
+                    )
+                    .id(project.id)
+                case .files:
+                    ProjectFilesView(rootURL: project.rootPath)
+                case .skills:
+                    ProjectSkillsView(project: project, store: store)
+                case .rules:
+                    ProjectRulesView(project: project, store: store)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: project.id) {
             selectedTab = .overview
             if let branch = try? await store.gitService.currentBranch(at: project.rootPath) {

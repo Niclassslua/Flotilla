@@ -58,27 +58,31 @@ struct ProjectGitView: View {
             gitSubTabBar
             Divider()
 
-            switch selectedSubTab {
-            case .changes:
-                changesPane
+            Group {
+                switch selectedSubTab {
+                case .changes:
+                    changesPane
+                        .id(selectedScopeURL)
+                case .commits:
+                    ProjectHistoryView(
+                        repoPath: selectedScopeURL,
+                        gitService: store.gitService,
+                        sessions: sessions,
+                        highlightUnseenCommits: highlightUnseenCommits
+                    )
                     .id(selectedScopeURL)
-            case .commits:
-                ProjectHistoryView(
-                    repoPath: selectedScopeURL,
-                    gitService: store.gitService,
-                    sessions: sessions,
-                    highlightUnseenCommits: highlightUnseenCommits
-                )
-                .id(selectedScopeURL)
-            case .graph:
-                ProjectGraphView(
-                    repoPath: selectedScopeURL,
-                    gitService: store.gitService,
-                    sessions: sessions
-                )
-                .id(selectedScopeURL)
+                case .graph:
+                    ProjectGraphView(
+                        repoPath: selectedScopeURL,
+                        gitService: store.gitService,
+                        sessions: sessions
+                    )
+                    .id(selectedScopeURL)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: project.id) {
             await loadWorktrees()
         }
