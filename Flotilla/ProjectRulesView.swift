@@ -55,6 +55,14 @@ struct ProjectRulesView: View {
         }
     }
 
+    @State private var viewMode: RuleViewMode = .preview
+
+    enum RuleViewMode: String, CaseIterable, Identifiable {
+        case preview = "Preview"
+        case edit = "Edit"
+        var id: Self { self }
+    }
+
     // MARK: - File List
 
     private var filteredEntries: [RuleFileEntry] {
@@ -130,8 +138,10 @@ struct ProjectRulesView: View {
                         Task { await viewModel.select(entry) }
                     } label: {
                         HStack(spacing: FlotillaSpacing.small) {
-                            Label(entry.relativePath, systemImage: "doc.text")
-                                .lineLimit(2)
+                            MaterialFileIcon(url: entry.url, size: 16)
+                            Text(entry.relativePath)
+                                .font(FlotillaTypography.body)
+                                .lineLimit(1)
                             Spacer()
                             scopeBadge(entry.scope)
                         }
@@ -181,24 +191,39 @@ struct ProjectRulesView: View {
     private var editor: some View {
         if let selectedEntry = viewModel.selectedEntry {
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: FlotillaSpacing.small) {
+                    MaterialFileIcon(url: selectedEntry.url, size: 18)
+
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(selectedEntry.url.lastPathComponent)
-                            .font(.headline)
+                            .font(FlotillaTypography.headline)
                         Text(selectedEntry.relativePath)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(FlotillaColors.textTertiary)
                     }
+
                     Spacer()
+
                     scopeBadge(selectedEntry.scope)
+
+                    Picker("Mode", selection: $viewMode) {
+                        ForEach(RuleViewMode.allCases) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 130)
+
                     if let message = viewModel.message {
                         Label(
                             message,
                             systemImage: message.hasPrefix("Saved") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                         )
-                        .font(.caption)
+                        .font(FlotillaTypography.caption2)
                         .foregroundStyle(message.hasPrefix("Saved") ? FlotillaColors.success : Color.red)
                     }
+
                     Button("Save") {
                         isEditorFocused = false
                         Task {
@@ -206,19 +231,36 @@ struct ProjectRulesView: View {
                             await viewModel.save()
                         }
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(viewModel.isSaving)
                 }
                 .padding(.horizontal, FlotillaSpacing.medium)
                 .padding(.vertical, FlotillaSpacing.small)
                 .background(FlotillaColors.surface)
+
                 Divider()
-                TextEditor(text: $viewModel.content)
-                    .font(.system(.body, design: .monospaced))
-                    .scrollContentBackground(.hidden)
+
+                if viewMode == .preview {
+                    ScrollView {
+                        MarkdownView(markdown: viewModel.content)
+                            .padding(FlotillaSpacing.large)
+                    }
+                    .background(FlotillaColors.canvas)
+                } else {
+                    SyntaxHighlightedTextEditor(
+                        text: $viewModel.content,
+                        language: .markdown,
+                        font: .system(.body, design: .monospaced),
+                        onTextChange: { newValue in
+                            viewModel.content = newValue
+                        }
+                    )
+                    .focused($isEditorFocused)
                     .padding(FlotillaSpacing.small)
                     .background(FlotillaColors.terminalCanvas)
-                    .focused($isEditorFocused)
+                }
             }
         } else {
             ContentUnavailableView(
