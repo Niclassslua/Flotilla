@@ -24,6 +24,7 @@
 		21E0B603FB479FAFFE3C75B7 /* ProjectGitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C4D6DAA264F497DDD90922 /* ProjectGitView.swift */; };
 		2300252E82CA383375D3427B /* SessionKit in Frameworks */ = {isa = PBXBuildFile; productRef = B5259CCE5A5E0280938816DA /* SessionKit */; };
 		246D26AC8F1C9A0C0A70905E /* AXID.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2979D8F1026858FB7D2AB39 /* AXID.swift */; };
+		253F3CF2CB5E7FA704101F31 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00D312E07B95A6308BF78589 /* MarkdownView.swift */; };
 		27E06878B9691AB3BC33AD6F /* GridLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2DF974C708FB5E2495E820 /* GridLayoutEngine.swift */; };
 		28A257FBC4273E235E2C12B8 /* KanbanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFE4986BBB637873F3E8994A /* KanbanViews.swift */; };
 		2BA26BB6D80906243929CE44 /* CommandPalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A1347BB96D8C5EC75983D8 /* CommandPalettePanel.swift */; };
@@ -53,11 +54,13 @@
 		5A53DC65C2F57CB706144CFA /* SessionWorkspaceRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA44FB5AD25127F5E869142 /* SessionWorkspaceRegistry.swift */; };
 		5AFEBA002DC9EE604362C38C /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA89E931F91138492DF13F0 /* StatusBadge.swift */; };
 		5B2C150432A686283DAA2CF1 /* DetailColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA278AA87F5C50CA3C16374B /* DetailColumn.swift */; };
+		5D69D60FD099A2D5EF794511 /* ProjectSkillsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A36CA5CA7E0DC0B6941E78BB /* ProjectSkillsView.swift */; };
 		5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */; };
 		63A05E66EE5817F248D8AA40 /* CreateSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3E4FF1906A236364331113 /* CreateSessionView.swift */; };
 		65A0C5DF6D0EA6406B9CE77A /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4A98AEF98A101073B3ECE81 /* SettingsUITests.swift */; };
 		670D703D1EE25BC44EFCE9ED /* ProjectMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EA549F39B605D08B736383 /* ProjectMark.swift */; };
 		69323D20110EE84B01033EF8 /* PerfUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44C721ECC732427A1B4EE485 /* PerfUtils.swift */; };
+		6BC68209B5F1E3F03FE69E04 /* MarkdownParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D0CFBB2B0ECE30A6EF115F /* MarkdownParserTests.swift */; };
 		6C9D4BCCDEB0251DF659F48E /* TerminalManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A81869BA04B1A4E358E9D943 /* TerminalManager.swift */; };
 		6E8FB4027ABCC9D8A9D8A325 /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79AB3C3C89DD228310CF8D26 /* CommandPaletteView.swift */; };
 		6F63B9224CB47317310DA680 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802C8C7F071E28BCFDCDB62E /* ProjectDetailView.swift */; };
@@ -76,6 +79,7 @@
 		84C68B40AF60011958E9D451 /* FileIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C12A015B53DF3BC9C8ED273 /* FileIconHelper.swift */; };
 		881B0898525A29000C30C8C2 /* SessionLaunchForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B7F21F2BDE75CC6ED1E661 /* SessionLaunchForm.swift */; };
 		88C3ED6C4E5C2692B278643A /* WorkspaceNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F46E12016C9EAC9CBBF8830 /* WorkspaceNavigation.swift */; };
+		898E0363CFDA00161E6395C4 /* SkillFrontmatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E981131F173F30668314C97 /* SkillFrontmatterTests.swift */; };
 		8B161966235D6188DD797669 /* ProjectGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78A6553CA399F2ECA7E4E96 /* ProjectGraphView.swift */; };
 		8BD8492768B3EC20D5A9C56A /* SessionKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6D93705F55A5D34EE54781 /* SessionKitTests.swift */; };
 		8EB6E4E9C649E2A2BCA59007 /* ProcessKit in Frameworks */ = {isa = PBXBuildFile; productRef = 638E85CFF2EF3D34E8D9BA60 /* ProcessKit */; };
@@ -151,6 +155,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00D312E07B95A6308BF78589 /* MarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownView.swift; sourceTree = "<group>"; };
 		03D27B2FAF659497F64E9D32 /* RulesPanelUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesPanelUITests.swift; sourceTree = "<group>"; };
 		0D9D4138971887AAFE0D1122 /* FleetSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FleetSidebar.swift; sourceTree = "<group>"; };
 		0EFB55909CF830A56BBBB51B /* ProjectCommandCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandCard.swift; sourceTree = "<group>"; };
@@ -188,6 +193,7 @@
 		581A82A986DD9B62C69E6136 /* AgentSessionProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSessionProviderTests.swift; sourceTree = "<group>"; };
 		5D7F6F4C3315FF603502A26E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5F8D2F2169407E8FA0432BBF /* SessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRow.swift; sourceTree = "<group>"; };
+		60D0CFBB2B0ECE30A6EF115F /* MarkdownParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownParserTests.swift; sourceTree = "<group>"; };
 		64E9ED463505D508B071660E /* SettingsKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SettingsKit; path = Packages/SettingsKit; sourceTree = SOURCE_ROOT; };
 		6C12A015B53DF3BC9C8ED273 /* FileIconHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileIconHelper.swift; sourceTree = "<group>"; };
 		6E82A51AF77E0200DE401E14 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -221,10 +227,12 @@
 		9872301D40294F9A1AC0132F /* SyntaxHighlightedTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlightedTextEditor.swift; sourceTree = "<group>"; };
 		990734B770659EDF562881F7 /* ProjectHistoryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectHistoryViewModelTests.swift; sourceTree = "<group>"; };
 		9923E7E7C4E4C057EAC60EFC /* MarkdownParser */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MarkdownParser; path = Packages/MarkdownParser; sourceTree = SOURCE_ROOT; };
+		9E981131F173F30668314C97 /* SkillFrontmatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillFrontmatterTests.swift; sourceTree = "<group>"; };
 		A0353C16566A859CC1A8412E /* ProjectRulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRulesView.swift; sourceTree = "<group>"; };
 		A0DF4A9D37F882915627EE76 /* GridZoomGestures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridZoomGestures.swift; sourceTree = "<group>"; };
 		A17376EF1B5EAE79721945D7 /* SessionScreenReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionScreenReader.swift; sourceTree = "<group>"; };
 		A185A326325E0657CB0E93B1 /* PerfLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfLog.swift; sourceTree = "<group>"; };
+		A36CA5CA7E0DC0B6941E78BB /* ProjectSkillsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSkillsView.swift; sourceTree = "<group>"; };
 		A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffPanelViewModelTests.swift; sourceTree = "<group>"; };
 		A81869BA04B1A4E358E9D943 /* TerminalManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalManager.swift; sourceTree = "<group>"; };
 		A9636EB3D64BE7F5FB20A38D /* AppLayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLayerTests.swift; sourceTree = "<group>"; };
@@ -374,6 +382,7 @@
 				DB2E8981092A820642684228 /* GridView.swift */,
 				FEA60550ED266054906FF36F /* HookCoordinator.swift */,
 				DFE4986BBB637873F3E8994A /* KanbanViews.swift */,
+				00D312E07B95A6308BF78589 /* MarkdownView.swift */,
 				A185A326325E0657CB0E93B1 /* PerfLog.swift */,
 				0EFB55909CF830A56BBBB51B /* ProjectCommandCard.swift */,
 				802C8C7F071E28BCFDCDB62E /* ProjectDetailView.swift */,
@@ -384,6 +393,7 @@
 				C2FF30BBE9519D001D160302 /* ProjectOverviewView.swift */,
 				B45CE7CA41906B3B47E8C51E /* ProjectPathSheet.swift */,
 				A0353C16566A859CC1A8412E /* ProjectRulesView.swift */,
+				A36CA5CA7E0DC0B6941E78BB /* ProjectSkillsView.swift */,
 				936E3BDE4582F381F44FCD91 /* ProjectWorktreeSection.swift */,
 				30C225401714B2AE9A8518DE /* ProviderLogo.swift */,
 				9167419F82C96BB959BDC26D /* RulesPanelView.swift */,
@@ -466,6 +476,7 @@
 				B8034B27D7FF60ED84FD5A58 /* GitLogTests.swift */,
 				D81A7626DA67303D0C7CD01F /* HooksKitTests.swift */,
 				8007B7DFF42E35CB2C584727 /* KanbanTests.swift */,
+				60D0CFBB2B0ECE30A6EF115F /* MarkdownParserTests.swift */,
 				F0FC0E7A5D4334D57338B01E /* ModelCatalogTests.swift */,
 				7A61B9F980C1F13B20C49816 /* PersistenceKitTests.swift */,
 				D4E3398E0DBBE2055AA3506D /* ProcessKitTests.swift */,
@@ -475,6 +486,7 @@
 				7BBC083783BD10EC9D3923E7 /* RealPipelineReproTests.swift */,
 				BC6D93705F55A5D34EE54781 /* SessionKitTests.swift */,
 				317375274369CC35C23D6991 /* SettingsKitTests.swift */,
+				9E981131F173F30668314C97 /* SkillFrontmatterTests.swift */,
 				BECCD7A6308B107F37525D5D /* TerminalPipelineTests.swift */,
 				E9DCBD80E1B4F78415924591 /* WorkspaceFileServiceTests.swift */,
 			);
@@ -655,6 +667,7 @@
 				EAEB8C12F2DB24CAE6443071 /* GitLogTests.swift in Sources */,
 				4691198A8C6D5C9AA79A10D2 /* HooksKitTests.swift in Sources */,
 				C7F772DB0DC0620BA9347B66 /* KanbanTests.swift in Sources */,
+				6BC68209B5F1E3F03FE69E04 /* MarkdownParserTests.swift in Sources */,
 				0BFC04E001C343E474DCDC70 /* ModelCatalogTests.swift in Sources */,
 				E78CCDC78DB4736082465172 /* PersistenceKitTests.swift in Sources */,
 				E76DDCBA01511749C21BB8EF /* ProcessKitTests.swift in Sources */,
@@ -664,6 +677,7 @@
 				195CD176EEA524BA2246BA0C /* RealPipelineReproTests.swift in Sources */,
 				8BD8492768B3EC20D5A9C56A /* SessionKitTests.swift in Sources */,
 				A0E3F72416EEFECD3A87AEA3 /* SettingsKitTests.swift in Sources */,
+				898E0363CFDA00161E6395C4 /* SkillFrontmatterTests.swift in Sources */,
 				1C1642696393DBA72C1AF11F /* TerminalPipelineTests.swift in Sources */,
 				C33C5A5725D92F74245FB8CC /* WorkspaceFileServiceTests.swift in Sources */,
 			);
@@ -702,6 +716,7 @@
 				A8F1B17C6D8115BE11CD2444 /* HomePreviewFixtures.swift in Sources */,
 				D9BE37FD65A706EB5E74527B /* HookCoordinator.swift in Sources */,
 				28A257FBC4273E235E2C12B8 /* KanbanViews.swift in Sources */,
+				253F3CF2CB5E7FA704101F31 /* MarkdownView.swift in Sources */,
 				BBDB8D8C32BB9F15EE1DE377 /* MissionControlGrid.swift in Sources */,
 				33E7BC8246F45B60B017DB5C /* PerfLog.swift in Sources */,
 				9A561446247EC3977621834E /* ProjectCommandCard.swift in Sources */,
@@ -713,6 +728,7 @@
 				33122EC6940D7D2F88D871FC /* ProjectOverviewView.swift in Sources */,
 				AA1F5861AC5F2A64FE3749D3 /* ProjectPathSheet.swift in Sources */,
 				6FFF6FC63964B46959BB6765 /* ProjectRulesView.swift in Sources */,
+				5D69D60FD099A2D5EF794511 /* ProjectSkillsView.swift in Sources */,
 				FFE6B495A7A0EDC2BFD6F5CB /* ProjectWorktreeSection.swift in Sources */,
 				0D0572566171E8D76DF41E3E /* ProviderLogo.swift in Sources */,
 				A2C15074150CF68BA1BACF55 /* RulesPanelView.swift in Sources */,

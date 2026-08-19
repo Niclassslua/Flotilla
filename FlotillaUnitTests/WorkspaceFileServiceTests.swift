@@ -68,4 +68,46 @@ final class WorkspaceFileServiceTests: XCTestCase {
         XCTAssertEqual(entries.map(\.relativePath), ["~/.agents/AGENTS.md", "~/.claude/CLAUDE.md"])
         XCTAssertTrue(entries.allSatisfy { $0.scope == .global })
     }
+
+    func testDiscoversSkillsAcrossGlobalAndProjectScopesWithPluginAttribution() async throws {
+        let fakeHome = root.appendingPathComponent("fake-home", isDirectory: true)
+        let projectDir = root.appendingPathComponent("project", isDirectory: true)
+
+        // 1. Global skill in ~/.claude/skills/review
+        let globalSkillDir = fakeHome.appendingPathComponent(".claude/skills/review", isDirectory: true)
+        try FileManager.default.createDirectory(at: globalSkillDir, withIntermediateDirectories: true)
+        let globalSkillText = "---\nname: code-review\ndescription: Global review skill\n---\nBody"
+        try globalSkillText.write(to: globalSkillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        // 2. Global plugin skill in ~/.claude/plugins/formatter-plugin/skills/fmt
+        let pluginSkillDir = fakeHome.appendingPathComponent(".claude/plugins/formatter-plugin/skills/fmt", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginSkillDir, withIntermediateDirectories: true)
+        let pluginSkillText = "---\nname: code-fmt\ndescription: Formats code\n---\nBody"
+        try pluginSkillText.write(to: pluginSkillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        // 3. Project skill in <projectRoot>/.agents/skills/deploy
+        let projectSkillDir = projectDir.appendingPathComponent(".agents/skills/deploy", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectSkillDir, withIntermediateDirectories: true)
+        let projectSkillText = "---\nname: project-deploy\ndescription: Deploys project\n---\nBody"
+        try projectSkillText.write(to: projectSkillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        let service = WorkspaceFileService(homeDirectoryProvider: { fakeHome })
+        let skills = try await service.skills(projectRoot: projectDir)
+
+        XCTAssertEqual(skills.count, 3)
+
+        let fmtSkill = skills.first { $0.name == "code-fmt" }
+        XCTAssertNotNil(fmtSkill)
+        XCTAssertEqual(fmtSkill?.scope, .global)
+        XCTAssertEqual(fmtSkill?.source, "formatter-plugin")
+
+        let reviewSkill = skills.first { $0.name == "code-review" }
+        XCTAssertNotNil(reviewSkill)
+        XCTAssertEqual(reviewSkill?.scope, .global)
+        XCTAssertNil(reviewSkill?.source)
+
+        let deploySkill = skills.first { $0.name == "project-deploy" }
+        XCTAssertNotNil(deploySkill)
+        XCTAssertEqual(deploySkill?.scope, .project)
+    }
 }

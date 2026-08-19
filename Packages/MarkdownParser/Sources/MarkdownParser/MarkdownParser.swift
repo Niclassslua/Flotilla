@@ -1,138 +1,195 @@
 import Foundation
-import SwiftUI
 
-public enum MarkdownParserError: Error {
-    case invalidMarkdown
+public enum MarkdownBlock: Sendable, Equatable {
+    case heading(level: Int, AttributedString)
+    case paragraph(AttributedString)
+    case codeBlock(language: String?, String)
+    case listItem(ordered: Bool, depth: Int, AttributedString)
+    case blockQuote([MarkdownBlock])
+    case thematicBreak
 }
 
-public struct MarkdownParser {
-    private let markdown: String
+public enum MarkdownDocument {
+    /// Parses raw markdown into structured blocks, preserving full inline attributes
+    /// and correct list item content.
+    public static func blocks(from markdown: String) -> [MarkdownBlock] {
+        let normalized = markdown
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
 
-    public init(_ markdown: String) {
-        self.markdown = markdown
-    }
+        var blocks: [MarkdownBlock] = []
+        var i = 0
 
-    public func attributedString() -> NSAttributedString {
-        let wholeRange = NSRange(location: 0, length: max(0, markdown.utf16.count))
-        return attributedString(in: wholeRange)
-    }
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-    public func attributedString(in range: NSRange) -> NSAttributedString {
-        let nsString = markdown as NSString
-        let limitedRange = NSRange(location: min(range.location, nsString.length),
-                                   length: max(0, min(range.length, nsString.length - range.location)))
-        guard limitedRange.length > 0 else { return NSMutableAttributedString(string: "") }
-
-        let attributed = NSMutableAttributedString(string: nsString.substring(with: limitedRange))
-        processRange(in: limitedRange, into: attributed)
-        return attributed
-    }
-
-    private func processRange(in range: NSRange, into attributed: NSMutableAttributedString) {
-        let nsString = markdown as NSString
-        let searchRange = NSRange(location: range.location, length: max(0, range.length))
-        let text = nsString.substring(with: searchRange)
-        let lines = text.components(separatedBy: .newlines)
-
-        var charPos = range.location
-        for line in lines {
-            let lineLen = max(0, line.utf16.count)
-            let lineRange = NSRange(location: charPos, length: lineLen)
-
-            if line.hasPrefix("```") {
-                addCodeBlockStyle(to: attributed, range: lineRange)
-            } else if line.hasPrefix("# ") || line.hasPrefix("## ") || line.hasPrefix("### ") ||
-                      line.hasPrefix("#### ") || line.hasPrefix("##### ") || line.hasPrefix("###### ") {
-                let level = countHashes(line)
-                addHeaderStyle(to: attributed, range: lineRange, level: level)
-            } else if line.hasPrefix("> ") {
-                addBlockquoteStyle(to: attributed, range: lineRange)
-            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
-                addListItemStyle(to: attributed, range: lineRange, ordered: false)
-            } else if line.range(of: "\\d+\\. ", options: .regularExpression) != nil {
-                addListItemStyle(to: attributed, range: lineRange, ordered: true)
-            } else {
-                addDefaultStyle(to: attributed, range: lineRange)
+            // 1. Empty lines
+            if trimmed.isEmpty {
+                i += 1
+                continue
             }
 
-            charPos += lineLen + 1
+            // 2. Fenced code block (``` or ~~~)
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                let fence = String(trimmed.prefix(3))
+                let language = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                var codeLines: [String] = []
+                i += 1
+                while i < lines.count {
+                    let nextLine = lines[i]
+                    let nextTrimmed = nextLine.trimmingCharacters(in: .whitespaces)
+                    if nextTrimmed.hasPrefix(fence) {
+                        i += 1
+                        break
+                    }
+                    codeLines.append(nextLine)
+                    i += 1
+                }
+                blocks.append(.codeBlock(
+                    language: language.isEmpty ? nil : language,
+                    codeLines.joined(separator: "\n")
+                ))
+                continue
+            }
+
+            // 3. Thematic break (---, ***, ___)
+            if isThematicBreak(trimmed) {
+                blocks.append(.thematicBreak)
+                i += 1
+                continue
+            }
+
+            // 4. Headings (# ... ######)
+            if let heading = parseHeading(line) {
+                blocks.append(heading)
+                i += 1
+                continue
+            }
+
+            // 5. Blockquotes (> ...)
+            if trimmed.hasPrefix(">") {
+                var quoteLines: [String] = []
+                while i < lines.count {
+                    let nextLine = lines[i]
+                    let nextTrimmed = nextLine.trimmingCharacters(in: .whitespaces)
+                    if nextTrimmed.hasPrefix(">") {
+                        let stripped: String
+                        if nextTrimmed.hasPrefix("> ") {
+                            stripped = String(nextTrimmed.dropFirst(2))
+                        } else {
+                            stripped = String(nextTrimmed.dropFirst(1))
+                        }
+                        quoteLines.append(stripped)
+                        i += 1
+                    } else if nextTrimmed.isEmpty {
+                        break
+                    } else {
+                        // Continuation line of blockquote
+                        quoteLines.append(nextLine)
+                        i += 1
+                    }
+                }
+                let nestedBlocks = Self.blocks(from: quoteLines.joined(separator: "\n"))
+                blocks.append(.blockQuote(nestedBlocks))
+                continue
+            }
+
+            // 6. List items (- , * , + , 1. )
+            if let listItem = parseListItem(line) {
+                blocks.append(listItem)
+                i += 1
+                continue
+            }
+
+            // 7. Paragraph: accumulate consecutive non-block lines
+            var paragraphLines: [String] = []
+            while i < lines.count {
+                let nextLine = lines[i]
+                let nextTrimmed = nextLine.trimmingCharacters(in: .whitespaces)
+                if nextTrimmed.isEmpty
+                    || nextTrimmed.hasPrefix("```")
+                    || nextTrimmed.hasPrefix("~~~")
+                    || isThematicBreak(nextTrimmed)
+                    || parseHeading(nextLine) != nil
+                    || nextTrimmed.hasPrefix(">")
+                    || parseListItem(nextLine) != nil {
+                    break
+                }
+                paragraphLines.append(nextLine)
+                i += 1
+            }
+
+            if !paragraphLines.isEmpty {
+                let text = paragraphLines.joined(separator: "\n")
+                blocks.append(.paragraph(parseInline(text)))
+            }
         }
+
+        return blocks
     }
 
-    private func countHashes(_ line: String) -> Int {
-        var count = 0
-        for char in line {
-            if char == "#" { count += 1 } else { break }
-        }
-        return min(count, 6)
-    }
+    private static func parseHeading(_ line: String) -> MarkdownBlock? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("#") else { return nil }
 
-    private func addCodeBlockStyle(to attributed: NSMutableAttributedString, range: NSRange) {
-        attributed.addAttributes([
-            .font: Font.system(size: 13, weight: .regular),
-            .foregroundColor: Color(red: 0.6, green: 0.6, blue: 0.6),
-            .backgroundColor: Color(red: 10/255, green: 10/255, blue: 12/255).opacity(0.3),
-            .paragraphStyle: NSMutableParagraphStyle()
-        ], range: range)
-    }
-
-    private func addHeaderStyle(to attributed: NSMutableAttributedString, range: NSRange, level: Int) {
-        let fontSize = CGFloat(max(11, 17 - level))
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.firstLineHeadIndent = 20
-        paragraphStyle.headIndent = CGFloat(level * 20)
-
-        attributed.addAttributes([
-            .font: Font.system(size: fontSize, weight: .bold),
-            .foregroundColor: Color(red: 1, green: 1, blue: 1),
-            .paragraphStyle: paragraphStyle
-        ], range: range)
-    }
-
-    private func addBlockquoteStyle(to attributed: NSMutableAttributedString, range: NSRange) {
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.firstLineHeadIndent = 20
-        paragraphStyle.headIndent = 20
-
-        attributed.addAttributes([
-            .font: Font.system(size: 13, weight: .regular),
-            .foregroundColor: Color(red: 0.8, green: 0.8, blue: 0.8),
-            .paragraphStyle: paragraphStyle
-        ], range: range)
-    }
-
-    private func addListItemStyle(to attributed: NSMutableAttributedString, range: NSRange, ordered: Bool) {
-        let prefix = ordered ? "1. " : "- "
-        let attributedText = NSMutableAttributedString(string: prefix)
-
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: Font.system(size: 13, weight: .regular),
-            .foregroundColor: Color(red: 1, green: 1, blue: 1)
-        ]
-
-        attributedText.addAttributes(attrs, range: NSRange(location: 0, length: 2))
-
-        let textStart = 2
-        let textLen = max(0, range.length - 2)
-        if textStart + textLen <= attributedText.length {
-            attributedText.addAttributes(attrs, range: NSRange(location: textStart, length: textLen))
+        var level = 0
+        for ch in trimmed {
+            if ch == "#" { level += 1 } else { break }
         }
 
-        attributed.replaceCharacters(in: range, with: attributedText)
+        guard level >= 1 && level <= 6 else { return nil }
+        let afterHashes = trimmed.dropFirst(level)
+        guard afterHashes.hasPrefix(" ") || afterHashes.isEmpty else { return nil }
+
+        let text = afterHashes.trimmingCharacters(in: .whitespaces)
+        return .heading(level: level, parseInline(text))
     }
 
-    private func addDefaultStyle(to attributed: NSMutableAttributedString, range: NSRange) {
-        attributed.addAttributes([
-            .font: Font.system(size: 13),
-            .foregroundColor: Color(red: 1, green: 1, blue: 1),
-        ], range: range)
+    private static func parseListItem(_ line: String) -> MarkdownBlock? {
+        // Calculate leading space depth
+        var leadingSpaces = 0
+        for ch in line {
+            if ch == " " { leadingSpaces += 1 }
+            else if ch == "\t" { leadingSpaces += 4 }
+            else { break }
+        }
+        let depth = leadingSpaces / 2
+
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+        // Unordered: - , * , +
+        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") {
+            let text = String(trimmed.dropFirst(2))
+            return .listItem(ordered: false, depth: depth, parseInline(text))
+        }
+
+        // Ordered: 1. , 2. , etc.
+        if let match = trimmed.range(of: #"^\d+[\.\)]\s+"#, options: .regularExpression) {
+            let text = String(trimmed[match.upperBound...])
+            return .listItem(ordered: true, depth: depth, parseInline(text))
+        }
+
+        return nil
     }
-}
 
-// MARK: - Public convenience
+    private static func isThematicBreak(_ line: String) -> Bool {
+        let stripped = line.filter { !$0.isWhitespace }
+        guard stripped.count >= 3 else { return false }
+        let allDash = stripped.allSatisfy { $0 == "-" }
+        let allStar = stripped.allSatisfy { $0 == "*" }
+        let allUnderscore = stripped.allSatisfy { $0 == "_" }
+        return allDash || allStar || allUnderscore
+    }
 
-extension MarkdownParser {
-    public static func attributedString(from markdown: String) -> NSAttributedString {
-        MarkdownParser(markdown).attributedString()
+    public static func parseInline(_ text: String) -> AttributedString {
+        if let attr = try? AttributedString(markdown: text, options: .init(
+            interpretedSyntax: .full,
+            failurePolicy: .returnPartiallyParsedIfPossible
+        )) {
+            return attr
+        }
+        return AttributedString(text)
     }
 }

@@ -31,10 +31,110 @@ enum RuleScope: String, Sendable, Hashable {
     case project
 }
 
+public struct SkillEntry: Identifiable, Hashable, Sendable {
+    public let url: URL              // the SKILL.md
+    public let name: String          // frontmatter `name`, else directory name
+    public let description: String   // frontmatter `description`
+    public let scope: SkillScope     // .global | .project
+    public let source: String?       // plugin name when under ~/.claude/plugins
+    public var id: URL { url }
+
+    public init(
+        url: URL,
+        name: String,
+        description: String,
+        scope: SkillScope,
+        source: String? = nil
+    ) {
+        self.url = url
+        self.name = name
+        self.description = description
+        self.scope = scope
+        self.source = source
+    }
+}
+
+public enum SkillScope: String, Sendable, Hashable {
+    case global
+    case project
+}
+
+public enum SkillFrontmatter {
+    public static func parse(_ text: String) -> (name: String?, description: String?) {
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
+
+        guard let first = lines.first, first.trimmingCharacters(in: .whitespaces) == "---" else {
+            return (nil, nil)
+        }
+
+        var name: String?
+        var description: String?
+
+        var i = 1
+        var currentKey: String?
+        var currentValue: [String] = []
+
+        func flushCurrent() {
+            guard let key = currentKey else { return }
+            let combined = currentValue.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            let unquoted = stripQuotes(combined)
+            if key == "name" {
+                name = unquoted
+            } else if key == "description" {
+                description = unquoted
+            }
+            currentKey = nil
+            currentValue = []
+        }
+
+        var hasClosed = false
+
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == "---" {
+                hasClosed = true
+                flushCurrent()
+                break
+            }
+
+            if line.hasPrefix(" ") || line.hasPrefix("\t") {
+                if currentKey != nil {
+                    currentValue.append(trimmed)
+                }
+            } else if let colonIdx = line.firstIndex(of: ":") {
+                flushCurrent()
+                let key = String(line[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+                let val = String(line[line.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
+                currentKey = key
+                if !val.isEmpty && val != ">" && val != "|" {
+                    currentValue.append(val)
+                }
+            }
+            i += 1
+        }
+
+        guard hasClosed else { return (nil, nil) }
+        return (name, description)
+    }
+
+    private static func stripQuotes(_ s: String) -> String {
+        var str = s.trimmingCharacters(in: .whitespaces)
+        if (str.hasPrefix("\"") && str.hasSuffix("\"")) || (str.hasPrefix("'") && str.hasSuffix("'")) {
+            str = String(str.dropFirst().dropLast())
+        }
+        return str
+    }
+}
+
 protocol WorkspaceFileServicing: Sendable {
     func fileTree(at root: URL) async throws -> [FileNode]
     func instructionFiles(in root: URL) async throws -> [RuleFileEntry]
     func globalInstructionFiles() async throws -> [RuleFileEntry]
+    func skills(projectRoot: URL) async throws -> [SkillEntry]
     func readText(at url: URL) async throws -> String
     func writeText(_ text: String, to url: URL) async throws
 }
@@ -74,6 +174,13 @@ struct WorkspaceFileService: WorkspaceFileServicing {
         let home = homeDirectoryProvider()
         return try await Task.detached {
             Self.discoverGlobalInstructionFiles(home: home, fileManager: .default)
+        }.value
+    }
+
+    func skills(projectRoot: URL) async throws -> [SkillEntry] {
+        let home = homeDirectoryProvider()
+        return try await Task.detached {
+            Self.discoverSkills(projectRoot: projectRoot, home: home, fileManager: .default)
         }.value
     }
 
@@ -209,6 +316,86 @@ struct WorkspaceFileService: WorkspaceFileServicing {
             }
         }
         return results.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
+    }
+
+    /// Discovers skills across global (~/.claude, ~/.agents, ~/.codex) and project-scoped roots.
+    private static func discoverSkills(
+        projectRoot: URL,
+        home: URL,
+        fileManager: FileManager
+    ) -> [SkillEntry] {
+        var results: [SkillEntry] = []
+
+        func scanDirectSkillRoots(baseDir: URL, relativePrefix: String, scope: SkillScope) {
+            guard fileManager.fileExists(atPath: baseDir.path), !isTCCProtected(baseDir) else { return }
+            fileScanLog.notice("discoverSkills: scanning direct root \(baseDir.path, privacy: .public)")
+            guard let contents = try? fileManager.contentsOfDirectory(at: baseDir, includingPropertiesForKeys: [.isDirectoryKey]) else { return }
+
+            for folder in contents {
+                let isDir = (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                guard isDir else { continue }
+                let skillFile = folder.appendingPathComponent("SKILL.md")
+                if fileManager.fileExists(atPath: skillFile.path) {
+                    let dirName = folder.lastPathComponent
+                    let text = (try? String(contentsOf: skillFile, encoding: .utf8)) ?? ""
+                    let parsed = SkillFrontmatter.parse(text)
+                    results.append(SkillEntry(
+                        url: skillFile,
+                        name: parsed.name ?? dirName,
+                        description: parsed.description ?? "",
+                        scope: scope,
+                        source: nil
+                    ))
+                }
+            }
+        }
+
+        func scanPluginSkillRoots(pluginsDir: URL, scope: SkillScope) {
+            guard fileManager.fileExists(atPath: pluginsDir.path), !isTCCProtected(pluginsDir) else { return }
+            fileScanLog.notice("discoverSkills: scanning plugins root \(pluginsDir.path, privacy: .public)")
+            guard let plugins = try? fileManager.contentsOfDirectory(at: pluginsDir, includingPropertiesForKeys: [.isDirectoryKey]) else { return }
+
+            for pluginFolder in plugins {
+                let isDir = (try? pluginFolder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                guard isDir else { continue }
+                let pluginName = pluginFolder.lastPathComponent
+                let skillsFolder = pluginFolder.appendingPathComponent("skills")
+                guard fileManager.fileExists(atPath: skillsFolder.path) else { continue }
+
+                guard let skillDirs = try? fileManager.contentsOfDirectory(at: skillsFolder, includingPropertiesForKeys: [.isDirectoryKey]) else { continue }
+                for folder in skillDirs {
+                    let isFolderDir = (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                    guard isFolderDir else { continue }
+                    let skillFile = folder.appendingPathComponent("SKILL.md")
+                    if fileManager.fileExists(atPath: skillFile.path) {
+                        let dirName = folder.lastPathComponent
+                        let text = (try? String(contentsOf: skillFile, encoding: .utf8)) ?? ""
+                        let parsed = SkillFrontmatter.parse(text)
+                        results.append(SkillEntry(
+                            url: skillFile,
+                            name: parsed.name ?? dirName,
+                            description: parsed.description ?? "",
+                            scope: scope,
+                            source: pluginName
+                        ))
+                    }
+                }
+            }
+        }
+
+        // Global skills
+        scanDirectSkillRoots(baseDir: home.appendingPathComponent(".claude/skills"), relativePrefix: "~/.claude/skills", scope: .global)
+        scanPluginSkillRoots(pluginsDir: home.appendingPathComponent(".claude/plugins"), scope: .global)
+        scanDirectSkillRoots(baseDir: home.appendingPathComponent(".agents/skills"), relativePrefix: "~/.agents/skills", scope: .global)
+        scanDirectSkillRoots(baseDir: home.appendingPathComponent(".codex/skills"), relativePrefix: "~/.codex/skills", scope: .global)
+
+        // Project skills
+        scanDirectSkillRoots(baseDir: projectRoot.appendingPathComponent(".claude/skills"), relativePrefix: ".claude/skills", scope: .project)
+        scanPluginSkillRoots(pluginsDir: projectRoot.appendingPathComponent(".claude/plugins"), scope: .project)
+        scanDirectSkillRoots(baseDir: projectRoot.appendingPathComponent(".agents/skills"), relativePrefix: ".agents/skills", scope: .project)
+        scanDirectSkillRoots(baseDir: projectRoot.appendingPathComponent(".codex/skills"), relativePrefix: ".codex/skills", scope: .project)
+
+        return results.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }
 

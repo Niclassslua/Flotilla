@@ -137,9 +137,6 @@ struct FileBrowserView: View {
 extension FileBrowserView {
     @ViewBuilder
     private func MarkdownFileEditor(node: FileNode) -> some View {
-        let markdownContent = viewModel.content
-        let attributed = MarkdownParser(markdownContent).attributedString()
-
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "doc.text")
@@ -148,7 +145,7 @@ extension FileBrowserView {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(node.name)
                         .font(.headline)
-                    Text(node.url.path.replacingOccurrences(of: "", with: ""))
+                    Text(node.url.path)
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
@@ -186,12 +183,12 @@ extension FileBrowserView {
 
             Divider()
 
-            Text(AttributedString(attributed))
-                .font(.system(.body, design: .monospaced))
-                .focused($isEditorFocused)
-                .padding(FlotillaSpacing.small)
-                .accessibilityIdentifier("FileBrowser.MarkdownEditor")
-                .accessibilityLabel("Markdown editor for \(node.name)")
+            ScrollView {
+                MarkdownView(markdown: viewModel.content)
+                    .padding(FlotillaSpacing.medium)
+            }
+            .accessibilityIdentifier("FileBrowser.MarkdownEditor")
+            .accessibilityLabel("Markdown editor for \(node.name)")
         }
         .frame(maxHeight: .infinity)
     }

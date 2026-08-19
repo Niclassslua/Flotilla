@@ -81,12 +81,7 @@ struct ProjectDetailView: View {
                 // Phase 4 — Monaco editor
                 FileBrowserView(rootURL: project.rootPath)
             case .skills:
-                // Phase 3 — Skills discovery
-                ContentUnavailableView(
-                    "Skills",
-                    systemImage: "sparkles",
-                    description: Text("Skills discovery coming soon.")
-                )
+                ProjectSkillsView(project: project, store: store)
             case .rules:
                 ProjectRulesView(project: project, store: store)
             }
