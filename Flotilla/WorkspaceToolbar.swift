@@ -92,54 +92,12 @@ struct WorkspaceToolbar: ToolbarContent {
             }
         }
 
-        ToolbarItemGroup(placement: .primaryAction) {
-            // Overflow menu
-            Menu {
-                if let session = store.selectedSession {
-                    Button("Restore") {
-                        store.restartSession(sessionID: session.id)
-                    }
-                    .keyboardShortcut("r", modifiers: .command)
-                    .accessibilityIdentifier("Restore Session")
-
-                    Button("Reveal in Finder") {
-                        let path = session.worktree?.worktreePath ?? session.workingDirectory
-                        NSWorkspace.shared.activateFileViewerSelecting([path])
-                    }
-
-                    Button("Copy Working Directory") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString((session.worktree?.worktreePath ?? session.workingDirectory).path, forType: .string)
-                    }
-
-                    Button("Copy Branch") {
-                        if let branch = session.worktree?.branchName {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(branch, forType: .string)
-                        }
-                    }
-
-                    Divider()
-
-                    Button("Delete Session…", role: .destructive) {
-                        navigator.presentedSheet = .deleteSession(session.id)
-                    }
-                    .keyboardShortcut(.delete, modifiers: .command)
-                }
-
-                Divider()
-
-                Button("Keyboard Shortcuts") {
-                    navigator.presentedSheet = .shortcuts
-                }
-
-                Button("Settings…") { openSettings() }
-            } label: {
-                Image(systemName: "ellipsis.circle")
+        ToolbarItem(placement: .primaryAction) {
+            Button(action: { openSettings() }) {
+                Image(systemName: "gearshape")
             }
-            .menuStyle(.borderlessButton)
-            .help("More actions")
-            .accessibilityIdentifier("Toolbar.Overflow")
+            .help("Settings (⌘,)")
+            .accessibilityIdentifier("Toolbar.Settings")
         }
     }
 }

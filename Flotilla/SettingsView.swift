@@ -8,6 +8,7 @@ import DesignSystem
 
 private enum SettingsTab: String, CaseIterable, Identifiable {
     case general
+    case shortcuts
     case sessions
     case terminal
     case git
@@ -23,6 +24,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: "General"
+        case .shortcuts: "Shortcuts"
         case .sessions: "Sessions"
         case .terminal: "Terminal & Editor"
         case .git: "Git & Worktrees"
@@ -38,6 +40,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .general: "gearshape.fill"
+        case .shortcuts: "keyboard.fill"
         case .sessions: "rectangle.3.group.fill"
         case .terminal: "terminal.fill"
         case .git: "arrow.triangle.branch"
@@ -53,6 +56,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var color: Color {
         switch self {
         case .general: .gray
+        case .shortcuts: .teal
         case .sessions: .indigo
         case .terminal: .cyan
         case .git: .green
@@ -68,6 +72,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var searchText: String {
         switch self {
         case .general: "worktrees workspace grid density directory"
+        case .shortcuts: "keyboard shortcuts keybindings hotkeys navigation layout session terminal commands"
         case .sessions: "session defaults coding agent prompt worktree"
         case .terminal: "terminal editor font size scroll option meta"
         case .git: "git branch worktree delete lifecycle"
@@ -163,6 +168,8 @@ struct SettingsView: View {
         switch selectedTab {
         case .general:
             GeneralSettingsPane(viewModel: viewModel)
+        case .shortcuts:
+            ShortcutsSettingsPane()
         case .sessions:
             SessionSettingsPane(viewModel: viewModel)
         case .terminal:
@@ -611,6 +618,63 @@ private struct AdvancedSettingsPane: View {
             }
         }
         .flotillaSettingsFormLayout()
+    }
+}
+
+private struct ShortcutsSettingsPane: View {
+    var body: some View {
+        Form {
+            Section {
+                Text("Move through Flotilla quickly without leaving the keyboard.")
+                    .font(FlotillaTypography.body)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+            } header: {
+                SettingsSectionHeader("Keyboard Shortcuts", systemImage: "keyboard")
+            }
+
+            ForEach(shortcutGroups, id: \.0) { groupName, shortcuts in
+                Section(groupName) {
+                    ForEach(shortcuts, id: \.0) { label, key in
+                        LabeledContent(label) {
+                            Text(key)
+                                .font(FlotillaTypography.callout.monospaced())
+                                .foregroundStyle(FlotillaColors.textSecondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
+                        }
+                    }
+                }
+            }
+        }
+        .flotillaSettingsFormLayout()
+    }
+
+    private var shortcutGroups: [(String, [(String, String)])] {
+        [
+            ("Navigation", [
+                ("New Session", "⌘N"),
+                ("Command Palette", "⌘K"),
+                ("Overview", "⌘1"),
+                ("All Sessions", "⌘2"),
+                ("Settings", "⌘,"),
+            ]),
+            ("Layout & Views", [
+                ("Focus Presentation", "⌘⌃1"),
+                ("Grid Presentation", "⌘⌃2"),
+                ("Board Presentation", "⌘⌃3"),
+                ("Toggle Inspector", "⌘⌥I"),
+                ("Zoom In / Out", "⌘+ / ⌘-"),
+            ]),
+            ("Session & Terminal", [
+                ("Terminal Lens", "⌘⇧T"),
+                ("Files Browser Lens", "⌘⇧F"),
+                ("Rules & Skills Lens", "⌘⇧R"),
+                ("Diff Changes Inspector", "⌘⇧D"),
+                ("Restart Session", "⌘R"),
+                ("Delete Session", "⌘⌫"),
+            ]),
+        ]
     }
 }
 
