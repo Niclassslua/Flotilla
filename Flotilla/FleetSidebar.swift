@@ -137,16 +137,14 @@ struct FleetSessionList: View {
 enum SidebarFacet: String, CaseIterable, Identifiable {
     case overview
     case sessions
-    case projects
 
     var id: Self { self }
 
     /// The rail highlights whichever facet the current scope belongs to, so
-    /// opening a single session or project keeps its facet lit.
+    /// opening a single session keeps Sessions lit, and overview/project keeps Overview lit.
     init(_ item: SidebarItem) {
         switch item {
-        case .overview: self = .overview
-        case .allProjects, .project: self = .projects
+        case .overview, .project: self = .overview
         case .allSessions, .session: self = .sessions
         }
     }
@@ -156,7 +154,6 @@ enum SidebarFacet: String, CaseIterable, Identifiable {
         switch self {
         case .overview: return .overview
         case .sessions: return .allSessions
-        case .projects: return .allProjects
         }
     }
 
@@ -164,7 +161,6 @@ enum SidebarFacet: String, CaseIterable, Identifiable {
         switch self {
         case .overview: return "Overview"
         case .sessions: return "Sessions"
-        case .projects: return "Projects"
         }
     }
 
@@ -172,7 +168,6 @@ enum SidebarFacet: String, CaseIterable, Identifiable {
         switch self {
         case .overview: return "house"
         case .sessions: return "terminal"
-        case .projects: return "folder"
         }
     }
 
@@ -180,7 +175,6 @@ enum SidebarFacet: String, CaseIterable, Identifiable {
         switch self {
         case .overview: return AXID.sidebarOverview.rawValue
         case .sessions: return AXID.sidebarAllSessions.rawValue
-        case .projects: return AXID.sidebarAllProjects.rawValue
         }
     }
 }
@@ -280,26 +274,3 @@ struct SessionSidebarRow: View {
     }
 }
 
-/// Kept for `ContentView.swift` (legacy, pre-`FlotillaShell` screen still in
-/// the target). Not used by FleetSidebar.
-struct SessionActivityStrip: View {
-    let sessions: [Session]
-
-    var body: some View {
-        HStack(spacing: 3) {
-            let shown = Array(sessions.prefix(12))
-            if shown.isEmpty {
-                Capsule()
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(height: 3)
-            } else {
-                ForEach(shown) { session in
-                    StatusBadge(session.status, variant: .compact)
-                        .frame(height: 3)
-                }
-            }
-        }
-        .frame(height: 3)
-        .accessibilityHidden(true)
-    }
-}

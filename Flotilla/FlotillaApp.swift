@@ -120,10 +120,6 @@ struct FlotillaApp: App {
                     navigator.presentation = .focus
                 }
                 .keyboardShortcut("2", modifiers: .command)
-                Button("All Projects") {
-                    navigator.selection = .allProjects
-                }
-                .keyboardShortcut("3", modifiers: .command)
                 Divider()
                 Button("Focus Layout") {
                     navigator.selection = .allSessions
@@ -160,7 +156,8 @@ struct FlotillaApp: App {
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
                 Button("Toggle Changes") {
-                    navigator.isChangesInspectorOpen.toggle()
+                    navigator.inspectorTab = .changes
+                    navigator.isInspectorOpen.toggle()
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 Divider()

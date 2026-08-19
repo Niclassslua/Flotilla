@@ -20,7 +20,6 @@ struct DetailColumn: View {
     let onInspectorToggle: () -> Void
 
     @State private var activeGridSessionID: UUID?
-    @State private var projectMode: ProjectWorkspaceMode = .overview
 
     var body: some View {
         let _ = navigator.presentedSheet
@@ -30,8 +29,6 @@ struct DetailColumn: View {
                 overviewContent
             case .allSessions:
                 sessionsContent(showingAll: true)
-            case .allProjects:
-                projectsContent
             case .project(let projectID):
                 projectContent(projectID: projectID)
             case .session(let sessionID):
@@ -72,6 +69,7 @@ struct DetailColumn: View {
             openSession: onOpenSession,
             settingsViewModel: settingsViewModel,
             activityStore: activityStore,
+            terminalManager: terminalManager,
             openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
             defaultAgent: .claudeCode
         )
@@ -173,111 +171,18 @@ case .grid:
     @ViewBuilder
     private func projectContent(projectID: UUID) -> some View {
         if let project = store.projects.first(where: { $0.id == projectID }) {
-            ProjectWorkspaceDetail(
+            ProjectDetailView(
                 project: project,
                 sessions: store.sessions(for: project),
-                selectedMode: $projectMode,
                 store: store,
                 terminalManager: terminalManager,
                 openSession: onOpenSession,
                 openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
-                onBackToGrid: { navigator.selection = .allProjects }
+                onBackToOverview: { navigator.selection = .overview }
             )
         } else {
             ContentUnavailableView("Project Not Found", systemImage: "folder.badge.questionmark")
         }
-    }
-
-    @ViewBuilder
-    private func projectHeader(_ project: Project) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "folder.fill")
-                .font(.title2)
-                .foregroundStyle(FlotillaColors.accent)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(project.name)
-                    .font(.title2.weight(.semibold))
-                Text(project.rootPath.path)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer()
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([project.rootPath])
-            } label: {
-                Label("Reveal", systemImage: "finder")
-            }
-            Button {
-                onCreateSession()
-            } label: {
-                Label("New Session", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(.thinMaterial)
-    }
-
-    @ViewBuilder
-    private func projectListView(_ project: Project) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Sessions")
-                    .font(.title3.weight(.semibold))
-                    .padding(.horizontal, 22)
-
-                let sessions = store.sessions(for: project)
-                if sessions.isEmpty {
-                    Text("No agents have worked in this project yet.")
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 22)
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 12) {
-                        ForEach(sessions) { session in
-                            Button {
-                                onOpenSession(session.id)
-                            } label: {
-                                SessionCard(
-                                    session: session,
-                                    variant: .tile,
-                                    diffStatStore: store.diffStatStore,
-                                    activityStore: nil,
-                                    isSelected: false,
-                                    isActive: false,
-                                    onTap: { onOpenSession(session.id) },
-                                    onDelete: {},
-                                    onRestart: {},
-                                    onRevealInFinder: {},
-                                    onCopyPath: {},
-                                    onCopyBranch: {},
-                                    terminal: { EmptyView() }
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 22)
-                }
-            }
-            .padding(.vertical, 22)
-        }
-        .background(FlotillaColors.canvas)
-    }
-
-    @ViewBuilder
-    private var projectsContent: some View {
-        ProjectsCommandCenterView(
-            store: store,
-            onSelect: onOpenProject,
-            onAdd: { navigator.presentedSheet = .createSession },
-            onImportWorkspace: { navigator.presentedSheet = .createSession },
-            onQuickLaunch: { project in
-                onOpenProject(project.id)
-            }
-        )
     }
 
     @ViewBuilder
@@ -327,7 +232,6 @@ case .grid:
         switch navigator.selection {
         case .overview: return "Overview"
         case .allSessions: return "Sessions"
-        case .allProjects: return "Projects"
         case .project(let id):
             return store.projects.first(where: { $0.id == id })?.name ?? "Project"
         case .session(let id):
@@ -344,8 +248,6 @@ case .grid:
             let needsInput = store.sessions.filter { $0.status == .waitingForInput }.count
             let ready = store.sessions.filter { $0.status == .ready }.count
             return "\(working) working · \(needsInput) need input · \(ready) ready"
-        case .allProjects:
-            return "\(store.projects.count) projects"
         case .project(let id):
             let sessions = store.sessions.filter { $0.projectID == id }
             let working = sessions.filter { $0.status == .working }.count
@@ -375,163 +277,6 @@ case .grid:
 
     private func workspaceRoot(for session: Session) -> URL {
         session.worktree?.worktreePath ?? session.workingDirectory
-    }
-}
-
-private struct ProjectCollectionView: View {
-    let projects: [Project]
-    let sessionCount: (Project) -> Int
-    let select: (UUID) -> Void
-    let add: () -> Void
-    let importWorkspace: () -> Void
-
-    @State private var sortOrder = ProjectSort.recent
-
-    private enum ProjectSort: String, CaseIterable, Identifiable {
-        case recent = "Last used"
-        case name = "Name"
-        case active = "Active"
-
-        var id: Self { self }
-    }
-
-    private var sortedProjects: [Project] {
-        switch sortOrder {
-        case .recent: projects
-        case .name: projects.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        case .active: projects.sorted { sessionCount($0) > sessionCount($1) }
-        }
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Your Projects")
-                            .font(.system(size: 22, weight: .semibold))
-                        Text("Jump back into a codebase or start an agent in a fresh context.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(action: importWorkspace) {
-                        Label("Import", systemImage: "square.and.arrow.down")
-                    }
-                    .buttonStyle(.bordered)
-                    Button(action: add) {
-                        Label("Add Project", systemImage: "plus")
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                if projects.isEmpty {
-                    ContentUnavailableView(
-                        "No Projects",
-                        systemImage: "folder.badge.plus",
-                        description: Text("Import a Git checkout or create a project-scoped session.")
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 320)
-                } else {
-                    HStack(spacing: 5) {
-                        Text("SORT")
-                            .font(.caption2.weight(.bold))
-                            .tracking(0.8)
-                            .foregroundStyle(.tertiary)
-                        ForEach(ProjectSort.allCases) { option in
-                            Button(option.rawValue) { sortOrder = option }
-                                .buttonStyle(.plain)
-                                .font(.caption.weight(sortOrder == option ? .semibold : .regular))
-                                .padding(.horizontal, 9)
-                                .frame(height: 26)
-                                .background(
-                                    sortOrder == option ? FlotillaColors.surfaceElevated : .clear,
-                                    in: RoundedRectangle(cornerRadius: 5)
-                                )
-                                .foregroundStyle(sortOrder == option ? .primary : .secondary)
-                        }
-                    }
-
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 12)], spacing: 12) {
-                        ForEach(sortedProjects) { project in
-                            Button {
-                                select(project.id)
-                            } label: {
-                                ProjectCollectionCard(project: project, sessionCount: sessionCount(project))
-                            }
-                            .buttonStyle(.plain)
-                            // This grid is the detail column, not the sidebar —
-                            // the "Sidebar." prefix was a mislabel, and it left
-                            // the Projects destination with no "ProjectRow-"
-                            // element for tests to reach.
-                            .accessibilityIdentifier(AXID.projectRow.rawValue + project.name)
-                        }
-                    }
-                }
-            }
-            .padding(24)
-        }
-        .background(FlotillaColors.canvas)
-    }
-}
-
-struct ProjectCollectionCard: View {
-    let project: Project
-    let sessionCount: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(FlotillaColors.accent.opacity(0.12))
-                    Image(systemName: "folder.fill")
-                        .foregroundStyle(FlotillaColors.accent)
-                }
-                .frame(width: 32, height: 32)
-                Spacer()
-                Menu {
-                    Button("Open") { }
-                    Button("Reveal in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([project.rootPath])
-                    }
-                    Button("New Session Here") { }
-                    Divider()
-                    Button("Remove Project", role: .destructive) { }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundStyle(.secondary)
-                }
-                .menuStyle(.borderlessButton)
-            }
-            Text(project.name)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-            Text(project.rootPath.path)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Divider()
-            HStack {
-                Label("\(sessionCount) session\(sessionCount == 1 ? "" : "s")", systemImage: "terminal")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(sessionCount > 0 ? "Active" : "Ready")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(sessionCount > 0 ? FlotillaColors.statusWorking : .secondary)
-            }
-        }
-        .padding(15)
-        .frame(maxWidth: .infinity, minHeight: 154, alignment: .leading)
-        .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(FlotillaColors.separator)
-        }
-        .contentShape(.rect)
     }
 }
 

@@ -182,10 +182,9 @@ struct FlotillaShell: View {
     }
 
     private func restoreWorkspaceSelection() async {
-        if navigator.selectedSessionID == nil,
+        if store.selectedSessionID == nil,
            let persisted = settingsViewModel.settings.workspace.selectedSessionID.flatMap(UUID.init(uuidString:)),
            store.sessions.contains(where: { $0.id == persisted }) {
-            navigator.selectedSessionID = persisted
             store.selectedSessionID = persisted
         }
     }
@@ -217,7 +216,7 @@ struct FlotillaShell: View {
         case .showOverview:
             navigator.selection = .overview
         case .showProjects:
-            navigator.selection = .allProjects
+            navigator.selection = .overview
         case .showSessions:
             navigator.selection = .allSessions
             navigator.presentation = .focus
@@ -242,7 +241,8 @@ struct FlotillaShell: View {
         case .showChanges:
             navigator.selection = .allSessions
             navigator.presentation = .focus
-            navigator.isChangesInspectorOpen = true
+            navigator.inspectorTab = .changes
+            navigator.isInspectorOpen = true
         case .restoreSessions:
             navigator.presentedSheet = .restore
         case .showSettings:

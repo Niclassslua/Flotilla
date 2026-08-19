@@ -6,7 +6,7 @@ import SwiftUI
 @Observable
 @MainActor
 final class WorkspaceNavigator {
-    var selection: SidebarItem = .allSessions
+    var selection: SidebarItem = .overview
     var presentation: WorkspacePresentation = ProcessInfo.processInfo.environment["UI_TESTING"] == "1" ? .focus : .grid
     var inspectorTab: InspectorTab = .changes
     var isInspectorOpen = false
@@ -35,46 +35,7 @@ final class WorkspaceNavigator {
         }
     }
 
-    // Legacy - not used in new architecture
-    var destination: AppDestination {
-        get {
-            switch selection {
-            case .overview: return .overview
-            case .allSessions, .session: return .sessions
-            case .allProjects, .project: return .projects
-            }
-        }
-        set {
-            switch newValue {
-            case .overview: selection = .overview
-            case .sessions: selection = .allSessions
-            case .projects: selection = .allProjects
-            }
-        }
-    }
-
-    var layout: WorkspaceLayout {
-        get {
-            switch presentation {
-            case .focus: return .focus
-            case .grid: return .grid
-            case .board: return .board
-            case .list: return .list
-            }
-        }
-        set {
-            switch newValue {
-            case .focus: presentation = .focus
-            case .grid: presentation = .grid
-            case .board: presentation = .board
-            case .list: presentation = .list
-            }
-        }
-    }
-
     var sessionLens: SessionLens = .terminal
-    var projectLens: ProjectLens = .overview
-    var isChangesInspectorOpen: Bool = false
 
     nonisolated init() {}
 }
@@ -95,7 +56,6 @@ extension EnvironmentValues {
 enum SidebarItem: Hashable, Codable, Sendable {
     case overview
     case allSessions
-    case allProjects
     case project(UUID)
     case session(UUID)
 
@@ -103,7 +63,6 @@ enum SidebarItem: Hashable, Codable, Sendable {
         switch self {
         case .overview: return "Overview"
         case .allSessions: return "All Sessions"
-        case .allProjects: return "All Projects"
         case .project: return "Project"
         case .session: return "Session"
         }
@@ -113,7 +72,6 @@ enum SidebarItem: Hashable, Codable, Sendable {
         switch self {
         case .overview: return "house"
         case .allSessions: return "terminal"
-        case .allProjects: return "folder"
         case .project: return "folder.fill"
         case .session: return "terminal.fill"
         }
@@ -192,57 +150,6 @@ enum WorkspaceSheet: Identifiable, Equatable, Codable, Sendable {
     }
 }
 
-enum AppDestination: String, CaseIterable, Identifiable, Codable, Sendable {
-    case overview
-    case sessions
-    case projects
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .overview: return "Overview"
-        case .sessions: return "Sessions"
-        case .projects: return "Projects"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .overview: return "house"
-        case .sessions: return "terminal"
-        case .projects: return "folder"
-        }
-    }
-}
-
-enum WorkspaceLayout: String, CaseIterable, Identifiable, Codable, Sendable {
-    case focus
-    case grid
-    case board
-    case list
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .focus: return "Focus"
-        case .grid: return "Grid"
-        case .board: return "Board"
-        case .list: return "List"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .focus: return "macwindow"
-        case .grid: return "square.grid.2x2"
-        case .board: return "square.grid.2x2.fill"
-        case .list: return "list.bullet"
-        }
-    }
-}
-
 enum SessionLens: String, CaseIterable, Identifiable, Codable, Sendable {
     case terminal
     case files
@@ -265,14 +172,4 @@ enum SessionLens: String, CaseIterable, Identifiable, Codable, Sendable {
         case .instructions: return "doc.badge.gearshape"
         }
     }
-}
-
-enum ProjectLens: String, CaseIterable, Identifiable, Codable, Sendable {
-    case overview
-    case git
-    case files
-    case skills
-    case rules
-
-    var id: Self { self }
 }
