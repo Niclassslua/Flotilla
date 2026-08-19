@@ -141,7 +141,7 @@ if let error = store.lastCreationError {
     }
 
     private var goalSection: some View {
-        CreationSection(number: "02", title: "Set the objective", subtitle: "Optional — sent directly to the selected CLI after its PTY starts.") {
+        CreationSection(number: "02", title: "Set the objective", subtitle: "Optional — passed directly to the selected CLI on launch.") {
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $goal)
                     .font(.body)

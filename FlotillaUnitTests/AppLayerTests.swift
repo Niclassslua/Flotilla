@@ -152,9 +152,9 @@ final class SessionProcessManagerTests: XCTestCase {
         let mock = try XCTUnwrap(process as? MockPTYProcess)
 
         XCTAssertEqual(mock.startedExecutable?.path, "/usr/bin/env")
-        XCTAssertEqual(mock.startedArguments, ["--profile", "careful"])
+        XCTAssertEqual(mock.startedArguments, ["--profile", "careful", "Resolve every compiler error"])
         XCTAssertEqual(mock.startedWorkingDirectory, model.workingDirectory)
-        XCTAssertEqual(mock.sentInput, [Data("Resolve every compiler error\r".utf8)])
+        XCTAssertTrue(mock.sentInput.isEmpty)
     }
 
     func testMissingAgentFailsTruthfullyWithoutCreatingFallbackProcess() {
@@ -259,7 +259,9 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertEqual(store.sessions.count, 1)
         XCTAssertEqual(store.selectedSessionID, store.sessions.first?.id)
         XCTAssertEqual(store.sessions.first?.status, .working)
-        XCTAssertEqual(factory.processes.first?.sentInput, [Data("Find the race\r".utf8)])
+        let createdSession = try XCTUnwrap(store.sessions.first)
+        XCTAssertEqual(factory.processes.first?.startedArguments, ["--session-id", createdSession.id.uuidString, "Find the race"])
+        XCTAssertTrue(factory.processes.first?.sentInput.isEmpty == true)
     }
 
     func testWorktreeCreationFailureDoesNotCreateSession() async throws {

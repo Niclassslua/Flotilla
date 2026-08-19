@@ -90,6 +90,7 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
     public let settingsKey: String
     public let modelFlag: FlagSpec?
     public let effortFlag: EffortFlagSpec?
+    public let promptFlag: FlagSpec?
     public let effortLevels: [AgentEffort]
     public let effortLabels: [AgentEffort: String]
     public let fallbackModels: [String]
@@ -105,6 +106,7 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
         settingsKey: String,
         modelFlag: FlagSpec? = .separateTokens("--model"),
         effortFlag: EffortFlagSpec? = nil,
+        promptFlag: FlagSpec? = nil,
         effortLevels: [AgentEffort] = [],
         effortLabels: [AgentEffort: String] = [:],
         fallbackModels: [String] = [],
@@ -119,6 +121,7 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
         self.settingsKey = settingsKey
         self.modelFlag = modelFlag
         self.effortFlag = effortFlag
+        self.promptFlag = promptFlag
         self.effortLevels = effortLevels
         self.effortLabels = effortLabels
         self.fallbackModels = fallbackModels
@@ -174,6 +177,7 @@ public enum AgentCatalog {
         settingsKey: "claudeCode",
         modelFlag: .separateTokens("--model"),
         effortFlag: .flag(.separateTokens("--effort")),
+        promptFlag: .bareValue,
         effortLevels: [.low, .medium, .high, .xhigh, .max],
         effortLabels: [:],
         fallbackModels: ["sonnet", "opus", "haiku", "fable", "best", "opusplan"],
@@ -194,6 +198,7 @@ public enum AgentCatalog {
         settingsKey: "codexCLI",
         modelFlag: .separateTokens("--model"),
         effortFlag: .configAssignment(flag: "--config", key: "model_reasoning_effort"),
+        promptFlag: .bareValue,
         effortLevels: [.minimal, .low, .medium, .high, .xhigh, .max, .ultra],
         effortLabels: [.xhigh: "Extra High"],
         fallbackModels: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"],
@@ -213,6 +218,7 @@ public enum AgentCatalog {
         settingsKey: "openCode",
         modelFlag: .separateTokens("--model"),
         effortFlag: nil,
+        promptFlag: .separateTokens("--prompt"),
         effortLevels: [],
         effortLabels: [:],
         fallbackModels: [
@@ -284,6 +290,7 @@ public enum AgentCatalog {
         settingsKey: "antigravity",
         modelFlag: .separateTokens("--model"),
         effortFlag: .flag(.separateTokens("--effort")),
+        promptFlag: .separateTokens("--prompt-interactive"),
         effortLevels: [.low, .medium, .high],
         effortLabels: [:],
         fallbackModels: [

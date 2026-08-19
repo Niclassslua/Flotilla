@@ -25,8 +25,8 @@ final class AgentProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.configuredPath, "/opt/homebrew/bin/codex")
-        XCTAssertEqual(plan.arguments, ["--model", "gpt-5"])
-        XCTAssertEqual(plan.initialInput, Data("Repair the build\r".utf8))
+        XCTAssertEqual(plan.arguments, ["--model", "gpt-5", "Repair the build"])
+        XCTAssertNil(plan.initialInput)
         XCTAssertEqual(plan.environment["TERM"], "xterm-256color")
         XCTAssertEqual(plan.environment["COLORTERM"], "truecolor")
         XCTAssertTrue(plan.environment["PATH"]?.contains("/opt/homebrew/bin") == true)
@@ -202,5 +202,130 @@ final class AgentProviderTests: XCTestCase {
             baseEnvironment: [:]
         )
         XCTAssertEqual(resumePlan.arguments, ["--conversation", "conv-xyz789"])
+    }
+
+    func testClaudeLaunchPlanAppendsPositionalPrompt() {
+        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let plan = provider.launchPlan(
+            goal: "Investigate crash in renderer",
+            model: "sonnet",
+            effort: .high,
+            resumeIntent: .freshWithAssignedIdentity("uuid-1234"),
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [
+            "--model", "sonnet",
+            "--effort", "high",
+            "--session-id", "uuid-1234",
+            "Investigate crash in renderer"
+        ])
+        XCTAssertNil(plan.initialInput)
+    }
+
+    func testCodexLaunchPlanAppendsPositionalPrompt() {
+        let provider = AgentProviderRegistry().provider(for: .codexCLI)
+        let plan = provider.launchPlan(
+            goal: "Write unit tests for parser",
+            model: "gpt-5.5",
+            effort: .xhigh,
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [
+            "--model", "gpt-5.5",
+            "--config", "model_reasoning_effort=\"xhigh\"",
+            "Write unit tests for parser"
+        ])
+        XCTAssertNil(plan.initialInput)
+    }
+
+    func testOpenCodeLaunchPlanAppendsPromptFlag() {
+        let provider = AgentProviderRegistry().provider(for: .openCode)
+        let plan = provider.launchPlan(
+            goal: "Refactor database migrations",
+            model: "opencode/deepseek-v4-flash-free",
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [
+            "--model", "opencode/deepseek-v4-flash-free",
+            "--prompt", "Refactor database migrations"
+        ])
+        XCTAssertNil(plan.initialInput)
+    }
+
+    func testAntigravityLaunchPlanAppendsInteractivePromptFlag() {
+        let provider = AgentProviderRegistry().provider(for: .antigravity)
+        let plan = provider.launchPlan(
+            goal: "Fix layout bug in sidebar",
+            model: "gemini-3.7-flash-high",
+            effort: .medium,
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [
+            "--model", "gemini-3.7-flash-high",
+            "--effort", "medium",
+            "--prompt-interactive", "Fix layout bug in sidebar"
+        ])
+        XCTAssertNil(plan.initialInput)
+    }
+
+    func testLaunchPlanOmitsPromptFlagWhenGoalIsNilOrBlank() {
+        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let planWithNil = provider.launchPlan(
+            goal: nil,
+            model: "sonnet",
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+        let planWithBlank = provider.launchPlan(
+            goal: "   \n\t  ",
+            model: "sonnet",
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(planWithNil.arguments, ["--model", "sonnet"])
+        XCTAssertEqual(planWithBlank.arguments, ["--model", "sonnet"])
+        XCTAssertNil(planWithNil.initialInput)
+        XCTAssertNil(planWithBlank.initialInput)
+    }
+
+    func testLaunchPlanOmitsPromptFlagOnResumeEvenWithGoal() {
+        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let resumePlan = provider.launchPlan(
+            goal: "Some previous goal",
+            resumeIntent: .resume("sess-abc"),
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(resumePlan.arguments, ["--resume", "sess-abc"])
+        XCTAssertNil(resumePlan.initialInput)
+    }
+
+    func testLaunchPlanPreservesMultilinePrompt() {
+        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let multilineGoal = "Line 1: implement feature\nLine 2: ensure tests pass\nLine 3: add documentation"
+        let plan = provider.launchPlan(
+            goal: multilineGoal,
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [multilineGoal])
+        XCTAssertNil(plan.initialInput)
     }
 }

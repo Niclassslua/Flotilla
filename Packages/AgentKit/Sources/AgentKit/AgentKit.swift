@@ -152,18 +152,6 @@ public struct CLIAgentProvider: AgentProviding {
         )
 
         let trimmedGoal = goal?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        // Neither a trailing "\n" nor "\r" reliably submits in Claude
-        // Code's or Codex's interactive composer when written directly to
-        // the PTY like this — both real CLIs' TUIs appear to treat a bulk
-        // write as paste-like content needing a separate, genuine keystroke
-        // to confirm, so the goal is left typed-but-unsent until the user
-        // manually presses Enter. `\r` is kept here as the conventional
-        // choice for a literal Enter keystroke; it's not known to matter
-        // either way. When tmux is available, `SessionProcessManager`
-        // delivers the goal via `tmux send-keys` instead, which is
-        // confirmed to actually submit — this raw write only remains as the
-        // fallback for sessions launched without tmux.
-        let input = trimmedGoal.isEmpty ? nil : Data("\(trimmedGoal)\r".utf8)
 
         var arguments = settings.agentOverrides.arguments[descriptor.settingsKey] ?? []
         let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -209,6 +197,12 @@ public struct CLIAgentProvider: AgentProviding {
             break
         }
 
+        if !trimmedGoal.isEmpty, case .resume = resumeIntent {
+            // Resumed sessions do not receive an initial prompt argument
+        } else if !trimmedGoal.isEmpty, let promptFlag = descriptor.promptFlag {
+            arguments += promptFlag.arguments(for: trimmedGoal)
+        }
+
         let fullArguments = leadingSubcommands + arguments
 
         return AgentLaunchPlan(
@@ -216,7 +210,7 @@ public struct CLIAgentProvider: AgentProviding {
             configuredPath: settings.agentOverrides.paths[descriptor.settingsKey] ?? "",
             arguments: fullArguments,
             environment: environment,
-            initialInput: input
+            initialInput: nil
         )
     }
 }
