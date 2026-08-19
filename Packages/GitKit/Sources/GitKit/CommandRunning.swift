@@ -117,11 +117,22 @@ private final class ResumeGuard: @unchecked Sendable {
 
 /// Drains a pipe while the child is running. Waiting for termination before
 /// reading can deadlock once a chatty `git diff` fills the kernel pipe buffer.
+///
+/// Only the `readabilityHandler` closure ever calls `handle.availableData` —
+/// `finish()` used to do its own racing read from the termination-handler
+/// thread, which could interleave with an in-flight `readabilityHandler`
+/// read on the same fd. For output that fit in one pipe read that race was
+/// harmless, but a large `git diff` (spanning multiple reads) could lose its
+/// final chunk to the race, making that poll observe a truncated/empty diff
+/// even though real changes existed — the Git Changes panel would flash
+/// "No Changes" and then recover on the next poll. `finish()` now just waits
+/// for the handler thread to observe EOF instead of reading itself.
 private final class PipeCollector: @unchecked Sendable {
     private let handle: FileHandle
     private let lock = NSLock()
     private var data = Data()
-    private var hasFinished = false
+    private var isEOF = false
+    private let eofSemaphore = DispatchSemaphore(value: 0)
 
     init(handle: FileHandle) {
         self.handle = handle
@@ -130,29 +141,20 @@ private final class PipeCollector: @unchecked Sendable {
     func start() {
         handle.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            self?.append(chunk)
+            if chunk.isEmpty {
+                self?.markEOF()
+            } else {
+                self?.append(chunk)
+            }
         }
     }
 
     func finish() -> Data {
-        lock.lock()
-        guard !hasFinished else {
-            let snapshot = data
-            lock.unlock()
-            return snapshot
-        }
-        hasFinished = true
-        lock.unlock()
-
-        // Drain any remaining available data without blocking; if the underlying
-        // file descriptor has been closed by the termination handler, readDataToEndOfFile
-        // would block until all inheritors close their copy of the write end.
+        // The child has already exited by the time this is called, so its
+        // end of the pipe is closed and the handler thread should observe
+        // EOF almost immediately; the timeout is just a safety net.
+        _ = eofSemaphore.wait(timeout: .now() + 5)
         handle.readabilityHandler = nil
-        let available = handle.availableData
-        if !available.isEmpty {
-            append(available)
-        }
         lock.lock()
         let snapshot = data
         lock.unlock()
@@ -160,9 +162,17 @@ private final class PipeCollector: @unchecked Sendable {
     }
 
     private func append(_ chunk: Data) {
-        guard !chunk.isEmpty else { return }
         lock.lock()
         data.append(chunk)
         lock.unlock()
+    }
+
+    private func markEOF() {
+        lock.lock()
+        let alreadySignaled = isEOF
+        isEOF = true
+        lock.unlock()
+        guard !alreadySignaled else { return }
+        eofSemaphore.signal()
     }
 }
