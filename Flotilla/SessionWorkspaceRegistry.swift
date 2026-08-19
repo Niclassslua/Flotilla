@@ -8,22 +8,24 @@ import DesignSystem
 @MainActor
 final class SessionWorkspaceRegistry {
     private let gitService: GitServiceProtocol
+    private let ghService: GhServiceProtocol?
     private let store: AppStore
 
     private var diffViewModels: [UUID: DiffPanelViewModel] = [:]
     private var fileBrowserViewModels: [UUID: FileBrowserViewModel] = [:]
     private var rulesViewModels: [UUID: RulesPanelViewModel] = [:]
 
-    init(store: AppStore, gitService: GitServiceProtocol) {
+    init(store: AppStore, gitService: GitServiceProtocol, ghService: GhServiceProtocol? = nil) {
         self.store = store
         self.gitService = gitService
+        self.ghService = ghService
     }
 
     func diffViewModel(for session: Session) -> DiffPanelViewModel {
         if let existing = diffViewModels[session.id] {
             return existing
         }
-        let vm = DiffPanelViewModel(session: session, gitService: gitService)
+        let vm = DiffPanelViewModel(session: session, gitService: gitService, ghService: ghService)
         diffViewModels[session.id] = vm
         return vm
     }

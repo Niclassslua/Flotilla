@@ -22,7 +22,9 @@ final class HookCoordinator {
     let screenReader: any SessionScreenReading
     private let dispatcher: NotificationDispatching
     private let notificationsEnabled: @MainActor () -> Bool
+    private let hookSupportDirectory: URL
     private var monitors: [UUID: SessionScreenMonitor] = [:]
+    private var hookReceivers: [UUID: HookEventReceiver] = [:]
     private var gates: [UUID: WaitingNotificationGate] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
@@ -42,12 +44,14 @@ final class HookCoordinator {
         screenReader: any SessionScreenReading,
         dispatcher: NotificationDispatching = SystemNotificationDispatcher(),
         requestsAuthorization: Bool = true,
-        notificationsEnabled: @escaping @MainActor () -> Bool = { true }
+        notificationsEnabled: @escaping @MainActor () -> Bool = { true },
+        hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory()
     ) {
         self.store = store
         self.screenReader = screenReader
         self.dispatcher = dispatcher
         self.notificationsEnabled = notificationsEnabled
+        self.hookSupportDirectory = hookSupportDirectory
         if requestsAuthorization, notificationsEnabled(), ProcessInfo.processInfo.environment["UI_TESTING"] != "1" {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
@@ -63,8 +67,10 @@ final class HookCoordinator {
         let activeIDs = Set(store.sessions.map(\.id))
         for sessionID in monitors.keys where !activeIDs.contains(sessionID) || store.process(for: sessionID) == nil {
             monitors[sessionID]?.stop()
+            hookReceivers[sessionID]?.stop()
             tasks[sessionID]?.cancel()
             monitors[sessionID] = nil
+            hookReceivers[sessionID] = nil
             tasks[sessionID] = nil
             gates[sessionID] = nil
         }
@@ -73,18 +79,50 @@ final class HookCoordinator {
         }
     }
 
+    /// Runs `SessionScreenMonitor` for every session, and — for agent kinds
+    /// `HookConfigurationWriter` supports — a `HookEventReceiver` alongside
+    /// it, both feeding the same `handle` funnel. This is deliberately
+    /// "both, always" rather than "hook primary, screen fallback on
+    /// timeout": a broken hook pipe (write failure, agent restyle, a
+    /// project directory Flotilla couldn't write `.claude/settings.json`
+    /// into) then degrades to exactly today's screen-only behavior instead
+    /// of to no status at all, with no timeout/cutover logic to get wrong.
+    /// `applyObservedStatus`'s existing no-op-on-unchanged-status guard
+    /// keeps two agreeing sources from being noisier than one.
     private func observe(sessionID: UUID) {
         guard monitors[sessionID] == nil else { return }
+        guard let session = store.sessions.first(where: { $0.id == sessionID }) else { return }
 
         let monitor = SessionScreenMonitor(sessionID: sessionID, reader: screenReader)
         let gate = WaitingNotificationGate()
         monitors[sessionID] = monitor
         gates[sessionID] = gate
 
+        var hookReceiver: HookEventReceiver?
+        if HookConfigurationWriter.supportsHooks(for: session.agent) {
+            let receiver = HookEventReceiver(
+                filePath: HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: hookSupportDirectory)
+            )
+            hookReceivers[sessionID] = receiver
+            hookReceiver = receiver
+        }
+
         tasks[sessionID] = Task { [weak self] in
             monitor.start()
-            for await status in monitor.statusStream {
-                await self?.handle(status: status, sessionID: sessionID, gate: gate)
+            hookReceiver?.start()
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await status in monitor.statusStream {
+                        await self?.handle(status: status, sessionID: sessionID, gate: gate)
+                    }
+                }
+                if let hookReceiver {
+                    group.addTask {
+                        for await status in hookReceiver.statusStream {
+                            await self?.handle(status: status, sessionID: sessionID, gate: gate)
+                        }
+                    }
+                }
             }
         }
     }
@@ -97,7 +135,7 @@ final class HookCoordinator {
            notificationsEnabled(),
            let session = store.sessions.first(where: { $0.id == sessionID }) {
             lastNotifiedSessionTitle = session.title
-            await dispatcher.notifyWaitingForInput(sessionTitle: session.title)
+            await dispatcher.notifyWaitingForInput(sessionTitle: session.title, sessionID: sessionID)
         }
     }
 }

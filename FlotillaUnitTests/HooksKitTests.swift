@@ -229,9 +229,10 @@ final class SessionScreenMonitorTests: XCTestCase {
 final class NotificationDispatchingTests: XCTestCase {
     private final class RecordingDispatcher: NotificationDispatching, @unchecked Sendable {
         private(set) var notifiedTitles: [String] = []
-        func notifyWaitingForInput(sessionTitle: String) async {
+        func notifyWaitingForInput(sessionTitle: String, sessionID: UUID) async {
             notifiedTitles.append(sessionTitle)
         }
+        func notifySessionFinished(sessionTitle: String, sessionID: UUID) async {}
     }
 
     private final class StaticScreenReader: SessionScreenReading, @unchecked Sendable {
@@ -255,7 +256,7 @@ final class NotificationDispatchingTests: XCTestCase {
         let collectorTask = Task {
             for await status in monitor.statusStream {
                 if gate.shouldNotify(for: status) {
-                    await dispatcher.notifyWaitingForInput(sessionTitle: "Test Session")
+                    await dispatcher.notifyWaitingForInput(sessionTitle: "Test Session", sessionID: UUID())
                 }
             }
         }
@@ -265,5 +266,207 @@ final class NotificationDispatchingTests: XCTestCase {
         collectorTask.cancel()
 
         XCTAssertEqual(dispatcher.notifiedTitles, ["Test Session"])
+    }
+}
+
+final class HookEventReceiverTests: XCTestCase {
+    private func tempFile() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("flotilla-hook-tests-\(UUID().uuidString).jsonl")
+    }
+
+    private func collect(
+        from receiver: HookEventReceiver,
+        settling: Duration = .milliseconds(500)
+    ) async -> [SessionStatus] {
+        let statuses = StatusBox()
+        let collector = Task {
+            for await status in receiver.statusStream { await statuses.append(status) }
+        }
+        receiver.start()
+        try? await Task.sleep(for: settling)
+        receiver.stop()
+        collector.cancel()
+        return await statuses.values
+    }
+
+    private actor StatusBox {
+        private(set) var values: [SessionStatus] = []
+        func append(_ status: SessionStatus) { values.append(status) }
+    }
+
+    private func append(_ line: String, to url: URL) throws {
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data((line + "\n").utf8))
+    }
+
+    func testMapsEachKnownEventNameToItsStatusInArrivalOrder() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let receiver = HookEventReceiver(filePath: file, pollInterval: .milliseconds(30))
+        let statuses = StatusBox()
+        let collector = Task {
+            for await status in receiver.statusStream { await statuses.append(status) }
+        }
+        receiver.start()
+        try await Task.sleep(for: .milliseconds(60))
+        try append(#"{"hook_event_name":"PostToolUse","session_id":"abc"}"#, to: file)
+        try await Task.sleep(for: .milliseconds(80))
+        try append(#"{"hook_event_name":"Notification","session_id":"abc"}"#, to: file)
+        try await Task.sleep(for: .milliseconds(80))
+        try append(#"{"hook_event_name":"Stop","session_id":"abc"}"#, to: file)
+        try await Task.sleep(for: .milliseconds(150))
+        receiver.stop()
+        collector.cancel()
+
+        let observed = await statuses.values
+        XCTAssertEqual(observed, [.working, .waitingForInput, .ready])
+    }
+
+    func testIgnoresUnknownEventNamesAndMalformedLines() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try append(#"{"hook_event_name":"SomeFutureEvent"}"#, to: file)
+        try append("not json at all", to: file)
+        try append(#"{"hook_event_name":"Stop"}"#, to: file)
+
+        let receiver = HookEventReceiver(filePath: file, pollInterval: .milliseconds(30))
+        let observed = await collect(from: receiver, settling: .milliseconds(200))
+
+        XCTAssertEqual(observed, [.ready])
+    }
+
+    func testMissingFileYieldsNothingRatherThanCrashing() async {
+        let receiver = HookEventReceiver(
+            filePath: FileManager.default.temporaryDirectory.appendingPathComponent("flotilla-hook-tests-does-not-exist.jsonl"),
+            pollInterval: .milliseconds(30)
+        )
+        let observed = await collect(from: receiver, settling: .milliseconds(150))
+        XCTAssertTrue(observed.isEmpty)
+    }
+}
+
+final class HookConfigurationWriterTests: XCTestCase {
+    private var workingDirectory: URL!
+    private var supportDirectory: URL!
+
+    override func setUp() {
+        super.setUp()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flotilla-hookconfig-\(UUID().uuidString)")
+        workingDirectory = root.appendingPathComponent("project")
+        supportDirectory = root.appendingPathComponent("support")
+        try? FileManager.default.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: workingDirectory.deletingLastPathComponent())
+        super.tearDown()
+    }
+
+    private var settingsFile: URL {
+        workingDirectory.appendingPathComponent(".claude/settings.json")
+    }
+
+    private func readSettings() -> [String: Any] {
+        guard let data = try? Data(contentsOf: settingsFile),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        return json
+    }
+
+    func testOnlyClaudeCodeSupportsHooks() {
+        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .claudeCode))
+        XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .codexCLI))
+        XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .openCode))
+        XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .antigravity))
+    }
+
+    func testNonHookCapableAgentIsANoOp() {
+        let writer = HookConfigurationWriter()
+        let succeeded = writer.configureHooks(
+            for: .codexCLI,
+            sessionID: UUID(),
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+        XCTAssertFalse(succeeded)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: settingsFile.path))
+    }
+
+    func testCreatesSettingsFileWithHooksForAllThreeEvents() {
+        let writer = HookConfigurationWriter()
+        let sessionID = UUID()
+        let succeeded = writer.configureHooks(
+            for: .claudeCode,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+
+        XCTAssertTrue(succeeded)
+        let settings = readSettings()
+        let hooks = settings["hooks"] as? [String: Any]
+        XCTAssertNotNil(hooks?["Notification"])
+        XCTAssertNotNil(hooks?["Stop"])
+        XCTAssertNotNil(hooks?["PostToolUse"])
+
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: eventFile.path))
+    }
+
+    func testPreservesUnrelatedExistingSettingsAndHooks() throws {
+        let claudeDir = workingDirectory.appendingPathComponent(".claude", isDirectory: true)
+        try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+        let existing: [String: Any] = [
+            "permissions": ["allow": ["Bash(git *)"]],
+            "hooks": [
+                "PostToolUse": [
+                    ["hooks": [["type": "command", "command": "echo user-configured"]]]
+                ]
+            ]
+        ]
+        try JSONSerialization.data(withJSONObject: existing).write(to: settingsFile)
+
+        let writer = HookConfigurationWriter()
+        _ = writer.configureHooks(
+            for: .claudeCode,
+            sessionID: UUID(),
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+
+        let settings = readSettings()
+        XCTAssertNotNil(settings["permissions"], "unrelated top-level keys must survive the merge")
+
+        let postToolUse = settings["hooks"].flatMap { $0 as? [String: Any] }?["PostToolUse"] as? [[String: Any]]
+        XCTAssertEqual(postToolUse?.count, 2, "the user's existing PostToolUse hook must not be replaced")
+    }
+}
+
+final class SystemNotificationDispatcherRequestTests: XCTestCase {
+    func testWaitingForInputRequestCarriesSessionIdentityAndCategory() {
+        let sessionID = UUID()
+        let request = SystemNotificationDispatcher.waitingForInputRequest(sessionTitle: "Fix the build", sessionID: sessionID)
+
+        XCTAssertEqual(request.content.userInfo["sessionID"] as? String, sessionID.uuidString)
+        XCTAssertEqual(request.content.threadIdentifier, sessionID.uuidString)
+        XCTAssertEqual(request.content.categoryIdentifier, SystemNotificationDispatcher.waitingForInputCategoryIdentifier)
+        XCTAssertEqual(request.content.title, "Needs Your Input")
+        XCTAssertTrue(request.content.body.contains("Fix the build"))
+    }
+
+    func testFinishedRequestCarriesSessionIdentityWithoutReplyCategory() {
+        let sessionID = UUID()
+        let request = SystemNotificationDispatcher.finishedRequest(sessionTitle: "Fix the build", sessionID: sessionID)
+
+        XCTAssertEqual(request.content.userInfo["sessionID"] as? String, sessionID.uuidString)
+        XCTAssertEqual(request.content.threadIdentifier, sessionID.uuidString)
+        XCTAssertTrue(request.content.categoryIdentifier.isEmpty, "a finished session shouldn't offer the Reply action")
+        XCTAssertEqual(request.content.title, "Session Finished")
     }
 }

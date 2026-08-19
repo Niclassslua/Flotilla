@@ -35,10 +35,13 @@ public struct ProcessCommandRunner: CommandRunning {
             process.standardOutput = Pipe()
             process.standardError = Pipe()
 
-            // Prevent git from opening a terminal prompt for credentials etc.
-            process.environment = [
-                "GIT_TERMINAL_PROMPT": "0",
-            ]
+            // Inherit the parent environment (PATH, HOME, SSH_AUTH_SOCK, …) —
+            // `gh` and SSH-based remotes need these to find credentials and
+            // the SSH agent. Only `GIT_TERMINAL_PROMPT` is overridden, to
+            // prevent git from opening an interactive credential prompt.
+            var environment = ProcessInfo.processInfo.environment
+            environment["GIT_TERMINAL_PROMPT"] = "0"
+            process.environment = environment
 
             let outPipe = process.standardOutput as! Pipe
             let errPipe = process.standardError as! Pipe
@@ -47,7 +50,24 @@ public struct ProcessCommandRunner: CommandRunning {
             outCollector.start()
             errCollector.start()
 
+            // Both the termination handler and the timeout task can fire —
+            // the guard ensures only the first one to arrive resumes the
+            // continuation, since resuming twice is a fatal error.
+            let resumeGuard = ResumeGuard()
+
+            let timeoutTask = Task {
+                try? await Task.sleep(for: .seconds(self.timeout))
+                guard !Task.isCancelled, resumeGuard.claim() else { return }
+                process.terminationHandler = nil
+                process.terminate()
+                _ = outCollector.finish()
+                _ = errCollector.finish()
+                continuation.resume(throwing: CommandTimeoutError(seconds: self.timeout))
+            }
+
             process.terminationHandler = { proc in
+                timeoutTask.cancel()
+                guard resumeGuard.claim() else { return }
                 let outData = outCollector.finish()
                 let errData = errCollector.finish()
                 continuation.resume(returning: CommandResult(
@@ -60,19 +80,38 @@ public struct ProcessCommandRunner: CommandRunning {
             do {
                 try process.run()
             } catch {
+                timeoutTask.cancel()
+                guard resumeGuard.claim() else { return }
                 _ = outCollector.finish()
                 _ = errCollector.finish()
                 continuation.resume(throwing: error)
             }
         }
     }
+}
 
-    // Wall-clock timeout support: cancel the running process if the timeout
-    // exceeds. Called from the event handler when the process runs too long.
-    func cancelIfTimedOut(process: Process, continuation: CheckedContinuation<CommandResult, Error>) {
-        // Best-effort terminate; don't block.
-        process.terminate()
-        continuation.resume(throwing: NSError(domain: "ProcessKit", code: 1, userInfo: [NSLocalizedDescriptionKey: "Process exceeded \(self.timeout)s timeout"]))
+/// A command exceeded its `ProcessCommandRunner` timeout and was terminated.
+public struct CommandTimeoutError: Error, Equatable, LocalizedError {
+    public let seconds: TimeInterval
+
+    public var errorDescription: String? {
+        "The command did not finish within \(Int(seconds))s and was cancelled."
+    }
+}
+
+/// Ensures the continuation in `ProcessCommandRunner.run` is resumed exactly
+/// once, even though termination and timeout can race on different queues.
+private final class ResumeGuard: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+
+    /// Returns `true` for the first caller only.
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !claimed else { return false }
+        claimed = true
+        return true
     }
 }
 

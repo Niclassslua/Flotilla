@@ -57,6 +57,12 @@ struct PreviewGitService: GitServiceProtocol {
         GitWorktree(branch: branch, path: destination, isMainWorktree: false)
     }
     func removeWorktree(at path: URL, in repoPath: URL, branch: String, deleteBranch: Bool) async throws {}
+    func stage(paths: [String], at repoPath: URL) async throws {}
+    func unstage(paths: [String], at repoPath: URL) async throws {}
+    func discard(paths: [String], at repoPath: URL) async throws {}
+    func commit(message: String, at repoPath: URL) async throws {}
+    func push(branch: String, at repoPath: URL) async throws {}
+    func fetch(at repoPath: URL) async throws {}
 }
 
 enum HomePreviewData {

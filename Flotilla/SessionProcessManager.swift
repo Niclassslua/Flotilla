@@ -4,6 +4,7 @@ import AgentKit
 import SessionKit
 import ProcessKit
 import SettingsKit
+import HooksKit
 
 /// Owns the live `PTYProcessProtocol` for every session that has been
 /// started, keyed by session id. Sessions keep running here across sidebar
@@ -26,6 +27,8 @@ final class SessionProcessManager {
     private let tmuxGoalDeliverer: any TmuxGoalDelivering
     private let tmuxServerProbe: any TmuxServerProbing
     private let tmuxClientProbe: any TmuxClientProbing
+    private let hookConfigurationWriter: HookConfigurationWriter
+    private let hookSupportDirectory: URL
     private var intentionallyTerminating = Set<UUID>()
     private var tmuxProbeCache: (usable: Bool, probedAt: Date)?
     private static let tmuxProbeCacheLifetime: TimeInterval = 5
@@ -64,7 +67,9 @@ final class SessionProcessManager {
         tmuxTerminator: any TmuxSessionTerminating = ProcessTmuxSessionTerminator(),
         tmuxGoalDeliverer: any TmuxGoalDelivering = ProcessTmuxGoalDeliverer(),
         tmuxServerProbe: any TmuxServerProbing = ProcessTmuxServerProbe(),
-        tmuxClientProbe: any TmuxClientProbing = ProcessTmuxClientProbe()
+        tmuxClientProbe: any TmuxClientProbing = ProcessTmuxClientProbe(),
+        hookConfigurationWriter: HookConfigurationWriter = HookConfigurationWriter(),
+        hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory()
     ) {
         self.locator = locator
         self.processFactory = processFactory
@@ -74,6 +79,8 @@ final class SessionProcessManager {
         self.tmuxGoalDeliverer = tmuxGoalDeliverer
         self.tmuxServerProbe = tmuxServerProbe
         self.tmuxClientProbe = tmuxClientProbe
+        self.hookConfigurationWriter = hookConfigurationWriter
+        self.hookSupportDirectory = hookSupportDirectory
     }
 
     func process(for sessionID: UUID) -> PTYProcessProtocol? {
@@ -141,6 +148,18 @@ final class SessionProcessManager {
         } else {
             effectiveDeliverGoal = deliverGoal
         }
+
+        // Best-effort: a broken/read-only project directory must not block
+        // launch. When this succeeds, HookCoordinator's HookEventReceiver
+        // picks up structured status from the same session ID; when it
+        // doesn't (or the agent kind isn't hook-capable), status still
+        // comes from TerminalScreenHeuristic as before.
+        hookConfigurationWriter.configureHooks(
+            for: session.agent,
+            sessionID: session.id,
+            workingDirectory: session.workingDirectory,
+            supportDirectory: hookSupportDirectory
+        )
 
         let provider = providers.provider(for: session.agent)
         let settings = settingsProvider()

@@ -103,6 +103,11 @@ public enum GitServiceError: Error, Equatable, LocalizedError {
     case commandFailed(exitCode: Int32, stderr: String)
     case branchAlreadyExists(String)
     case worktreePathAlreadyExists(URL)
+    case nothingToCommit
+    case pushRejected(stderr: String)
+    case noRemoteConfigured
+    case ghNotFound
+    case prCreationFailed(exitCode: Int32, stderr: String)
 
     public var errorDescription: String? {
         switch self {
@@ -113,6 +118,18 @@ public enum GitServiceError: Error, Equatable, LocalizedError {
             return "A branch named '\(branch)' already exists."
         case .worktreePathAlreadyExists(let url):
             return "A worktree already exists at \(url.path)."
+        case .nothingToCommit:
+            return "There are no staged changes to commit."
+        case .pushRejected(let stderr):
+            let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty ? "The push was rejected." : "The push was rejected: \(detail)"
+        case .noRemoteConfigured:
+            return "This branch has no configured remote to push to."
+        case .ghNotFound:
+            return "The GitHub CLI (gh) was not found. Install it to create pull requests."
+        case .prCreationFailed(let exitCode, let stderr):
+            let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty ? "gh exited with code \(exitCode)" : "gh exited with code \(exitCode): \(detail)"
         }
     }
 }
@@ -125,6 +142,26 @@ public protocol GitServiceProtocol: Sendable {
     func listWorktrees(at repoPath: URL) async throws -> [GitWorktree]
     func createWorktree(basePath: URL, branch: String, destination: URL) async throws -> GitWorktree
     func removeWorktree(at path: URL, in repoPath: URL, branch: String, deleteBranch: Bool) async throws
+
+    /// `git add -- <paths>`.
+    func stage(paths: [String], at repoPath: URL) async throws
+    /// `git restore --staged -- <paths>`.
+    func unstage(paths: [String], at repoPath: URL) async throws
+    /// Discards local changes to `paths`. Tracked files are restored from
+    /// the index/HEAD (`git restore --worktree`); untracked files are
+    /// removed from disk (`git clean -f`), since `restore` cannot undo a
+    /// file that was never tracked. Irreversible — callers must confirm.
+    func discard(paths: [String], at repoPath: URL) async throws
+    /// `git commit -m <message>`. Throws `.nothingToCommit` when there is
+    /// nothing staged.
+    func commit(message: String, at repoPath: URL) async throws
+    /// `git push`, automatically adding `--set-upstream origin <branch>`
+    /// when the branch has no upstream configured yet — the caller never
+    /// has to decide this itself.
+    func push(branch: String, at repoPath: URL) async throws
+    /// `git fetch`, used to refresh remote-tracking refs before creating a
+    /// worktree from them.
+    func fetch(at repoPath: URL) async throws
 }
 
 public extension GitServiceProtocol {
@@ -315,13 +352,81 @@ public struct GitService: GitServiceProtocol {
         }
     }
 
-    private func run(_ arguments: [String], at path: URL) async throws -> CommandResult {
-        let result: CommandResult
-        if let gitExecutable {
-            result = try await runner.run(arguments, executable: gitExecutable, workingDirectory: path)
-        } else {
-            result = try await runner.run(["git"] + arguments, executable: URL(fileURLWithPath: "/usr/bin/env"), workingDirectory: path)
+    public func stage(paths: [String], at repoPath: URL) async throws {
+        guard !paths.isEmpty else { return }
+        _ = try await run(["add", "--"] + paths, at: repoPath)
+    }
+
+    public func unstage(paths: [String], at repoPath: URL) async throws {
+        guard !paths.isEmpty else { return }
+        _ = try await run(["restore", "--staged", "--"] + paths, at: repoPath)
+    }
+
+    public func discard(paths: [String], at repoPath: URL) async throws {
+        guard !paths.isEmpty else { return }
+        let entries = try await status(at: repoPath).entries
+        let untrackedSet = Set(entries.filter(\.isUntracked).map(\.path))
+        let untracked = paths.filter { untrackedSet.contains($0) }
+        let tracked = paths.filter { !untrackedSet.contains($0) }
+        if !tracked.isEmpty {
+            _ = try await run(["restore", "--worktree", "--"] + tracked, at: repoPath)
         }
+        if !untracked.isEmpty {
+            _ = try await run(["clean", "-f", "--"] + untracked, at: repoPath)
+        }
+    }
+
+    public func commit(message: String, at repoPath: URL) async throws {
+        // Raw, not the throwing `run(_:at:)` wrapper: `git commit` writes
+        // "nothing to commit" to *stdout*, not stderr, and the wrapper only
+        // carries stderr into its thrown error.
+        let result = try await runRaw(["commit", "-m", message], at: repoPath)
+        guard result.exitCode == 0 else {
+            if result.stdout.contains("nothing to commit") || result.stderr.contains("nothing to commit") {
+                throw GitServiceError.nothingToCommit
+            }
+            throw GitServiceError.commandFailed(exitCode: result.exitCode, stderr: result.stderr)
+        }
+    }
+
+    public func push(branch: String, at repoPath: URL) async throws {
+        let hasUpstream = (try? await run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], at: repoPath)) != nil
+        var args = ["push"]
+        if !hasUpstream {
+            args += ["--set-upstream", "origin", branch]
+        }
+        do {
+            _ = try await run(args, at: repoPath)
+        } catch let GitServiceError.commandFailed(exitCode, stderr) {
+            let lowered = stderr.lowercased()
+            if lowered.contains("rejected") || lowered.contains("non-fast-forward") {
+                throw GitServiceError.pushRejected(stderr: stderr)
+            }
+            if lowered.contains("no configured push destination") || lowered.contains("does not appear to be a git repository") {
+                throw GitServiceError.noRemoteConfigured
+            }
+            throw GitServiceError.commandFailed(exitCode: exitCode, stderr: stderr)
+        }
+    }
+
+    public func fetch(at repoPath: URL) async throws {
+        _ = try await run(["fetch"], at: repoPath)
+    }
+
+    /// Runs git and returns the raw result regardless of exit code — for
+    /// callers (like `commit`) that need to inspect stdout/stderr themselves
+    /// to distinguish failure reasons `run(_:at:)`'s single `stderr`-only
+    /// error can't carry.
+    private func runRaw(_ arguments: [String], at path: URL) async throws -> CommandResult {
+        if let gitExecutable {
+            return try await runner.run(arguments, executable: gitExecutable, workingDirectory: path)
+        } else {
+            return try await runner.run(["git"] + arguments, executable: URL(fileURLWithPath: "/usr/bin/env"), workingDirectory: path)
+        }
+    }
+
+    private func run(_ arguments: [String], at path: URL) async throws -> CommandResult {
+        let result = try await runRaw(arguments, at: path)
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(exitCode: result.exitCode, stderr: result.stderr)
         }

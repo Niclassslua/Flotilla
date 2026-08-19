@@ -144,6 +144,50 @@ final class MockGitServiceTests: XCTestCase {
             XCTAssertEqual(error as? GitServiceError, .commandFailed(exitCode: 1, stderr: "boom"))
         }
     }
+
+    func testRecordsWriteCalls() async throws {
+        let mock = MockGitService()
+        let repoPath = URL(fileURLWithPath: "/repo")
+
+        try await mock.stage(paths: ["a.swift"], at: repoPath)
+        try await mock.unstage(paths: ["b.swift"], at: repoPath)
+        try await mock.discard(paths: ["c.swift"], at: repoPath)
+        try await mock.commit(message: "msg", at: repoPath)
+        try await mock.push(branch: "main", at: repoPath)
+        try await mock.fetch(at: repoPath)
+
+        XCTAssertEqual(mock.stageCalls.first?.paths, ["a.swift"])
+        XCTAssertEqual(mock.unstageCalls.first?.paths, ["b.swift"])
+        XCTAssertEqual(mock.discardCalls.first?.paths, ["c.swift"])
+        XCTAssertEqual(mock.commitCalls.first?.message, "msg")
+        XCTAssertEqual(mock.pushCalls.first?.branch, "main")
+        XCTAssertEqual(mock.fetchCalls.first, repoPath)
+    }
+}
+
+final class MockGhServiceTests: XCTestCase {
+    func testRecordsCallAndReturnsConfiguredURL() async throws {
+        let mock = MockGhService()
+        mock.urlToReturn = URL(string: "https://github.com/example/example/pull/42")!
+
+        let url = try await mock.createPullRequest(title: "Add feature", body: "Body", base: "main", at: URL(fileURLWithPath: "/repo"))
+
+        XCTAssertEqual(url.absoluteString, "https://github.com/example/example/pull/42")
+        XCTAssertEqual(mock.createPullRequestCalls.first?.title, "Add feature")
+        XCTAssertEqual(mock.createPullRequestCalls.first?.base, "main")
+    }
+
+    func testThrowsConfiguredError() async {
+        let mock = MockGhService()
+        mock.errorToThrow = GitServiceError.ghNotFound
+
+        do {
+            _ = try await mock.createPullRequest(title: "t", body: "b", base: nil, at: URL(fileURLWithPath: "/repo"))
+            XCTFail("expected error to propagate")
+        } catch {
+            XCTAssertEqual(error as? GitServiceError, .ghNotFound)
+        }
+    }
 }
 
 /// Exercises the real `GitService` against an actual git repository created
@@ -285,6 +329,102 @@ final class GitServiceRealRepoTests: XCTestCase {
         let branches = try await git(["branch", "--list", "stale"])
         XCTAssertTrue(branches.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
+
+    // MARK: - Write path (stage / unstage / discard / commit / push / fetch)
+
+    func testStageMovesFileIntoIndex() async throws {
+        try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+
+        try await service.stage(paths: ["README.md"], at: repoPath)
+
+        let status = try await service.status(at: repoPath)
+        XCTAssertEqual(status.entries.first?.indexStatus, "M")
+    }
+
+    func testUnstageMovesFileBackOutOfIndex() async throws {
+        try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try await git(["add", "README.md"])
+
+        try await service.unstage(paths: ["README.md"], at: repoPath)
+
+        let status = try await service.status(at: repoPath)
+        XCTAssertEqual(status.entries.first?.indexStatus, " ")
+        XCTAssertEqual(status.entries.first?.worktreeStatus, "M")
+    }
+
+    func testDiscardRestoresTrackedFileContent() async throws {
+        try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+
+        try await service.discard(paths: ["README.md"], at: repoPath)
+
+        let content = try String(contentsOf: repoPath.appendingPathComponent("README.md"), encoding: .utf8)
+        XCTAssertEqual(content, "hello\n")
+    }
+
+    func testDiscardRemovesUntrackedFile() async throws {
+        let newFile = repoPath.appendingPathComponent("NEW.md")
+        try "new\n".write(to: newFile, atomically: true, encoding: .utf8)
+
+        try await service.discard(paths: ["NEW.md"], at: repoPath)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: newFile.path))
+    }
+
+    func testCommitClearsStagedChanges() async throws {
+        try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try await service.stage(paths: ["README.md"], at: repoPath)
+
+        try await service.commit(message: "Update README", at: repoPath)
+
+        let snapshot = try await service.changes(at: repoPath)
+        XCTAssertTrue(snapshot.staged.isEmpty)
+        let log = try await git(["log", "-1", "--format=%s"])
+        XCTAssertEqual(log.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "Update README")
+    }
+
+    func testCommitWithNothingStagedThrowsNothingToCommit() async throws {
+        do {
+            try await service.commit(message: "empty", at: repoPath)
+            XCTFail("expected nothingToCommit error")
+        } catch GitServiceError.nothingToCommit {
+            // expected
+        }
+    }
+
+    func testPushSetsUpstreamOnFirstPushAndSucceedsOnSecond() async throws {
+        let remotePath = worktreeBase.appendingPathComponent("origin.git")
+        try await runner.run(["git", "init", "--bare", remotePath.path], executable: URL(fileURLWithPath: "/usr/bin/env"), workingDirectory: worktreeBase)
+        try await git(["remote", "add", "origin", remotePath.path])
+
+        try await service.push(branch: "main", at: repoPath)
+
+        let upstream = try await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+        XCTAssertEqual(upstream.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "origin/main")
+
+        // Second push, upstream already configured, should still succeed.
+        try "more\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try await service.stage(paths: ["README.md"], at: repoPath)
+        try await service.commit(message: "second commit", at: repoPath)
+        try await service.push(branch: "main", at: repoPath)
+    }
+
+    func testPushWithNoRemoteThrowsNoRemoteConfigured() async throws {
+        do {
+            try await service.push(branch: "main", at: repoPath)
+            XCTFail("expected noRemoteConfigured error")
+        } catch GitServiceError.noRemoteConfigured {
+            // expected
+        }
+    }
+
+    func testFetchSucceedsAgainstConfiguredRemote() async throws {
+        let remotePath = worktreeBase.appendingPathComponent("origin-fetch.git")
+        try await runner.run(["git", "init", "--bare", remotePath.path], executable: URL(fileURLWithPath: "/usr/bin/env"), workingDirectory: worktreeBase)
+        try await git(["remote", "add", "origin", remotePath.path])
+        try await service.push(branch: "main", at: repoPath)
+
+        try await service.fetch(at: repoPath)
+    }
 }
 
 final class ProcessCommandRunnerTests: XCTestCase {
@@ -299,5 +439,27 @@ final class ProcessCommandRunnerTests: XCTestCase {
         XCTAssertTrue(result.stdout.hasPrefix("1\n2\n3\n"))
         XCTAssertTrue(result.stdout.hasSuffix("100000\n"))
         XCTAssertGreaterThan(result.stdout.utf8.count, 500_000)
+    }
+
+    func testInheritsParentEnvironmentForPathLookups() async throws {
+        let result = try await ProcessCommandRunner().run(
+            ["-c", "echo $HOME"],
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            workingDirectory: URL(fileURLWithPath: "/tmp")
+        )
+        XCTAssertFalse(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "HOME should be inherited from the parent process")
+    }
+
+    func testTimeoutCancelsHungProcessAndThrows() async throws {
+        do {
+            _ = try await ProcessCommandRunner(timeout: 0.2).run(
+                ["100"],
+                executable: URL(fileURLWithPath: "/bin/sleep"),
+                workingDirectory: URL(fileURLWithPath: "/tmp")
+            )
+            XCTFail("expected a timeout error")
+        } catch let error as CommandTimeoutError {
+            XCTAssertEqual(error.seconds, 0.2)
+        }
     }
 }

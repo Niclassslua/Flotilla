@@ -50,6 +50,7 @@
 		5A53DC65C2F57CB706144CFA /* SessionWorkspaceRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA44FB5AD25127F5E869142 /* SessionWorkspaceRegistry.swift */; };
 		5AFEBA002DC9EE604362C38C /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA89E931F91138492DF13F0 /* StatusBadge.swift */; };
 		5B2C150432A686283DAA2CF1 /* DetailColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA278AA87F5C50CA3C16374B /* DetailColumn.swift */; };
+		5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */; };
 		63A05E66EE5817F248D8AA40 /* CreateSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3E4FF1906A236364331113 /* CreateSessionView.swift */; };
 		65A0C5DF6D0EA6406B9CE77A /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4A98AEF98A101073B3ECE81 /* SettingsUITests.swift */; };
 		670D703D1EE25BC44EFCE9ED /* ProjectMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EA549F39B605D08B736383 /* ProjectMark.swift */; };
@@ -59,6 +60,7 @@
 		6F63B9224CB47317310DA680 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802C8C7F071E28BCFDCDB62E /* ProjectDetailView.swift */; };
 		722BCF7EE2884F961D1414DD /* HooksKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3C04B541BCABB66405B1C847 /* HooksKit */; };
 		723875E0AA69C129B1AA034F /* FlotillaUnitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */; };
+		7666CEF06B123CCB5B58E56A /* FlotillaNotificationDelegateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */; };
 		7915273EEF98D75301DF9245 /* SyntaxHighlightedTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9872301D40294F9A1AC0132F /* SyntaxHighlightedTextEditor.swift */; };
 		79487EA23C46135232451FB2 /* HooksKit in Frameworks */ = {isa = PBXBuildFile; productRef = C25FA4077872094789200E11 /* HooksKit */; };
 		7B1F17DE94EC64B7DFE901A8 /* PersistenceKit in Frameworks */ = {isa = PBXBuildFile; productRef = 90BE8C16AC4B2147D4D413C4 /* PersistenceKit */; };
@@ -118,6 +120,7 @@
 		EF0A829A1F27EA0060651142 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1540B4BC11EF8F61BC039B74 /* SettingsViewModel.swift */; };
 		EFBC8762CBBFA3E94CAE045B /* HomeDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFBF6122FAEEB194651F7D81 /* HomeDashboardView.swift */; };
 		FA0AADD91E95FBC3347F792A /* CreateSessionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E9587FC9A7651467ABE1DE /* CreateSessionUITests.swift */; };
+		FC24BF03CB94036144AD9880 /* FlotillaNotificationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749673FEA682A4409439065F /* FlotillaNotificationDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -184,6 +187,7 @@
 		70BC83D1E94B12F65DD5E1E2 /* SessionProcessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionProcessManager.swift; sourceTree = "<group>"; };
 		70CFCC9AFA6C9AF54E0E7CC7 /* FileBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserView.swift; sourceTree = "<group>"; };
 		72B7F21F2BDE75CC6ED1E661 /* SessionLaunchForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchForm.swift; sourceTree = "<group>"; };
+		749673FEA682A4409439065F /* FlotillaNotificationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaNotificationDelegate.swift; sourceTree = "<group>"; };
 		749D2FC6B87D43FD5AA8B80C /* HooksUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HooksUITests.swift; sourceTree = "<group>"; };
 		7800DA86869083077CB29EBF /* FlotillaHeroTitleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaHeroTitleView.swift; sourceTree = "<group>"; };
 		79AB3C3C89DD228310CF8D26 /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
@@ -201,12 +205,14 @@
 		8C2DF974C708FB5E2495E820 /* GridLayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridLayoutEngine.swift; sourceTree = "<group>"; };
 		8D6D3AC66F17CE73B4B11254 /* FileNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNode.swift; sourceTree = "<group>"; };
 		9167419F82C96BB959BDC26D /* RulesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesPanelView.swift; sourceTree = "<group>"; };
+		935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaNotificationDelegateTests.swift; sourceTree = "<group>"; };
 		96262704F0E073633EE1AA24 /* ProcessKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ProcessKit; path = Packages/ProcessKit; sourceTree = SOURCE_ROOT; };
 		9872301D40294F9A1AC0132F /* SyntaxHighlightedTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlightedTextEditor.swift; sourceTree = "<group>"; };
 		9923E7E7C4E4C057EAC60EFC /* MarkdownParser */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MarkdownParser; path = Packages/MarkdownParser; sourceTree = SOURCE_ROOT; };
 		A0DF4A9D37F882915627EE76 /* GridZoomGestures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridZoomGestures.swift; sourceTree = "<group>"; };
 		A17376EF1B5EAE79721945D7 /* SessionScreenReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionScreenReader.swift; sourceTree = "<group>"; };
 		A185A326325E0657CB0E93B1 /* PerfLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfLog.swift; sourceTree = "<group>"; };
+		A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffPanelViewModelTests.swift; sourceTree = "<group>"; };
 		A81869BA04B1A4E358E9D943 /* TerminalManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalManager.swift; sourceTree = "<group>"; };
 		A9636EB3D64BE7F5FB20A38D /* AppLayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLayerTests.swift; sourceTree = "<group>"; };
 		A96A3D2D1468CDFA948B0E1E /* FlotillaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaApp.swift; sourceTree = "<group>"; };
@@ -342,6 +348,7 @@
 				8D6D3AC66F17CE73B4B11254 /* FileNode.swift */,
 				0D9D4138971887AAFE0D1122 /* FleetSidebar.swift */,
 				A96A3D2D1468CDFA948B0E1E /* FlotillaApp.swift */,
+				749673FEA682A4409439065F /* FlotillaNotificationDelegate.swift */,
 				B6C7F1B2B6C9A1A52B243C46 /* FlotillaShell.swift */,
 				DB2E8981092A820642684228 /* GridView.swift */,
 				FEA60550ED266054906FF36F /* HookCoordinator.swift */,
@@ -426,6 +433,8 @@
 			children = (
 				581A82A986DD9B62C69E6136 /* AgentSessionProviderTests.swift */,
 				A9636EB3D64BE7F5FB20A38D /* AppLayerTests.swift */,
+				A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */,
+				935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */,
 				51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */,
 				874C07585626CF8D03699AB0 /* GitKitTests.swift */,
 				D81A7626DA67303D0C7CD01F /* HooksKitTests.swift */,
@@ -608,6 +617,8 @@
 			files = (
 				BCB8240F67061DDC366CED1C /* AgentSessionProviderTests.swift in Sources */,
 				B956FF162F7F3D50931A966A /* AppLayerTests.swift in Sources */,
+				5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */,
+				7666CEF06B123CCB5B58E56A /* FlotillaNotificationDelegateTests.swift in Sources */,
 				723875E0AA69C129B1AA034F /* FlotillaUnitTests.swift in Sources */,
 				2C15A78E3C6B06BEBAC35D2E /* GitKitTests.swift in Sources */,
 				4691198A8C6D5C9AA79A10D2 /* HooksKitTests.swift in Sources */,
@@ -645,6 +656,7 @@
 				D10F113B7F9DE405B9BB27F6 /* FleetSidebar.swift in Sources */,
 				802073C68A2CD1D53877853E /* FlotillaApp.swift in Sources */,
 				4E2B8D17F0B0C646EAC291A2 /* FlotillaHeroTitleView.swift in Sources */,
+				FC24BF03CB94036144AD9880 /* FlotillaNotificationDelegate.swift in Sources */,
 				33B9BA58809C8D4F63DA78FC /* FlotillaShell.swift in Sources */,
 				27E06878B9691AB3BC33AD6F /* GridLayoutEngine.swift in Sources */,
 				3E687932F2C103BD5526012D /* GridView.swift in Sources */,

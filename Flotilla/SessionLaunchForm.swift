@@ -400,7 +400,8 @@ struct SessionLaunchForm: View {
                 model: model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : model,
                 effort: agent.supportsEffortSelection ? effort : nil,
                 projectFolder: selectedProject?.rootPath,
-                checkoutMode: useWorktree && selectedProject != nil ? .newWorktree : .mainCheckout
+                checkoutMode: useWorktree && selectedProject != nil ? .newWorktree : .mainCheckout,
+                fetchBeforeCreatingWorktree: settings.git.fetchBeforeCreatingWorktree
             )
             isLaunching = false
             if store.lastCreationError == nil,

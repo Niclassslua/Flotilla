@@ -357,6 +357,120 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(factory.processes[1].sentInput.isEmpty)
     }
 
+    func testAddProjectCreatesAndPersistsANewProject() throws {
+        let repository = try GRDBSessionRepository()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: RecordingProcessFactory()),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+
+        store.addProject(at: URL(fileURLWithPath: "/tmp/MyRepo"))
+
+        XCTAssertEqual(store.projects.map(\.name), ["MyRepo"])
+        XCTAssertEqual(try repository.loadAll().projects.map(\.name), ["MyRepo"])
+    }
+
+    func testAddProjectIsIdempotentForTheSameStandardizedPath() throws {
+        let repository = try GRDBSessionRepository()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: RecordingProcessFactory()),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+
+        store.addProject(at: URL(fileURLWithPath: "/tmp/MyRepo"))
+        store.addProject(at: URL(fileURLWithPath: "/tmp/MyRepo/"))
+
+        XCTAssertEqual(store.projects.count, 1, "re-adding the same folder must not create a duplicate project")
+    }
+
+    func testRemoveProjectDeletesItButKeepsItsSessionsAsStandalone() throws {
+        let repository = try GRDBSessionRepository()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: RecordingProcessFactory()),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+        store.addProject(at: URL(fileURLWithPath: "/tmp/MyRepo"))
+        let project = try XCTUnwrap(store.projects.first)
+        let session = Session(
+            title: "Fix bug",
+            goal: "Work",
+            agent: .claudeCode,
+            projectID: project.id,
+            workingDirectory: URL(fileURLWithPath: "/tmp/MyRepo")
+        )
+        try repository.save(session)
+        store.reload()
+        store.selectedProjectID = project.id
+
+        store.removeProject(id: project.id)
+
+        XCTAssertTrue(store.projects.isEmpty)
+        XCTAssertNil(store.selectedProjectID)
+        XCTAssertEqual(store.sessions.map(\.id), [session.id], "the session must survive as a standalone session")
+    }
+
+    func testCleanProcessExitFiresOnSessionFinishedCallback() async throws {
+        let repository = try GRDBSessionRepository()
+        let session = Session(
+            title: "Ship it",
+            goal: "Work",
+            agent: .codexCLI,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        try repository.save(session)
+        let factory = RecordingProcessFactory()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: factory),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+        var finishedSessions: [Session] = []
+        store.onSessionFinished = { finishedSessions.append($0) }
+
+        factory.processes[0].simulateCrash(code: 0)
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(store.sessions.first?.status, .finished)
+        XCTAssertEqual(finishedSessions.map(\.id), [session.id])
+    }
+
+    func testCrashDoesNotFireOnSessionFinishedCallback() async throws {
+        let repository = try GRDBSessionRepository()
+        let session = Session(
+            title: "Crash recovery",
+            goal: "Work",
+            agent: .codexCLI,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        try repository.save(session)
+        let factory = RecordingProcessFactory()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: factory),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+        var finishedSessions: [Session] = []
+        store.onSessionFinished = { finishedSessions.append($0) }
+
+        factory.processes[0].simulateCrash(code: 7)
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(store.sessions.first?.status, .crashed)
+        XCTAssertTrue(finishedSessions.isEmpty, "a crash is not a finish — it must not trigger the finished notification")
+    }
+
     /// `store.appendTerminalOutput` now writes to an unobserved live buffer
     /// (see `AppStore.liveScrollback`) rather than the `sessions` array, so
     /// the retained bytes are read back via `store.scrollback(for:)`, not

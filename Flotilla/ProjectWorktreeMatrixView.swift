@@ -260,7 +260,7 @@ struct ProjectWorktreeMatrixView: View {
 
             if let targetWorktree = selectedWorktree ?? worktrees.first {
                 let targetSession = matchingSession(for: targetWorktree) ?? dummySession(for: targetWorktree)
-                DiffPanelView(session: targetSession, gitService: store.gitService)
+                DiffPanelView(session: targetSession, gitService: store.gitService, ghService: store.ghService)
                     .id(targetWorktree.path)
             } else {
                 ContentUnavailableView(

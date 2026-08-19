@@ -10,6 +10,7 @@ struct CreateSessionView: View {
     @Environment(\.dismiss) private var dismiss
 
     let createWorktreeByDefault: Bool
+    let fetchBeforeCreatingWorktree: Bool
     let initialProject: Project?
     let didCreateSession: (UUID) -> Void
 
@@ -26,6 +27,7 @@ struct CreateSessionView: View {
     init(
         store: AppStore,
         createWorktreeByDefault: Bool = true,
+        fetchBeforeCreatingWorktree: Bool = false,
         initialProject: Project? = nil,
         didCreateSession: @escaping (UUID) -> Void = { _ in },
         openCodeSubscription: OpenCodeSubscription = .none,
@@ -33,6 +35,7 @@ struct CreateSessionView: View {
     ) {
         self.store = store
         self.createWorktreeByDefault = createWorktreeByDefault
+        self.fetchBeforeCreatingWorktree = fetchBeforeCreatingWorktree
         self.initialProject = initialProject
         self.didCreateSession = didCreateSession
         _isGeneralSession = State(initialValue: initialProject == nil)
@@ -277,7 +280,8 @@ if let error = store.lastCreationError {
                 effort: agent.supportsEffortSelection ? effort : nil,
                 projectFolder: isGeneralSession ? nil : selectedFolder,
                 checkoutMode: checkoutMode,
-                deliverGoal: !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                deliverGoal: !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                fetchBeforeCreatingWorktree: fetchBeforeCreatingWorktree
             )
             isCreating = false
             guard store.lastCreationError == nil else { return }

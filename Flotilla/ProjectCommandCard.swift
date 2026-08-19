@@ -20,6 +20,7 @@ struct ProjectCommandCard: View {
     @State private var projectDiffStat: GitDiffStat?
     @State private var worktreeCount: Int = 0
     @State private var isHovered = false
+    @State private var isConfirmingRemoval = false
 
     private var activeSessions: [Session] {
         sessions.filter { $0.status == .working || $0.status == .waitingForInput }
@@ -200,7 +201,7 @@ struct ProjectCommandCard: View {
             }
             Divider()
             Button("Remove Project from Library", role: .destructive) {
-                onRemove()
+                isConfirmingRemoval = true
             }
         } label: {
             Image(systemName: "ellipsis")
@@ -210,6 +211,16 @@ struct ProjectCommandCard: View {
                 .contentShape(.rect)
         }
         .menuStyle(.borderlessButton)
+        .confirmationDialog(
+            "Remove \"\(project.name)\" from Flotilla?",
+            isPresented: $isConfirmingRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Project", role: .destructive, action: onRemove)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This only removes it from Flotilla's library — the folder, its Git history, and any worktrees are untouched. Its sessions stay in Flotilla as standalone sessions.")
+        }
     }
 
     // MARK: - Actions

@@ -17,9 +17,15 @@ final class AppStore {
     var selectedKanbanBoardID: UUID?
     var lastCreationError: String?
     var lastOperationError: String?
+    /// Called once per clean process exit (never on `.crashed`) after the
+    /// session's status has already landed on `.finished` — the app layer
+    /// decides whether/how to notify from here, so this stays a plain
+    /// closure rather than pulling a notification dependency into AppStore.
+    var onSessionFinished: ((Session) -> Void)?
 
     let repository: SessionRepository
     let gitService: GitServiceProtocol
+    let ghService: GhServiceProtocol?
     let diffStatStore: DiffStatStore
     private let processManager: SessionProcessManager
     /// A closure, not a frozen value, so a Settings change to the worktree
@@ -54,11 +60,13 @@ final class AppStore {
     init(
         repository: SessionRepository,
         gitService: GitServiceProtocol,
+        ghService: GhServiceProtocol? = nil,
         processManager: SessionProcessManager,
         worktreeBaseDirectoryProvider: @escaping () -> URL
     ) {
         self.repository = repository
         self.gitService = gitService
+        self.ghService = ghService
         self.diffStatStore = DiffStatStore(gitService: gitService)
         self.processManager = processManager
         self.worktreeBaseDirectoryProvider = worktreeBaseDirectoryProvider
@@ -421,6 +429,9 @@ final class AppStore {
         } catch {
             lastOperationError = "Session status could not be saved: \(error.localizedDescription)"
         }
+        if updated.status == .finished {
+            onSessionFinished?(updated)
+        }
     }
 
     /// Asynchronously queries the active agent's native storage/API for an
@@ -615,7 +626,14 @@ final class AppStore {
     func addProject(at folder: URL) {
         fileScanLog.notice("addProject: rootPath=\(folder.path, privacy: .public)")
         let normalized = folder.standardizedFileURL
-        if let existing = projects.first(where: { $0.rootPath.standardizedFileURL == normalized }) {
+        // Comparing `.path` with a trailing slash trimmed, rather than the
+        // `URL`s themselves: `standardizedFileURL` resolves symlinks and
+        // `.`/`..` components, but for a path that doesn't exist on disk
+        // (nothing here touches the filesystem) it does not reliably erase
+        // a bare trailing-slash difference, so two `URL`s naming the same
+        // folder can still compare unequal.
+        let normalizedPath = Self.trimmedPath(normalized)
+        if let existing = projects.first(where: { Self.trimmedPath($0.rootPath.standardizedFileURL) == normalizedPath }) {
             selectedSessionID = sessions(for: existing).first?.id
             return
         }
@@ -642,6 +660,14 @@ final class AppStore {
         } catch {
             lastOperationError = "The project could not be removed: \(error.localizedDescription)"
         }
+    }
+
+    private static func trimmedPath(_ url: URL) -> String {
+        var path = url.path
+        while path.count > 1, path.hasSuffix("/") {
+            path.removeLast()
+        }
+        return path
     }
 
     /// Deletes a session, terminating its process and — when it has a
@@ -707,7 +733,8 @@ final class AppStore {
         effort: AgentEffort? = nil,
         projectFolder: URL?,
         checkoutMode: CheckoutMode,
-        deliverGoal: Bool = true
+        deliverGoal: Bool = true,
+        fetchBeforeCreatingWorktree: Bool = false
     ) async -> UUID? {
         lastCreationError = nil
         var createdWorktree: WorktreeInfo?
@@ -734,6 +761,12 @@ final class AppStore {
                 case .useExistingCheckout(let path):
                     workingDirectory = path
                 case .createWorktree(let basePath, let branch, let destination):
+                    if fetchBeforeCreatingWorktree {
+                        // Best-effort: an offline machine or a repo with no
+                        // remote must not block worktree creation over a
+                        // failed fetch.
+                        try? await gitService.fetch(at: basePath)
+                    }
                     let worktree = try await gitService.createWorktree(basePath: basePath, branch: branch, destination: destination)
                     workingDirectory = worktree.path
                     worktreeInfo = WorktreeInfo(branchName: worktree.branch, worktreePath: worktree.path, baseCheckoutPath: basePath)

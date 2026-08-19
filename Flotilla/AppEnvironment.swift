@@ -24,6 +24,10 @@ final class AppEnvironment {
 
     let sessionRepository: SessionRepository
     let gitService: GitServiceProtocol
+    /// `nil` when the GitHub CLI isn't installed — PR creation is hidden
+    /// rather than shown disabled, since `Settings` already surfaces `gh`'s
+    /// found/missing status.
+    let ghService: GhServiceProtocol?
     let worktreeBaseDirectory: URL
     let isUITesting: Bool
     let startupWarning: String?
@@ -38,6 +42,7 @@ final class AppEnvironment {
             : supportDirectory.appendingPathComponent("Worktrees", isDirectory: true)
 
         gitService = GitService(gitExecutable: PATHExecutableLocator().locate("git"))
+        ghService = PATHExecutableLocator().locate("gh").map { GhService(ghExecutable: $0) }
 
         if isUITesting {
             let repository = (try? GRDBSessionRepository()) ?? Self.makeInMemoryRepositoryOrCrash()

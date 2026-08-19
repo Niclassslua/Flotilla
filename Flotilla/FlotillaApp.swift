@@ -1,7 +1,9 @@
 import SwiftUI
+import UserNotifications
 import ProcessKit
 import SettingsKit
 import DesignSystem
+import HooksKit
 
 @main
 struct FlotillaApp: App {
@@ -11,6 +13,7 @@ struct FlotillaApp: App {
     @State private var settingsViewModel: SettingsViewModel
     @State private var startupCheck: StartupCheckViewModel
     @State private var navigator: WorkspaceNavigator
+    @State private var notificationDelegate: FlotillaNotificationDelegate
 
     init() {
         let environment = AppEnvironment()
@@ -40,6 +43,7 @@ struct FlotillaApp: App {
         let appStore = AppStore(
             repository: environment.sessionRepository,
             gitService: environment.gitService,
+            ghService: environment.ghService,
             processManager: SessionProcessManager(
                 locator: locator,
                 processFactory: processFactory,
@@ -73,6 +77,22 @@ struct FlotillaApp: App {
 
         let navigator = WorkspaceNavigator()
         _navigator = State(initialValue: navigator)
+
+        let notificationDelegate = FlotillaNotificationDelegate(
+            navigator: navigator,
+            onReply: { sessionID, text in
+                appStore.process(for: sessionID)?.send(input: Data((text + "\n").utf8))
+            }
+        )
+        UNUserNotificationCenter.current().delegate = notificationDelegate
+        _notificationDelegate = State(initialValue: notificationDelegate)
+
+        appStore.onSessionFinished = { session in
+            guard settingsViewModel.settings.notifications.finishedEnabled else { return }
+            Task {
+                await SystemNotificationDispatcher().notifySessionFinished(sessionTitle: session.title, sessionID: session.id)
+            }
+        }
 
         // No-op unless FLOTILLA_PERF=1 — see PerfLog.
         MainThreadStallMonitor.shared.start()

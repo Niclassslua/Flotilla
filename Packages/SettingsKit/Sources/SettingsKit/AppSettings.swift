@@ -171,26 +171,23 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
 public struct TerminalPreferences: Codable, Equatable, Sendable {
     public var fontSize: Double
     public var optionActsAsMeta: Bool
-    public var naturalTextSelection: Bool
     public var scrollSpeed: Double
     public var gpuRendering: Bool
 
     public init(
         fontSize: Double = 14,
         optionActsAsMeta: Bool = true,
-        naturalTextSelection: Bool = true,
         scrollSpeed: Double = 1,
         gpuRendering: Bool = false
     ) {
         self.fontSize = fontSize
         self.optionActsAsMeta = optionActsAsMeta
-        self.naturalTextSelection = naturalTextSelection
         self.scrollSpeed = scrollSpeed
         self.gpuRendering = gpuRendering
     }
 
     private enum CodingKeys: String, CodingKey {
-        case fontSize, optionActsAsMeta, naturalTextSelection, scrollSpeed, gpuRendering
+        case fontSize, optionActsAsMeta, scrollSpeed, gpuRendering
     }
 
     // Hand-written rather than synthesized: `SettingsStoring` decodes the
@@ -198,12 +195,13 @@ public struct TerminalPreferences: Codable, Equatable, Sendable {
     // key added after a user's settings file was already written (like
     // `gpuRendering`) would silently reset every setting, not just this
     // struct's. `decodeIfPresent` with an explicit default keeps old files
-    // decoding successfully.
+    // decoding successfully. A settings file still carrying the removed
+    // `naturalTextSelection` key (it was never wired to anything) simply
+    // has that key ignored — CodingKeys no longer knows about it.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         fontSize = try container.decodeIfPresent(Double.self, forKey: .fontSize) ?? 14
         optionActsAsMeta = try container.decodeIfPresent(Bool.self, forKey: .optionActsAsMeta) ?? true
-        naturalTextSelection = try container.decodeIfPresent(Bool.self, forKey: .naturalTextSelection) ?? true
         scrollSpeed = try container.decodeIfPresent(Double.self, forKey: .scrollSpeed) ?? 1
         gpuRendering = try container.decodeIfPresent(Bool.self, forKey: .gpuRendering) ?? false
     }
@@ -212,16 +210,13 @@ public struct TerminalPreferences: Codable, Equatable, Sendable {
 public struct NotificationPreferences: Codable, Equatable, Sendable {
     public var waitingForInputEnabled: Bool
     public var finishedEnabled: Bool
-    public var playsSound: Bool
 
     public init(
         waitingForInputEnabled: Bool = true,
-        finishedEnabled: Bool = true,
-        playsSound: Bool = true
+        finishedEnabled: Bool = true
     ) {
         self.waitingForInputEnabled = waitingForInputEnabled
         self.finishedEnabled = finishedEnabled
-        self.playsSound = playsSound
     }
 }
 

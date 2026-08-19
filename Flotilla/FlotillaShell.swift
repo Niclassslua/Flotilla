@@ -33,7 +33,7 @@ struct FlotillaShell: View {
         self.startupCheck = startupCheck
         self.settingsViewModel = settingsViewModel
         self._activityStore = State(initialValue: SessionActivityStore(screenReader: screenReader))
-        self._workspaceRegistry = State(initialValue: SessionWorkspaceRegistry(store: store, gitService: store.gitService))
+        self._workspaceRegistry = State(initialValue: SessionWorkspaceRegistry(store: store, gitService: store.gitService, ghService: store.ghService))
     }
 
     var body: some View {
@@ -138,6 +138,7 @@ struct FlotillaShell: View {
             CreateSessionView(
                 store: store,
                 createWorktreeByDefault: settingsViewModel.settings.sessionDefaults.createWorktreeByDefault,
+                fetchBeforeCreatingWorktree: settingsViewModel.settings.git.fetchBeforeCreatingWorktree,
                 initialProject: navigator.selectedProjectID.flatMap { id in store.projects.first { $0.id == id } },
                 didCreateSession: { id in
                     navigator.selection = .session(id)

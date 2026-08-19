@@ -384,6 +384,16 @@ private struct GitSettingsPane: View {
             } header: {
                 SettingsSectionHeader("Worktree Lifecycle", systemImage: "arrow.triangle.branch")
             }
+
+            Section {
+                Toggle("Fetch before creating a worktree", isOn: $viewModel.settings.git.fetchBeforeCreatingWorktree)
+                    .toggleStyle(.switch)
+                Text("Refreshes remote-tracking branches first, so a new worktree isn't cut from stale refs. Off by default to keep session launch fast; a failed fetch never blocks worktree creation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                SettingsSectionHeader("Worktree Creation", systemImage: "arrow.down.circle")
+            }
         }
         .flotillaSettingsFormLayout()
     }
@@ -396,6 +406,8 @@ private struct NotificationSettingsPane: View {
         Form {
             Section {
                 Toggle("Agent is waiting for input", isOn: $viewModel.settings.notifications.waitingForInputEnabled)
+                    .toggleStyle(.switch)
+                Toggle("Session finished", isOn: $viewModel.settings.notifications.finishedEnabled)
                     .toggleStyle(.switch)
                 Text("The system notification uses the Mac’s current notification sound and Focus settings.")
                     .font(.caption)
