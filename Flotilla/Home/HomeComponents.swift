@@ -336,21 +336,16 @@ private struct HomeSessionRow: View {
 
     var body: some View {
         HStack(spacing: FlotillaSpacing.medium) {
-            ZStack {
-                RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                    .fill(FlotillaColors.surfaceElevated)
-                ProviderLogo(agent: session.agent)
-                    .frame(width: 13, height: 13)
-            }
-            .frame(width: 24, height: 24)
-            .overlay(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(StatusPresentation.color(for: session.status))
-                    .frame(width: 7, height: 7)
-                    .overlay { Circle().strokeBorder(FlotillaColors.canvas, lineWidth: 1.5) }
-                    .offset(x: 2, y: 2)
-            }
-            .accessibilityHidden(true)
+            ProviderLogo(agent: session.agent)
+                .frame(width: 22, height: 22)
+                .overlay(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(StatusPresentation.color(for: session.status))
+                        .frame(width: 7, height: 7)
+                        .overlay { Circle().strokeBorder(FlotillaColors.canvas, lineWidth: 1.5) }
+                        .offset(x: 2, y: 2)
+                }
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title)
