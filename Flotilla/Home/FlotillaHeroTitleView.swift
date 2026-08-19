@@ -78,11 +78,12 @@ struct FlotillaHeroTitleView: View {
     @ViewBuilder
     private var appIconEmblem: some View {
         ZStack {
-            // Ambient warm glow behind icon matching color mode
+            // Subtle ambient warm glow behind and below icon (directed downward, no upward bleed)
             Circle()
-                .fill(FlotillaColors.accent.opacity(colorScheme == .dark ? 0.32 : 0.18))
-                .frame(width: 78, height: 78)
-                .blur(radius: 22)
+                .fill(FlotillaColors.accent.opacity(colorScheme == .dark ? 0.22 : 0.10))
+                .frame(width: 54, height: 54)
+                .blur(radius: 8)
+                .offset(y: 4)
 
             if colorScheme == .dark, let icon = NSApp.applicationIconImage {
                 // Real macOS App Icon for Dark Mode (borderless, 68pt)
@@ -90,7 +91,7 @@ struct FlotillaHeroTitleView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 68, height: 68)
-                    .shadow(color: FlotillaColors.accent.opacity(0.28), radius: 12, y: 4)
+                    .shadow(color: FlotillaColors.accent.opacity(0.18), radius: 5, y: 3)
             } else {
                 // Symmetrically matched Light Mode squircle with identical footprint and padding
                 RoundedRectangle(cornerRadius: 13.5, style: .continuous)
@@ -120,7 +121,7 @@ struct FlotillaHeroTitleView: View {
                                 )
                             )
                     }
-                    .shadow(color: Color.black.opacity(0.14), radius: 8, y: 3)
+                    .shadow(color: Color.black.opacity(0.10), radius: 4, y: 2)
                     .frame(width: 68, height: 68)
             }
         }

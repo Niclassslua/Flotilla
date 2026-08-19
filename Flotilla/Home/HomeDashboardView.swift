@@ -105,7 +105,7 @@ struct HomeDashboardView: View {
                 fleet
             }
             .padding(.horizontal, FlotillaSpacing.xxLarge)
-            .padding(.top, FlotillaSpacing.medium)
+            .padding(.top, FlotillaSpacing.large)
             .padding(.bottom, FlotillaSpacing.xxLarge)
             .frame(maxWidth: 1_440, alignment: .center)
             .frame(maxWidth: .infinity)
