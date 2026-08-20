@@ -110,14 +110,18 @@ struct FileBrowserView: View {
     @ViewBuilder
     private var editor: some View {
         if let node = viewModel.selectedNode {
-            let isMarkdown = node.url.pathExtension.lowercased() == "md"
-                || node.url.pathExtension.lowercased() == "markdown"
-                || node.url.pathExtension.lowercased() == "mdx"
-
-            if isMarkdown {
-                MarkdownFileEditor(node: node)
+            if viewModel.isBinaryOrUnopenable {
+                BinaryFileEditor(node: node)
             } else {
-                SyntaxHighlightedFileEditor(node: node)
+                let isMarkdown = node.url.pathExtension.lowercased() == "md"
+                    || node.url.pathExtension.lowercased() == "markdown"
+                    || node.url.pathExtension.lowercased() == "mdx"
+
+                if isMarkdown {
+                    MarkdownFileEditor(node: node)
+                } else {
+                    SyntaxHighlightedFileEditor(node: node)
+                }
             }
         } else {
             ContentUnavailableView(
@@ -202,5 +206,82 @@ extension FileBrowserView {
         .focused($isEditorFocused)
         .padding(FlotillaSpacing.small)
         .accessibilityIdentifier("FileBrowser.Editor")
+    }
+
+    @ViewBuilder
+    private func BinaryFileEditor(node: FileNode) -> some View {
+        VStack(spacing: FlotillaSpacing.large) {
+            HStack(spacing: 10) {
+                MaterialFileIcon(node: node, size: 18)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(node.name)
+                        .font(.headline)
+                    Text(node.url.path)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    NSWorkspace.shared.open(node.url)
+                } label: {
+                    Label("Open in App", systemImage: "arrow.up.forward.app")
+                        .font(FlotillaTypography.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, FlotillaSpacing.medium)
+            .padding(.vertical, FlotillaSpacing.small)
+            .background(FlotillaColors.surface)
+
+            Divider()
+
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(FlotillaColors.surfaceElevated)
+                    .frame(width: 84, height: 84)
+                MaterialFileIcon(url: node.url, size: 44)
+            }
+
+            VStack(spacing: FlotillaSpacing.xSmall) {
+                Text(node.name)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(FlotillaColors.textPrimary)
+
+                if let size = viewModel.fileSizeString {
+                    Text("\(size) · Binary / Uneditable File")
+                        .font(FlotillaTypography.caption.monospaced())
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+
+                Text("This file cannot be displayed in the text editor.")
+                    .font(FlotillaTypography.callout)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .padding(.top, 4)
+            }
+
+            HStack(spacing: FlotillaSpacing.medium) {
+                Button {
+                    NSWorkspace.shared.open(node.url)
+                } label: {
+                    Label("Open in Default App", systemImage: "arrow.up.forward.app")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([node.url])
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.top, FlotillaSpacing.small)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(FlotillaColors.terminalCanvas)
     }
 }

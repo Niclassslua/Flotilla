@@ -409,6 +409,8 @@ final class FileBrowserViewModel {
     var selectedNode: FileNode?
     var content = ""
     var savedAt: Date?
+    var isBinaryOrUnopenable: Bool = false
+    var fileSizeString: String?
     private(set) var isLoading = false
     private(set) var isSaving = false
     private(set) var errorMessage: String?
@@ -467,7 +469,7 @@ final class FileBrowserViewModel {
         guard !node.isDirectory else { return }
         
         // Check for unsaved changes before switching
-        if let currentNode = selectedNode, currentNode != node, content != "" {
+        if let currentNode = selectedNode, currentNode != node, !isBinaryOrUnopenable, content != "" {
             let fileManager = FileManager.default
             if let attributes = try? fileManager.attributesOfItem(atPath: currentNode.url.path),
                let modificationDate = attributes[.modificationDate] as? Date,
@@ -475,24 +477,51 @@ final class FileBrowserViewModel {
                modificationDate <= savedAt {
                 // Content appears unchanged, safe to switch
             } else {
-                // Prompt user about unsaved changes - for now, save automatically
-                // In a full implementation, this would show a confirmation dialog
                 await save()
             }
+        }
+
+        let fileManager = FileManager.default
+        let attributes = try? fileManager.attributesOfItem(atPath: node.url.path)
+        if let size = attributes?[.size] as? Int64 {
+            fileSizeString = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+        } else {
+            fileSizeString = nil
+        }
+        if let modificationDate = attributes?[.modificationDate] as? Date {
+            savedAt = modificationDate
+        }
+
+        let ext = node.url.pathExtension.lowercased()
+        let binaryExtensions: Set<String> = [
+            "png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "tiff", "heic", "icns",
+            "mp4", "mov", "mkv", "webm", "avi", "mp3", "wav", "m4a", "flac", "aac",
+            "pdf", "zip", "tar", "gz", "tgz", "7z", "rar", "dmg", "pkg",
+            "dylib", "so", "a", "o", "exe", "dll", "bin", "sqlite", "db", "sqlite3",
+            "car", "nib", "storyboardc", "ttf", "otf", "woff", "woff2", "eot", "xcassets"
+        ]
+
+        if binaryExtensions.contains(ext) {
+            content = ""
+            selectedNode = node
+            isBinaryOrUnopenable = true
+            errorMessage = nil
+            message = nil
+            return
         }
         
         do {
             content = try await service.readText(at: node.url)
-            let fileManager = FileManager.default
-            if let attributes = try? fileManager.attributesOfItem(atPath: node.url.path),
-               let modificationDate = attributes[.modificationDate] as? Date {
-                savedAt = modificationDate
-            }
             selectedNode = node
+            isBinaryOrUnopenable = false
             errorMessage = nil
             message = nil
         } catch {
-            errorMessage = "Could not open \(node.name): \(error.localizedDescription)"
+            content = ""
+            selectedNode = node
+            isBinaryOrUnopenable = true
+            errorMessage = nil
+            message = nil
         }
     }
 

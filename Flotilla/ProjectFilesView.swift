@@ -150,7 +150,14 @@ struct ProjectFilesView: View {
                         .background(Color.red.opacity(0.08))
                 }
 
-                if node.url.pathExtension.lowercased() == "md" {
+                if viewModel.isBinaryOrUnopenable {
+                    let ext = node.url.pathExtension.lowercased()
+                    if ["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "tiff", "heic", "svg"].contains(ext) {
+                        imagePreviewView(node: node)
+                    } else {
+                        binaryFilePlaceholderView(node: node)
+                    }
+                } else if node.url.pathExtension.lowercased() == "md" {
                     if markdownMode == .preview {
                         ScrollView {
                             MarkdownView(markdown: viewModel.content)
@@ -208,38 +215,155 @@ struct ProjectFilesView: View {
 
             Spacer()
 
-            if node.url.pathExtension.lowercased() == "md" {
-                Picker("Mode", selection: $markdownMode) {
-                    ForEach(MarkdownMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 130)
-            }
-
-            if let message = viewModel.message {
-                Label(
-                    message,
-                    systemImage: message.hasPrefix("Saved") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-                )
-                .font(FlotillaTypography.caption2)
-                .foregroundStyle(message.hasPrefix("Saved") ? FlotillaColors.success : Color.red)
-            }
-
-            Button("Save") {
-                Task {
-                    await viewModel.save()
-                }
+            Button {
+                NSWorkspace.shared.open(node.url)
+            } label: {
+                Label("Open in App", systemImage: "arrow.up.forward.app")
+                    .font(FlotillaTypography.caption)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .keyboardShortcut("s", modifiers: .command)
-            .disabled(viewModel.isSaving)
+            .help("Open in associated default application")
+
+            if !viewModel.isBinaryOrUnopenable {
+                if node.url.pathExtension.lowercased() == "md" {
+                    Picker("Mode", selection: $markdownMode) {
+                        ForEach(MarkdownMode.allCases) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 130)
+                }
+
+                if let message = viewModel.message {
+                    Label(
+                        message,
+                        systemImage: message.hasPrefix("Saved") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                    )
+                    .font(FlotillaTypography.caption2)
+                    .foregroundStyle(message.hasPrefix("Saved") ? FlotillaColors.success : Color.red)
+                }
+
+                Button("Save") {
+                    Task {
+                        await viewModel.save()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(viewModel.isSaving)
+            }
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .padding(.vertical, FlotillaSpacing.small)
         .background(FlotillaColors.surface)
+    }
+
+    // MARK: - Binary & Media Previews
+
+    private func imagePreviewView(node: FileNode) -> some View {
+        VStack(spacing: FlotillaSpacing.medium) {
+            Spacer()
+            if let image = NSImage(contentsOf: node.url) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 600, maxHeight: 460)
+                    .background(FlotillaColors.surfaceElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: FlotillaRadius.card)
+                            .strokeBorder(FlotillaColors.separator, lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.2), radius: 12, y: 6)
+            } else {
+                MaterialFileIcon(url: node.url, size: 64)
+            }
+
+            VStack(spacing: 4) {
+                if let size = viewModel.fileSizeString {
+                    Text(size)
+                        .font(FlotillaTypography.caption.monospaced())
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                }
+            }
+
+            HStack(spacing: FlotillaSpacing.medium) {
+                Button {
+                    NSWorkspace.shared.open(node.url)
+                } label: {
+                    Label("Open in Default App", systemImage: "arrow.up.forward.app")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([node.url])
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(FlotillaColors.terminalCanvas)
+    }
+
+    private func binaryFilePlaceholderView(node: FileNode) -> some View {
+        VStack(spacing: FlotillaSpacing.large) {
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(FlotillaColors.surfaceElevated)
+                    .frame(width: 96, height: 96)
+                MaterialFileIcon(url: node.url, size: 48)
+            }
+
+            VStack(spacing: FlotillaSpacing.xSmall) {
+                Text(node.name)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(FlotillaColors.textPrimary)
+
+                if let size = viewModel.fileSizeString {
+                    Text("\(size) · Binary / Uneditable File")
+                        .font(FlotillaTypography.caption.monospaced())
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+
+                Text("This file cannot be displayed in the built-in text editor.")
+                    .font(FlotillaTypography.callout)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .padding(.top, 4)
+            }
+
+            HStack(spacing: FlotillaSpacing.medium) {
+                Button {
+                    NSWorkspace.shared.open(node.url)
+                } label: {
+                    Label("Open in Default App", systemImage: "arrow.up.forward.app")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([node.url])
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+            }
+            .padding(.top, FlotillaSpacing.small)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(FlotillaColors.terminalCanvas)
     }
 }
