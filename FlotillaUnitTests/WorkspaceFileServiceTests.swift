@@ -44,10 +44,12 @@ final class WorkspaceFileServiceTests: XCTestCase {
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Sources"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
         try "text".write(to: root.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try "ignore".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        try "junk".write(to: root.appendingPathComponent(".DS_Store"), atomically: true, encoding: .utf8)
 
         let nodes = try await WorkspaceFileService().fileTree(at: root)
 
-        XCTAssertEqual(nodes.map(\.name), ["Sources", "README.md"])
+        XCTAssertEqual(nodes.map(\.name), ["Sources", ".gitignore", "README.md"])
         XCTAssertTrue(nodes[0].isDirectory)
     }
 

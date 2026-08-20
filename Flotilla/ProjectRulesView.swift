@@ -137,14 +137,16 @@ struct ProjectRulesView: View {
                     Button {
                         Task { await viewModel.select(entry) }
                     } label: {
-                        HStack(spacing: FlotillaSpacing.small) {
-                            MaterialFileIcon(url: entry.url, size: 16)
+                        HStack(spacing: 8) {
+                            MaterialFileIcon(url: entry.url, size: 19)
                             Text(entry.relativePath)
-                                .font(FlotillaTypography.body)
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundStyle(entry.relativePath.hasPrefix(".") ? FlotillaColors.textSecondary : FlotillaColors.textPrimary)
                                 .lineLimit(1)
                             Spacer()
                             scopeBadge(entry.scope)
                         }
+                        .padding(.vertical, 1)
                     }
                     .buttonStyle(.plain)
                     .listRowBackground(

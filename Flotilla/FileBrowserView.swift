@@ -80,12 +80,14 @@ struct FileBrowserView: View {
                             Task { await viewModel.select(node) }
                         } label: {
                             HStack(spacing: 8) {
-                                MaterialFileIcon(node: node, size: 16)
+                                MaterialFileIcon(node: node, size: 19)
                                 Text(node.name)
-                                    .foregroundStyle(.primary)
+                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(node.name.hasPrefix(".") ? FlotillaColors.textSecondary : .primary)
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                             }
+                            .padding(.vertical, 1)
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
@@ -141,12 +143,12 @@ extension FileBrowserView {
     private func MarkdownFileEditor(node: FileNode) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                MaterialFileIcon(node: node, size: 18)
-                VStack(alignment: .leading, spacing: 1) {
+                MaterialFileIcon(node: node, size: 22)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(node.name)
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
                     Text(node.url.path)
-                        .font(.caption.monospaced())
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()

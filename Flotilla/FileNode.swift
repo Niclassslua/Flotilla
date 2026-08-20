@@ -217,6 +217,10 @@ struct WorkspaceFileService: WorkspaceFileServicing {
         return protected
     }
 
+    private static let ignoredFileNames = Set([
+        ".ds_store", "thumbs.db", ".localized"
+    ])
+
     private static func loadChildren(
         of directory: URL,
         depth: Int,
@@ -227,10 +231,16 @@ struct WorkspaceFileService: WorkspaceFileServicing {
         let entries = try fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-            options: [.skipsHiddenFiles]
+            options: []
         )
         return try entries
-            .filter { !excludedDirectories.contains($0.lastPathComponent) && !isTCCProtected($0) }
+            .filter {
+                let name = $0.lastPathComponent.lowercased()
+                if ignoredFileNames.contains(name) { return false }
+                if excludedDirectories.contains($0.lastPathComponent) { return false }
+                if isTCCProtected($0) { return false }
+                return true
+            }
             .map { url in
                 let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 let isDirectory = values.isDirectory == true && values.isSymbolicLink != true
