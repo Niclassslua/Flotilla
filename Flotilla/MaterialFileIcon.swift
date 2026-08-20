@@ -18,12 +18,8 @@ public final class MaterialIconCache: @unchecked Sendable {
             return cached
         }
 
-        // 1. Check compiled asset catalog for direct matches or provider logos
-        if let assetImage = NSImage(named: name) {
-            cache.setObject(assetImage, forKey: key)
-            return assetImage
-        }
-        if name == "gemini" || name == "antigravity" {
+        // 1. Antigravity / Gemini official brand logo (ProviderLogoAntigravity)
+        if name == "gemini" || name == "antigravity" || name == "agy" {
             if let antigravityAsset = NSImage(named: "ProviderLogoAntigravity") {
                 cache.setObject(antigravityAsset, forKey: key)
                 return antigravityAsset
@@ -35,11 +31,23 @@ public final class MaterialIconCache: @unchecked Sendable {
                 return claudeAsset
             }
         }
+        if name == "codex" || name == "openai" {
+            if let codexAsset = NSImage(named: "ProviderLogoCodex") {
+                cache.setObject(codexAsset, forKey: key)
+                return codexAsset
+            }
+        }
         if name == "opencode" {
             if let openCodeAsset = NSImage(named: "ProviderLogoOpenCode") {
                 cache.setObject(openCodeAsset, forKey: key)
                 return openCodeAsset
             }
+        }
+
+        // 2. Check compiled asset catalog for direct matches
+        if let assetImage = NSImage(named: name) {
+            cache.setObject(assetImage, forKey: key)
+            return assetImage
         }
 
         // 2. Check SVG files in bundle / development paths
