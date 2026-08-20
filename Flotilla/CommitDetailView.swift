@@ -6,10 +6,14 @@ import DesignSystem
 /// The right-hand pane of the history view: everything about one commit —
 /// identity, decoration, what it touched, and the patch itself.
 struct CommitDetailView: View {
-    @Bindable var viewModel: ProjectHistoryViewModel
+    @Bindable var viewModel: ProjectGraphViewModel
+
+    @State private var isMessageExpanded = false
 
     private var commit: GitCommit? {
-        viewModel.commits.first { $0.sha == viewModel.selectedSHA }
+        guard let sha = viewModel.selectedSHA else { return nil }
+        if let detail = viewModel.detail, detail.commit.sha == sha { return detail.commit }
+        return viewModel.commits.first { $0.sha == sha }
     }
 
     var body: some View {
@@ -27,6 +31,10 @@ struct CommitDetailView: View {
                     }
                 }
                 .scrollContentBackground(.hidden)
+            } else if viewModel.isLoadingDetail {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ContentUnavailableView(
                     "No Commit Selected",
@@ -38,9 +46,23 @@ struct CommitDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FlotillaColors.canvas)
         .accessibilityIdentifier("ProjectHistory.Detail")
+        .onChange(of: commit?.sha) { _, _ in
+            isMessageExpanded = false
+        }
     }
 
     // MARK: - Header
+
+    private var hasLongBody: Bool {
+        guard let commit else { return false }
+        let lines = commit.body.components(separatedBy: .newlines)
+        return lines.count > 3 || commit.body.count > 200
+    }
+
+    private var hasLongSubject: Bool {
+        guard let commit else { return false }
+        return commit.subject.count > 120
+    }
 
     private func header(_ commit: GitCommit) -> some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
@@ -48,6 +70,7 @@ struct CommitDetailView: View {
                 .font(FlotillaTypography.headline)
                 .foregroundStyle(FlotillaColors.textPrimary)
                 .textSelection(.enabled)
+                .lineLimit(hasLongSubject && !isMessageExpanded ? 2 : nil)
                 .fixedSize(horizontal: false, vertical: true)
 
             if !commit.body.isEmpty {
@@ -55,7 +78,26 @@ struct CommitDetailView: View {
                     .font(FlotillaTypography.callout)
                     .foregroundStyle(FlotillaColors.textSecondary)
                     .textSelection(.enabled)
+                    .lineLimit(hasLongBody && !isMessageExpanded ? 3 : nil)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if hasLongBody || hasLongSubject {
+                Button {
+                    withAnimation(FlotillaMotion.fast.curve) {
+                        isMessageExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(isMessageExpanded ? "Show less" : "Show more")
+                            .font(FlotillaTypography.caption2.weight(.medium))
+                        Image(systemName: isMessageExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .foregroundStyle(FlotillaColors.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("CommitDetail.ToggleMessageButton")
             }
 
             HStack(spacing: FlotillaSpacing.small) {
@@ -138,8 +180,6 @@ struct CommitDetailView: View {
                         .padding(.top, 1)
                         .accessibilityIdentifier("ProjectHistory.Attribution")
                     }
-                    // Only shown when it differs — a rebase or an amend by
-                    // someone else. Otherwise it's noise.
                     if commit.hasDistinctCommitter {
                         Text("committed by \(commit.committerName) · \(commit.committerDate.formatted(date: .abbreviated, time: .shortened))")
                             .font(FlotillaTypography.caption2)
@@ -175,8 +215,6 @@ struct CommitDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Navigating to a parent keeps the pane useful for walking back through
-    /// history. Only parents present in the loaded page are reachable.
     private func parentButton(_ parent: String) -> some View {
         let isLoaded = viewModel.commits.contains { $0.sha == parent }
         return Button {
@@ -217,7 +255,6 @@ struct CommitDetailView: View {
         .padding(.vertical, FlotillaSpacing.medium)
     }
 
-    /// Additions-to-deletions at a glance, in the manner of `HomeFleetBar`.
     private func proportionBar(_ stat: GitDiffStat) -> some View {
         GeometryReader { geometry in
             let total = max(1, stat.additions + stat.deletions)
@@ -251,8 +288,6 @@ struct CommitDetailView: View {
                 }
             }
         } else if commit.isMerge {
-            // Not an error: `git show` reports no changes for a merge unless
-            // asked to diff against a specific parent.
             hint("This is a merge commit. Its changes belong to the commits it brings in.")
         } else {
             hint("This commit touched no files.")
@@ -275,8 +310,6 @@ struct CommitDetailView: View {
 
 // MARK: - File row
 
-/// One changed file, expanding to reveal its hunks. Collapsed by default so a
-/// wide-reaching commit stays scannable.
 struct CommitFileRow: View {
     let file: GitCommitFileChange
     let repoPath: URL
@@ -387,8 +420,6 @@ struct CommitFileRow: View {
 
 // MARK: - Hunk
 
-/// A unified-diff hunk. Wide lines scroll horizontally within the hunk rather
-/// than forcing the whole pane sideways.
 struct CommitHunkView: View {
     let hunk: FileDiffHunk
 
