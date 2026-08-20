@@ -273,7 +273,16 @@ struct WorkspaceFileService: WorkspaceFileServicing {
             }
         ) else { return [] }
 
-        let instructionNames = Set(["CLAUDE.md", "AGENTS.md", "GEMINI.md", "SKILL.md"])
+        let instructionNames = Set([
+            "CLAUDE.md", "claude.md",
+            "AGENTS.md", "agent.md",
+            "GEMINI.md", "gemini.md",
+            "SKILL.md", "skill.md",
+            ".cursorrules", ".cursorignore",
+            "copilot-instructions.md",
+            ".geminirules", ".geminiignore",
+            ".antigravityrules", ".clauderules"
+        ])
         var results: [RuleFileEntry] = []
         for case let url as URL in enumerator {
             let values = try url.resourceValues(forKeys: Set(keys))
@@ -288,17 +297,25 @@ struct WorkspaceFileService: WorkspaceFileServicing {
                 enumerator.skipDescendants()
                 continue
             }
-            guard values.isRegularFile == true, url.pathExtension.lowercased() == "md" else { continue }
+            guard values.isRegularFile == true else { continue }
 
+            let filename = url.lastPathComponent
+            let ext = url.pathExtension.lowercased()
             let canonicalURL = url.resolvingSymlinksInPath().standardizedFileURL
             let rootPrefix = canonicalRoot.path.hasSuffix("/") ? canonicalRoot.path : canonicalRoot.path + "/"
             guard canonicalURL.path.hasPrefix(rootPrefix) else { continue }
             let relative = String(canonicalURL.path.dropFirst(rootPrefix.count))
-            let isKnownInstruction = instructionNames.contains(url.lastPathComponent)
+            let isKnownInstruction = instructionNames.contains(filename)
+            let isAIConfigDir = relative.hasPrefix(".claude/") || relative.hasPrefix(".gemini/") || relative.hasPrefix(".antigravity/") || relative.hasPrefix(".agents/") || relative.hasPrefix(".cursor/") || relative.hasPrefix(".codex/")
+            let isInstructionExtension = ext == "md" || ext == "rules" || ext == "prompt"
+            let isInsideAIDir = isAIConfigDir && isInstructionExtension
             let isSkill = relative.contains(".claude/skills/")
                 || relative.contains(".agents/skills/")
                 || relative.contains(".codex/skills/")
-            guard isKnownInstruction || isSkill else { continue }
+                || relative.contains(".gemini/skills/")
+                || relative.contains(".antigravity/skills/")
+
+            guard isKnownInstruction || isInsideAIDir || isSkill else { continue }
             results.append(RuleFileEntry(url: url, relativePath: relative, scope: .project))
         }
         return results.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
@@ -312,9 +329,15 @@ struct WorkspaceFileService: WorkspaceFileServicing {
     ) -> [RuleFileEntry] {
         let candidates: [(dir: String, file: String)] = [
             (".claude", "CLAUDE.md"),
+            (".claude", "claude.json"),
             (".codex", "AGENTS.md"),
             (".agents", "AGENTS.md"),
             (".gemini", "GEMINI.md"),
+            (".gemini", "antigravity.md"),
+            (".gemini", "rules.md"),
+            (".antigravity", "AGENTS.md"),
+            (".antigravity", "GEMINI.md"),
+            (".cursor", ".cursorrules"),
         ]
         var results: [RuleFileEntry] = []
         for (dir, file) in candidates {
