@@ -9,16 +9,26 @@ final class MaterialFileIconTests: XCTestCase {
         let testFolder = URL(fileURLWithPath: "/project/test")
         let randomFolder = URL(fileURLWithPath: "/project/custom_folder")
 
-        XCTAssertEqual(MaterialIconProvider.folderIconName(for: srcFolder, isExpanded: false), "folder-src")
-        XCTAssertEqual(MaterialIconProvider.folderIconName(for: srcFolder, isExpanded: true), "folder-src-open")
-
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: srcFolder), "folder-src")
         XCTAssertEqual(MaterialIconProvider.folderIconName(for: gitFolder), "folder-git")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: testFolder), "folder-test")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: randomFolder), "folder")
 
-        XCTAssertEqual(MaterialIconProvider.folderIconName(for: testFolder, isExpanded: false), "folder-test")
-        XCTAssertEqual(MaterialIconProvider.folderIconName(for: testFolder, isExpanded: true), "folder-test-open")
-
-        XCTAssertEqual(MaterialIconProvider.folderIconName(for: randomFolder, isExpanded: false), "folder")
-        XCTAssertEqual(MaterialIconProvider.folderIconName(for: randomFolder, isExpanded: true), "folder-open")
+        // Specialized folders
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/.cache")), "folder-dist")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/.gitea")), "folder-gitea")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/.idea")), "folder-intellij")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/.pnpm-store")), "folder-node")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/attachments")), "folder-attachment")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/logs")), "folder-log")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/profiles")), "folder-config")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/perf-debug")), "folder-debug")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/security")), "folder-secure")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/files")), "folder-images")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/index")), "folder-src")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/workflows")), "folder-workflows")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/1")), "folder")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/v10")), "folder")
     }
 
     func testExactFilenameMatches() {

@@ -44,27 +44,24 @@ public final class MaterialIconCache: @unchecked Sendable {
             }
         }
 
-        // 2. Check compiled asset catalog for direct matches
-        if let assetImage = NSImage(named: name) {
-            cache.setObject(assetImage, forKey: key)
-            return assetImage
-        }
-
         // 2. Check SVG files in bundle / development paths
+        let lookupNames: [String] = (name == "folder-open" || name == "folder") ? ["folder", "folder-base", name] : [name]
         var candidateURLs: [URL] = []
-        if let url = Bundle.main.url(forResource: name, withExtension: "svg", subdirectory: "MaterialIcons") {
-            candidateURLs.append(url)
+        for n in lookupNames {
+            if let url = Bundle.main.url(forResource: n, withExtension: "svg", subdirectory: "MaterialIcons") {
+                candidateURLs.append(url)
+            }
+            if let url = Bundle.main.url(forResource: n, withExtension: "svg") {
+                candidateURLs.append(url)
+            }
+            candidateURLs.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/\(n).svg"))
+            candidateURLs.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/MaterialIcons/\(n).svg"))
+            candidateURLs.append(
+                URL(fileURLWithPath: #file)
+                    .deletingLastPathComponent()
+                    .appendingPathComponent("Resources/MaterialIcons/\(n).svg")
+            )
         }
-        if let url = Bundle.main.url(forResource: name, withExtension: "svg") {
-            candidateURLs.append(url)
-        }
-        candidateURLs.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/\(name).svg"))
-        candidateURLs.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/MaterialIcons/\(name).svg"))
-        candidateURLs.append(
-            URL(fileURLWithPath: #file)
-                .deletingLastPathComponent()
-                .appendingPathComponent("Resources/MaterialIcons/\(name).svg")
-        )
 
         for url in candidateURLs {
             if FileManager.default.fileExists(atPath: url.path),
@@ -111,22 +108,32 @@ public struct MaterialIconProvider {
             return "folder-git"
         case ".github":
             return "folder-github"
-        case "src", "source", "sources", "app", "lib", "libs":
-            return isExpanded ? "folder-src-open" : "folder-src"
-        case "test", "tests", "spec", "specs", "__tests__", "flotillaunittests", "flotillauitests":
-            return isExpanded ? "folder-test-open" : "folder-test"
-        case "dist", "build", "out", "target", ".build", "deriveddata":
-            return isExpanded ? "folder-dist-open" : "folder-dist"
-        case "node_modules":
-            return isExpanded ? "folder-node-open" : "folder-node"
-        case "packages":
+        case ".gitea", "gitea":
+            return "folder-gitea"
+        case ".idea", "idea":
+            return "folder-intellij"
+        case ".cache", "cache", "dist", "build", "out", "target", ".build", "deriveddata":
+            return "folder-dist"
+        case "node_modules", ".pnpm-store", "pnpm":
+            return "folder-node"
+        case "packages", "pkg", "pkgs":
             return "folder-packages"
-        case "assets", "images", "img", "media", "icons", "resources":
+        case "attachments", "attachment":
+            return "folder-attachment"
+        case "assets", "images", "img", "media", "icons", "resources", "files", "file":
             return "folder-images"
         case "docs", "doc", "documentation":
             return "folder-docs"
-        case "config", "configs", ".config":
+        case "logs", "log":
+            return "folder-log"
+        case "profiles", "profile", "config", "configs", ".config", "settings":
             return "folder-config"
+        case "perf-debug", "debug", "perf":
+            return "folder-debug"
+        case "security", "secure", "sec", "auth":
+            return "folder-secure"
+        case "workflows", "workflow", "tasks", "task":
+            return "folder-workflows"
         case "scripts", "bin", "tools":
             return "folder-scripts"
         case "hooks":
@@ -135,8 +142,12 @@ public struct MaterialIconProvider {
             return "folder-components"
         case "views", "ui":
             return "folder-views"
+        case "src", "source", "sources", "app", "lib", "libs", "index":
+            return "folder-src"
+        case "test", "tests", "spec", "specs", "__tests__", "flotillaunittests", "flotillauitests":
+            return "folder-test"
         default:
-            return isExpanded ? "folder-open" : "folder"
+            return "folder"
         }
     }
 
