@@ -27,10 +27,23 @@ final class MaterialFileIconTests: XCTestCase {
         XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/Dockerfile")), "docker")
         XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/.gitignore")), "git")
 
-        // AI Rule files
-        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/CLAUDE.md")), "robot")
+        // AI Rule files & Dot Configs
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/CLAUDE.md")), "claude")
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/GEMINI.md")), "gemini")
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/.gemini")), "gemini")
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/.geminirules")), "gemini")
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/.antigravity")), "gemini")
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/antigravity.md")), "gemini")
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/.cursorrules")), "cursor")
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/copilot-instructions.md")), "copilot")
         XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/AGENTS.md")), "robot")
-        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/.cursorrules")), "robot")
+        XCTAssertEqual(MaterialIconProvider.fileIconName(for: URL(fileURLWithPath: "/project/SKILL.md")), "robot")
+
+        // AI Folders
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/.gemini")), "gemini")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/.antigravity")), "gemini")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/.claude")), "claude")
+        XCTAssertEqual(MaterialIconProvider.folderIconName(for: URL(fileURLWithPath: "/project/.agents")), "robot")
     }
 
     func testLanguageExtensions() {
@@ -53,6 +66,18 @@ final class MaterialFileIconTests: XCTestCase {
 
         let folderSrcImage = MaterialIconCache.shared.image(named: "folder-src")
         XCTAssertNotNil(folderSrcImage, "Expected folder-src.svg to load")
+
+        let claudeImage = MaterialIconCache.shared.image(named: "claude")
+        XCTAssertNotNil(claudeImage, "Expected claude.svg to load")
+
+        let geminiImage = MaterialIconCache.shared.image(named: "gemini")
+        XCTAssertNotNil(geminiImage, "Expected gemini.svg to load")
+
+        let cursorImage = MaterialIconCache.shared.image(named: "cursor")
+        XCTAssertNotNil(cursorImage, "Expected cursor.svg to load")
+
+        let copilotImage = MaterialIconCache.shared.image(named: "copilot")
+        XCTAssertNotNil(copilotImage, "Expected copilot.svg to load")
 
         let robotImage = MaterialIconCache.shared.image(named: "robot")
         XCTAssertNotNil(robotImage, "Expected robot.svg to load")

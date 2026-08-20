@@ -65,6 +65,14 @@ public struct MaterialIconProvider {
             return "folder-git"
         case ".github":
             return "folder-github"
+        case ".gemini", "gemini", ".antigravity", "antigravity":
+            return "gemini"
+        case ".claude", "claude":
+            return "claude"
+        case ".cursor", "cursor":
+            return "cursor"
+        case ".agents", "agents", ".skills", "skills":
+            return "robot"
         case "src", "source", "sources", "app", "lib", "libs":
             return isExpanded ? "folder-src-open" : "folder-src"
         case "test", "tests", "spec", "specs", "__tests__", "flotillaunittests", "flotillauitests":
@@ -100,14 +108,25 @@ public struct MaterialIconProvider {
         let name = url.lastPathComponent.lowercased()
         let ext = url.pathExtension.lowercased()
 
-        // 1. Exact Filename Matches
-        switch name {
-        // AI Rules & Instructions
-        case "claude.md", "claude.json", "agents.md", "agent.md", "gemini.md", "skill.md", "skills.md", ".cursorrules", ".cursorignore":
+        // 1. AI Rules, Providers, & Dot Files (Exact & Prefix Matches)
+        if name == "gemini.md" || name.hasPrefix(".gemini") || name.hasPrefix(".antigravity") || name == "antigravity.md" {
+            return "gemini"
+        }
+        if name == "claude.md" || name == "claude.json" || name.hasPrefix(".claude") {
+            return "claude"
+        }
+        if name.hasPrefix(".cursor") {
+            return "cursor"
+        }
+        if name == "copilot-instructions.md" || name.hasPrefix(".copilot") {
+            return "copilot"
+        }
+        if name == "agents.md" || name == "agent.md" || name == "skill.md" || name == "skills.md" || name.hasPrefix(".agent") {
             return "robot"
-        case "copilot-instructions.md", ".copilot":
-            return "visualstudio"
+        }
 
+        // 2. Exact Filename Matches
+        switch name {
         // Package & Project Configs
         case "package.json":
             return "npm"
