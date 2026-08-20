@@ -107,8 +107,12 @@ struct RulesPanelView: View {
                     Button {
                         Task { await viewModel.select(entry) }
                     } label: {
-                        Label(entry.relativePath, systemImage: entry.url.lastPathComponent == "SKILL.md" ? "hammer" : "doc.text")
-                            .lineLimit(2)
+                        HStack(spacing: 8) {
+                            MaterialFileIcon(url: entry.url, size: 17)
+                            Text(entry.relativePath)
+                                .font(.system(size: 12, design: .monospaced))
+                                .lineLimit(1)
+                        }
                     }
                     .buttonStyle(.plain)
                     .listRowBackground(

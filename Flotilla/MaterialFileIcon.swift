@@ -18,6 +18,31 @@ public final class MaterialIconCache: @unchecked Sendable {
             return cached
         }
 
+        // 1. Check compiled asset catalog for direct matches or provider logos
+        if let assetImage = NSImage(named: name) {
+            cache.setObject(assetImage, forKey: key)
+            return assetImage
+        }
+        if name == "gemini" || name == "antigravity" {
+            if let antigravityAsset = NSImage(named: "ProviderLogoAntigravity") {
+                cache.setObject(antigravityAsset, forKey: key)
+                return antigravityAsset
+            }
+        }
+        if name == "claude" {
+            if let claudeAsset = NSImage(named: "ProviderLogoClaude") {
+                cache.setObject(claudeAsset, forKey: key)
+                return claudeAsset
+            }
+        }
+        if name == "opencode" {
+            if let openCodeAsset = NSImage(named: "ProviderLogoOpenCode") {
+                cache.setObject(openCodeAsset, forKey: key)
+                return openCodeAsset
+            }
+        }
+
+        // 2. Check SVG files in bundle / development paths
         var candidateURLs: [URL] = []
         if let url = Bundle.main.url(forResource: name, withExtension: "svg", subdirectory: "MaterialIcons") {
             candidateURLs.append(url)
@@ -60,19 +85,24 @@ public struct MaterialIconProvider {
     public static func folderIconName(for url: URL, isExpanded: Bool = false) -> String {
         let name = url.lastPathComponent.lowercased()
 
+        if name == ".gemini" || name == "gemini" || name == ".antigravity" || name == "antigravity" || name.contains("gemini") || name.contains("antigravity") {
+            return "gemini"
+        }
+        if name == ".claude" || name == "claude" || name.contains("claude") {
+            return "claude"
+        }
+        if name == ".cursor" || name == "cursor" || name.contains("cursor") {
+            return "cursor"
+        }
+        if name == ".agents" || name == "agents" || name == ".skills" || name == "skills" || name.contains("agent") || name.contains("skill") {
+            return "robot"
+        }
+
         switch name {
         case ".git":
             return "folder-git"
         case ".github":
             return "folder-github"
-        case ".gemini", "gemini", ".antigravity", "antigravity":
-            return "gemini"
-        case ".claude", "claude":
-            return "claude"
-        case ".cursor", "cursor":
-            return "cursor"
-        case ".agents", "agents", ".skills", "skills":
-            return "robot"
         case "src", "source", "sources", "app", "lib", "libs":
             return isExpanded ? "folder-src-open" : "folder-src"
         case "test", "tests", "spec", "specs", "__tests__", "flotillaunittests", "flotillauitests":
@@ -106,22 +136,23 @@ public struct MaterialIconProvider {
 
     public static func fileIconName(for url: URL) -> String {
         let name = url.lastPathComponent.lowercased()
+        let path = url.path.lowercased()
         let ext = url.pathExtension.lowercased()
 
-        // 1. AI Rules, Providers, & Dot Files (Exact & Prefix Matches)
-        if name == "gemini.md" || name.hasPrefix(".gemini") || name.hasPrefix(".antigravity") || name == "antigravity.md" {
+        // 1. AI Rules, Providers, & Dot Files (Exact, Prefix, & Path Matches)
+        if name.contains("gemini") || name.contains("antigravity") || path.contains("/.gemini/") || path.contains("/.antigravity/") {
             return "gemini"
         }
-        if name == "claude.md" || name == "claude.json" || name.hasPrefix(".claude") {
+        if name.contains("claude") || path.contains("/.claude/") {
             return "claude"
         }
-        if name.hasPrefix(".cursor") {
+        if name.contains("cursor") || path.contains("/.cursor/") {
             return "cursor"
         }
-        if name == "copilot-instructions.md" || name.hasPrefix(".copilot") {
+        if name.contains("copilot") {
             return "copilot"
         }
-        if name == "agents.md" || name == "agent.md" || name == "skill.md" || name == "skills.md" || name.hasPrefix(".agent") {
+        if name == "agents.md" || name == "agent.md" || name == "skill.md" || name == "skills.md" || name.hasPrefix(".agent") || path.contains("/.agents/") {
             return "robot"
         }
 
