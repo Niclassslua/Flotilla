@@ -403,9 +403,10 @@ struct DiffFileRow: View {
                 .truncationMode(.middle)
 
             if additions > 0 || deletions > 0 {
-                Text("+\(additions) −\(deletions)")
+                Text("+\(additions.formatted()) −\(deletions.formatted())")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(isStaged ? FlotillaColors.diffAdded : FlotillaColors.diffRemoved)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
             Spacer()

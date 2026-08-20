@@ -4,51 +4,57 @@ import GitKit
 import SessionKit
 import DesignSystem
 
-/// The commit DAG, drawn as a lane graph beside a column-aligned commit table
-/// and the detail of whatever is selected.
+/// The commit DAG, drawn as an interactive lane graph beside a column-aligned
+/// commit table and the detail inspector of the selected commit.
 ///
-/// Two things make the graph read as a graph rather than a list with dots:
-/// the gutter is sized once from the widest row so nothing to its right ever
-/// shifts, and selecting a commit lifts its lane out of the rest, which is how
-/// you follow a branch across a screenful of history.
+/// Combines visual branch topology, rich search, date categorization (by month/year),
+/// agent attributions, and direct web links into a unified commit experience.
 struct ProjectGraphView: View {
     let repoPath: URL
     let gitService: any GitServiceProtocol
     let sessions: [Session]
+    let highlightUnseenCommits: Bool
 
     @State private var viewModel: ProjectGraphViewModel
-    @State private var historyViewModel: ProjectHistoryViewModel
 
     init(
         repoPath: URL,
         gitService: any GitServiceProtocol,
-        sessions: [Session] = []
+        sessions: [Session] = [],
+        highlightUnseenCommits: Bool = true
     ) {
         self.repoPath = repoPath
         self.gitService = gitService
         self.sessions = sessions
+        self.highlightUnseenCommits = highlightUnseenCommits
         self._viewModel = State(initialValue: ProjectGraphViewModel(repoPath: repoPath, gitService: gitService))
-        self._historyViewModel = State(initialValue: ProjectHistoryViewModel(repoPath: repoPath, gitService: gitService))
+    }
+
+    private var attributionSignature: String {
+        sessions.map { "\($0.id)|\($0.worktree?.branchName ?? "")" }.joined(separator: ",")
     }
 
     var body: some View {
         HSplitView {
             graphPane
                 .frame(minWidth: 540, idealWidth: 720)
-            CommitDetailView(viewModel: historyViewModel)
-                .frame(minWidth: 340, idealWidth: 420)
+            CommitDetailView(viewModel: viewModel)
+                .frame(minWidth: 360, idealWidth: 460)
         }
         .task(id: repoPath) {
-            await viewModel.reload()
-            historyViewModel.sessions = sessions
-            if let firstSHA = viewModel.selectedSHA {
-                historyViewModel.selectedSHA = firstSHA
-            }
+            viewModel.sessions = sessions
+            viewModel.highlightUnseenCommits = highlightUnseenCommits
+            await viewModel.loadIfNeeded()
         }
-        .onChange(of: viewModel.selectedSHA) { _, newSHA in
-            if let newSHA {
-                historyViewModel.selectedSHA = newSHA
-            }
+        .onChange(of: attributionSignature) { _, _ in
+            viewModel.sessions = sessions
+            Task { await viewModel.loadAttributions() }
+        }
+        .onChange(of: highlightUnseenCommits) { _, newValue in
+            viewModel.highlightUnseenCommits = newValue
+        }
+        .onDisappear {
+            viewModel.markAllAsSeen()
         }
     }
 
@@ -56,7 +62,7 @@ struct ProjectGraphView: View {
 
     private var graphPane: some View {
         VStack(spacing: 0) {
-            branchBar
+            topBar
             Divider()
 
             if viewModel.isLoading && viewModel.rows.isEmpty {
@@ -77,6 +83,18 @@ struct ProjectGraphView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("ProjectGraph.Empty")
+            } else if viewModel.isSearching && viewModel.filteredRows.isEmpty {
+                ContentUnavailableView {
+                    Label("No Matching Commits", systemImage: "magnifyingglass")
+                } description: {
+                    Text("No commits match “\(viewModel.searchQuery)”.")
+                } actions: {
+                    Button("Clear Search") {
+                        viewModel.searchQuery = ""
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("ProjectGraph.NoMatches")
             } else if viewModel.filteredRows.isEmpty {
                 ContentUnavailableView(
                     "Nothing on This Branch",
@@ -84,7 +102,7 @@ struct ProjectGraphView: View {
                     description: Text("No commits in the loaded window are reachable from “\(viewModel.selectedBranchFilter ?? "")”.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityIdentifier("ProjectGraph.NoMatches")
+                .accessibilityIdentifier("ProjectGraph.NoBranchMatches")
             } else {
                 columnHeader
                 commitList
@@ -105,9 +123,9 @@ struct ProjectGraphView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Branch bar
+    // MARK: - Top bar (Branches & Search)
 
-    private var branchBar: some View {
+    private var topBar: some View {
         HStack(spacing: FlotillaSpacing.small) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 5) {
@@ -147,6 +165,12 @@ struct ProjectGraphView: View {
 
             Spacer(minLength: 0)
 
+            searchField
+
+            if viewModel.newCommitCount > 0 {
+                unseenChip
+            }
+
             if viewModel.isLoading {
                 ProgressView().controlSize(.small)
             }
@@ -166,16 +190,59 @@ struct ProjectGraphView: View {
         .background(FlotillaColors.surface)
     }
 
+    private var searchField: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: FlotillaIconSize.small))
+                .foregroundStyle(FlotillaColors.textTertiary)
+            TextField("Search commits…", text: $viewModel.searchQuery)
+                .textFieldStyle(.plain)
+                .font(FlotillaTypography.caption)
+                .accessibilityIdentifier("ProjectGraph.SearchField")
+            if viewModel.isSearching {
+                Button {
+                    viewModel.searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: FlotillaIconSize.small))
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear search")
+            }
+        }
+        .padding(.horizontal, FlotillaSpacing.small)
+        .padding(.vertical, 4)
+        .background(FlotillaColors.surfaceElevated, in: Capsule())
+        .frame(maxWidth: 200)
+    }
+
+    private var unseenChip: some View {
+        Button {
+            withAnimation(FlotillaMotion.fast.curve) { viewModel.markAllAsSeen() }
+        } label: {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(FlotillaColors.accent)
+                    .frame(width: 5, height: 5)
+                Text("\(viewModel.newCommitCount) new")
+                    .font(FlotillaTypography.caption2.weight(.medium).monospacedDigit())
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(FlotillaColors.accent.opacity(0.16), in: Capsule())
+            .foregroundStyle(FlotillaColors.accent)
+        }
+        .buttonStyle(.plain)
+        .help("Commits since you last opened this view — click to mark as seen")
+        .accessibilityIdentifier("ProjectGraph.UnseenChip")
+    }
+
     // MARK: - Column header
 
-    /// Names the fixed trailing columns. Its only real job is to make the
-    /// right-hand alignment look deliberate rather than accidental, so it
-    /// shares the row's exact metrics.
     private var columnHeader: some View {
         HStack(spacing: 0) {
-            Text("Graph")
-                .frame(width: viewModel.gutterWidth, alignment: .leading)
-                .padding(.leading, GraphMetrics.gutterLeading)
+            Color.clear.frame(width: viewModel.gutterWidth, height: 1)
 
             HStack(spacing: GraphMetrics.columnSpacing) {
                 Text("Commit")
@@ -187,13 +254,15 @@ struct ProjectGraphView: View {
                 Text("When")
                     .frame(width: GraphMetrics.timeColumn, alignment: .trailing)
                 Text("ID")
-                    .frame(width: GraphMetrics.shaColumn, alignment: .trailing)
+                    .frame(width: GraphMetrics.shaColumn + 18, alignment: .trailing)
             }
             .padding(.horizontal, GraphMetrics.contentInset)
         }
         .font(FlotillaTypography.caption2.weight(.semibold))
         .tracking(FlotillaTypography.Tracking.loose2)
         .textCase(.uppercase)
+        .lineLimit(1)
+        .fixedSize(horizontal: false, vertical: true)
         .foregroundStyle(FlotillaColors.textTertiary)
         .padding(.vertical, 5)
         .background(FlotillaColors.surface)
@@ -207,24 +276,35 @@ struct ProjectGraphView: View {
     private var commitList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(viewModel.filteredRows) { row in
-                        GraphCommitRow(
-                            row: row,
-                            gutterWidth: viewModel.gutterWidth,
-                            isSelected: viewModel.selectedSHA == row.commit.sha,
-                            highlightedColorIndex: viewModel.highlightedColorIndex
-                        ) {
-                            viewModel.selectedSHA = row.commit.sha
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    ForEach(viewModel.groupedRows, id: \.group) { group, rows in
+                        Section {
+                            ForEach(rows) { row in
+                                if row.commit.sha == viewModel.firstSeenSHA {
+                                    lastReviewedSeparator
+                                }
+                                GraphCommitRow(
+                                    row: row,
+                                    gutterWidth: viewModel.gutterWidth,
+                                    isSelected: viewModel.selectedSHA == row.commit.sha,
+                                    highlightedColorIndex: viewModel.highlightedColorIndex,
+                                    webURL: viewModel.webURL(for: row.commit),
+                                    attribution: viewModel.attribution(for: row.commit),
+                                    isUnpushed: viewModel.isUnpushed(row.commit),
+                                    isNew: viewModel.isNew(row.commit)
+                                ) {
+                                    viewModel.selectedSHA = row.commit.sha
+                                }
+                                .id(row.commit.sha)
+                            }
+                        } header: {
+                            sectionHeader(group.title, count: rows.count)
                         }
-                        .id(row.commit.sha)
                     }
                 }
             }
             .scrollContentBackground(.hidden)
             .accessibilityIdentifier("ProjectGraph.List")
-            // Arrow keys walk the graph, which is how anyone reviewing a
-            // stretch of history actually moves through it.
             .focusable()
             .onMoveCommand { direction in
                 switch direction {
@@ -236,6 +316,45 @@ struct ProjectGraphView: View {
         }
     }
 
+    private func sectionHeader(_ title: String, count: Int) -> some View {
+        HStack(spacing: FlotillaSpacing.small) {
+            Text(title)
+                .font(FlotillaTypography.caption2.weight(.semibold))
+                .tracking(FlotillaTypography.Tracking.loose2)
+                .textCase(.uppercase)
+                .foregroundStyle(FlotillaColors.textTertiary)
+            Spacer()
+            Text("\(count)")
+                .font(FlotillaTypography.caption2.monospacedDigit())
+                .foregroundStyle(FlotillaColors.textTertiary)
+        }
+        .padding(.horizontal, GraphMetrics.contentInset)
+        .padding(.vertical, 4)
+        .background(FlotillaColors.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(FlotillaColors.separator.opacity(0.4)).frame(height: 1)
+        }
+    }
+
+    private var lastReviewedSeparator: some View {
+        HStack(spacing: FlotillaSpacing.small) {
+            Rectangle()
+                .fill(FlotillaColors.accent.opacity(0.35))
+                .frame(height: 1)
+            Text("Seen before")
+                .font(FlotillaTypography.caption2)
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .fixedSize()
+            Rectangle()
+                .fill(FlotillaColors.separator)
+                .frame(height: 1)
+        }
+        .padding(.horizontal, GraphMetrics.contentInset)
+        .padding(.vertical, FlotillaSpacing.small)
+        .accessibilityLabel("Everything below was already seen")
+        .accessibilityIdentifier("ProjectGraph.SeenSeparator")
+    }
+
     private func move(by offset: Int, proxy: ScrollViewProxy) {
         guard let sha = viewModel.neighbourSHA(of: viewModel.selectedSHA, offset: offset) else { return }
         viewModel.selectedSHA = sha
@@ -244,9 +363,6 @@ struct ProjectGraphView: View {
 
     // MARK: - Legend
 
-    /// Doubles as a status line and a key. The dot vocabulary is only useful
-    /// if it's stated somewhere, and the bottom of the graph is where someone
-    /// looks once they notice two dots differ.
     private var legendBar: some View {
         HStack(spacing: FlotillaSpacing.medium) {
             GraphLegendItem(shape: .tip, label: "Branch tip")
@@ -268,23 +384,18 @@ struct ProjectGraphView: View {
 
 // MARK: - Metrics
 
-/// Shared by the rows and the header, because a table only reads as a table
-/// when both agree to the point.
 enum GraphMetrics {
     static let rowHeight: CGFloat = 34
     static let laneWidth: CGFloat = 15
     static let gutterLeading: CGFloat = 10
     static let gutterTrailing: CGFloat = 6
-    /// Past this the gutter stops growing and the graph clips instead, so a
-    /// repository with a dozen live branches can't squeeze the subject column
-    /// down to nothing.
     static let maxVisibleLanes = 9
 
     static let contentInset: CGFloat = 10
     static let columnSpacing: CGFloat = 8
-    static let statColumn: CGFloat = 76
+    static let statColumn: CGFloat = 88
     static let authorColumn: CGFloat = 22
-    static let timeColumn: CGFloat = 34
+    static let timeColumn: CGFloat = 44
     static let shaColumn: CGFloat = 58
 
     static func gutterWidth(laneCount: Int) -> CGFloat {
@@ -299,9 +410,6 @@ enum GraphMetrics {
 
 // MARK: - Lane palette
 
-/// Eight hues, one per `GitGraphLayout.colorCount` slot, each defined for both
-/// appearances — the pastels that read well on the dark canvas turn to mush on
-/// white, so light mode gets its own, deeper set.
 enum GraphPalette {
     static let lanes: [Color] = [
         dynamic(dark: (0.35, 0.72, 0.98), light: (0.09, 0.45, 0.82)),  // blue
@@ -329,15 +437,55 @@ enum GraphPalette {
     }
 }
 
+// MARK: - Date Grouping
+
+/// Recency buckets for timeline section headers (Today, Yesterday, Earlier This Week, Month Year).
+enum CommitDateGroup: Hashable {
+    case today
+    case yesterday
+    case thisWeek
+    case month(year: Int, month: Int)
+
+    init(for date: Date) {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            self = .today
+        } else if calendar.isDateInYesterday(date) {
+            self = .yesterday
+        } else if let weekAgo = calendar.date(byAdding: .day, value: -7, to: Date()), date > weekAgo {
+            self = .thisWeek
+        } else {
+            let parts = calendar.dateComponents([.year, .month], from: date)
+            self = .month(year: parts.year ?? 0, month: parts.month ?? 0)
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .today: return "Today"
+        case .yesterday: return "Yesterday"
+        case .thisWeek: return "Earlier This Week"
+        case .month(let year, let month):
+            var components = DateComponents()
+            components.year = year
+            components.month = month
+            guard let date = Calendar.current.date(from: components) else { return "Earlier" }
+            return date.formatted(.dateTime.month(.wide).year())
+        }
+    }
+}
+
 // MARK: - Row
 
 private struct GraphCommitRow: View {
     let row: GitGraphRow
     let gutterWidth: CGFloat
     let isSelected: Bool
-    /// Lane colour to keep at full strength; everything else recedes. `nil`
-    /// leaves the whole graph at full strength.
     let highlightedColorIndex: Int?
+    let webURL: URL?
+    let attribution: CommitAttribution?
+    let isUnpushed: Bool
+    let isNew: Bool
     let onSelect: () -> Void
 
     @State private var isHovering = false
@@ -360,8 +508,6 @@ private struct GraphCommitRow: View {
         .frame(height: GraphMetrics.rowHeight)
         .background(rowBackground)
         .overlay(alignment: .leading) {
-            // An accent edge rather than a border: a box around the row would
-            // compete with the lane lines running through it.
             Rectangle()
                 .fill(FlotillaColors.accent)
                 .frame(width: 2)
@@ -387,13 +533,6 @@ private struct GraphCommitRow: View {
 
     private var content: some View {
         HStack(spacing: GraphMetrics.columnSpacing) {
-            if commit.isMerge {
-                Image(systemName: "arrow.triangle.merge")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(GraphPalette.lane(row.colorIndex))
-                    .help("Merge of \(commit.parents.count) parents")
-            }
-
             Text(commit.subject)
                 .font(FlotillaTypography.body.weight(isSelected ? .medium : .regular))
                 .foregroundStyle(isSelected ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
@@ -401,6 +540,12 @@ private struct GraphCommitRow: View {
                 .truncationMode(.tail)
                 .layoutPriority(1)
 
+            if isNew {
+                CommitRefChip(text: "NEW", systemImage: "sparkle", tint: FlotillaColors.accent)
+            }
+            if isUnpushed {
+                CommitRefChip(text: "unpushed", systemImage: "arrow.up.circle", tint: FlotillaColors.accent)
+            }
             ForEach(Array(commit.refs.prefix(3).enumerated()), id: \.offset) { _, ref in
                 CommitRefChip(ref: ref)
             }
@@ -408,15 +553,10 @@ private struct GraphCommitRow: View {
             Spacer(minLength: FlotillaSpacing.small)
 
             GraphStatCell(stat: commit.stat, fileCount: commit.changedFileCount)
-                .frame(width: GraphMetrics.statColumn, alignment: .trailing)
+                .frame(minWidth: GraphMetrics.statColumn, alignment: .trailing)
 
-            ProjectMark(
-                title: commit.authorName,
-                tint: ProjectMark.tint(forKey: commit.authorEmail),
-                size: 18
-            )
-            .frame(width: GraphMetrics.authorColumn, alignment: .center)
-            .help(commit.authorName)
+            authorIdentity
+                .frame(width: GraphMetrics.authorColumn, alignment: .center)
 
             Text(HomeTimestamp.compact(commit.authorDate))
                 .font(FlotillaTypography.caption2.monospacedDigit())
@@ -424,18 +564,54 @@ private struct GraphCommitRow: View {
                 .frame(width: GraphMetrics.timeColumn, alignment: .trailing)
                 .help(commit.authorDate.formatted(date: .abbreviated, time: .shortened))
 
-            Text(commit.shortSHA)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(isHovering ? FlotillaColors.textSecondary : FlotillaColors.textTertiary)
-                .frame(width: GraphMetrics.shaColumn, alignment: .trailing)
+            HStack(spacing: 4) {
+                Text(commit.shortSHA)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(isHovering ? FlotillaColors.textSecondary : FlotillaColors.textTertiary)
+
+                if let webURL {
+                    Link(destination: webURL) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 10))
+                            .foregroundStyle(isHovering ? FlotillaColors.accent : FlotillaColors.textTertiary.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open commit on the web")
+                    .accessibilityIdentifier("ProjectGraph.RowWebLink-\(commit.shortSHA)")
+                }
+            }
+            .frame(width: GraphMetrics.shaColumn + 18, alignment: .trailing)
         }
         .padding(.horizontal, GraphMetrics.contentInset)
     }
 
+    @ViewBuilder
+    private var authorIdentity: some View {
+        if let attribution {
+            ProviderLogo(agent: attribution.agent)
+                .frame(width: 16, height: 16)
+                .help("\(attribution.displayName) (\(attribution.agent.displayName)) — \(attribution.source.explanation)")
+        } else {
+            ProjectMark(
+                title: commit.authorName,
+                tint: ProjectMark.tint(forKey: commit.authorEmail),
+                size: 18
+            )
+            .help(commit.authorName)
+        }
+    }
+
     private var accessibilityDescription: String {
-        var parts = [commit.subject, "by \(commit.authorName)", HomeTimestamp.compact(commit.authorDate)]
+        var parts = [commit.subject]
+        if let attribution {
+            parts.append("by \(attribution.agent.displayName), \(attribution.source.explanation)")
+        } else {
+            parts.append("by \(commit.authorName)")
+        }
+        parts.append(HomeTimestamp.compact(commit.authorDate))
+        if isNew { parts.append("new since your last visit") }
         if commit.isMerge { parts.append("merge commit") }
-        if commit.parents.isEmpty { parts.append("root commit") }
+        if isUnpushed { parts.append("not yet pushed") }
         if !commit.refs.isEmpty { parts.append(commit.refs.map(\.name).joined(separator: ", ")) }
         parts.append("lane \(row.lane + 1)")
         return parts.joined(separator: ", ")
@@ -447,6 +623,11 @@ private struct GraphCommitRow: View {
         Button("Copy Short SHA") { copy(commit.shortSHA) }
         Button("Copy Subject") { copy(commit.subject) }
         Button("Copy as “SHA — Subject”") { copy("\(commit.shortSHA) — \(commit.subject)") }
+        if let webURL {
+            Divider()
+            Link("Open on the Web", destination: webURL)
+            Button("Copy Link") { copy(webURL.absoluteString) }
+        }
     }
 
     private func copy(_ text: String) {
@@ -457,13 +638,6 @@ private struct GraphCommitRow: View {
 
 // MARK: - Lane canvas
 
-/// Draws one row's slice of the graph.
-///
-/// Every edge meets the row boundary vertically at a lane centre, which is
-/// what makes independently drawn rows join without seams. The dot is punched
-/// out of the line layer rather than painted over it, so the row's own
-/// background — hover tint, selection tint — shows through the gap and the
-/// halo never has to guess what colour it is sitting on.
 private struct GraphLanePainter: View {
     let row: GitGraphRow
     let highlightedColorIndex: Int?
@@ -475,13 +649,11 @@ private struct GraphLanePainter: View {
 
     var body: some View {
         Canvas(rendersAsynchronously: false) { context, size in
-            let midY = (size.height / 2).rounded() + 0.5
+            let midY = size.height / 2
             let dotX = GraphMetrics.laneCentre(row.lane)
 
             context.drawLayer { layer in
-                // Two passes so a highlighted lane is never buried under the
-                // lanes it crosses.
-                for segment in ordered(dimmedFirst: true) {
+                for segment in orderedSegments {
                     stroke(segment, in: &layer, midY: midY, height: size.height)
                 }
 
@@ -497,14 +669,9 @@ private struct GraphLanePainter: View {
 
             drawDot(in: &context, at: CGPoint(x: dotX, y: midY))
         }
-        .drawingGroup(opaque: false)
     }
 
-    // MARK: Segments
-
-    /// Pass-throughs first (they are backdrop), then dimmed lanes, then the
-    /// highlighted lane on top.
-    private func ordered(dimmedFirst: Bool) -> [GitGraphSegment] {
+    private var orderedSegments: [GitGraphSegment] {
         let rank = { (segment: GitGraphSegment) -> Int in
             let isHighlighted = highlightedColorIndex == segment.colorIndex
             if segment.kind == .passThrough { return isHighlighted ? 2 : 0 }
@@ -530,9 +697,6 @@ private struct GraphLanePainter: View {
         case .incoming:
             path.move(to: CGPoint(x: from, y: 0))
             if segment.isDiagonal {
-                // Control points stay on their own lane so the curve leaves
-                // the row edge vertically and arrives at the dot vertically —
-                // that's what makes the join with the row above invisible.
                 path.addCurve(
                     to: CGPoint(x: to, y: midY),
                     control1: CGPoint(x: from, y: midY * 0.45),
@@ -568,8 +732,6 @@ private struct GraphLanePainter: View {
         )
     }
 
-    // MARK: Dot
-
     private var commit: GitCommit { row.commit }
     private var isTip: Bool { !commit.refs.isEmpty }
     private var isRoot: Bool { commit.parents.isEmpty }
@@ -582,9 +744,6 @@ private struct GraphLanePainter: View {
 
     private var haloRadius: CGFloat { dotRadius + 2.4 }
 
-    /// Shape carries the meaning alongside colour — a hollow ring for a merge,
-    /// a haloed disc for a branch tip, a ringed disc for a root — so the graph
-    /// stays readable without relying on hue alone.
     private func drawDot(in context: inout GraphicsContext, at centre: CGPoint) {
         let color = GraphPalette.lane(row.colorIndex)
         let dims = highlightedColorIndex != nil && highlightedColorIndex != row.colorIndex
@@ -618,36 +777,33 @@ private struct GraphLanePainter: View {
 
 // MARK: - Small parts
 
-/// Additions and deletions as one right-aligned pair, so the numbers stack
-/// into a column instead of drifting with each row's digit count.
 private struct GraphStatCell: View {
     let stat: GitDiffStat
     let fileCount: Int
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3.5) {
             if stat.isEmpty {
                 Text("—")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(FlotillaColors.textTertiary.opacity(0.6))
             } else {
-                Text("+\(stat.additions)")
+                Text("+\(stat.additions.formatted())")
                     .foregroundStyle(FlotillaColors.diffAdded)
-                Text("−\(stat.deletions)")
+                Text("−\(stat.deletions.formatted())")
                     .foregroundStyle(FlotillaColors.diffRemoved)
             }
         }
         .font(.system(size: 10, weight: .medium, design: .monospaced))
         .lineLimit(1)
-        .help(stat.isEmpty ? "No line changes recorded" : "\(fileCount) file\(fileCount == 1 ? "" : "s") changed")
+        .fixedSize(horizontal: true, vertical: false)
+        .help(stat.isEmpty ? "No line changes recorded" : "\(fileCount) file\(fileCount == 1 ? "" : "s") changed (\(stat.additions.formatted()) additions, \(stat.deletions.formatted()) deletions)")
     }
 }
 
 private struct GraphBranchChip: View {
     let title: String
     let systemImage: String
-    /// The colour this branch's tip occupies in the graph, which is what ties
-    /// the chip to the lane it filters to.
     let laneColor: Color?
     let isCurrent: Bool
     let isSelected: Bool
@@ -699,9 +855,9 @@ private struct GraphBranchChip: View {
 }
 
 private struct GraphLegendItem: View {
-    enum Shape { case tip, merge, root }
+    enum Marker { case tip, merge, root }
 
-    let shape: Shape
+    let shape: Marker
     let label: String
 
     var body: some View {
@@ -745,35 +901,163 @@ private struct GraphLegendItem: View {
     }
 }
 
+// MARK: - Attribution Model
+
+struct CommitAttribution: Equatable {
+    enum Source: Equatable {
+        case trailer
+        case sessionBranch
+        case authorIdentity
+
+        var explanation: String {
+            switch self {
+            case .trailer: return "Recorded in the commit by Flotilla"
+            case .sessionBranch: return "Only on this session's branch"
+            case .authorIdentity: return "Committed under the agent's git identity"
+            }
+        }
+    }
+
+    let agent: AgentKind
+    let sessionID: UUID?
+    let sessionTitle: String?
+    let branchName: String?
+    let source: Source
+
+    var displayName: String { sessionTitle ?? agent.displayName }
+}
+
+extension AgentKind {
+    static func inferredFromGitIdentity(name: String, email: String) -> AgentKind? {
+        let name = name.lowercased()
+        let email = email.lowercased()
+        let domain = email.split(separator: "@").last.map(String.init) ?? ""
+
+        if domain == "anthropic.com" || name == "claude code" || name == "claude" {
+            return .claudeCode
+        }
+        if name == "codex" || name == "codex cli" || email.hasPrefix("codex@") {
+            return .codexCLI
+        }
+        if name == "opencode" || domain == "opencode.ai" || email.hasPrefix("opencode@") {
+            return .openCode
+        }
+        if name == "antigravity" || email.hasPrefix("antigravity@") {
+            return .antigravity
+        }
+        return nil
+    }
+
+    static func fromTrailerValue(_ value: String) -> AgentKind? {
+        AgentKind(rawValue: value.trimmingCharacters(in: .whitespaces))
+    }
+}
+
+// MARK: - Ref Chip
+
+/// Capsule chip for a ref decoration — branch, remote, or tag.
+struct CommitRefChip: View {
+    let text: String
+    let systemImage: String
+    let tint: Color
+
+    init(text: String, systemImage: String, tint: Color) {
+        self.text = text
+        self.systemImage = systemImage
+        self.tint = tint
+    }
+
+    init(ref: GitCommitRef) {
+        self.text = ref.name
+        switch ref.kind {
+        case .head:
+            self.systemImage = "location.fill"
+            self.tint = FlotillaColors.accent
+        case .localBranch:
+            self.systemImage = "arrow.triangle.branch"
+            self.tint = FlotillaColors.accent
+        case .remoteBranch:
+            self.systemImage = "cloud"
+            self.tint = FlotillaColors.textTertiary
+        case .tag:
+            self.systemImage = "tag"
+            self.tint = FlotillaColors.statusReady
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 8, weight: .semibold))
+            Text(text)
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1.5)
+        .background(tint.opacity(0.14), in: Capsule())
+        .foregroundStyle(tint)
+        .fixedSize()
+    }
+}
+
 // MARK: - ViewModel
 
 @Observable
 @MainActor
 final class ProjectGraphViewModel {
-    /// One `--all` window. Deep enough to reach the merge base of anything
-    /// still in flight, shallow enough that the layout stays instantaneous.
     static let windowSize = 500
+    static let pageSize = 100
 
     let repoPath: URL
     private let gitService: any GitServiceProtocol
 
+    private(set) var commits: [GitCommit] = []
     private(set) var rows: [GitGraphRow] = []
     private(set) var filteredRows: [GitGraphRow] = []
     private(set) var branches: [GitBranch] = []
+    private(set) var availableRefs: [String] = []
+    private(set) var remoteURL: String?
+    private(set) var mainWorktreeBranch: String?
+    private(set) var unpushedSHAs: Set<String> = []
+
+    var sessions: [Session] = []
+    private(set) var attributions: [String: CommitAttribution] = [:]
+
+    var highlightUnseenCommits = true {
+        didSet { if oldValue != highlightUnseenCommits { recomputeNewCommits() } }
+    }
+    private(set) var newCommitSHAs: Set<String> = []
+    private var previouslySeenSHA: String?
+    private var hasCapturedSeenMarker = false
 
     private(set) var isLoading = false
+    private(set) var isLoadingMore = false
+    private(set) var hasMore = false
     private(set) var errorMessage: String?
 
-    /// The commits behind `rows`, kept so a branch filter can re-run the
-    /// layout over a subset rather than punching holes in the finished graph.
-    private var commits: [GitCommit] = []
     private var colorIndexBySHA: [String: Int] = [:]
 
     var selectedBranchFilter: String? {
         didSet { if oldValue != selectedBranchFilter { recomputeFilteredRows() } }
     }
 
-    var selectedSHA: String?
+    var selectedRef: String? {
+        get { selectedBranchFilter }
+        set { selectedBranchFilter = newValue }
+    }
+
+    var searchQuery: String = "" {
+        didSet { if oldValue != searchQuery { recomputeFilteredRows() } }
+    }
+
+    var selectedSHA: String? {
+        didSet { if oldValue != selectedSHA { Task { await loadDetail() } } }
+    }
+
+    private(set) var detail: GitCommitDetail?
+    private(set) var isLoadingDetail = false
+    private var detailCache: [String: GitCommitDetail] = [:]
 
     init(repoPath: URL, gitService: any GitServiceProtocol) {
         self.repoPath = repoPath
@@ -782,15 +1066,10 @@ final class ProjectGraphViewModel {
 
     // MARK: Derived
 
-    /// One width for the whole graph, taken from its widest row. Sizing the
-    /// gutter per row is what used to make every column to its right shuffle
-    /// sideways as the graph opened and closed.
     var gutterWidth: CGFloat {
         GraphMetrics.gutterWidth(laneCount: GitGraphLayout.laneCount(of: filteredRows))
     }
 
-    /// The lane the selection sits on, which the rows use to lift that branch
-    /// out of the rest of the graph.
     var highlightedColorIndex: Int? {
         guard let selectedSHA else { return nil }
         return colorIndexBySHA[selectedSHA]
@@ -818,16 +1097,69 @@ final class ProjectGraphViewModel {
         return filteredRows[target].commit.sha
     }
 
+    var isSearching: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var filteredCommits: [GitCommit] {
+        filteredRows.map(\.commit)
+    }
+
+    var groupedRows: [(group: CommitDateGroup, rows: [GitGraphRow])] {
+        var order: [CommitDateGroup] = []
+        var buckets: [CommitDateGroup: [GitGraphRow]] = [:]
+        for row in filteredRows {
+            let group = CommitDateGroup(for: row.commit.authorDate)
+            if buckets[group] == nil { order.append(group) }
+            buckets[group, default: []].append(row)
+        }
+        return order.map { ($0, buckets[$0] ?? []) }
+    }
+
+    var groupedCommits: [(group: CommitDateGroup, commits: [GitCommit])] {
+        groupedRows.map { ($0.group, $0.rows.map(\.commit)) }
+    }
+
+    func webURL(for commit: GitCommit) -> URL? {
+        guard let remoteURL else { return nil }
+        return GitService.webURL(forRemote: remoteURL, commitSHA: commit.sha)
+    }
+
+    func isUnpushed(_ commit: GitCommit) -> Bool { unpushedSHAs.contains(commit.sha) }
+
+    func attribution(for commit: GitCommit) -> CommitAttribution? { attributions[commit.sha] }
+
+    func isNew(_ commit: GitCommit) -> Bool { newCommitSHAs.contains(commit.sha) }
+
+    var newCommitCount: Int { newCommitSHAs.count }
+
+    var firstSeenSHA: String? {
+        guard !newCommitSHAs.isEmpty else { return nil }
+        return filteredRows.first { !newCommitSHAs.contains($0.commit.sha) }?.commit.sha
+    }
+
+    func isTip(_ commit: GitCommit) -> Bool { commit.sha == commits.first?.sha }
+
     // MARK: Loading
+
+    func loadIfNeeded() async {
+        guard commits.isEmpty, !isLoading else { return }
+        await reload()
+    }
 
     func reload() async {
         isLoading = true
         defer { isLoading = false }
 
+        await loadRefsAndRemote()
+
         do {
-            async let logTask = gitService.logGraph(at: repoPath, maxCount: Self.windowSize)
+            async let logTask = gitService.log(at: repoPath, ref: selectedBranchFilter, skip: 0, maxCount: Self.pageSize)
+            async let graphTask = gitService.logGraph(at: repoPath, maxCount: Self.pageSize)
             async let branchesTask = gitService.branches(at: repoPath)
-            let (loaded, branchList) = try await (logTask, branchesTask)
+            async let unpushedTask = gitService.unpushedSHAs(at: repoPath, ref: selectedBranchFilter)
+            let (page, graphPage, branchList) = try await (logTask, graphTask, branchesTask)
+            let loaded = graphPage.isEmpty ? page : graphPage
 
             commits = loaded
             rows = GitGraphLayout.rows(for: loaded)
@@ -836,11 +1168,19 @@ final class ProjectGraphViewModel {
                 uniquingKeysWith: { first, _ in first }
             )
             branches = Self.ordered(branchList)
+            unpushedSHAs = (try? await unpushedTask) ?? []
             errorMessage = nil
+            hasMore = loaded.count == Self.pageSize
+
+            captureSeenMarkerIfNeeded()
+            recomputeNewCommits()
+            await loadAttributions()
             recomputeFilteredRows()
 
-            if selectedSHA == nil || colorIndexBySHA[selectedSHA!] == nil {
-                selectedSHA = rows.first?.commit.sha
+            if let selected = selectedSHA, colorIndexBySHA[selected] != nil {
+                // keep selection
+            } else {
+                selectedSHA = filteredRows.first?.commit.sha ?? rows.first?.commit.sha
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -849,47 +1189,173 @@ final class ProjectGraphViewModel {
             filteredRows = []
             branches = []
             colorIndexBySHA = [:]
+            hasMore = false
         }
+    }
+
+    func loadMore() async {
+        guard hasMore, !isLoadingMore, !isLoading, !isSearching else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do {
+            let page = try await gitService.log(
+                at: repoPath, ref: selectedBranchFilter, skip: commits.count, maxCount: Self.pageSize
+            )
+            let known = Set(commits.map(\.sha))
+            let newCommits = page.filter { !known.contains($0.sha) }
+            commits.append(contentsOf: newCommits)
+            hasMore = page.count == Self.pageSize
+            rows = GitGraphLayout.rows(for: commits)
+            colorIndexBySHA = Dictionary(
+                rows.map { ($0.commit.sha, $0.colorIndex) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            recomputeNewCommits()
+            recomputeFilteredRows()
+        } catch {
+            errorMessage = error.localizedDescription
+            hasMore = false
+        }
+    }
+
+    private func loadDetail() async {
+        guard let selectedSHA else {
+            detail = nil
+            return
+        }
+        if let cached = detailCache[selectedSHA] {
+            detail = cached
+            return
+        }
+        isLoadingDetail = true
+        defer { isLoadingDetail = false }
+        do {
+            let loaded = try await gitService.commitDetail(sha: selectedSHA, at: repoPath)
+            detailCache[selectedSHA] = loaded
+            if self.selectedSHA == selectedSHA { detail = loaded }
+        } catch {
+            if self.selectedSHA == selectedSHA {
+                detail = nil
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func loadRefsAndRemote() async {
+        if let worktrees = try? await gitService.listWorktrees(at: repoPath) {
+            availableRefs = worktrees.map(\.branch).filter { $0 != "(detached)" }
+            mainWorktreeBranch = worktrees.first(where: \.isMainWorktree)?.branch
+        }
+        remoteURL = try? await gitService.remoteURL(at: repoPath)
+    }
+
+    func loadAttributions() async {
+        var map: [String: CommitAttribution] = [:]
+
+        for commit in commits {
+            guard let agent = AgentKind.inferredFromGitIdentity(
+                name: commit.authorName, email: commit.authorEmail
+            ) else { continue }
+            map[commit.sha] = CommitAttribution(
+                agent: agent, sessionID: nil, sessionTitle: nil,
+                branchName: nil, source: .authorIdentity
+            )
+        }
+
+        if let base = mainWorktreeBranch {
+            for session in sessions {
+                guard let branch = session.worktree?.branchName, branch != base else { continue }
+                guard let shas = try? await gitService.commitsOnBranch(branch, notOn: base, at: repoPath) else { continue }
+                let attribution = CommitAttribution(
+                    agent: session.agent, sessionID: session.id, sessionTitle: session.title,
+                    branchName: branch, source: .sessionBranch
+                )
+                for sha in shas { map[sha] = attribution }
+            }
+        }
+
+        for commit in commits {
+            guard let raw = commit.trailers["flotilla-agent"],
+                  let agent = AgentKind.fromTrailerValue(raw) else { continue }
+            let sessionID = commit.trailers["flotilla-session"].flatMap(UUID.init(uuidString:))
+            let session = sessionID.flatMap { id in sessions.first { $0.id == id } }
+            map[commit.sha] = CommitAttribution(
+                agent: agent,
+                sessionID: sessionID,
+                sessionTitle: session?.title,
+                branchName: session?.worktree?.branchName,
+                source: .trailer
+            )
+        }
+
+        attributions = map
+    }
+
+    private var lastSeenDefaultsKey: String { "flotilla.history.lastSeen.\(repoPath.path)" }
+
+    private func captureSeenMarkerIfNeeded() {
+        guard highlightUnseenCommits, !hasCapturedSeenMarker else { return }
+        hasCapturedSeenMarker = true
+        previouslySeenSHA = UserDefaults.standard.string(forKey: lastSeenDefaultsKey)
+    }
+
+    private func recomputeNewCommits() {
+        guard highlightUnseenCommits, let previouslySeenSHA, !commits.isEmpty else {
+            newCommitSHAs = []
+            return
+        }
+        if let index = commits.firstIndex(where: { $0.sha == previouslySeenSHA }) {
+            newCommitSHAs = Set(commits.prefix(index).map(\.sha))
+        } else {
+            newCommitSHAs = Set(commits.map(\.sha))
+        }
+    }
+
+    func markAllAsSeen() {
+        guard highlightUnseenCommits, let tip = commits.first?.sha else { return }
+        UserDefaults.standard.set(tip, forKey: lastSeenDefaultsKey)
+        previouslySeenSHA = tip
+        newCommitSHAs = []
     }
 
     // MARK: Filtering
 
-    /// Filters by *reachability*, then lays the survivors out again.
-    ///
-    /// Keeping the original rows and hiding the rest looked plausible but drew
-    /// nonsense: a row's segments name lanes belonging to rows that are no
-    /// longer on screen, so edges pointed at empty space. Re-running the
-    /// layout over the ancestor set is the only way a filtered graph is still
-    /// a graph.
     private func recomputeFilteredRows() {
-        guard let filter = selectedBranchFilter else {
-            filteredRows = rows
-            return
-        }
-        guard let tip = tipSHA(forBranch: filter) else {
-            filteredRows = rows
-            return
+        var candidateCommits = commits
+        if let filter = selectedBranchFilter, let tip = tipSHA(forBranch: filter) {
+            let byS = Dictionary(commits.map { ($0.sha, $0) }, uniquingKeysWith: { first, _ in first })
+            var reachable: Set<String> = []
+            var frontier = [tip]
+            while let sha = frontier.popLast() {
+                guard reachable.insert(sha).inserted, let commit = byS[sha] else { continue }
+                frontier.append(contentsOf: commit.parents)
+            }
+            candidateCommits = candidateCommits.filter { reachable.contains($0.sha) }
         }
 
-        let byS = Dictionary(commits.map { ($0.sha, $0) }, uniquingKeysWith: { first, _ in first })
-        var reachable: Set<String> = []
-        var frontier = [tip]
-        while let sha = frontier.popLast() {
-            guard reachable.insert(sha).inserted, let commit = byS[sha] else { continue }
-            frontier.append(contentsOf: commit.parents)
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !query.isEmpty {
+            candidateCommits = candidateCommits.filter { commit in
+                commit.subject.lowercased().contains(query)
+                    || commit.authorName.lowercased().contains(query)
+                    || commit.authorEmail.lowercased().contains(query)
+                    || commit.sha.lowercased().hasPrefix(query)
+                    || commit.body.lowercased().contains(query)
+            }
         }
-        filteredRows = GitGraphLayout.rows(for: commits.filter { reachable.contains($0.sha) })
+
+        filteredRows = GitGraphLayout.rows(for: candidateCommits)
+
+        if let currentSelected = selectedSHA, !filteredRows.contains(where: { $0.commit.sha == currentSelected }) {
+            selectedSHA = filteredRows.first?.commit.sha
+        }
     }
 
     private func tipSHA(forBranch name: String) -> String? {
         if let branch = branches.first(where: { $0.name == name }) { return branch.tipSHA }
-        // A ref decoration without a matching `for-each-ref` entry still
-        // identifies a tip — worth honouring rather than showing everything.
         return commits.first { $0.refs.contains { $0.name == name } }?.sha
     }
 
-    /// Current branch first, then locals, then remotes — the order someone
-    /// scanning the chip row expects to find them in.
     private static func ordered(_ branches: [GitBranch]) -> [GitBranch] {
         branches.sorted { lhs, rhs in
             if lhs.isCurrent != rhs.isCurrent { return lhs.isCurrent }
