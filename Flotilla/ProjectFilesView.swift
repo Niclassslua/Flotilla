@@ -12,7 +12,15 @@ struct ProjectFilesView: View {
     @State private var markdownMode: MarkdownMode = .preview
     @State private var searchText = ""
     @State private var isShowingNewFileDialog = false
+    @State private var isShowingNewFolderDialog = false
+    @State private var isShowingRenameDialog = false
+    @State private var isShowingDeleteDialog = false
+    @State private var targetFolderURL: URL?
+    @State private var targetNodeToRename: FileNode?
+    @State private var targetNodeToDelete: FileNode?
     @State private var newFileName = ""
+    @State private var newFolderName = ""
+    @State private var renameText = ""
     @State private var creationError: String?
 
     enum MarkdownMode: String, CaseIterable, Identifiable {
@@ -49,6 +57,40 @@ struct ProjectFilesView: View {
         } message: {
             Text("Enter a name for the new file to create in this workspace.")
         }
+        .alert("New Folder", isPresented: $isShowingNewFolderDialog) {
+            TextField("Folder name (e.g. components, utils)", text: $newFolderName)
+            Button("Create") {
+                createNewFolder()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter a name for the new directory.")
+        }
+        .alert("Rename", isPresented: $isShowingRenameDialog) {
+            TextField("New name", text: $renameText)
+            Button("Rename") {
+                if let target = targetNodeToRename {
+                    renameItem(node: target, newName: renameText)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let target = targetNodeToRename {
+                Text("Rename \"\(target.name)\" to:")
+            }
+        }
+        .alert("Delete", isPresented: $isShowingDeleteDialog) {
+            Button("Delete", role: .destructive) {
+                if let target = targetNodeToDelete {
+                    deleteItem(node: target)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let target = targetNodeToDelete {
+                Text("Are you sure you want to delete \"\(target.name)\"? This item will be moved to the Trash.")
+            }
+        }
         .accessibilityIdentifier(AXID.projectFiles.rawValue)
     }
 
@@ -56,7 +98,8 @@ struct ProjectFilesView: View {
         let trimmed = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let targetURL = rootURL.appendingPathComponent(trimmed)
+        let folder = targetFolderURL ?? rootURL
+        let targetURL = folder.appendingPathComponent(trimmed)
         do {
             let parentDir = targetURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
@@ -70,6 +113,64 @@ struct ProjectFilesView: View {
             }
         } catch {
             creationError = error.localizedDescription
+        }
+    }
+
+    private func createNewFolder() {
+        let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let folder = targetFolderURL ?? rootURL
+        let targetURL = folder.appendingPathComponent(trimmed)
+        do {
+            try FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
+            Task {
+                await viewModel.refresh()
+            }
+        } catch {
+            creationError = error.localizedDescription
+        }
+    }
+
+    private func renameItem(node: FileNode, newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != node.name else { return }
+
+        let parent = node.url.deletingLastPathComponent()
+        let newURL = parent.appendingPathComponent(trimmed)
+        do {
+            try FileManager.default.moveItem(at: node.url, to: newURL)
+            Task {
+                await viewModel.refresh()
+                if viewModel.selectedNode?.id == node.id {
+                    let renamedNode = FileNode(url: newURL, isDirectory: node.isDirectory)
+                    await viewModel.select(renamedNode)
+                }
+            }
+        } catch {
+            creationError = error.localizedDescription
+        }
+    }
+
+    private func deleteItem(node: FileNode) {
+        do {
+            try FileManager.default.trashItem(at: node.url, resultingItemURL: nil)
+            Task {
+                if viewModel.selectedNode?.id == node.id {
+                    viewModel.selectedNode = nil
+                    viewModel.content = ""
+                }
+                await viewModel.refresh()
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: node.url)
+            Task {
+                if viewModel.selectedNode?.id == node.id {
+                    viewModel.selectedNode = nil
+                    viewModel.content = ""
+                }
+                await viewModel.refresh()
+            }
         }
     }
 
@@ -113,6 +214,47 @@ struct ProjectFilesView: View {
                         RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
                             .fill(viewModel.selectedNode?.id == node.id ? FlotillaColors.accent.opacity(0.12) : Color.clear)
                     )
+                    .contextMenu {
+                        Button {
+                            targetFolderURL = node.isDirectory ? node.url : node.url.deletingLastPathComponent()
+                            newFileName = ""
+                            isShowingNewFileDialog = true
+                        } label: {
+                            Label("New File", systemImage: "doc.badge.plus")
+                        }
+
+                        Button {
+                            targetFolderURL = node.isDirectory ? node.url : node.url.deletingLastPathComponent()
+                            newFolderName = ""
+                            isShowingNewFolderDialog = true
+                        } label: {
+                            Label("New Folder", systemImage: "folder.badge.plus")
+                        }
+
+                        Divider()
+
+                        Button {
+                            targetNodeToRename = node
+                            renameText = node.name
+                            isShowingRenameDialog = true
+                        } label: {
+                            Label("Rename…", systemImage: "pencil")
+                        }
+
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(node.url.path, forType: .string)
+                        } label: {
+                            Label("Copy Path", systemImage: "doc.on.doc")
+                        }
+
+                        Button(role: .destructive) {
+                            targetNodeToDelete = node
+                            isShowingDeleteDialog = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
                 .scrollContentBackground(.hidden)
                 .background(FlotillaColors.surface)
