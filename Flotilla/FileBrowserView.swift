@@ -122,15 +122,15 @@ struct FileBrowserView: View {
                         Button {
                             Task { await viewModel.select(node) }
                         } label: {
-                            HStack(spacing: 8) {
-                                MaterialFileIcon(node: node, size: 19)
+                            HStack(spacing: 7) {
+                                MaterialFileIcon(node: node, size: 17)
                                 Text(node.name)
-                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
                                     .foregroundStyle(node.name.hasPrefix(".") ? FlotillaColors.textSecondary : .primary)
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                             }
-                            .padding(.vertical, 1)
+                            .padding(.vertical, 0.5)
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
@@ -185,13 +185,13 @@ extension FileBrowserView {
     @ViewBuilder
     private func MarkdownFileEditor(node: FileNode) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                MaterialFileIcon(node: node, size: 22)
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                MaterialFileIcon(node: node, size: 19)
+                VStack(alignment: .leading, spacing: 1) {
                     Text(node.name)
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     Text(node.url.path)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -256,13 +256,13 @@ extension FileBrowserView {
     @ViewBuilder
     private func BinaryFileEditor(node: FileNode) -> some View {
         VStack(spacing: FlotillaSpacing.large) {
-            HStack(spacing: 10) {
-                MaterialFileIcon(node: node, size: 18)
+            HStack(spacing: 8) {
+                MaterialFileIcon(node: node, size: 19)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(node.name)
-                        .font(.headline)
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     Text(node.url.path)
-                        .font(.caption.monospaced())
+                        .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()

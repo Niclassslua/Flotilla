@@ -99,14 +99,14 @@ struct ProjectFilesView: View {
                             Task { await viewModel.select(node) }
                         }
                     } label: {
-                        HStack(spacing: 8) {
-                            MaterialFileIcon(node: node, size: 19)
+                        HStack(spacing: 7) {
+                            MaterialFileIcon(node: node, size: 17)
                             Text(node.name)
-                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
                                 .foregroundStyle(node.name.hasPrefix(".") ? FlotillaColors.textSecondary : FlotillaColors.textPrimary)
                                 .lineLimit(1)
                         }
-                        .padding(.vertical, 1)
+                        .padding(.vertical, 0.5)
                     }
                     .buttonStyle(.plain)
                     .listRowBackground(
@@ -162,7 +162,7 @@ struct ProjectFilesView: View {
                 .font(.system(size: FlotillaIconSize.small))
             TextField("Filter files…", text: $searchText)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(size: 11.5, design: .monospaced))
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
@@ -174,7 +174,7 @@ struct ProjectFilesView: View {
             }
         }
         .padding(.horizontal, FlotillaSpacing.small + 2)
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
         .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
         .padding(FlotillaSpacing.small)
     }
@@ -212,7 +212,7 @@ struct ProjectFilesView: View {
 
                 if let error = viewModel.errorMessage {
                     Text(error)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.system(size: 11.5, design: .monospaced))
                         .foregroundStyle(Color.red)
                         .padding(.horizontal, FlotillaSpacing.medium)
                         .padding(.vertical, 4)
@@ -269,15 +269,15 @@ struct ProjectFilesView: View {
     }
 
     private func editorHeader(_ node: FileNode) -> some View {
-        HStack(spacing: FlotillaSpacing.small + 2) {
-            MaterialFileIcon(node: node, size: 22)
+        HStack(spacing: FlotillaSpacing.small) {
+            MaterialFileIcon(node: node, size: 19)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(node.name)
-                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(FlotillaColors.textPrimary)
                 Text(node.url.path)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
