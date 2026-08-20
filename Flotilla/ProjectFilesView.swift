@@ -11,6 +11,9 @@ struct ProjectFilesView: View {
 
     @State private var markdownMode: MarkdownMode = .preview
     @State private var searchText = ""
+    @State private var isShowingNewFileDialog = false
+    @State private var newFileName = ""
+    @State private var creationError: String?
 
     enum MarkdownMode: String, CaseIterable, Identifiable {
         case preview = "Preview"
@@ -37,13 +40,44 @@ struct ProjectFilesView: View {
         .task(id: rootURL) {
             await viewModel.refresh()
         }
+        .alert("New File", isPresented: $isShowingNewFileDialog) {
+            TextField("File name (e.g. README.md, .env, main.ts)", text: $newFileName)
+            Button("Create") {
+                createNewFile()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter a name for the new file to create in this workspace.")
+        }
         .accessibilityIdentifier(AXID.projectFiles.rawValue)
+    }
+
+    private func createNewFile() {
+        let trimmed = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let targetURL = rootURL.appendingPathComponent(trimmed)
+        do {
+            let parentDir = targetURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: targetURL.path) {
+                try "".write(to: targetURL, atomically: true, encoding: .utf8)
+            }
+            Task {
+                await viewModel.refresh()
+                let newNode = FileNode(url: targetURL, isDirectory: false)
+                await viewModel.select(newNode)
+            }
+        } catch {
+            creationError = error.localizedDescription
+        }
     }
 
     // MARK: - File Tree Pane
 
     private var fileTreePane: some View {
         VStack(spacing: 0) {
+            fileTreeHeader
             searchBar
             Divider()
 
@@ -84,6 +118,40 @@ struct ProjectFilesView: View {
                 .background(FlotillaColors.surface)
             }
         }
+        .background(FlotillaColors.surface)
+    }
+
+    private var fileTreeHeader: some View {
+        HStack(spacing: FlotillaSpacing.small) {
+            Text("Files")
+                .font(FlotillaTypography.headline)
+                .foregroundStyle(FlotillaColors.textPrimary)
+
+            Spacer()
+
+            Button {
+                newFileName = ""
+                isShowingNewFileDialog = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .help("New File (⌘N)")
+            .keyboardShortcut("n", modifiers: .command)
+
+            Button {
+                Task { await viewModel.refresh() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .help("Refresh files")
+        }
+        .padding(.horizontal, FlotillaSpacing.medium)
+        .padding(.top, FlotillaSpacing.small + 2)
+        .padding(.bottom, 2)
         .background(FlotillaColors.surface)
     }
 

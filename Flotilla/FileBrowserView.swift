@@ -7,6 +7,9 @@ struct FileBrowserView: View {
     @Bindable var viewModel: FileBrowserViewModel
     @FocusState private var isEditorFocused: Bool
 
+    @State private var isShowingNewFileDialog = false
+    @State private var newFileName = ""
+
     init(rootURL: URL, service: any WorkspaceFileServicing = WorkspaceFileService()) {
         self.rootURL = rootURL
         self._viewModel = Bindable(wrappedValue: FileBrowserViewModel(root: rootURL, service: service))
@@ -29,15 +32,55 @@ struct FileBrowserView: View {
         }
         .frame(maxHeight: .infinity)
         .task(id: rootURL) { await viewModel.refresh() }
+        .alert("New File", isPresented: $isShowingNewFileDialog) {
+            TextField("File name (e.g. README.md, .env, main.ts)", text: $newFileName)
+            Button("Create") {
+                createNewFile()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter a name for the new file to create in this workspace.")
+        }
+    }
+
+    private func createNewFile() {
+        let trimmed = newFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let targetURL = rootURL.appendingPathComponent(trimmed)
+        do {
+            let parentDir = targetURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: targetURL.path) {
+                try "".write(to: targetURL, atomically: true, encoding: .utf8)
+            }
+            Task {
+                await viewModel.refresh()
+                let newNode = FileNode(url: targetURL, isDirectory: false)
+                await viewModel.select(newNode)
+            }
+        } catch {}
     }
 
     private var fileNavigator: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: FlotillaSpacing.small) {
                 Label(rootURL.lastPathComponent, systemImage: "folder")
                     .font(.headline)
                     .lineLimit(1)
                 Spacer()
+
+                Button {
+                    newFileName = ""
+                    isShowingNewFileDialog = true
+                } label: {
+                    Label("New File", systemImage: "plus")
+                }
+                .labelStyle(.iconOnly)
+                .help("New File (⌘N)")
+                .keyboardShortcut("n", modifiers: .command)
+                .accessibilityIdentifier("FileBrowser.NewFileButton")
+
                 Button {
                     Task { await viewModel.refresh() }
                 } label: {
