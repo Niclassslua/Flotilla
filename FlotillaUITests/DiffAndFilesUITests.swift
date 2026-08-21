@@ -12,14 +12,18 @@ final class DiffAndFilesUITests: XCTestCase {
 
     func testDiffPanelAndFileBrowser() {
         let app = launchedApp()
+        let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
+        if sessionsButton.waitForExistence(timeout: 3) {
+            sessionsButton.click()
+        }
         let sessionRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 8))
         sessionRow.click()
 
-        // 1. Test Diff panel via Inspector toggle
-        let inspectorToggle = app.descendants(matching: .any)["Toolbar.InspectorToggle"].firstMatch
-        XCTAssertTrue(inspectorToggle.waitForExistence(timeout: 3))
-        inspectorToggle.click()
+        // 1. Test Diff panel via Changes lens
+        let changesLens = app.descendants(matching: .any)["Session.Lens.changes"].firstMatch
+        XCTAssertTrue(changesLens.waitForExistence(timeout: 3))
+        changesLens.click()
 
         let emptyState = app.descendants(matching: .any)["DiffPanel.Empty"].firstMatch
         XCTAssertTrue(emptyState.waitForExistence(timeout: 3))
@@ -36,10 +40,10 @@ final class DiffAndFilesUITests: XCTestCase {
         refreshButton.click()
         XCTAssertTrue(app.descendants(matching: .any)["DiffPanel.File-README.md"].firstMatch.waitForExistence(timeout: 3))
 
-        // 2. Test Files panel via Inspector Files tab
-        let filesTab = app.radioButtons["Files"]
-        XCTAssertTrue(filesTab.waitForExistence(timeout: 3))
-        filesTab.click()
+        // 2. Test Files panel via Files lens
+        let filesLens = app.descendants(matching: .any)["Session.Lens.files"].firstMatch
+        XCTAssertTrue(filesLens.waitForExistence(timeout: 3))
+        filesLens.click()
 
         let readmeRow = app.descendants(matching: .any)["FileBrowser.Row-README.md"].firstMatch
         XCTAssertTrue(readmeRow.waitForExistence(timeout: 3))

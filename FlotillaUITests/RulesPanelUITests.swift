@@ -16,13 +16,9 @@ final class RulesPanelUITests: XCTestCase {
         XCTAssertTrue(fastWait(sessionRow, timeout: 8))
         sessionRow.click()
 
-        let inspectorToggle = app.descendants(matching: .any)["Toolbar.InspectorToggle"].firstMatch
-        XCTAssertTrue(fastWait(inspectorToggle, timeout: 3))
-        inspectorToggle.click()
-
-        let instructionsTab = app.radioButtons["Instructions"].firstMatch
-        XCTAssertTrue(fastWait(instructionsTab, timeout: 3))
-        instructionsTab.click()
+        let instructionsLens = app.descendants(matching: .any)["Session.Lens.instructions"].firstMatch
+        XCTAssertTrue(fastWait(instructionsLens, timeout: 3))
+        instructionsLens.click()
 
         let claudeFile = app.descendants(matching: .any)["RulesPanel.File-CLAUDE.md"].firstMatch
         XCTAssertTrue(fastWait(claudeFile, timeout: 3))

@@ -126,6 +126,7 @@ final class SystemPTYProcessTests: XCTestCase {
         )
 
         let process = SystemPTYProcess()
+        let stream = process.outputStream
         try process.start(
             executable: URL(fileURLWithPath: "/usr/bin/env"),
             arguments: [],
@@ -140,8 +141,12 @@ final class SystemPTYProcessTests: XCTestCase {
         // expected substring, or a race could stop the read before a
         // not-yet-printed line has been flushed.
         var collected = Data()
-        for await chunk in process.outputStream {
+        for await chunk in stream {
             collected.append(chunk)
+            let str = String(decoding: collected, as: UTF8.self)
+            if str.contains("TERM=xterm-256color") && str.contains("COLORTERM=truecolor") {
+                break
+            }
         }
 
         let printedEnvironment = String(decoding: collected, as: UTF8.self)

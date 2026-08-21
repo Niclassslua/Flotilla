@@ -30,27 +30,25 @@ Flotilla is a **macOS-only** SwiftUI application that serves as a local command 
 
 ```
 Flotilla/
-├── Flotilla/                      # Main app target (31 source files)
-│   ├── FlotillaApp.swift          # @main entry point
-│   ├── AppEnvironment.swift       # Dependency injection container
-│   ├── AppStore.swift             # Central @Observable state (ViewModel)
-│   ├── ContentView.swift          # Root view, NavigationSplitView
-│   ├── TerminalManager.swift      # Per-session terminal lifecycle
-│   ├── TerminalHostView.swift     # SwiftTerm host view
-│   ├── SessionProcessManager.swift# Process lifecycle management
-│   ├── HookCoordinator.swift      # Notification/hook orchestration
-│   ├── CreateSessionView.swift    # New session creation UI
-│   ├── GridView.swift / GridTileView.swift  # Multi-session grid
-│   ├── DiffPanelView.swift        # Git diff inspector
-│   ├── FileBrowserView.swift      # File tree browser
-│   ├── RulesPanelView.swift       # Project rules/skills viewer
-│   ├── SettingsView.swift         # App settings UI
-│   ├── HomeDashboardView.swift    # Home/overview screen
-│   ├── CommandPaletteView.swift   # Keyboard command palette
-│   └── Assets.xcassets/           # App icon + agent logos
-├── FlotillaUnitTests/             # Unit tests (10 files)
-├── FlotillaUITests/               # UI tests (10 files)
-├── Packages/                      # 9 local Swift packages
+├── Flotilla/                      # Main app target
+│   ├── App/                       # Lifecycle, AppEnvironment, AppStore, AXID
+│   ├── Features/                  # User-facing domain feature modules
+│   │   ├── Shell/                 # FlotillaShell, FleetSidebar, WorkspaceToolbar, Inspector
+│   │   ├── Home/                  # HomeDashboardView, Hero title, preview fixtures
+│   │   ├── CreateSession/         # CreateSessionView, Drafts, Launchpad & CommandBar designs
+│   │   ├── Grid/                  # MissionControlGrid, GridView, zoom gestures, layout engine
+│   │   ├── Session/               # TerminalHostView, TerminalManager, MonacoHost, editors
+│   │   ├── Projects/              # ProjectOverview, Git visualizer, graph, history, rules, Kanban
+│   │   ├── Diff/                  # DiffPanelView, DiffStatBadge, DiffStatStore, CommitDetail
+│   │   ├── CommandPalette/        # CommandPaletteView, CommandPalettePanel
+│   │   ├── Settings/              # SettingsView, SettingsViewModel, Startup warning/checks
+│   │   └── FileBrowser/           # FileBrowserView, FileNode, icon helpers
+│   ├── Services/                  # SessionProcessManager, HookCoordinator, WorkspaceRegistry, ActivityStore
+│   ├── Components/                # StatusBadge, MaterialFileIcon, ProviderLogo, AgentBrand, pickers
+│   └── Resources/                 # Assets.xcassets, MaterialIcons SVG catalog
+├── FlotillaUnitTests/             # Unit tests (28 test suites)
+├── FlotillaUITests/               # UI tests
+├── Packages/                      # 10 local Swift packages
 ├── project.yml                    # XcodeGen specification
 ├── Makefile                       # Build automation
 ├── .impeccable.md                 # Brand/design guidelines
@@ -279,6 +277,8 @@ func testWorktreeCreationFailureDoesNotCreateSession() { ... }
 > - You are explicitly asked to run or verify UI tests
 > For most changes, a Debug build + unit tests is sufficient verification. When running UI tests, prefer the minimal targeted set of test classes over the full suite (`-only-testing:FlotillaUITests/<SpecificClass>`).
 
+**Scope: only write a UI test for something a human can't easily eyeball, or that's a stable behavioral contract.** Don't write UI tests asserting on visual/styling details — background tints, padding, corner radius, colors, frame sizes chosen for looks. A human glances at a screenshot and knows instantly if those are wrong; a test asserting on them breaks on every intentional visual change and becomes pure maintenance overhead with no signal. Reserve UI tests for things that are easy to silently regress and hard to notice by eye: keyboard-shortcut wiring, focus/dismissal behavior, data flowing correctly into fields, multi-step interaction sequences, accessibility-identifier contracts other tests depend on.
+
 - All UI tests set `UI_TESTING=1` environment variable
 - Element lookup uses accessibility identifiers: `app.descendants(matching: .any)["CreateSession.GoalField"]`
 - Use `waitForExistence(timeout:)` for async UI state
@@ -465,14 +465,14 @@ Import only what you need. Package modules are imported by product name.
 
 | File | Why It Matters |
 |------|---------------|
-| `AppEnvironment.swift` | DI container — read this first to understand what's wired where |
-| `AppStore.swift` | Central state — all business logic lives here |
-| `ContentView.swift` | Root view — understand the view hierarchy and navigation |
-| `SessionProcessManager.swift` | Process lifecycle — start, terminate, event handling |
-| `TerminalManager.swift` | Terminal controller lifecycle — retain/release per session |
-| `HookCoordinator.swift` | Notification orchestration — status observation and dispatch |
+| `Flotilla/App/AppEnvironment.swift` | DI container — read this first to understand what's wired where |
+| `Flotilla/App/AppStore.swift` | Central state — all business logic lives here |
+| `Flotilla/Features/Shell/FlotillaShell.swift` | Root shell view — navigation and split presentation |
+| `Flotilla/Services/SessionProcessManager.swift` | Process lifecycle — start, terminate, event handling |
+| `Flotilla/Features/Session/TerminalManager.swift` | Terminal controller lifecycle — retain/release per session |
+| `Flotilla/Services/HookCoordinator.swift` | Notification orchestration — status observation and dispatch |
 | `project.yml` | Build configuration — source of truth for xcodeproj generation |
-| `SessionKit/Models.swift` | Core domain types — Session, Project, AgentKind, SessionStatus |
-| `ProcessKit/PTYProcessProtocol.swift` | Core process abstraction — read to understand PTY protocol |
-| `PersistenceKit/GRDBSessionRepository.swift` | Database layer — migrations, CRUD operations |
-| `make test-ui` | Run UI tests (~5 min, 12 test classes, 12 app launches) |
+| `Packages/SessionKit/Sources/SessionKit/Models.swift` | Core domain types — Session, Project, AgentKind, SessionStatus |
+| `Packages/ProcessKit/Sources/ProcessKit/PTYProcessProtocol.swift` | Core process abstraction — read to understand PTY protocol |
+| `Packages/PersistenceKit/Sources/PersistenceKit/GRDBSessionRepository.swift` | Database layer — migrations, CRUD operations |
+| `make test` | Run unit test suite (355 tests) |
