@@ -118,8 +118,7 @@ case .grid:
 
     @ViewBuilder
     private func terminal(for session: Session) -> some View {
-        if session.status != .crashed && session.status != .finished,
-           let process = store.process(for: session.id) {
+        if let process = store.process(for: session.id) {
             TerminalHostView(
                 controller: terminalManager.controller(
                     for: session,

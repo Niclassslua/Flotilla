@@ -50,6 +50,13 @@ public struct TerminalScreenHeuristic: Sendable {
         "approve?",
     ]
 
+    /// Markers indicating the process or agent exited.
+    private static let finishedMarkers = [
+        "agent exited",
+        "pane is dead",
+        "process finished",
+    ]
+
     /// Composer/ready markers — indicate the agent is at a prompt with
     /// transcript history, meaning it finished its turn and awaits user input.
     private static let readyMarkers = [
@@ -74,6 +81,7 @@ public struct TerminalScreenHeuristic: Sendable {
         if Self.waitingMarkers.contains(where: lowered.contains) { return .waitingForInput }
         if promptHeuristic.detectStatus(in: tail) == .waitingForInput { return .waitingForInput }
         if Self.showsChoiceList(in: tail) { return .waitingForInput }
+        if Self.finishedMarkers.contains(where: lowered.contains) { return .finished }
         if Self.workingMarkers.contains(where: lowered.contains) { return .working }
         if Self.hasComposerWithTranscript(tail) { return .ready }
         return .idle

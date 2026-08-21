@@ -47,6 +47,8 @@ enum TmuxSessionWrapping {
         ["status", "off"],
         ["history-limit", "50000"],
         ["mouse", "on"],
+        ["remain-on-exit", "on"],
+        ["remain-on-exit-format", "\"[Agent exited with status #{pane_dead_status} — click Restart Session to resume]\""],
     ]
 
     /// `set-option -g` needs a server that is already running, and on a cold
