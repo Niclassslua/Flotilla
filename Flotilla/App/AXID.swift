@@ -140,7 +140,6 @@ public enum AXID: String, Sendable {
     case projectRules = "ProjectRules"
 
     // MARK: - Knowledge (Skills & Rules catalog)
-    case knowledgeDesignPicker = "Knowledge.DesignPicker"
     case knowledgeSearchField = "Knowledge.SearchField"
     case knowledgeScopeFilter = "Knowledge.ScopeFilter"
     case knowledgeSortMenu = "Knowledge.SortMenu"

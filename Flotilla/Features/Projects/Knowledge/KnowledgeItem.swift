@@ -112,7 +112,7 @@ struct KnowledgeItem: Identifiable, Hashable, Sendable {
     let metrics: [KnowledgeMetric]
     let author: String?
     let license: String?
-    /// Drives Constellation's tile sizing — bigger documents get bigger tiles.
+    /// Document size weight for proportional calculations.
     let weight: Int
     /// On-disk size of the document itself, so an empty file is obvious at a
     /// glance without opening it.

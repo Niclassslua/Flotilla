@@ -14,9 +14,8 @@ enum KnowledgeFilter: String, Sendable, Hashable, CaseIterable {
     }
 }
 
-/// How the catalog is ordered. Each design applies this within whatever
-/// grouping it imposes — Ledger and Shelf still separate global from project
-/// first, then order inside each group.
+/// How the catalog is ordered. Ledger separates global from project
+/// first, then orders inside each group.
 enum KnowledgeSort: String, Sendable, Hashable, CaseIterable, Identifiable {
     case name
     case modified

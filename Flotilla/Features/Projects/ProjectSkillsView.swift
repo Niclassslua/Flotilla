@@ -3,8 +3,8 @@ import SessionKit
 
 /// Skills tab for a project workspace.
 ///
-/// A thin host: everything visual lives in `KnowledgeCatalogView` and the four
-/// designs behind it, which the Rules tab shares. Skills add no header controls
+/// A thin host: everything visual lives in `KnowledgeCatalogView` and the
+/// Ledger design behind it, which the Rules tab shares. Skills add no header controls
 /// of their own — there is no "create a skill" flow, since a skill is a folder
 /// with a bundle in it rather than a single file we could template.
 struct ProjectSkillsView: View {

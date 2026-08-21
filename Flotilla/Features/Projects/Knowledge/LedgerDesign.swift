@@ -3,15 +3,9 @@ import DesignSystem
 
 /// **Ledger** — a dense table with a docked inspector.
 ///
-/// The most IDE-native of the four, and the one that matches `.impeccable.md`
-/// most literally: hairline dividers, compact rows, columns of machine facts,
+/// Hairline dividers, compact rows, columns of machine facts,
 /// arrow-key navigation, and a detail pane that stays put while you move
-/// through the list. Optimised for a user who already knows the catalog and
-/// wants to get to one file.
-///
-/// Strengths: highest information density, no modal to dismiss, keyboard-first.
-/// Weakness: a row shows less description than a card, so a first-time reader
-/// leans on the inspector more.
+/// through the list. Optimised for keyboard-first navigation and high information density.
 struct LedgerDesign: View {
     let items: [KnowledgeItem]
     @Bindable var viewModel: ProjectKnowledgeViewModel

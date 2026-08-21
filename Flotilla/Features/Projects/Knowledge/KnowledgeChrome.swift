@@ -1,9 +1,8 @@
 import SwiftUI
 import DesignSystem
 
-/// Small shared pieces every design draws — the icon tile, the scope/framework
-/// chips, metric pills, tag chips. Extracted so the four designs differ in
-/// layout and interaction rather than re-implementing the same badge five times.
+/// Small shared pieces drawn by the catalog — the icon tile, scope/framework
+/// chips, metric pills, tag chips, search field, scope picker, and sort menu.
 
 // MARK: - Icon
 
@@ -329,14 +328,9 @@ struct KnowledgeSortMenu: View {
     }
 }
 
-/// The filter strip the split designs dock above their own list column.
-///
-/// `isNarrow` stacks scope and sort onto separate rows for the Shelf rail,
-/// where a segmented control and a menu side by side would each be too
-/// cramped to read.
+/// The filter strip docked above the list column.
 struct KnowledgeListControls: View {
     @Bindable var viewModel: ProjectKnowledgeViewModel
-    var isNarrow = false
 
     var body: some View {
         VStack(spacing: FlotillaSpacing.small) {
@@ -345,21 +339,12 @@ struct KnowledgeListControls: View {
                 text: $viewModel.searchText
             )
 
-            if isNarrow {
+            HStack(spacing: FlotillaSpacing.small) {
                 KnowledgeScopePicker(filter: $viewModel.filter)
-                HStack {
-                    Spacer(minLength: 0)
-                    KnowledgeSortMenu(sort: $viewModel.sort)
-                        .controlSize(.small)
-                }
-            } else {
-                HStack(spacing: FlotillaSpacing.small) {
-                    KnowledgeScopePicker(filter: $viewModel.filter)
-                        .frame(maxWidth: 220)
-                    Spacer(minLength: 0)
-                    KnowledgeSortMenu(sort: $viewModel.sort)
-                        .controlSize(.small)
-                }
+                    .frame(maxWidth: 220)
+                Spacer(minLength: 0)
+                KnowledgeSortMenu(sort: $viewModel.sort)
+                    .controlSize(.small)
             }
         }
         .padding(.horizontal, FlotillaSpacing.medium)
