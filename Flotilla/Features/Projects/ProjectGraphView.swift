@@ -388,6 +388,7 @@ enum GraphMetrics {
 
     static let contentInset: CGFloat = 10
     static let columnSpacing: CGFloat = 8
+    static let refTextMaxWidth: CGFloat = 112
     static let statColumn: CGFloat = 88
     static let authorColumn: CGFloat = 22
     static let timeColumn: CGFloat = 44
@@ -541,8 +542,17 @@ private struct GraphCommitRow: View {
             if isUnpushed {
                 CommitRefChip(text: "unpushed", systemImage: "arrow.up.circle", tint: FlotillaColors.accent)
             }
-            ForEach(Array(commit.refs.prefix(3).enumerated()), id: \.offset) { _, ref in
-                CommitRefChip(ref: ref)
+            ForEach(commit.refs.prefix(1), id: \.name) { ref in
+                CommitRefChip(ref: ref, maxTextWidth: GraphMetrics.refTextMaxWidth)
+                    .help(ref.name)
+            }
+            if commit.refs.count > 1 {
+                CommitRefChip(
+                    text: "+\(commit.refs.count - 1)",
+                    systemImage: "ellipsis",
+                    tint: FlotillaColors.textTertiary
+                )
+                .help(commit.refs.dropFirst().map(\.name).joined(separator: "\n"))
             }
 
             Spacer(minLength: FlotillaSpacing.small)
@@ -956,15 +966,18 @@ struct CommitRefChip: View {
     let text: String
     let systemImage: String
     let tint: Color
+    let maxTextWidth: CGFloat?
 
-    init(text: String, systemImage: String, tint: Color) {
+    init(text: String, systemImage: String, tint: Color, maxTextWidth: CGFloat? = nil) {
         self.text = text
         self.systemImage = systemImage
         self.tint = tint
+        self.maxTextWidth = maxTextWidth
     }
 
-    init(ref: GitCommitRef) {
+    init(ref: GitCommitRef, maxTextWidth: CGFloat? = nil) {
         self.text = ref.name
+        self.maxTextWidth = maxTextWidth
         switch ref.kind {
         case .head:
             self.systemImage = "location.fill"
@@ -988,12 +1001,14 @@ struct CommitRefChip: View {
             Text(text)
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: maxTextWidth)
         }
         .padding(.horizontal, 5)
         .padding(.vertical, 1.5)
         .background(tint.opacity(0.14), in: Capsule())
         .foregroundStyle(tint)
-        .fixedSize()
+        .fixedSize(horizontal: maxTextWidth == nil, vertical: true)
     }
 }
 
