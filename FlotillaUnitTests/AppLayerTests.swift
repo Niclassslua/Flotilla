@@ -38,6 +38,14 @@ private final class StubTmuxServerProbe: TmuxServerProbing, @unchecked Sendable 
     }
 }
 
+private struct StubConversationOwnershipChecker: AgentConversationOwnershipChecking {
+    let isActive: Bool
+
+    func isConversationActive(agent: AgentKind, conversationID: String) -> Bool {
+        isActive
+    }
+}
+
 @MainActor
 final class TerminalPresentationTests: XCTestCase {
     func testSessionAndGridUseIndependentRenderersWithSharedOutput() async throws {
@@ -198,6 +206,52 @@ final class SessionProcessManagerTests: XCTestCase {
         }
     }
 
+    func testAntigravityNativeResumeRefusesConversationOwnedByAnotherCLI() {
+        let factory = RecordingProcessFactory()
+        let manager = SessionProcessManager(
+            locator: FixedExecutableLocator(executable: URL(fileURLWithPath: "/usr/bin/env")),
+            processFactory: factory,
+            tmuxServerProbe: StubTmuxServerProbe(usable: false),
+            conversationOwnershipChecker: StubConversationOwnershipChecker(isActive: true)
+        )
+        var model = session()
+        model.agent = .antigravity
+        model.agentSessionID = "conv-123"
+
+        XCTAssertThrowsError(try manager.start(session: model)) { error in
+            XCTAssertEqual(
+                error as? SessionProcessManager.LaunchError,
+                .conversationAlreadyActive(agent: .antigravity, conversationID: "conv-123")
+            )
+        }
+        XCTAssertTrue(factory.processes.isEmpty)
+    }
+
+    func testAntigravityReconnectsToItsExistingTmuxPaneWithoutOwnershipConflict() throws {
+        let factory = RecordingProcessFactory()
+        let terminator = MockTmuxSessionTerminator()
+        let sessionID = UUID()
+        terminator.stubbedSessions = [TmuxSessionWrapping.sessionName(for: sessionID)]
+        let manager = SessionProcessManager(
+            locator: FixedExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxTerminator: terminator,
+            tmuxServerProbe: StubTmuxServerProbe(usable: true),
+            conversationOwnershipChecker: StubConversationOwnershipChecker(isActive: true)
+        )
+        var model = session(id: sessionID)
+        model.agent = .antigravity
+        model.agentSessionID = "conv-123"
+
+        _ = try manager.start(session: model)
+
+        XCTAssertEqual(factory.processes.count, 1)
+        XCTAssertTrue(factory.processes[0].startedArguments.contains("new-session"))
+    }
+
     func testUnexpectedCrashPublishesExitEventAndExplicitRestartUsesNewProcess() async throws {
         let factory = RecordingProcessFactory()
         let manager = SessionProcessManager(
@@ -262,6 +316,39 @@ final class AppStoreLifecycleTests: XCTestCase {
         let createdSession = try XCTUnwrap(store.sessions.first)
         XCTAssertEqual(factory.processes.first?.startedArguments, ["--session-id", createdSession.id.uuidString, "Find the race"])
         XCTAssertTrue(factory.processes.first?.sentInput.isEmpty == true)
+    }
+
+    func testRestoreKeepsAntigravityConversationWhenAnotherCLIAlreadyOwnsIt() throws {
+        let repository = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let session = Session(
+            title: "Existing Antigravity conversation",
+            goal: "Continue safely",
+            agent: .antigravity,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working,
+            agentSessionID: "conv-123"
+        )
+        try repository.save(session)
+        let processManager = SessionProcessManager(
+            locator: FixedExecutableLocator(executable: URL(fileURLWithPath: "/usr/bin/env")),
+            processFactory: factory,
+            tmuxServerProbe: StubTmuxServerProbe(usable: false),
+            conversationOwnershipChecker: StubConversationOwnershipChecker(isActive: true)
+        )
+
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: processManager,
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+
+        XCTAssertEqual(store.sessions.first?.status, .crashed)
+        XCTAssertEqual(store.sessions.first?.agentSessionID, "conv-123")
+        XCTAssertTrue(store.lastOperationError?.contains("already open") == true)
+        XCTAssertTrue(factory.processes.isEmpty, "A conflicting native resume must not fall back to a fresh conversation")
     }
 
     func testWorktreeCreationFailureDoesNotCreateSession() async throws {

@@ -32,6 +32,7 @@ final class SessionProcessManager {
     private let tmuxGoalDeliverer: any TmuxGoalDelivering
     private let tmuxServerProbe: any TmuxServerProbing
     private let tmuxClientProbe: any TmuxClientProbing
+    private let conversationOwnershipChecker: any AgentConversationOwnershipChecking
     private let hookConfigurationWriter: HookConfigurationWriter
     private let hookSupportDirectory: URL
     private var intentionallyTerminating = Set<UUID>()
@@ -49,6 +50,7 @@ final class SessionProcessManager {
 
     enum LaunchError: LocalizedError, Equatable {
         case executableNotFound(agent: AgentKind, binary: String, configuredPath: String)
+        case conversationAlreadyActive(agent: AgentKind, conversationID: String)
         case failedToStart(agent: AgentKind, message: String)
 
         var errorDescription: String? {
@@ -58,6 +60,8 @@ final class SessionProcessManager {
                     return "\(agent.displayName) was not found. Install ‘\(binary)’ or choose its executable in Settings."
                 }
                 return "\(agent.displayName) is not executable at \(configuredPath). Choose a valid binary in Settings."
+            case let .conversationAlreadyActive(agent, _):
+                return "\(agent.displayName) conversation is already open in another CLI. Close that CLI, then reopen this Flotilla session; use Restart Session only to begin a fresh conversation."
             case let .failedToStart(agent, message):
                 return "\(agent.displayName) could not start: \(message)"
             }
@@ -73,6 +77,7 @@ final class SessionProcessManager {
         tmuxGoalDeliverer: any TmuxGoalDelivering = ProcessTmuxGoalDeliverer(),
         tmuxServerProbe: any TmuxServerProbing = ProcessTmuxServerProbe(),
         tmuxClientProbe: any TmuxClientProbing = ProcessTmuxClientProbe(),
+        conversationOwnershipChecker: any AgentConversationOwnershipChecking = ProcessAgentConversationOwnershipChecker(),
         hookConfigurationWriter: HookConfigurationWriter = HookConfigurationWriter(),
         hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
         gitService: any GitServiceProtocol = GitService()
@@ -86,6 +91,7 @@ final class SessionProcessManager {
         self.tmuxGoalDeliverer = tmuxGoalDeliverer
         self.tmuxServerProbe = tmuxServerProbe
         self.tmuxClientProbe = tmuxClientProbe
+        self.conversationOwnershipChecker = conversationOwnershipChecker
         self.hookConfigurationWriter = hookConfigurationWriter
         self.hookSupportDirectory = hookSupportDirectory
     }
@@ -149,6 +155,23 @@ final class SessionProcessManager {
             resumeIntent = .none
         }
 
+        // If our tmux pane still exists, `new-session -A` only reattaches to
+        // it — it does not start the command after `--`, so no second agent
+        // process is created. Native resume is only needed after that pane is
+        // gone. Antigravity explicitly permits just one CLI per conversation,
+        // therefore refuse to create a competing `agy --conversation` process.
+        let tmuxExecutable = usableTmuxExecutable(for: session.id)
+        let hasLiveTmuxSession = tmuxExecutable.map {
+            tmuxTerminator.listSessions(tmuxExecutable: $0)
+                .contains(TmuxSessionWrapping.sessionName(for: session.id))
+        } ?? false
+        if session.agent == .antigravity,
+           case let .resume(conversationID) = resumeIntent,
+           !hasLiveTmuxSession,
+           conversationOwnershipChecker.isConversationActive(agent: session.agent, conversationID: conversationID) {
+            throw LaunchError.conversationAlreadyActive(agent: session.agent, conversationID: conversationID)
+        }
+
         let effectiveDeliverGoal: Bool
         if case .resume = resumeIntent {
             effectiveDeliverGoal = false
@@ -195,7 +218,6 @@ final class SessionProcessManager {
                 configuredPath: plan.configuredPath
             )
         }
-        let tmuxExecutable = usableTmuxExecutable(for: session.id)
         tmuxWrappedSessions[session.id] = tmuxExecutable
         // Covers an already-running server; the `-f` config passed to
         // `new-session` below covers the cold-socket case this cannot.

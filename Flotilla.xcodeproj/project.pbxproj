@@ -219,6 +219,7 @@
 		C62436F737B90F9AB7EC463A /* AgentBrandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49AA426B52688D2B81854409 /* AgentBrandTests.swift */; };
 		C7F772DB0DC0620BA9347B66 /* KanbanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8007B7DFF42E35CB2C584727 /* KanbanTests.swift */; };
 		C8EB697F01CA679EF2319C7A /* MonacoLanguageMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7647E6E3F8217B4210D6634 /* MonacoLanguageMappingTests.swift */; };
+		C911E3A2A43F3D1E6475B7ED /* AgentConversationOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9E53144F55E554FC3CD0B5 /* AgentConversationOwnership.swift */; };
 		C9D271C08A0E62FB3DFB2B3A /* SessionLaunchPreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC108CFFA20A3D4EE6A5C1 /* SessionLaunchPreviewTests.swift */; };
 		CAD6247D89A5A6290BCDB406 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 796835DB2BE8824C2165999C /* Assets.xcassets */; };
 		CBDDE8E2BD1EDA4A5925077E /* git.svg in Resources */ = {isa = PBXBuildFile; fileRef = ACF1BC73FD352D9CADCA8CC9 /* git.svg */; };
@@ -513,6 +514,7 @@
 		EB717523525E6357E9B0BC2A /* tailwindcss.svg */ = {isa = PBXFileReference; path = tailwindcss.svg; sourceTree = "<group>"; };
 		EC604BC3DA6DB79BECE2C2FC /* SessionLaunchPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchPreview.swift; sourceTree = "<group>"; };
 		EC7571A04951B71A2187C320 /* claude.svg */ = {isa = PBXFileReference; path = claude.svg; sourceTree = "<group>"; };
+		EC9E53144F55E554FC3CD0B5 /* AgentConversationOwnership.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentConversationOwnership.swift; sourceTree = "<group>"; };
 		ECBC98B1E339659FBE0A518F /* graphql.svg */ = {isa = PBXFileReference; path = graphql.svg; sourceTree = "<group>"; };
 		ECC9A7AB155793EE6C596001 /* PersistenceKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PersistenceKit; path = Packages/PersistenceKit; sourceTree = SOURCE_ROOT; };
 		ED25D359CAC4403EA0C7C322 /* webpack.svg */ = {isa = PBXFileReference; path = webpack.svg; sourceTree = "<group>"; };
@@ -729,6 +731,7 @@
 		195E30D121D6E5F4AF063293 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				EC9E53144F55E554FC3CD0B5 /* AgentConversationOwnership.swift */,
 				E560D5E9A15E6BEFD4593C51 /* HookCoordinator.swift */,
 				A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */,
 				726F2E966A42B093C4E60D6D /* SessionProcessManager.swift */,
@@ -1309,6 +1312,7 @@
 			files = (
 				EA1357FDA10CE4036A1A92E1 /* AXID.swift in Sources */,
 				075CD0C76B8E2F897B615EE9 /* AgentBrand.swift in Sources */,
+				C911E3A2A43F3D1E6475B7ED /* AgentConversationOwnership.swift in Sources */,
 				81E957F5ED399AFD4BD9EDD5 /* AppEnvironment.swift in Sources */,
 				9FF6263BE339EEA516E02B96 /* AppStore.swift in Sources */,
 				10816D50FD5E62E3BB6295D2 /* CommandBarDesign.swift in Sources */,

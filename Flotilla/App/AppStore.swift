@@ -136,6 +136,12 @@ final class AppStore {
                 // destructive work after every app launch.
                 try processManager.start(session: sessions[index], deliverGoal: false)
             } catch {
+                if case .conversationAlreadyActive = error as? SessionProcessManager.LaunchError {
+                    sessions[index] = statusMachine.transition(sessions[index], to: .crashed)
+                    try? repository.save(mergingLiveScrollback(sessions[index]))
+                    lastOperationError = error.localizedDescription
+                    continue
+                }
                 if sessions[index].agentSessionID != nil {
                     sessions[index].agentSessionID = nil
                     try? repository.save(mergingLiveScrollback(sessions[index]))
@@ -447,7 +453,7 @@ final class AppStore {
         ) {
             // Pin the discovered native session ID before title guards
             if let index = sessions.firstIndex(where: { $0.id == sessionID }),
-               sessions[index].agentSessionID != discovered.id {
+               sessions[index].agentSessionID == nil || sessions[index].agentSessionID?.isEmpty == true {
                 sessions[index].agentSessionID = discovered.id
                 try? repository.save(mergingLiveScrollback(sessions[index]))
             }
@@ -847,6 +853,7 @@ final class AppStore {
         case let .terminated(sessionID, exitCode):
             if exitCode != 0,
                let index = sessions.firstIndex(where: { $0.id == sessionID }),
+               sessions[index].agent != .antigravity,
                sessions[index].agentSessionID != nil,
                !sessionResumeRetried.contains(sessionID),
                let start = sessionResumeStarts[sessionID],
