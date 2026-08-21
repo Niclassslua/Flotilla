@@ -261,18 +261,10 @@ final class RealPipelineReproTests: XCTestCase {
         let process = try XCTUnwrap(store.process(for: created.id))
         XCTAssertTrue(process.isRunning)
 
-        // Simulate the agent exiting: kill the pane's process. tmux destroys
-        // the session, which kills the attached client — exactly what happens
-        // when a real agent finishes or crashes.
+        // Simulate the agent exiting: kill the pane's process. With remain-on-exit on,
+        // the pane enters dead state with the exit banner while remaining available for restart.
         kill(Int32(originalPID)!, SIGKILL)
-
-        var clientExited = false
-        for _ in 0..<50 where !clientExited {
-            if store.process(for: created.id) == nil || store.process(for: created.id)?.isRunning == false { clientExited = true }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        XCTAssertTrue(clientExited, "app-side client must exit when the agent dies")
-        XCTAssertTrue(waitForTmuxPaneToDisappear(sessionName), "tmux session must be destroyed when its agent exits")
+        try await Task.sleep(for: .milliseconds(500))
 
         store.restartSession(sessionID: created.id)
 
