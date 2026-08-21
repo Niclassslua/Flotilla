@@ -162,7 +162,6 @@ enum SidebarItem: Hashable, Codable, Sendable {
 enum WorkspacePresentation: String, CaseIterable, Identifiable, Codable, Sendable {
     case grid
     case board
-    case list
     case focus
 
     var id: Self { self }
@@ -171,7 +170,6 @@ enum WorkspacePresentation: String, CaseIterable, Identifiable, Codable, Sendabl
         switch self {
         case .grid: return "Grid"
         case .board: return "Board"
-        case .list: return "List"
         case .focus: return "Focus"
         }
     }
@@ -180,7 +178,6 @@ enum WorkspacePresentation: String, CaseIterable, Identifiable, Codable, Sendabl
         switch self {
         case .grid: return "square.grid.2x2"
         case .board: return "square.grid.2x2.fill"
-        case .list: return "list.bullet"
         case .focus: return "macwindow"
         }
     }

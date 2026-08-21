@@ -67,13 +67,13 @@ struct WorkspaceToolbar: ToolbarContent {
                 // Presentation picker - only show when in fleet scope
                 if showsPresentationPicker {
                     Picker("Presentation", selection: presentation) {
-                        ForEach([WorkspacePresentation.grid, .board, .list]) { mode in
+                        ForEach([WorkspacePresentation.grid, .board]) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 170)
+                    .frame(width: 116)
                     .help("Switch presentation")
                     .accessibilityIdentifier("Toolbar.PresentationPicker")
                 }

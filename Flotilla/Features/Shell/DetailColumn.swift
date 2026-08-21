@@ -26,7 +26,7 @@ struct DetailColumn: View {
             case .overview:
                 overviewContent
             case .allSessions:
-                sessionsContent(showingAll: true)
+                sessionsContent
             case .project(let projectID):
                 projectContent(projectID: projectID)
             case .session(let sessionID):
@@ -63,7 +63,7 @@ struct DetailColumn: View {
     }
 
     @ViewBuilder
-    private func sessionsContent(showingAll: Bool) -> some View {
+    private var sessionsContent: some View {
         switch navigator.presentation {
         case .focus:
             focusedSessionContent
@@ -81,8 +81,6 @@ case .grid:
                 terminalManager: terminalManager,
                 openSession: onOpenSession
             )
-        case .list:
-            listView
         }
     }
 
@@ -187,37 +185,6 @@ case .grid:
         } else {
             EmptyWorkspaceView(hasSessions: !store.sessions.isEmpty, onCreate: onCreateSession)
         }
-    }
-
-    @ViewBuilder
-    private var listView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(store.sessions) { session in
-                    Button {
-                        onOpenSession(session.id)
-                    } label: {
-                        SessionCard(
-                            session: session,
-                            variant: .row,
-                            diffStatStore: store.diffStatStore,
-                            activityStore: nil,
-                            isSelected: store.selectedSessionID == session.id,
-                            onTap: { onOpenSession(session.id) },
-                            onDelete: {},
-                            onRestart: {},
-                            onRevealInFinder: {},
-                            onCopyPath: {},
-                            onCopyBranch: {},
-                            terminal: { EmptyView() }
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(22)
-        }
-        .background(FlotillaColors.canvas)
     }
 
     private var scopeTitle: String {
