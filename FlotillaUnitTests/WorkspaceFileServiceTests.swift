@@ -101,15 +101,51 @@ final class WorkspaceFileServiceTests: XCTestCase {
         let fmtSkill = skills.first { $0.name == "code-fmt" }
         XCTAssertNotNil(fmtSkill)
         XCTAssertEqual(fmtSkill?.scope, .global)
+        XCTAssertEqual(fmtSkill?.framework, .claude)
         XCTAssertEqual(fmtSkill?.source, "formatter-plugin")
 
         let reviewSkill = skills.first { $0.name == "code-review" }
         XCTAssertNotNil(reviewSkill)
         XCTAssertEqual(reviewSkill?.scope, .global)
+        XCTAssertEqual(reviewSkill?.framework, .claude)
         XCTAssertNil(reviewSkill?.source)
 
         let deploySkill = skills.first { $0.name == "project-deploy" }
         XCTAssertNotNil(deploySkill)
         XCTAssertEqual(deploySkill?.scope, .project)
+        XCTAssertEqual(deploySkill?.framework, .agents)
+    }
+
+    func testInspectsSkillBundleResourcesCorrectly() async throws {
+        let fakeHome = root.appendingPathComponent("fake-home-bundle", isDirectory: true)
+        let skillDir = fakeHome.appendingPathComponent(".agents/skills/expert", isDirectory: true)
+        let scriptsDir = skillDir.appendingPathComponent("scripts", isDirectory: true)
+        let refsDir = skillDir.appendingPathComponent("references", isDirectory: true)
+        let dataDir = skillDir.appendingPathComponent("data", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: scriptsDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: refsDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+
+        try "print('hi')".write(to: scriptsDir.appendingPathComponent("run.py"), atomically: true, encoding: .utf8)
+        try "# Guide".write(to: refsDir.appendingPathComponent("api.md"), atomically: true, encoding: .utf8)
+        try "# Another Guide".write(to: refsDir.appendingPathComponent("patterns.md"), atomically: true, encoding: .utf8)
+        try "col1,col2\n1,2".write(to: dataDir.appendingPathComponent("dataset.csv"), atomically: true, encoding: .utf8)
+
+        let skillText = "---\nname: expert-skill\ndescription: Expert skill with resources\nversion: 1.0.0\n---\nLine 1\nLine 2\nLine 3"
+        try skillText.write(to: skillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        let service = WorkspaceFileService(homeDirectoryProvider: { fakeHome })
+        let skills = try await service.skills(projectRoot: root)
+
+        let expert = skills.first { $0.name == "expert-skill" }
+        XCTAssertNotNil(expert)
+        XCTAssertEqual(expert?.framework, .agents)
+        XCTAssertEqual(expert?.version, "1.0.0")
+        XCTAssertEqual(expert?.bundleStats.scriptsCount, 1)
+        XCTAssertEqual(expert?.bundleStats.referencesCount, 2)
+        XCTAssertEqual(expert?.bundleStats.dataCount, 1)
+        XCTAssertEqual(expert?.bundleStats.totalFilesCount, 4)
+        XCTAssertTrue(expert?.bundleStats.lineCount ?? 0 >= 7)
     }
 }

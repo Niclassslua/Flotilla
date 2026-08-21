@@ -78,4 +78,45 @@ final class SkillFrontmatterTests: XCTestCase {
         XCTAssertNil(parsed.name)
         XCTAssertNil(parsed.description)
     }
+
+    func testParsesExtendedFieldsAndTags() {
+        let text = """
+        ---
+        name: impeccable
+        description: Create distinctive, production-grade frontend interfaces.
+        version: 2.1.1
+        user-invocable: true
+        argument-hint: "[craft|teach|extract]"
+        author: Anthropic
+        license: Apache-2.0
+        tags: [swift, ui, design]
+        ---
+        Body content
+        """
+
+        let parsed = SkillFrontmatter.parse(text)
+        XCTAssertEqual(parsed.name, "impeccable")
+        XCTAssertEqual(parsed.description, "Create distinctive, production-grade frontend interfaces.")
+        XCTAssertEqual(parsed.version, "2.1.1")
+        XCTAssertEqual(parsed.userInvocable, true)
+        XCTAssertEqual(parsed.argumentHint, "[craft|teach|extract]")
+        XCTAssertEqual(parsed.author, "Anthropic")
+        XCTAssertEqual(parsed.license, "Apache-2.0")
+        XCTAssertEqual(parsed.tags, ["swift", "ui", "design"])
+    }
+
+    func testParsesMarkdownFallbackWhenNoFrontmatter() {
+        let text = """
+        # ui-ux-pro-max
+
+        Comprehensive design guide for web and mobile applications. Contains styles and palettes.
+
+        ## Prerequisites
+        Check Python
+        """
+
+        let parsed = SkillFrontmatter.parseWithFallback(text, fallbackDirName: "ui-ux-pro-max-dir")
+        XCTAssertEqual(parsed.name, "ui-ux-pro-max")
+        XCTAssertTrue(parsed.description?.contains("Comprehensive design guide") == true)
+    }
 }
