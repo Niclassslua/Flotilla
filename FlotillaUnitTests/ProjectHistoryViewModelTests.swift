@@ -268,6 +268,7 @@ final class ProjectHistoryViewModelTests: XCTestCase {
 
         let attributed = viewModel.attribution(for: viewModel.commits[0])
         XCTAssertEqual(attributed?.sessionTitle, "Remove dead code")
+        XCTAssertEqual(attributed?.sessionGoal, "goal")
         XCTAssertEqual(attributed?.agent, .codexCLI)
         XCTAssertEqual(attributed?.branchName, "feat/x")
         XCTAssertNotNil(viewModel.attribution(for: viewModel.commits[1]))
