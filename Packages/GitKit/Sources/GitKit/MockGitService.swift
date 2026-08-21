@@ -107,17 +107,17 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public func log(at repoPath: URL, ref: String?, skip: Int, maxCount: Int) async throws -> [GitCommit] {
         logCalls.append((repoPath, ref, skip, maxCount))
         if let errorToThrow { throw errorToThrow }
-        // Paged the way the real service pages, so tests can exercise
-        // load-more without scripting each page by hand.
-        guard skip < logToReturn.count else { return [] }
-        return Array(logToReturn[skip..<min(skip + maxCount, logToReturn.count)])
+        let source = !logToReturn.isEmpty ? logToReturn : graphLogToReturn
+        guard skip < source.count else { return [] }
+        return Array(source[skip..<min(skip + maxCount, source.count)])
     }
 
     public func commitDetail(sha: String, at repoPath: URL) async throws -> GitCommitDetail {
         commitDetailCalls.append((sha, repoPath))
         if let errorToThrow { throw errorToThrow }
         if let scripted = commitDetailToReturn { return scripted }
-        guard let commit = logToReturn.first(where: { $0.sha == sha }) else {
+        let source = !logToReturn.isEmpty ? logToReturn : graphLogToReturn
+        guard let commit = source.first(where: { $0.sha == sha }) else {
             throw GitServiceError.commitNotFound(sha)
         }
         return GitCommitDetail(commit: commit, files: [])
@@ -147,7 +147,8 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public func logGraph(at repoPath: URL, maxCount: Int) async throws -> [GitCommit] {
         logGraphCalls.append((repoPath, maxCount))
         if let errorToThrow { throw errorToThrow }
-        return graphLogToReturn
+        if !graphLogToReturn.isEmpty { return Array(graphLogToReturn.prefix(maxCount)) }
+        return Array(logToReturn.prefix(maxCount))
     }
 
     public func branches(at repoPath: URL) async throws -> [GitBranch] {

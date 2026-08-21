@@ -563,6 +563,10 @@ public struct GitService: GitServiceProtocol {
             "--topo-order",
             "--no-color",
             "--decorate=full",
+            // Same single-invocation reasoning as `log`: the graph rows show a
+            // diff stat, and asking for it here costs one flag instead of one
+            // subprocess per visible commit.
+            "--numstat",
             "--max-count=\(max(1, maxCount))",
             "--format=\(Self.logFormat)",
             "--",

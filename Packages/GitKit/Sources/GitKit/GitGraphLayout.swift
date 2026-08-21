@@ -1,11 +1,27 @@
 import Foundation
 
-public struct GitGraphRow: Sendable, Equatable {
+/// One row of the rendered commit graph: a commit, the lane its dot sits in,
+/// and every edge that has to be drawn inside that row's slice of canvas.
+///
+/// Segments are deliberately *self-contained per row*, so a row can be drawn
+/// knowing nothing about its neighbours — which is what lets the view keep its
+/// list lazy. Continuity across rows falls out of the geometry instead: every
+/// edge leaves the bottom of a row vertically at a lane centre, and every edge
+/// enters the next row the same way, so abutting rows join seamlessly.
+public struct GitGraphRow: Sendable, Equatable, Identifiable {
     public let commit: GitCommit
-    public let lane: Int              // which column the dot sits in
-    public let colorIndex: Int        // stable per-lane color
-    public let segments: [GitGraphSegment]  // edges drawn within THIS row
+    /// Column the dot sits in, counted from the left.
+    public let lane: Int
+    /// Palette slot for this commit's lane. Stable along a lane's whole run,
+    /// so one branch keeps one colour from tip to merge base.
+    public let colorIndex: Int
+    public let segments: [GitGraphSegment]
+    /// Lanes occupied by *this* row. The view takes the maximum across all
+    /// rows for the gutter width: sizing the gutter per row makes every column
+    /// to its right jitter as the graph widens and narrows.
     public let laneCount: Int
+
+    public var id: String { commit.sha }
 
     public init(
         commit: GitCommit,
@@ -22,11 +38,23 @@ public struct GitGraphRow: Sendable, Equatable {
     }
 }
 
+/// An edge inside one row.
+///
+/// The kinds are *geometric*, not semantic: they say only where the edge
+/// starts and ends vertically, which is the sole thing the renderer needs.
+/// What the edge means — a branch fanning out, a branch being absorbed, an
+/// unrelated branch passing by — is carried by the lanes it joins. Encoding
+/// meaning instead was the original bug: "a branch merging into an existing
+/// lane" and "a lane converging onto this commit" are opposite geometries, and
+/// sharing one case for both drew half the edges upside down.
 public struct GitGraphSegment: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
+        /// Top edge → bottom edge, in a lane this commit isn't on.
         case passThrough
-        case branchOut
-        case mergeIn
+        /// Top edge at `fromLane` → this row's dot.
+        case incoming
+        /// This row's dot → bottom edge at `toLane`.
+        case outgoing
     }
 
     public let fromLane: Int
@@ -40,154 +68,154 @@ public struct GitGraphSegment: Sendable, Equatable {
         self.colorIndex = colorIndex
         self.kind = kind
     }
+
+    /// True when the edge changes column and therefore has to be curved rather
+    /// than drawn as a straight line.
+    public var isDiagonal: Bool { fromLane != toLane }
 }
 
 public enum GitGraphLayout {
-    /// Pure function converting a list of topo-ordered commits into graph rows.
-    /// Each row contains the commit, its dot position (lane), color, laneCount,
-    /// and self-contained segments for edge rendering within that row.
+    /// Number of distinct palette slots `colorIndex` cycles through. The view's
+    /// palette must have exactly this many entries, otherwise two lanes that
+    /// were deliberately given different slots collapse to the same colour.
+    public static let colorCount = 8
+
+    /// Lays topologically ordered commits (newest first) out into lanes.
+    ///
+    /// Pure and total: unknown parents, multiple roots, and octopus merges all
+    /// produce rows rather than throwing, because a 500-commit `--all` window
+    /// routinely cuts the history off mid-branch and a truncated graph still
+    /// has to draw.
     public static func rows(for commits: [GitCommit]) -> [GitGraphRow] {
-        var activeLanes: [String?] = [] // index -> SHA expected in that lane
+        var lanes: [Lane?] = []
+        var colorCursor = 0
         var rows: [GitGraphRow] = []
         rows.reserveCapacity(commits.count)
 
+        /// Allocates a lane, preferring a free slot to the right of `origin` so
+        /// branches fan outward from the commit that spawned them instead of
+        /// darting back to column 0.
+        func allocateLane(rightOf origin: Int) -> Int {
+            if let index = lanes.indices.first(where: { $0 > origin && lanes[$0] == nil }) {
+                return index
+            }
+            if let index = lanes.firstIndex(where: { $0 == nil }) { return index }
+            lanes.append(nil)
+            return lanes.count - 1
+        }
+
+        /// Hands out the next palette slot not already worn by a live lane, so
+        /// two lanes drawn side by side never share a colour while both exist.
+        func allocateColor() -> Int {
+            let inUse = Set(lanes.compactMap { $0?.colorIndex })
+            for offset in 0..<colorCount {
+                let candidate = (colorCursor + offset) % colorCount
+                if !inUse.contains(candidate) {
+                    colorCursor = (candidate + 1) % colorCount
+                    return candidate
+                }
+            }
+            // Every slot is live — more concurrent branches than colours.
+            let candidate = colorCursor % colorCount
+            colorCursor = (candidate + 1) % colorCount
+            return candidate
+        }
+
         for commit in commits {
             let sha = commit.sha
-
-            // 1. Find or assign a lane for this commit
-            let lane: Int
-            if let existingIndex = activeLanes.firstIndex(where: { $0 == sha }) {
-                lane = existingIndex
-            } else if let freeIndex = activeLanes.firstIndex(where: { $0 == nil }) {
-                lane = freeIndex
-            } else {
-                lane = activeLanes.count
-                activeLanes.append(nil)
-            }
-
             var segments: [GitGraphSegment] = []
 
-            // If other lanes were also expecting this commit (convergence/merge from above),
-            // record incoming mergeIn segments from those lanes to our lane
-            for (idx, expected) in activeLanes.enumerated() where idx != lane && expected == sha {
+            // 1. Place the commit. A lane already waiting for it means the
+            //    child drawn above continued down into this row, so the dot
+            //    needs a stub joining it to the top edge; a commit nobody is
+            //    waiting for is a branch tip and gets a fresh lane and colour,
+            //    with nothing drawn above the dot.
+            let lane: Int
+            let colorIndex: Int
+            if let existing = lanes.firstIndex(where: { $0?.expected == sha }) {
+                lane = existing
+                colorIndex = lanes[existing]!.colorIndex
                 segments.append(GitGraphSegment(
-                    fromLane: idx,
-                    toLane: lane,
-                    colorIndex: idx,
-                    kind: .mergeIn
+                    fromLane: lane, toLane: lane, colorIndex: colorIndex, kind: .incoming
                 ))
-                activeLanes[idx] = nil
-            }
-
-            // Clear expectations for this commit
-            activeLanes[lane] = nil
-
-            // 2. Pass-through for other active lanes that are not this commit
-            for (idx, expected) in activeLanes.enumerated() where idx != lane && expected != nil {
-                segments.append(GitGraphSegment(
-                    fromLane: idx,
-                    toLane: idx,
-                    colorIndex: idx,
-                    kind: .passThrough
-                ))
-            }
-
-            // 3. Connect this commit to its parents
-            let parents = commit.parents
-
-            if parents.isEmpty {
-                // Root commit — lane ends here, no downward edge from this lane
-            } else if parents.count == 1 {
-                let parentSHA = parents[0]
-                if let targetLane = activeLanes.firstIndex(where: { $0 == parentSHA }) {
-                    // Parent is already expected in another lane -> merge into it
-                    segments.append(GitGraphSegment(
-                        fromLane: lane,
-                        toLane: targetLane,
-                        colorIndex: lane,
-                        kind: .mergeIn
-                    ))
-                } else {
-                    // Continue this lane with the parent
-                    activeLanes[lane] = parentSHA
-                    segments.append(GitGraphSegment(
-                        fromLane: lane,
-                        toLane: lane,
-                        colorIndex: lane,
-                        kind: .passThrough
-                    ))
-                }
             } else {
-                // Merge commit (2+ parents)
-                // First parent continues in current lane or merges into existing
-                let firstParent = parents[0]
-                if let targetLane = activeLanes.firstIndex(where: { $0 == firstParent }) {
+                lane = allocateLane(rightOf: -1)
+                colorIndex = allocateColor()
+            }
+
+            // 2. Any *other* lane waiting for this commit converges into the
+            //    dot and ends here — this is a branch being caught up with.
+            for index in lanes.indices where index != lane && lanes[index]?.expected == sha {
+                segments.append(GitGraphSegment(
+                    fromLane: index, toLane: lane, colorIndex: lanes[index]!.colorIndex, kind: .incoming
+                ))
+                lanes[index] = nil
+            }
+            lanes[lane] = nil
+
+            // 3. Lanes with nothing to do with this commit run straight past.
+            for index in lanes.indices where index != lane {
+                guard let occupant = lanes[index] else { continue }
+                segments.append(GitGraphSegment(
+                    fromLane: index, toLane: index, colorIndex: occupant.colorIndex, kind: .passThrough
+                ))
+            }
+
+            // 4. Descend to the parents. The first parent inherits the lane and
+            //    its colour so mainline history stays one unbroken column; the
+            //    rest fan out. A parent another lane is already waiting for
+            //    needs no new lane — the edge just curves across into it, which
+            //    is what draws a branch rejoining its base.
+            for (offset, parent) in commit.parents.enumerated() {
+                if let existing = lanes.firstIndex(where: { $0?.expected == parent }) {
                     segments.append(GitGraphSegment(
-                        fromLane: lane,
-                        toLane: targetLane,
-                        colorIndex: lane,
-                        kind: .mergeIn
+                        fromLane: lane, toLane: existing, colorIndex: lanes[existing]!.colorIndex, kind: .outgoing
+                    ))
+                } else if offset == 0 {
+                    lanes[lane] = Lane(expected: parent, colorIndex: colorIndex)
+                    segments.append(GitGraphSegment(
+                        fromLane: lane, toLane: lane, colorIndex: colorIndex, kind: .outgoing
                     ))
                 } else {
-                    activeLanes[lane] = firstParent
+                    let branchLane = allocateLane(rightOf: lane)
+                    let branchColor = allocateColor()
+                    lanes[branchLane] = Lane(expected: parent, colorIndex: branchColor)
                     segments.append(GitGraphSegment(
-                        fromLane: lane,
-                        toLane: lane,
-                        colorIndex: lane,
-                        kind: .passThrough
+                        fromLane: lane, toLane: branchLane, colorIndex: branchColor, kind: .outgoing
                     ))
                 }
-
-                // Additional parents branch out or merge in
-                for parentSHA in parents.dropFirst() {
-                    if let targetLane = activeLanes.firstIndex(where: { $0 == parentSHA }) {
-                        segments.append(GitGraphSegment(
-                            fromLane: lane,
-                            toLane: targetLane,
-                            colorIndex: targetLane,
-                            kind: .mergeIn
-                        ))
-                    } else {
-                        // Allocate a new or free lane for this parent
-                        let branchLane: Int
-                        if let freeIndex = activeLanes.firstIndex(where: { $0 == nil }) {
-                            branchLane = freeIndex
-                        } else {
-                            branchLane = activeLanes.count
-                            activeLanes.append(nil)
-                        }
-                        activeLanes[branchLane] = parentSHA
-                        segments.append(GitGraphSegment(
-                            fromLane: lane,
-                            toLane: branchLane,
-                            colorIndex: branchLane,
-                            kind: .branchOut
-                        ))
-                    }
-                }
             }
 
-            // Compact trailing nil lanes in activeLanes
-            while let last = activeLanes.last, last == nil {
-                activeLanes.removeLast()
+            // Trailing empties are dropped so the graph narrows again after a
+            // branch closes. Only the tail is trimmed: compacting interior gaps
+            // would shift live lanes sideways mid-run, and a lane that changes
+            // column between two rows tears the line drawn through it.
+            while lanes.last == .some(nil) { lanes.removeLast() }
+
+            let widest = segments.reduce(max(lane, lanes.count - 1)) {
+                max($0, max($1.fromLane, $1.toLane))
             }
-
-            let maxLane = max(
-                lane,
-                activeLanes.count - 1,
-                segments.map { max($0.fromLane, $0.toLane) }.max() ?? 0
-            )
-            let laneCount = max(1, maxLane + 1)
-
             rows.append(GitGraphRow(
                 commit: commit,
                 lane: lane,
-                colorIndex: lane,
+                colorIndex: colorIndex,
                 segments: segments,
-                laneCount: laneCount
+                laneCount: max(1, widest + 1)
             ))
         }
 
         return rows
+    }
+
+    /// Widest point of the graph — the gutter width the view has to reserve.
+    public static func laneCount(of rows: [GitGraphRow]) -> Int {
+        max(1, rows.map(\.laneCount).max() ?? 1)
+    }
+
+    /// A lane in flight: the SHA it is descending towards, and the colour it
+    /// keeps until it gets there.
+    private struct Lane: Equatable {
+        var expected: String
+        var colorIndex: Int
     }
 }
