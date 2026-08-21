@@ -151,7 +151,8 @@ struct CommitDetailView: View {
     // MARK: - Identity
 
     private func identity(_ commit: GitCommit) -> some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
+        let attribution = viewModel.attribution(for: commit)
+        return VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
             HStack(alignment: .top, spacing: FlotillaSpacing.small) {
                 ProjectMark(
                     title: commit.authorName,

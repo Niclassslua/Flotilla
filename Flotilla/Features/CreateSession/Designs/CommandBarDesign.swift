@@ -72,16 +72,20 @@ struct CommandBarDesign: View {
                 .font(.system(size: 18, weight: .regular))
                 .lineLimit(1...4)
                 .focused($goalFocused)
-                .onSubmit { actions.launch(true) }
-                // Belt and suspenders alongside `EscapeKeyCatcher` at the
-                // presentation layer: this field's multi-line `axis: .vertical`
-                // TextField is NSTextView-backed, and NSTextView can consume
-                // Escape internally via its own `cancelOperation:` handling
-                // before any ancestor `.onExitCommand`/`.keyboardShortcut`
-                // ever sees it.
-                .onKeyPress(.escape) {
-                    actions.cancel()
-                    return .handled
+                .onKeyPress { press in
+                    if press.key == .return {
+                        if press.modifiers.contains(.shift) || press.modifiers.contains(.option) {
+                            return .ignored
+                        }
+                        if draft.canLaunch {
+                            actions.launch(true)
+                        }
+                        return .handled
+                    } else if press.key == .escape {
+                        actions.cancel()
+                        return .handled
+                    }
+                    return .ignored
                 }
                 .accessibilityIdentifier("CreateSession.GoalField")
 

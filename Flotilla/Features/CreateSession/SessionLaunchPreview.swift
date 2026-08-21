@@ -89,9 +89,12 @@ struct SessionLaunchPreview: Equatable {
     /// Matches the rule the old `CreateSessionView.sessionTitle` used, so
     /// existing sessions and new ones are named the same way.
     static func derivedTitle(goal: String, projectChoice: ProjectChoice) -> String {
-        let trimmed = goal.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            return String(trimmed.prefix(60))
+        let firstLine = goal
+            .components(separatedBy: .newlines)
+            .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        if !firstLine.isEmpty {
+            return String(firstLine.prefix(60))
         }
         switch projectChoice {
         case .general: return "General session"

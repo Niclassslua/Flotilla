@@ -245,7 +245,7 @@ struct ProjectGraphView: View {
                 Text("Changes")
                     .frame(width: GraphMetrics.statColumn, alignment: .trailing)
                 Text("By")
-                    .frame(width: GraphMetrics.authorColumn, alignment: .center)
+                    .frame(width: GraphMetrics.authorColumn, alignment: .leading)
                 Text("When")
                     .frame(width: GraphMetrics.timeColumn, alignment: .trailing)
                 Text("ID")
@@ -390,7 +390,7 @@ enum GraphMetrics {
     static let columnSpacing: CGFloat = 8
     static let refTextMaxWidth: CGFloat = 112
     static let statColumn: CGFloat = 88
-    static let authorColumn: CGFloat = 22
+    static let authorColumn: CGFloat = 52
     static let timeColumn: CGFloat = 44
     static let shaColumn: CGFloat = 58
 
@@ -561,7 +561,7 @@ private struct GraphCommitRow: View {
                 .frame(minWidth: GraphMetrics.statColumn, alignment: .trailing)
 
             authorIdentity
-                .frame(width: GraphMetrics.authorColumn, alignment: .center)
+                .frame(width: GraphMetrics.authorColumn, alignment: .leading)
 
             Text(HomeTimestamp.compact(commit.authorDate))
                 .font(FlotillaTypography.caption2.monospacedDigit())
@@ -592,26 +592,32 @@ private struct GraphCommitRow: View {
 
     @ViewBuilder
     private var authorIdentity: some View {
-        if let attribution {
-            ProviderLogo(agent: attribution.agent)
-                .frame(width: 16, height: 16)
-                .help("\(attribution.displayName) (\(attribution.agent.displayName)) — \(attribution.source.explanation)")
-        } else {
+        HStack(spacing: 3.5) {
             ProjectMark(
                 title: commit.authorName,
                 tint: ProjectMark.tint(forKey: commit.authorEmail),
                 size: 18
             )
-            .help(commit.authorName)
+            .help(commit.authorEmail.isEmpty ? commit.authorName : "\(commit.authorName) <\(commit.authorEmail)>")
+
+            if let attribution {
+                Image(systemName: "plus")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundStyle(FlotillaColors.textTertiary.opacity(0.6))
+
+                ProviderLogo(agent: attribution.agent)
+                    .frame(width: 16, height: 16)
+                    .help("\(attribution.agent.displayName)\(attribution.sessionTitle.map { " · \($0)" } ?? "") — \(attribution.source.explanation)")
+            }
         }
     }
 
     private var accessibilityDescription: String {
         var parts = [commit.subject]
         if let attribution {
-            parts.append("by \(attribution.agent.displayName), \(attribution.source.explanation)")
+            parts.append("authored by \(commit.authorName), assisted by \(attribution.agent.displayName) (\(attribution.source.explanation))")
         } else {
-            parts.append("by \(commit.authorName)")
+            parts.append("authored by \(commit.authorName)")
         }
         parts.append(HomeTimestamp.compact(commit.authorDate))
         if isNew { parts.append("new since your last visit") }

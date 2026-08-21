@@ -137,6 +137,23 @@ public enum AXID: String, Sendable {
     case projectTabRules = "ProjectDetail.ModeTab-Rules"
     case projectFiles = "ProjectFiles"
     case projectSkills = "ProjectSkills"
+    case projectRules = "ProjectRules"
+
+    // MARK: - Knowledge (Skills & Rules catalog)
+    case knowledgeDesignPicker = "Knowledge.DesignPicker"
+    case knowledgeSearchField = "Knowledge.SearchField"
+    case knowledgeScopeFilter = "Knowledge.ScopeFilter"
+    case knowledgeSortMenu = "Knowledge.SortMenu"
+    case knowledgeRefresh = "Knowledge.Refresh"
+    case knowledgeAddTemplate = "Knowledge.AddTemplate"
+    /// Suffixed with the item's title, e.g. `Knowledge.Item-CLAUDE.md`.
+    case knowledgeItem = "Knowledge.Item-"
+    case knowledgeDetailReader = "Knowledge.Detail.Reader"
+    case knowledgeDetailEditor = "Knowledge.Detail.Editor"
+    case knowledgeEditButton = "Knowledge.Detail.Edit"
+    case knowledgeSaveButton = "Knowledge.Detail.Save"
+    case knowledgeSaveStatus = "Knowledge.Detail.SaveStatus"
+    case knowledgeNoSelection = "Knowledge.NoSelection"
 
     // MARK: - Home Dashboard
     case homeDashboard = "HomeDashboard"

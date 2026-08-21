@@ -110,6 +110,13 @@ final class SessionLaunchPreviewTests: XCTestCase {
         XCTAssertEqual(preview.title.count, 60)
     }
 
+    func testTitleUsesFirstLineOfMultilineGoal() {
+        let multilineGoal = "First line of objective\nSecond line with details\nThird line"
+        let preview = resolve(goal: multilineGoal, choice: .general, createWorktree: false)
+
+        XCTAssertEqual(preview.title, "First line of objective")
+    }
+
     func testEmptyGoalFallsBackToProjectNameThenGeneralSession() {
         let projectPreview = resolve(goal: "   ", choice: .known(project(named: "Atlas")), createWorktree: false)
         XCTAssertEqual(projectPreview.title, "Atlas")
