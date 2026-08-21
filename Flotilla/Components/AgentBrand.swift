@@ -1,0 +1,79 @@
+import SwiftUI
+import SessionKit
+import DesignSystem
+
+/// Real per-agent brand colors, distinct from `FlotillaColors`' semantic
+/// status palette (which was only ever a stand-in here). Fixed hex values
+/// rather than adaptive tokens — brand marks don't shift for light/dark the
+/// way UI chrome does.
+enum AgentBrand {
+    /// Antigravity's 5-stop loop — first and last stop match, so it closes
+    /// cleanly as a sweep. Only the home composer's background wash uses
+    /// this directly (`LaunchpadDesign.backdrop`); everywhere else that
+    /// wants a single per-agent color — card borders, fills, the selection
+    /// checkmark — uses `accentColor` instead.
+    static let antigravityGradientColors: [Color] = [
+        Color(red: 0x49 / 255, green: 0x86 / 255, blue: 0xF2 / 255), // #4986F2
+        Color(red: 0x80 / 255, green: 0xBB / 255, blue: 0x74 / 255), // #80BB74
+        Color(red: 0xE8 / 255, green: 0x8A / 255, blue: 0x3F / 255), // #E88A3F
+        Color(red: 0xDB / 255, green: 0x5F / 255, blue: 0x4E / 255), // #DB5F4E
+        Color(red: 0x49 / 255, green: 0x86 / 255, blue: 0xF2 / 255)  // #4986F2 — closes the loop
+    ]
+
+    /// A single representative color per agent — usable as a gradient stop,
+    /// a wash, or anywhere a flat `Color` is required. For Antigravity this
+    /// is the anchor color its full gradient starts and ends on.
+    static func accentColor(for kind: AgentKind) -> Color {
+        switch kind {
+        case .claudeCode: FlotillaColors.accent
+        case .codexCLI: Color(red: 0x40 / 255, green: 0x43 / 255, blue: 0xF5 / 255) // #4043F5
+        case .openCode: .white // #FFFFFF
+        case .antigravity: antigravityGradientColors[0]
+        }
+    }
+
+    /// Accent color for a skill framework, matching agent brand colors where applicable.
+    static func accentColor(for framework: SkillFramework) -> Color {
+        if let kind = framework.agentKind {
+            return accentColor(for: kind)
+        }
+        switch framework {
+        case .cursor:
+            return Color(white: 0.90)
+        case .agents:
+            return Color(red: 0.40, green: 0.70, blue: 0.65)
+        case .custom:
+            return FlotillaColors.accent
+        case .claude, .codex, .gemini:
+            return FlotillaColors.accent
+        }
+    }
+
+    /// Background color for framework badge / icon containers.
+    static func iconBackgroundColor(for framework: SkillFramework, isHovered: Bool = false) -> Color {
+        switch framework {
+        case .cursor:
+            return Color(white: 0.20).opacity(isHovered ? 0.8 : 0.5)
+        case .agents:
+            return FlotillaColors.surfaceElevated
+        case .claude, .codex, .gemini, .custom:
+            return accentColor(for: framework).opacity(isHovered ? 0.18 : 0.10)
+        }
+    }
+}
+
+extension AgentKind {
+    var accentColor: Color {
+        AgentBrand.accentColor(for: self)
+    }
+}
+
+extension SkillFramework {
+    var accentColor: Color {
+        AgentBrand.accentColor(for: self)
+    }
+
+    func iconBackgroundColor(isHovered: Bool = false) -> Color {
+        AgentBrand.iconBackgroundColor(for: self, isHovered: isHovered)
+    }
+}
