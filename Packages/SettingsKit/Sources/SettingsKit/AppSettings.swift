@@ -131,18 +131,35 @@ public enum OpenCodeSubscription: String, Codable, CaseIterable, Sendable, Ident
     }
 }
 
+public enum WorktreeNamingSource: String, Codable, CaseIterable, Sendable, Identifiable {
+    case promptDerived
+    case agentManaged
+
+    public var id: Self { self }
+
+    public var displayName: String {
+        switch self {
+        case .promptDerived: "Derived from prompt"
+        case .agentManaged: "Chosen by the agent"
+        }
+    }
+}
+
 public struct SessionDefaults: Codable, Equatable, Sendable {
     public var createWorktreeByDefault: Bool
     public var defaultAgentRawValue: String = "claudeCode"
+    public var agentManagedTitleEnabled: Bool
 
-    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: String = "claudeCode") {
+    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: String = "claudeCode", agentManagedTitleEnabled: Bool = true) {
         self.createWorktreeByDefault = createWorktreeByDefault
         self.defaultAgentRawValue = defaultAgentRawValue
+        self.agentManagedTitleEnabled = agentManagedTitleEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
         case createWorktreeByDefault
         case defaultAgentRawValue
+        case agentManagedTitleEnabled
     }
 
     // Hand-written rather than synthesized: `SettingsStoring` decodes the
@@ -153,6 +170,7 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         createWorktreeByDefault = try container.decodeIfPresent(Bool.self, forKey: .createWorktreeByDefault) ?? true
+        agentManagedTitleEnabled = try container.decodeIfPresent(Bool.self, forKey: .agentManagedTitleEnabled) ?? true
         if let stringValue = try? container.decode(String.self, forKey: .defaultAgentRawValue) {
             defaultAgentRawValue = stringValue
         } else if let intValue = try? container.decode(Int.self, forKey: .defaultAgentRawValue) {
@@ -230,17 +248,28 @@ public struct GitPreferences: Codable, Equatable, Sendable {
     /// inside an agent session, so history stays attributable after the
     /// session's branch is merged away. Never changes commit authorship.
     public var stampAgentTrailer: Bool
+    public var worktreeNamingSource: WorktreeNamingSource
 
     public init(
         deleteBranchWithWorktree: Bool = true,
         fetchBeforeCreatingWorktree: Bool = false,
         highlightUnseenCommits: Bool = true,
-        stampAgentTrailer: Bool = true
+        stampAgentTrailer: Bool = true,
+        worktreeNamingSource: WorktreeNamingSource = .promptDerived
     ) {
         self.deleteBranchWithWorktree = deleteBranchWithWorktree
         self.fetchBeforeCreatingWorktree = fetchBeforeCreatingWorktree
         self.highlightUnseenCommits = highlightUnseenCommits
         self.stampAgentTrailer = stampAgentTrailer
+        self.worktreeNamingSource = worktreeNamingSource
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case deleteBranchWithWorktree
+        case fetchBeforeCreatingWorktree
+        case highlightUnseenCommits
+        case stampAgentTrailer
+        case worktreeNamingSource
     }
 
     /// Decoded key by key rather than by the synthesized initializer: a
@@ -254,6 +283,7 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         fetchBeforeCreatingWorktree = try container.decodeIfPresent(Bool.self, forKey: .fetchBeforeCreatingWorktree) ?? false
         highlightUnseenCommits = try container.decodeIfPresent(Bool.self, forKey: .highlightUnseenCommits) ?? true
         stampAgentTrailer = try container.decodeIfPresent(Bool.self, forKey: .stampAgentTrailer) ?? true
+        worktreeNamingSource = try container.decodeIfPresent(WorktreeNamingSource.self, forKey: .worktreeNamingSource) ?? .promptDerived
     }
 }
 

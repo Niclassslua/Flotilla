@@ -133,7 +133,12 @@ final class SessionProcessManager {
     }
 
     @discardableResult
-    func start(session: Session, deliverGoal: Bool = true) throws -> PTYProcessProtocol {
+    func start(
+        session: Session,
+        deliverGoal: Bool = true,
+        selfReportInstructions: String? = nil,
+        selfReportDescriptorPath: URL? = nil
+    ) throws -> PTYProcessProtocol {
         // A restart is in flight: the registered process was told to die but
         // its exit callback has not landed yet. Returning it would hand the
         // caller a dying process whose eventual exit clears the session's
@@ -202,9 +207,26 @@ final class SessionProcessManager {
            let attributionEnvironment = agentAttributionEnvironment(for: session, base: baseEnvironment) {
             baseEnvironment = attributionEnvironment
         }
+        if let selfReportDescriptorPath {
+            baseEnvironment["FLOTILLA_SELF_REPORT_PATH"] = selfReportDescriptorPath.path
+        }
+
+        // When self-report instructions are provided and the goal is being
+        // delivered (first launch, not resume), prepend them so the agent
+        // reads the setup block before the user's actual objective.
+        let effectiveGoal: String?
+        if effectiveDeliverGoal {
+            if let selfReportInstructions, !selfReportInstructions.isEmpty {
+                effectiveGoal = selfReportInstructions + session.goal
+            } else {
+                effectiveGoal = session.goal
+            }
+        } else {
+            effectiveGoal = nil
+        }
 
         let plan = provider.launchPlan(
-            goal: effectiveDeliverGoal ? session.goal : nil,
+            goal: effectiveGoal,
             model: session.model,
             effort: session.effort,
             resumeIntent: resumeIntent,
@@ -292,7 +314,7 @@ final class SessionProcessManager {
                 // submitted (see TmuxGoalDelivering's doc comment) — tmux
                 // send-keys is the mechanism confirmed to actually work.
                 let deliverer = tmuxGoalDeliverer
-                let trimmedGoal = session.goal.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedGoal = (effectiveGoal ?? session.goal).trimmingCharacters(in: .whitespacesAndNewlines)
                 let sessionName = TmuxSessionWrapping.sessionName(for: session.id)
                 goalDeliveryTasks[session.id] = Task.detached(priority: .userInitiated) {
                     guard !Task.isCancelled else { return }

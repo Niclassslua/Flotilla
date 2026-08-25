@@ -144,4 +144,37 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.agentOverrides.arguments["claudeCode"], ["--verbose"])
         XCTAssertEqual(decoded.agentOverrides.arguments["openCode"], ["--log-level", "debug"])
     }
+
+    func testSettingsWrittenBeforeWorktreeNamingSourceAndAgentManagedTitlesStillDecode() throws {
+        let oldJSON = Data(
+            #"{"worktreeBaseDirectory":"/tmp/worktrees","sessionDefaults":{"createWorktreeByDefault":false},"git":{"deleteBranchWithWorktree":false}}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
+
+        XCTAssertEqual(decoded.git.worktreeNamingSource, .promptDerived)
+        XCTAssertEqual(decoded.sessionDefaults.agentManagedTitleEnabled, true)
+        XCTAssertEqual(decoded.sessionDefaults.createWorktreeByDefault, false)
+        XCTAssertEqual(decoded.git.deleteBranchWithWorktree, false)
+    }
+
+    func testWorktreeNamingSourceRoundTrips() throws {
+        var settings = AppSettings(worktreeBaseDirectory: "/tmp/worktrees")
+        settings.git.worktreeNamingSource = .agentManaged
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertEqual(decoded.git.worktreeNamingSource, .agentManaged)
+    }
+
+    func testAgentManagedTitleEnabledRoundTrips() throws {
+        var settings = AppSettings(worktreeBaseDirectory: "/tmp/worktrees")
+        settings.sessionDefaults.agentManagedTitleEnabled = false
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertEqual(decoded.sessionDefaults.agentManagedTitleEnabled, false)
+    }
 }

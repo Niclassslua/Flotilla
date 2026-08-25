@@ -326,12 +326,20 @@ private struct SessionSettingsPane: View {
 
                 Toggle("Create a worktree for project sessions", isOn: $viewModel.settings.sessionDefaults.createWorktreeByDefault)
                     .toggleStyle(.switch)
+                Toggle("Let the agent choose a session title", isOn: $viewModel.settings.sessionDefaults.agentManagedTitleEnabled)
+                    .toggleStyle(.switch)
+                    .accessibilityIdentifier("Settings.AgentManagedTitle")
             } header: {
                 SettingsSectionHeader("Defaults", systemImage: "slider.horizontal.3")
             } footer: {
-                Text("New sessions open with this agent preselected.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("New sessions open with this agent preselected.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("When enabled, Codex CLI and OpenCode are asked to propose a short title after reading your prompt. Claude Code and Antigravity are unaffected — they already generate titles natively.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
@@ -407,6 +415,20 @@ private struct GitSettingsPane: View {
                     .foregroundStyle(.secondary)
             } header: {
                 SettingsSectionHeader("Worktree Creation", systemImage: "arrow.down.circle")
+            }
+
+            Section {
+                Picker("Branch naming", selection: $viewModel.settings.git.worktreeNamingSource) {
+                    ForEach(WorktreeNamingSource.allCases) { source in
+                        Text(source.displayName).tag(source)
+                    }
+                }
+                .accessibilityIdentifier("Settings.WorktreeNamingSource")
+                Text("Flotilla normally derives the branch name from your prompt. When set to \"Chosen by the agent\", the agent is asked to pick a name and create the worktree itself. Falls back to prompt-derived naming if the agent doesn't respond in time.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                SettingsSectionHeader("Worktree Naming", systemImage: "pencil.and.list.clipboard")
             }
 
             Section {

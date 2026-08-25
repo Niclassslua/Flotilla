@@ -5,6 +5,7 @@ import GitKit
 import ProcessKit
 import TerminalKit
 import AgentKit
+import SettingsKit
 
 @Observable
 @MainActor
@@ -32,6 +33,11 @@ final class AppStore {
     /// base directory takes effect on the very next session creation
     /// without needing to relaunch the app.
     private let worktreeBaseDirectoryProvider: () -> URL
+    /// Provides the current `AppSettings` snapshot for features that need
+    /// to consult user preferences at runtime (agent-managed worktree naming,
+    /// agent-managed session titles). Same closure-not-frozen-value rationale
+    /// as `worktreeBaseDirectoryProvider`.
+    private let settingsProvider: () -> AppSettings
     private let worktreePlanner = WorktreePlanner()
     private let statusMachine = SessionStatusMachine()
     private var scrollbackSaveTasks: [UUID: Task<Void, Never>] = [:]
@@ -62,7 +68,8 @@ final class AppStore {
         gitService: GitServiceProtocol,
         ghService: GhServiceProtocol? = nil,
         processManager: SessionProcessManager,
-        worktreeBaseDirectoryProvider: @escaping () -> URL
+        worktreeBaseDirectoryProvider: @escaping () -> URL,
+        settingsProvider: @escaping () -> AppSettings = { AppSettings() }
     ) {
         self.repository = repository
         self.gitService = gitService
@@ -70,6 +77,7 @@ final class AppStore {
         self.diffStatStore = DiffStatStore(gitService: gitService)
         self.processManager = processManager
         self.worktreeBaseDirectoryProvider = worktreeBaseDirectoryProvider
+        self.settingsProvider = settingsProvider
         processManager.eventHandler = { [weak self] event in
             self?.handleProcessEvent(event)
         }
@@ -505,6 +513,102 @@ final class AppStore {
         syncDiscoveredTitle(newTitle, toSessionID: sessionID)
     }
 
+    // MARK: - Agent self-report
+
+    /// Polls for the agent's self-report descriptor file and applies any
+    /// metadata it contains (title, worktree branch/path) to the session.
+    /// Falls back to app-managed worktree creation on timeout when the
+    /// agent was expected to create one.
+    private func awaitAgentSelfReport(
+        sessionID: UUID,
+        descriptorPath: URL,
+        wantsWorktree: Bool,
+        projectFolder: URL?
+    ) async {
+        let supportDirectory = TmuxSessionWrapping.defaultSupportDirectory()
+        guard let descriptor = await AgentSelfReportCoordinator.waitForDescriptor(
+            sessionID: sessionID,
+            supportDirectory: supportDirectory
+        ) else {
+            // Timeout — the agent did not write the descriptor in time.
+            if wantsWorktree {
+                await fallBackToAppManagedWorktree(sessionID: sessionID, projectFolder: projectFolder)
+            }
+            return
+        }
+
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+
+        // Apply title (same guards syncAgentSessionMetadata already applies).
+        if let reportedTitle = descriptor.title {
+            let trimmed = reportedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !trimmed.contains("\n"), trimmed.count <= 120, sessions[index].title != trimmed {
+                sessions[index].title = trimmed
+            }
+        }
+
+        // Apply worktree metadata.
+        if let branch = descriptor.branch, let worktreePathString = descriptor.worktreePath {
+            let worktreePath = URL(fileURLWithPath: worktreePathString)
+            if let projectFolder {
+                sessions[index].worktree = WorktreeInfo(
+                    branchName: branch,
+                    worktreePath: worktreePath,
+                    baseCheckoutPath: projectFolder
+                )
+                sessions[index].workingDirectory = worktreePath
+            }
+        }
+
+        do {
+            try repository.save(mergingLiveScrollback(sessions[index]))
+        } catch {
+            lastOperationError = "Agent self-report could not be saved: \(error.localizedDescription)"
+        }
+    }
+
+    /// Re-runs today's `WorktreePlanner` + `gitService.createWorktree` flow
+    /// when the agent didn't respond to the self-report request in time.
+    ///
+    /// **Known limitation:** by the time the 25 s timeout fires, the agent
+    /// has already been running — and possibly editing files — directly in
+    /// the main checkout, since it was never actually launched into a
+    /// worktree. The worktree created here gives the session a
+    /// `Session.worktree` the running agent process has no relationship to;
+    /// its real edits are still landing in the main checkout. The warning
+    /// makes this visible rather than silently presenting the worktree as
+    /// if it were in use.
+    private func fallBackToAppManagedWorktree(sessionID: UUID, projectFolder: URL?) async {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
+              let projectFolder else { return }
+
+        let branchName = BranchNaming.generate(from: sessions[index].title)
+        let decision = worktreePlanner.plan(
+            useNewWorktree: true,
+            projectRoot: projectFolder,
+            worktreeBaseDirectory: worktreeBaseDirectoryProvider(),
+            branchName: branchName
+        )
+        guard case .createWorktree(let basePath, let branch, let destination) = decision else { return }
+        do {
+            let worktree = try await gitService.createWorktree(basePath: basePath, branch: branch, destination: destination)
+            sessions[index].worktree = WorktreeInfo(
+                branchName: worktree.branch,
+                worktreePath: worktree.path,
+                baseCheckoutPath: basePath
+            )
+            sessions[index].workingDirectory = worktree.path
+            try repository.save(mergingLiveScrollback(sessions[index]))
+            lastOperationError = "The agent did not create its own worktree in time. "
+                + "A worktree was created automatically, but the agent's process is still "
+                + "running in the main checkout — files it edits will land there, not in "
+                + "the new worktree."
+        } catch {
+            lastOperationError = "The agent did not create its own worktree, and the "
+                + "automatic fallback also failed: \(error.localizedDescription)"
+        }
+    }
+
     /// Appends to the live scrollback buffer only — `sessions` is untouched,
     /// so a chatty PTY no longer invalidates the observed session list on
     /// every chunk. The debounced task below is the only place this reaches
@@ -763,6 +867,16 @@ final class AppStore {
     ) async -> UUID? {
         lastCreationError = nil
         var createdWorktree: WorktreeInfo?
+        let settings = settingsProvider()
+        let agentDescriptor = AgentCatalog.descriptor(for: agent)
+
+        // Determine whether agent-managed features should activate.
+        let wantsAgentWorktree = checkoutMode == .newWorktree
+            && projectFolder != nil
+            && settings.git.worktreeNamingSource == .agentManaged
+        let wantsAgentTitle = settings.sessionDefaults.agentManagedTitleEnabled
+            && !agentDescriptor.hasNativeTitleGeneration
+
         do {
             var projectID: UUID?
             var workingDirectory: URL
@@ -776,32 +890,66 @@ final class AppStore {
                 }
                 projectID = project.id
 
-                let decision = worktreePlanner.plan(
-                    useNewWorktree: checkoutMode == .newWorktree,
-                    projectRoot: projectFolder,
-                    worktreeBaseDirectory: worktreeBaseDirectoryProvider(),
-                    branchName: BranchNaming.generate(from: title)
-                )
-                switch decision {
-                case .useExistingCheckout(let path):
-                    workingDirectory = path
-                case .createWorktree(let basePath, let branch, let destination):
-                    if fetchBeforeCreatingWorktree {
-                        // Best-effort: an offline machine or a repo with no
-                        // remote must not block worktree creation over a
-                        // failed fetch.
-                        try? await gitService.fetch(at: basePath)
+                if wantsAgentWorktree {
+                    // Agent-managed worktree: skip WorktreePlanner and launch
+                    // in the project root. The agent creates the worktree
+                    // itself and reports back via the descriptor file.
+                    workingDirectory = projectFolder
+                } else {
+                    let decision = worktreePlanner.plan(
+                        useNewWorktree: checkoutMode == .newWorktree,
+                        projectRoot: projectFolder,
+                        worktreeBaseDirectory: worktreeBaseDirectoryProvider(),
+                        branchName: BranchNaming.generate(from: title)
+                    )
+                    switch decision {
+                    case .useExistingCheckout(let path):
+                        workingDirectory = path
+                    case .createWorktree(let basePath, let branch, let destination):
+                        if fetchBeforeCreatingWorktree {
+                            // Best-effort: an offline machine or a repo with no
+                            // remote must not block worktree creation over a
+                            // failed fetch.
+                            try? await gitService.fetch(at: basePath)
+                        }
+                        let worktree = try await gitService.createWorktree(basePath: basePath, branch: branch, destination: destination)
+                        workingDirectory = worktree.path
+                        worktreeInfo = WorktreeInfo(branchName: worktree.branch, worktreePath: worktree.path, baseCheckoutPath: basePath)
+                        createdWorktree = worktreeInfo
                     }
-                    let worktree = try await gitService.createWorktree(basePath: basePath, branch: branch, destination: destination)
-                    workingDirectory = worktree.path
-                    worktreeInfo = WorktreeInfo(branchName: worktree.branch, worktreePath: worktree.path, baseCheckoutPath: basePath)
-                    createdWorktree = worktreeInfo
                 }
             } else {
                 workingDirectory = Self.generalSessionWorkingDirectory()
             }
 
+            // Mint the session ID up front so the descriptor path is
+            // deterministic before the Session struct exists.
+            let sessionID = UUID()
+            let supportDirectory = TmuxSessionWrapping.defaultSupportDirectory()
+
+            // Build self-report instructions + descriptor path when either
+            // agent-managed feature is active.
+            var selfReportInstructions: String?
+            var selfReportDescriptorPath: URL?
+            if (wantsAgentWorktree || wantsAgentTitle) && deliverGoal {
+                let descPath = AgentSelfReportCoordinator.descriptorPath(
+                    for: sessionID, supportDirectory: supportDirectory
+                )
+                AgentSelfReportCoordinator.clearDescriptor(
+                    for: sessionID, supportDirectory: supportDirectory
+                )
+                selfReportDescriptorPath = descPath
+                selfReportInstructions = AgentSelfReportCoordinator.instructions(
+                    wantsTitle: wantsAgentTitle,
+                    wantsWorktree: wantsAgentWorktree,
+                    descriptorPath: descPath,
+                    projectRoot: projectFolder,
+                    worktreeBaseDirectory: wantsAgentWorktree ? worktreeBaseDirectoryProvider() : nil
+                )
+            }
+
             var session = Session(
+                id: sessionID,
                 title: title,
                 goal: goal,
                 agent: agent,
@@ -812,9 +960,13 @@ final class AppStore {
                 worktree: worktreeInfo,
                 status: .idle
             )
-            try processManager.start(session: session, deliverGoal: deliverGoal)
-            let descriptor = AgentCatalog.descriptor(for: agent)
-            if case .assignable = descriptor.resume {
+            try processManager.start(
+                session: session,
+                deliverGoal: deliverGoal,
+                selfReportInstructions: selfReportInstructions,
+                selfReportDescriptorPath: selfReportDescriptorPath
+            )
+            if case .assignable = agentDescriptor.resume {
                 session.agentSessionID = session.id.uuidString
             }
             session = statusMachine.transition(session, to: .working)
@@ -828,6 +980,20 @@ final class AppStore {
             reload()
             selectedSessionID = session.id
             scheduleTitleSync(forSessionID: session.id)
+
+            // Kick off background polling for the agent's self-report
+            // descriptor when either agent-managed feature is active.
+            if let selfReportDescriptorPath, (wantsAgentWorktree || wantsAgentTitle) {
+                Task { @MainActor [weak self] in
+                    await self?.awaitAgentSelfReport(
+                        sessionID: sessionID,
+                        descriptorPath: selfReportDescriptorPath,
+                        wantsWorktree: wantsAgentWorktree,
+                        projectFolder: projectFolder
+                    )
+                }
+            }
+
             return session.id
         } catch {
             var message = error.localizedDescription

@@ -52,7 +52,8 @@ struct FlotillaApp: App {
             worktreeBaseDirectoryProvider: {
                 let configuredPath = settingsViewModel.settings.worktreeBaseDirectory
                 return configuredPath.isEmpty ? environment.worktreeBaseDirectory : URL(fileURLWithPath: configuredPath)
-            }
+            },
+            settingsProvider: { settingsViewModel.settings }
         )
         appStore.lastOperationError = environment.startupWarning
         _store = State(initialValue: appStore)
