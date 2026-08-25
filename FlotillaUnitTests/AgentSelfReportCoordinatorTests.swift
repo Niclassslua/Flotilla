@@ -5,13 +5,6 @@ import AgentKit
 
 final class AgentSelfReportCoordinatorTests: XCTestCase {
 
-    func testNativeTitleGenerationFlags() {
-        XCTAssertTrue(AgentCatalog.descriptor(for: .claudeCode).hasNativeTitleGeneration)
-        XCTAssertTrue(AgentCatalog.descriptor(for: .antigravity).hasNativeTitleGeneration)
-        XCTAssertFalse(AgentCatalog.descriptor(for: .codexCLI).hasNativeTitleGeneration)
-        XCTAssertFalse(AgentCatalog.descriptor(for: .openCode).hasNativeTitleGeneration)
-    }
-
     func testDescriptorPathIsDeterministic() {
         let sessionID = UUID()
         let supportDir = URL(fileURLWithPath: "/tmp/flotilla-support")

@@ -314,7 +314,14 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertEqual(store.selectedSessionID, store.sessions.first?.id)
         XCTAssertEqual(store.sessions.first?.status, .working)
         let createdSession = try XCTUnwrap(store.sessions.first)
-        XCTAssertEqual(factory.processes.first?.startedArguments, ["--session-id", createdSession.id.uuidString, "Find the race"])
+        let startedArguments = try XCTUnwrap(factory.processes.first?.startedArguments)
+        // `agentManagedTitleEnabled` defaults to true, so the setup-step
+        // title instructions apply here too, Claude Code's own native title
+        // generation notwithstanding (see AppStore.createSession).
+        XCTAssertEqual(startedArguments.dropLast(), ["--session-id", createdSession.id.uuidString])
+        let goalArg = try XCTUnwrap(startedArguments.last)
+        XCTAssertTrue(goalArg.contains("Choose a concise 2–5 word noun-phrase title"))
+        XCTAssertTrue(goalArg.hasSuffix("Find the race"))
         XCTAssertTrue(factory.processes.first?.sentInput.isEmpty == true)
     }
 
@@ -1330,7 +1337,12 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         AgentSelfReportCoordinator.clearDescriptor(for: unwrappedID, supportDirectory: supportDir)
     }
 
-    func testAppStoreClaudeCodeDoesNotAddTitleInstructions() async throws {
+    /// Claude Code and Antigravity also generate a title natively, on their
+    /// own schedule, well after the setup step — but that title can diverge
+    /// from ours, reintroducing the title/worktree mismatch. So when
+    /// `agentManagedTitleEnabled` is on, our setup-step title instructions
+    /// apply uniformly to every agent, native title generation or not.
+    func testAppStoreClaudeCodeAddsTitleInstructionsWhenSettingEnabled() async throws {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()
         var settings = AppSettings()
@@ -1355,7 +1367,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
 
         let proc = try XCTUnwrap(factory.processes.first)
         let goalArg = try XCTUnwrap(proc.startedArguments.last)
-        XCTAssertFalse(goalArg.contains("Choose a concise 2–5 word noun-phrase title"))
+        XCTAssertTrue(goalArg.contains("Choose a concise 2–5 word noun-phrase title"))
     }
 }
 

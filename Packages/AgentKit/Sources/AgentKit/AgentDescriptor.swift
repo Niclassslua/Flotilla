@@ -97,7 +97,6 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
     public let multilineNewline: Data
     public let resume: AgentResumeStrategy
     public let accessibilityIDPrefix: String
-    public let hasNativeTitleGeneration: Bool
 
     public init(
         kind: AgentKind,
@@ -113,8 +112,7 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
         fallbackModels: [String] = [],
         multilineNewline: Data = Data([0x0A]),
         resume: AgentResumeStrategy = .unsupported,
-        accessibilityIDPrefix: String,
-        hasNativeTitleGeneration: Bool = false
+        accessibilityIDPrefix: String
     ) {
         self.kind = kind
         self.displayName = displayName
@@ -130,7 +128,6 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
         self.multilineNewline = multilineNewline
         self.resume = resume
         self.accessibilityIDPrefix = accessibilityIDPrefix
-        self.hasNativeTitleGeneration = hasNativeTitleGeneration
     }
 
     public var supportsEffort: Bool {
@@ -190,8 +187,7 @@ public enum AgentCatalog {
             resume: .separateTokens("--resume"),
             placement: .appendFlags
         ),
-        accessibilityIDPrefix: "Settings.ClaudeCode",
-        hasNativeTitleGeneration: true
+        accessibilityIDPrefix: "Settings.ClaudeCode"
     )
 
     public static let codexCLI = AgentDescriptor(
@@ -318,7 +314,6 @@ public enum AgentCatalog {
             resume: .separateTokens("--conversation"),
             placement: .appendFlags
         ),
-        accessibilityIDPrefix: "Settings.Antigravity",
-        hasNativeTitleGeneration: true
+        accessibilityIDPrefix: "Settings.Antigravity"
     )
 }

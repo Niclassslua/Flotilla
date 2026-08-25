@@ -466,6 +466,12 @@ final class AppStore {
                 try? repository.save(mergingLiveScrollback(sessions[index]))
             }
 
+            // When our own setup-step title is in play, it's authoritative —
+            // don't let the agent's native title (discovered on its own,
+            // later, separate schedule) clobber it and reintroduce the
+            // title/worktree mismatch this setting exists to prevent.
+            guard !settingsProvider().sessionDefaults.agentManagedTitleEnabled else { return }
+
             let discoveredTitle = discovered.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !discoveredTitle.isEmpty else { return }
             guard !discoveredTitle.contains("\n"), discoveredTitle.count <= 120 else { return }
@@ -970,11 +976,17 @@ final class AppStore {
         let agentDescriptor = AgentCatalog.descriptor(for: agent)
 
         // Determine whether agent-managed features should activate.
+        // Title generation applies uniformly regardless of whether the agent
+        // has its own native title feature (Claude Code, Antigravity): our
+        // setup-step title and its native one are picked at different points
+        // in the run and can diverge, so only one is ever allowed to win —
+        // whichever the `agentManagedTitleEnabled` setting selects. See
+        // `syncAgentSessionMetadata`, which defers to this same setting
+        // before letting a native title overwrite ours.
         let wantsAgentWorktree = checkoutMode == .newWorktree
             && projectFolder != nil
             && settings.git.worktreeNamingSource == .agentManaged
         let wantsAgentTitle = settings.sessionDefaults.agentManagedTitleEnabled
-            && !agentDescriptor.hasNativeTitleGeneration
 
         do {
             var projectID: UUID?
