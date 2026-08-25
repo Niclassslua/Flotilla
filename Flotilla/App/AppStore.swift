@@ -480,19 +480,50 @@ final class AppStore {
     }
 
     /// Spawns a lightweight background retry loop that checks the agent's
-    /// native session storage at progressively spaced intervals (1s, 2.5s, 5s, 9s, 15s, 25s)
-    /// to pick up auto-generated titles and session IDs as soon as the agent produces them.
+    /// native session storage to pick up auto-generated titles and session
+    /// IDs as soon as the agent produces them.
+    ///
+    /// Starts with tight intervals (1s, 2.5s, 5s, 9s, 15s, 25s) to catch the
+    /// common case fast, then keeps polling every `steadyStateInterval`
+    /// while the session stays active. The steady-state tail matters: an
+    /// agent that pauses on an interactive tool-permission prompt (e.g. a
+    /// CLI agent asking to approve a shell command) can take far longer than
+    /// 25s for a human to notice and respond, and a fixed short schedule
+    /// gives up before the agent ever writes its title. Bounded by
+    /// `giveUpAfter` so an abandoned-but-still-open session doesn't poll
+    /// forever.
     func scheduleTitleSync(forSessionID sessionID: UUID) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let retryDelays: [TimeInterval] = [1.0, 2.5, 5.0, 9.0, 15.0, 25.0]
-            for delay in retryDelays {
+            let burstDelays: [TimeInterval] = [1.0, 2.5, 5.0, 9.0, 15.0, 25.0]
+            let steadyStateInterval: TimeInterval = 20.0
+            let giveUpAfter: TimeInterval = 1800
+            var elapsed: TimeInterval = 0
+
+            for delay in burstDelays {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                guard let currentSession = self.sessions.first(where: { $0.id == sessionID }) else { break }
-                guard currentSession.status == .working || currentSession.status == .waitingForInput || currentSession.status == .idle else { break }
+                elapsed += delay
+                guard self.isSessionActive(sessionID) else { return }
+                await self.syncAgentSessionMetadata(forSessionID: sessionID)
+            }
+
+            while elapsed < giveUpAfter {
+                try? await Task.sleep(nanoseconds: UInt64(steadyStateInterval * 1_000_000_000))
+                elapsed += steadyStateInterval
+                guard self.isSessionActive(sessionID) else { return }
                 await self.syncAgentSessionMetadata(forSessionID: sessionID)
             }
         }
+    }
+
+    /// Whether a session is still in a state where its agent process is
+    /// expected to be doing (or about to do) work — used to decide when a
+    /// background poll loop should keep waiting versus give up.
+    private func isSessionActive(_ sessionID: UUID) -> Bool {
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return false }
+        return session.status == .working
+            || session.status == .waitingForInput
+            || session.status == .idle
     }
 
     /// Updates a session's title from discovered agent metadata.
@@ -515,10 +546,33 @@ final class AppStore {
 
     // MARK: - Agent self-report
 
+    /// Fallback-creating an app-managed worktree only kicks in once the
+    /// agent has had this long to write its own descriptor. A shorter
+    /// window races an interactive tool-permission prompt (e.g. a CLI
+    /// agent asking a human to approve the `git worktree add` command) —
+    /// the human can easily take longer than a few seconds to notice and
+    /// respond, and firing the fallback mid-approval leaves the session
+    /// with a spurious duplicate worktree.
+    /// `var`, not `let`: tests override this to a short interval so they
+    /// don't have to sleep for real minutes to exercise the fallback path.
+    static var selfReportFallbackAfter: Duration = .seconds(180)
+    /// Absolute cap on how long a self-report poll loop runs for one
+    /// session, so an abandoned-but-still-open session doesn't poll
+    /// forever in the background. `var` for the same test-override reason.
+    static var selfReportGiveUpAfter: Duration = .seconds(1800)
+    /// `var` for the same test-override reason.
+    static var selfReportPollChunk: Duration = .seconds(20)
+
     /// Polls for the agent's self-report descriptor file and applies any
     /// metadata it contains (title, worktree branch/path) to the session.
-    /// Falls back to app-managed worktree creation on timeout when the
-    /// agent was expected to create one.
+    ///
+    /// Keeps polling in `selfReportPollChunk` increments for as long as the
+    /// session is still active. If `wantsWorktree` and the agent hasn't
+    /// reported in by `selfReportFallbackAfter`, an app-managed worktree is
+    /// created as a stopgap — but polling continues afterward, so if the
+    /// agent's own descriptor arrives later (e.g. once a human finally
+    /// approves a pending tool-permission prompt) it still wins: the
+    /// stopgap worktree is discarded and the agent-reported one takes over.
     private func awaitAgentSelfReport(
         sessionID: UUID,
         descriptorPath: URL,
@@ -526,15 +580,52 @@ final class AppStore {
         projectFolder: URL?
     ) async {
         let supportDirectory = TmuxSessionWrapping.defaultSupportDirectory()
-        guard let descriptor = await AgentSelfReportCoordinator.waitForDescriptor(
-            sessionID: sessionID,
-            supportDirectory: supportDirectory
-        ) else {
-            // Timeout — the agent did not write the descriptor in time.
-            if wantsWorktree {
-                await fallBackToAppManagedWorktree(sessionID: sessionID, projectFolder: projectFolder)
+        var elapsed: Duration = .zero
+        var fallbackWorktree: WorktreeInfo?
+
+        while elapsed < Self.selfReportGiveUpAfter {
+            if let descriptor = await AgentSelfReportCoordinator.waitForDescriptor(
+                sessionID: sessionID,
+                supportDirectory: supportDirectory,
+                timeout: Self.selfReportPollChunk
+            ) {
+                await applySelfReport(descriptor, sessionID: sessionID, projectFolder: projectFolder, replacing: fallbackWorktree)
+                return
             }
-            return
+            elapsed += Self.selfReportPollChunk
+
+            guard sessions.contains(where: { $0.id == sessionID }) else { return }
+            let isActive = isSessionActive(sessionID)
+
+            if wantsWorktree, fallbackWorktree == nil, elapsed >= Self.selfReportFallbackAfter || !isActive {
+                fallbackWorktree = await fallBackToAppManagedWorktree(sessionID: sessionID, projectFolder: projectFolder)
+            }
+
+            if !isActive { return }
+        }
+    }
+
+    /// Applies a (possibly late-arriving) self-report descriptor. When a
+    /// `replacing` fallback worktree is passed, it's removed first so the
+    /// agent-reported worktree becomes the session's only one, and the
+    /// fallback's warning is cleared since the situation it described has
+    /// now resolved itself.
+    private func applySelfReport(
+        _ descriptor: AgentSelfReportDescriptor,
+        sessionID: UUID,
+        projectFolder: URL?,
+        replacing fallbackWorktree: WorktreeInfo?
+    ) async {
+        if let fallbackWorktree {
+            try? await gitService.removeWorktree(
+                at: fallbackWorktree.worktreePath,
+                in: fallbackWorktree.baseCheckoutPath,
+                branch: fallbackWorktree.branchName,
+                deleteBranch: true
+            )
+            if lastOperationError == Self.fallbackWarning {
+                lastOperationError = nil
+            }
         }
 
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
@@ -567,20 +658,28 @@ final class AppStore {
         }
     }
 
+    private static let fallbackWarning = "The agent did not create its own worktree in time. "
+        + "A worktree was created automatically, but the agent's process is still "
+        + "running in the main checkout — files it edits will land there, not in "
+        + "the new worktree."
+
     /// Re-runs today's `WorktreePlanner` + `gitService.createWorktree` flow
-    /// when the agent didn't respond to the self-report request in time.
+    /// when the agent hasn't responded to the self-report request within
+    /// `selfReportFallbackAfter`. Returns the worktree it created, so the
+    /// caller can discard it later if the agent's own descriptor still
+    /// shows up.
     ///
-    /// **Known limitation:** by the time the 25 s timeout fires, the agent
-    /// has already been running — and possibly editing files — directly in
-    /// the main checkout, since it was never actually launched into a
-    /// worktree. The worktree created here gives the session a
-    /// `Session.worktree` the running agent process has no relationship to;
-    /// its real edits are still landing in the main checkout. The warning
-    /// makes this visible rather than silently presenting the worktree as
-    /// if it were in use.
-    private func fallBackToAppManagedWorktree(sessionID: UUID, projectFolder: URL?) async {
+    /// **Known limitation:** by the time this fires, the agent has already
+    /// been running — and possibly editing files — directly in the main
+    /// checkout, since it was never actually launched into a worktree. The
+    /// worktree created here gives the session a `Session.worktree` the
+    /// running agent process has no relationship to; its real edits are
+    /// still landing in the main checkout. The warning makes this visible
+    /// rather than silently presenting the worktree as if it were in use.
+    @discardableResult
+    private func fallBackToAppManagedWorktree(sessionID: UUID, projectFolder: URL?) async -> WorktreeInfo? {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
-              let projectFolder else { return }
+              let projectFolder else { return nil }
 
         let branchName = BranchNaming.generate(from: sessions[index].title)
         let decision = worktreePlanner.plan(
@@ -589,23 +688,23 @@ final class AppStore {
             worktreeBaseDirectory: worktreeBaseDirectoryProvider(),
             branchName: branchName
         )
-        guard case .createWorktree(let basePath, let branch, let destination) = decision else { return }
+        guard case .createWorktree(let basePath, let branch, let destination) = decision else { return nil }
         do {
             let worktree = try await gitService.createWorktree(basePath: basePath, branch: branch, destination: destination)
-            sessions[index].worktree = WorktreeInfo(
+            let worktreeInfo = WorktreeInfo(
                 branchName: worktree.branch,
                 worktreePath: worktree.path,
                 baseCheckoutPath: basePath
             )
+            sessions[index].worktree = worktreeInfo
             sessions[index].workingDirectory = worktree.path
             try repository.save(mergingLiveScrollback(sessions[index]))
-            lastOperationError = "The agent did not create its own worktree in time. "
-                + "A worktree was created automatically, but the agent's process is still "
-                + "running in the main checkout — files it edits will land there, not in "
-                + "the new worktree."
+            lastOperationError = Self.fallbackWarning
+            return worktreeInfo
         } catch {
             lastOperationError = "The agent did not create its own worktree, and the "
                 + "automatic fallback also failed: \(error.localizedDescription)"
+            return nil
         }
     }
 

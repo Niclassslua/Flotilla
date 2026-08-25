@@ -1245,6 +1245,91 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         AgentSelfReportCoordinator.clearDescriptor(for: unwrappedID, supportDirectory: supportDir)
     }
 
+    /// Regression test: a permission-gated agent (e.g. a CLI tool-approval
+    /// prompt sitting in front of the `git worktree add` command) can take
+    /// longer than the fallback threshold to write its self-report
+    /// descriptor. Flotilla's fallback should create a stopgap worktree in
+    /// the meantime, but once the agent's real descriptor finally shows up
+    /// it must win: the stopgap worktree is discarded and the
+    /// agent-reported title/branch/path take over, instead of the poll loop
+    /// having already given up.
+    func testAppStoreAgentSelfReportArrivingAfterFallbackReplacesStopgapWorktree() async throws {
+        let originalFallbackAfter = AppStore.selfReportFallbackAfter
+        let originalPollChunk = AppStore.selfReportPollChunk
+        AppStore.selfReportFallbackAfter = .milliseconds(50)
+        AppStore.selfReportPollChunk = .milliseconds(50)
+        defer {
+            AppStore.selfReportFallbackAfter = originalFallbackAfter
+            AppStore.selfReportPollChunk = originalPollChunk
+        }
+
+        let repository = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        var settings = AppSettings()
+        settings.git.worktreeNamingSource = .agentManaged
+        let gitService = MockGitService()
+
+        let store = AppStore(
+            repository: repository,
+            gitService: gitService,
+            processManager: manager(factory: factory, settings: settings),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            settingsProvider: { settings }
+        )
+
+        let projectFolder = URL(fileURLWithPath: "/tmp/my-project")
+        let sessionID = await store.createSession(
+            title: "Prompt Title",
+            goal: "Implement feature",
+            agent: .codexCLI,
+            projectFolder: projectFolder,
+            checkoutMode: .newWorktree
+        )
+        let unwrappedID = try XCTUnwrap(sessionID)
+
+        // Wait for the fallback to fire (it creates a stopgap worktree once
+        // the shortened threshold elapses with no descriptor on disk).
+        for _ in 0..<40 {
+            if !gitService.createWorktreeCalls.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(gitService.createWorktreeCalls.count, 1)
+        let stopgapSession = try XCTUnwrap(store.sessions.first(where: { $0.id == unwrappedID }))
+        XCTAssertNotNil(stopgapSession.worktree)
+        XCTAssertNotNil(store.lastOperationError)
+
+        // Now simulate the agent finally clearing its permission prompt and
+        // writing its own descriptor, after the fallback already ran.
+        let supportDir = TmuxSessionWrapping.defaultSupportDirectory()
+        let descPath = AgentSelfReportCoordinator.descriptorPath(for: unwrappedID, supportDirectory: supportDir)
+        try FileManager.default.createDirectory(at: descPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        let chosenWorktreeURL = URL(fileURLWithPath: "/tmp/worktrees/agent-chosen-slug")
+        let descriptor = AgentSelfReportDescriptor(
+            title: "Agent Decided Title",
+            branch: "flotilla/agent-chosen-slug",
+            worktreePath: chosenWorktreeURL.path
+        )
+        try JSONEncoder().encode(descriptor).write(to: descPath)
+
+        for _ in 0..<60 {
+            if store.sessions.first(where: { $0.id == unwrappedID })?.worktree?.branchName == "flotilla/agent-chosen-slug" { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+
+        let finalSession = try XCTUnwrap(store.sessions.first(where: { $0.id == unwrappedID }))
+        XCTAssertEqual(finalSession.title, "Agent Decided Title")
+        XCTAssertEqual(finalSession.worktree?.branchName, "flotilla/agent-chosen-slug")
+        XCTAssertEqual(finalSession.worktree?.worktreePath, chosenWorktreeURL)
+        XCTAssertEqual(finalSession.workingDirectory, chosenWorktreeURL)
+
+        // The stopgap worktree should have been cleaned up, and its warning cleared.
+        XCTAssertEqual(gitService.removeWorktreeCalls.count, 1)
+        XCTAssertNil(store.lastOperationError)
+
+        AgentSelfReportCoordinator.clearDescriptor(for: unwrappedID, supportDirectory: supportDir)
+    }
+
     func testAppStoreClaudeCodeDoesNotAddTitleInstructions() async throws {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()
