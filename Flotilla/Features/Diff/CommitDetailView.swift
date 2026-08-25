@@ -11,6 +11,7 @@ struct CommitDetailView: View {
     @Environment(\.workspaceNavigator) private var navigator
 
     @State private var isMessageExpanded = false
+    @State private var isGoalExpanded = false
     @State private var isReleaseNoteCopied = false
 
     private var commit: GitCommit? {
@@ -53,6 +54,7 @@ struct CommitDetailView: View {
         .accessibilityIdentifier("ProjectHistory.Detail")
         .onChange(of: commit?.sha) { _, _ in
             isMessageExpanded = false
+            isGoalExpanded = false
         }
     }
 
@@ -416,8 +418,14 @@ struct CommitDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func hasLongGoal(_ goal: String) -> Bool {
+        let lines = goal.components(separatedBy: .newlines)
+        return lines.count > 3 || goal.count > 200
+    }
+
     private func agentGoalView(goal: String, agent: AgentKind) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let isLong = hasLongGoal(goal)
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Image(systemName: "quote.opening")
                     .font(.system(size: 9, weight: .semibold))
@@ -431,6 +439,8 @@ struct CommitDetailView: View {
                 .font(FlotillaTypography.caption)
                 .foregroundStyle(FlotillaColors.textPrimary)
                 .textSelection(.enabled)
+                .lineLimit(isLong && !isGoalExpanded ? 3 : nil)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, FlotillaSpacing.small)
                 .padding(.vertical, 6)
@@ -439,6 +449,24 @@ struct CommitDetailView: View {
                     RoundedRectangle(cornerRadius: FlotillaRadius.control)
                         .strokeBorder(FlotillaColors.separator, lineWidth: 0.5)
                 )
+
+            if isLong {
+                Button {
+                    withAnimation(FlotillaMotion.fast.curve) {
+                        isGoalExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(isGoalExpanded ? "Show less" : "Show more")
+                            .font(FlotillaTypography.caption2.weight(.medium))
+                        Image(systemName: isGoalExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .foregroundStyle(FlotillaColors.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("CommitDetail.ToggleGoalButton")
+            }
         }
         .padding(.top, 2)
         .accessibilityIdentifier("ProjectHistory.AgentGoal")
