@@ -45,14 +45,6 @@ struct WorkspaceToolbar: ToolbarContent {
     }
 
     var body: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button(action: onCommandPalette) {
-                Image(systemName: "command")
-            }
-            .help("Command palette")
-            .accessibilityIdentifier("Toolbar.CommandPalette")
-        }
-
         ToolbarItemGroup(placement: .principal) {
             // Presentation picker - only show when in fleet scope
             if showsPresentationPicker {
@@ -75,10 +67,6 @@ struct WorkspaceToolbar: ToolbarContent {
 
         if case .session(let sessionID) = navigator.selection,
            let session = store.sessions.first(where: { $0.id == sessionID }) {
-            ToolbarItem(placement: .primaryAction) {
-                Divider()
-            }
-
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     navigator.openProjectPanel(.git, scopedTo: session)
@@ -96,9 +84,17 @@ struct WorkspaceToolbar: ToolbarContent {
                 .help("Browse project files")
                 .accessibilityIdentifier("Toolbar.OpenProjectFiles")
             }
+
+            ToolbarSpacer(.fixed, placement: .primaryAction)
         }
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button(action: onCommandPalette) {
+                Image(systemName: "command")
+            }
+            .help("Command palette")
+            .accessibilityIdentifier("Toolbar.CommandPalette")
+
             Button(action: { openSettings() }) {
                 Image(systemName: "gearshape")
             }
