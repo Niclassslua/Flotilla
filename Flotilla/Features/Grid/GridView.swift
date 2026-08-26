@@ -56,15 +56,11 @@ struct GridView: View {
                 )
                 .accessibilityIdentifier("GridEmptyState")
             } else if visibleSessions.isEmpty {
-                ContentUnavailableView {
-                    Label("No Sessions in the Grid", systemImage: "square.grid.2x2")
-                } description: {
-                    Text("Select sessions from the sidebar, or add as many as fit \(dimensions.label).")
-                } actions: {
-                    Button("Add All") { addAll() }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("Grid.AddAll")
-                }
+                ContentUnavailableView(
+                    "No Sessions in the Grid",
+                    systemImage: "square.grid.2x2",
+                    description: Text("Select sessions from the sidebar, or add as many as fit \(dimensions.label).")
+                )
                 .accessibilityIdentifier("GridEmptyState")
             } else {
                 grid
@@ -105,10 +101,6 @@ struct GridView: View {
             dimIntensity: settingsViewModel.settings.workspace.gridDimIntensity,
             actions: actions(for:)
         )
-    }
-
-    private func addAll() {
-        settingsViewModel.addAllToGrid(from: scopedSessions, capacity: dimensions.capacity)
     }
 
     private func apply(_ newDimensions: GridDimensions) {
