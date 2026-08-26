@@ -35,6 +35,7 @@ playground.xcworkspace
 # Local scratch — notes and test fixtures, not versioned
 Ideas/
 fixtures/
+/scripts/
 
 # Flotilla-generated per-machine agent hook wiring (HookConfigurationWriter),
 # not something to check in — absolute paths to this user's Application
