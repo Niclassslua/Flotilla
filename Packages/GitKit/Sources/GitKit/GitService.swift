@@ -385,8 +385,23 @@ public struct GitService: GitServiceProtocol {
             // partial cleanup). Recover by removing any lingering directory
             // and pruning the stale worktree record from git, so the session
             // deletion still cleans up on disk.
+            //
+            // `FileManager.removeItem` used to do this recursively, but it
+            // aborts the whole recursive delete on the first item it can't
+            // remove — leaving everything *before* that item gone and
+            // everything after it (including the directory itself) behind.
+            // That's exactly how orphaned worktree directories with a
+            // leftover `.claude/` folder and no `.git` file were found on
+            // disk: git had already unregistered the worktree, but the
+            // directory removal choked partway through. `rm -rf` keeps
+            // going past an unremovable item instead of stopping the whole
+            // walk, so it clears everything it can rather than nothing.
             if FileManager.default.fileExists(atPath: path.path) {
-                try FileManager.default.removeItem(at: path)
+                let cleanup = Process()
+                cleanup.executableURL = URL(fileURLWithPath: "/bin/rm")
+                cleanup.arguments = ["-rf", "--", path.path]
+                try? cleanup.run()
+                cleanup.waitUntilExit()
             }
             _ = try? await run(["worktree", "prune"], at: repoPath)
             if !FileManager.default.fileExists(atPath: path.path) {

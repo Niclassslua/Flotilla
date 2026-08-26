@@ -14,6 +14,16 @@ import SessionKit
 public struct HookConfigurationWriter: Sendable {
     public init() {}
 
+    /// Guards the read-modify-write below. Agent-managed-worktree sessions
+    /// all launch with `workingDirectory` set to the *project root* (the
+    /// agent creates its own worktree later), so every such session in the
+    /// same project shares one `.claude/settings.json`. Two sessions
+    /// launched close together previously raced an unguarded read-modify-
+    /// write on that file — a lost update at best. One process-wide lock is
+    /// enough: the critical section is a small synchronous file write, and
+    /// nothing outside this type touches the file.
+    private static let settingsFileLock = NSLock()
+
     /// Whether `configureHooks` can do anything useful for this agent kind.
     /// `HookCoordinator` checks this before bothering to spin up a
     /// `HookEventReceiver`.
@@ -65,6 +75,16 @@ public struct HookConfigurationWriter: Sendable {
         let settingsDirectory = workingDirectory.appendingPathComponent(".claude", isDirectory: true)
         let settingsFile = settingsDirectory.appendingPathComponent("settings.json", isDirectory: false)
 
+        // This session's own filename (`<uuid>.jsonl`) uniquely identifies
+        // any hook group this method previously wrote for it — every other
+        // session's command references a different filename. That's what
+        // makes the replace-not-append below safe: it only ever touches
+        // this session's own entries, never a sibling session's.
+        let sessionMarker = eventFile.lastPathComponent
+
+        Self.settingsFileLock.lock()
+        defer { Self.settingsFileLock.unlock() }
+
         var settings: [String: Any] = [:]
         if let existing = try? Data(contentsOf: settingsFile),
            let decoded = try? JSONSerialization.jsonObject(with: existing) as? [String: Any] {
@@ -75,6 +95,13 @@ public struct HookConfigurationWriter: Sendable {
         let command = Self.shellCommand(appendingTo: eventFile)
         for event in ["Notification", "Stop", "PostToolUse"] {
             var groups = hooks[event] as? [[String: Any]] ?? []
+            // Idempotent: drop any group this session wrote on a previous
+            // start/resume/restart before appending the fresh one, so
+            // relaunching the same session doesn't accumulate duplicate
+            // hook groups in this shared file forever.
+            groups.removeAll { group in
+                Self.commands(in: group).contains { $0.contains(sessionMarker) }
+            }
             groups.append([
                 "hooks": [
                     ["type": "command", "command": command]
@@ -92,6 +119,11 @@ public struct HookConfigurationWriter: Sendable {
         } catch {
             return false
         }
+    }
+
+    private static func commands(in group: [String: Any]) -> [String] {
+        guard let entries = group["hooks"] as? [[String: Any]] else { return [] }
+        return entries.compactMap { $0["command"] as? String }
     }
 
     /// Appends the hook's stdin JSON verbatim, plus a trailing newline —
