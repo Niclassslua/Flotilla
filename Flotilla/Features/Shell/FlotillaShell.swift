@@ -107,7 +107,11 @@ struct FlotillaShell: View {
                     },
                     onRequestDelete: { navigator.presentedSheet = .deleteSession($0) }
                 )
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
+                // AppKit remembers the divider position it was last dragged to
+                // (see `SidebarRail`'s doc comment) and restores it on the next
+                // launch, so `ideal` only matters for a first run — pick a value
+                // that reads well before the user has ever touched the divider.
+                .navigationSplitViewColumnWidth(min: 220, ideal: 314, max: 340)
                 .searchable(text: $navigator.searchText, placement: .sidebar, prompt: "Projects and sessions")
             } detail: {
                 DetailColumn(
