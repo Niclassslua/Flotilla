@@ -5,10 +5,7 @@ import SessionKit
 /// file, so `HookEventReceiver` can read exact, structured status instead
 /// of `TerminalScreenHeuristic` guessing from rendered text.
 ///
-/// Claude Code, Antigravity, and Codex CLI are wired today. OpenCode falls
-/// back to `TerminalScreenHeuristic` permanently for now — this is not a
-/// temporary gap to be filled in later, it's tracked as separate,
-/// per-provider follow-up work.
+/// All four supported agent kinds are wired today.
 ///
 /// Codex's wiring in particular carries two assumptions never verified
 /// against a real Codex session (no `codex` binary was available while this
@@ -49,6 +46,28 @@ import SessionKit
 /// `conversationId` that could filter this out properly, but Flotilla
 /// doesn't know a fresh session's `conversationId` until its first event
 /// arrives — closing this gap is tracked as follow-up work, not solved here.
+///
+/// OpenCode is structurally different from the other three: not a JSON
+/// config to merge but a TS/JS plugin file, and — live-verified this
+/// session with two co-installed plugin files run side by side via
+/// `opencode run` — multiple plugin files coexist cleanly, each getting the
+/// full event stream independently. That means OpenCode gets its own file
+/// *per session* (`.opencode/plugins/flotilla-status-<sessionID>.js`,
+/// fully overwritten on relaunch) rather than a shared merged file, which
+/// sidesteps the Claude-Code/Antigravity-style cross-session-contamination
+/// problem entirely rather than mitigating it — no lock needed. Also
+/// live-verified: `tool.execute.before`/`tool.execute.after` (separate
+/// named hook functions, not part of the event stream) and `session.idle`
+/// (which — naming trap — means "turn ended, composer free", i.e.
+/// Flotilla's `.ready`, not `.idle`). Not directly triggered this session:
+/// `permission.asked`/`question.asked` (the project's default policy ran
+/// shell commands unprompted, never surfacing either) — wired anyway on the
+/// strength of every other event name from the same documentation source
+/// checking out exactly as documented, and because OpenCode's generic
+/// `event` handler is a pure subscription with no response Flotilla must
+/// get right, unlike Codex's decision-blocking `PermissionRequest`: a wrong
+/// event name here just never fires, it can't hang or misdirect a real
+/// permission decision.
 public struct HookConfigurationWriter: Sendable {
     public init() {}
 
@@ -67,8 +86,7 @@ public struct HookConfigurationWriter: Sendable {
     /// spin up a `HookEventReceiver`.
     public static func supportsHooks(for kind: AgentKind) -> Bool {
         switch kind {
-        case .claudeCode, .antigravity, .codexCLI: return true
-        case .openCode: return false
+        case .claudeCode, .antigravity, .codexCLI, .openCode: return true
         }
     }
 
@@ -147,7 +165,11 @@ public struct HookConfigurationWriter: Sendable {
                 eventFile: eventFile
             )
         case .openCode:
-            return false
+            return Self.configureOpenCodeHooks(
+                sessionID: sessionID,
+                workingDirectory: workingDirectory,
+                eventFile: eventFile
+            )
         }
     }
 
@@ -428,5 +450,65 @@ public struct HookConfigurationWriter: Sendable {
         } catch {
             return false
         }
+    }
+
+    // MARK: - OpenCode
+
+    /// This session's own plugin file — unlike the other three providers,
+    /// OpenCode gets one file per session rather than a shared merged one
+    /// (see this file's top-level doc comment for why that's safe here).
+    private static func openCodePluginPath(for sessionID: UUID, workingDirectory: URL) -> URL {
+        workingDirectory
+            .appendingPathComponent(".opencode/plugins", isDirectory: true)
+            .appendingPathComponent("flotilla-status-\(sessionID.uuidString).js", isDirectory: false)
+    }
+
+    /// Writes (fully overwrites — no merge, no lock; see top-level doc
+    /// comment) this session's plugin file. `tool.execute.after` → working
+    /// and `session.idle` → ready are live-verified; `permission.asked`/
+    /// `question.asked` → waitingForInput are wired on the strength of
+    /// every other event name from the same source checking out live, not
+    /// directly observed themselves.
+    private static func configureOpenCodeHooks(
+        sessionID: UUID,
+        workingDirectory: URL,
+        eventFile: URL
+    ) -> Bool {
+        let pluginPath = openCodePluginPath(for: sessionID, workingDirectory: workingDirectory)
+        do {
+            try FileManager.default.createDirectory(
+                at: pluginPath.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data(openCodePluginContents(eventFile: eventFile).utf8).write(to: pluginPath, options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func openCodePluginContents(eventFile: URL) -> String {
+        // JSON-encoded (not just quoted) so the path round-trips safely as
+        // a JS string literal regardless of what characters it contains.
+        let pathLiteral = (try? JSONSerialization.data(withJSONObject: eventFile.path, options: .fragmentsAllowed))
+            .flatMap { String(data: $0, encoding: .utf8) }
+            ?? "\"\(eventFile.path)\""
+        return """
+        import fs from "node:fs";
+        const eventFile = \(pathLiteral);
+        function append(event) {
+          try { fs.appendFileSync(eventFile, JSON.stringify({ event }) + "\\n"); } catch {}
+        }
+        export const FlotillaStatus = async () => {
+          return {
+            "tool.execute.after": async () => { append("tool.execute.after"); },
+            event: async ({ event }) => {
+              if (event.type === "session.idle" || event.type === "permission.asked" || event.type === "question.asked") {
+                append(event.type);
+              }
+            },
+          };
+        };
+        """
     }
 }

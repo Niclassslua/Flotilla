@@ -112,7 +112,18 @@ public final class HookEventReceiver: @unchecked Sendable {
             default: return nil
             }
         case .openCode:
-            return nil
+            // Written by the generated per-session plugin file (see
+            // HookConfigurationWriter.openCodePluginContents) as a flat
+            // {"event": "<name>"} line — no nested payload needed for any
+            // of these mappings. session.idle is a naming trap: it means
+            // "turn ended, composer free" (Flotilla's .ready), not .idle.
+            guard let eventName = object["event"] as? String else { return nil }
+            switch eventName {
+            case "tool.execute.after": return .working
+            case "session.idle": return .ready
+            case "permission.asked", "question.asked": return .waitingForInput
+            default: return nil
+            }
         }
     }
 }
