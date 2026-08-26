@@ -380,6 +380,21 @@ final class HookEventReceiverTests: XCTestCase {
 
         XCTAssertEqual(observed, [.ready], "fullyIdle: false must not emit any status")
     }
+
+    func testCodexMapsPostToolUseAndStopOnly() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try append(#"{"event":"PostToolUse","payload":{}}"#, to: file)
+        try append(#"{"event":"PermissionRequest","payload":{}}"#, to: file)
+        try append(#"{"event":"Stop","payload":{}}"#, to: file)
+
+        let receiver = HookEventReceiver(filePath: file, agent: .codexCLI, pollInterval: .milliseconds(30))
+        let observed = await collect(from: receiver, settling: .milliseconds(200))
+
+        XCTAssertEqual(observed, [.working, .ready], "PermissionRequest must be ignored — it isn't wired")
+    }
 }
 
 final class HookConfigurationWriterTests: XCTestCase {
@@ -406,7 +421,7 @@ final class HookConfigurationWriterTests: XCTestCase {
     func testSupportsHooksMatchesImplementedProviders() {
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .claudeCode))
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .antigravity))
-        XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .codexCLI))
+        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .codexCLI))
         XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .openCode))
     }
 
@@ -414,7 +429,7 @@ final class HookConfigurationWriterTests: XCTestCase {
         let writer = HookConfigurationWriter()
         let sessionID = UUID()
         let succeeded = writer.configureHooks(
-            for: .codexCLI,
+            for: .openCode,
             sessionID: sessionID,
             workingDirectory: workingDirectory,
             supportDirectory: supportDirectory
@@ -424,7 +439,7 @@ final class HookConfigurationWriterTests: XCTestCase {
         let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile.path))
         XCTAssertTrue(HookConfigurationWriter.launchArguments(
-            for: .codexCLI,
+            for: .openCode,
             sessionID: sessionID,
             supportDirectory: supportDirectory
         ).isEmpty)
@@ -495,6 +510,17 @@ final class HookConfigurationWriterTests: XCTestCase {
     }
 
     func testLaunchArgumentsEmptyForNonHookCapableAgent() {
+        XCTAssertTrue(HookConfigurationWriter.launchArguments(
+            for: .openCode,
+            sessionID: UUID(),
+            supportDirectory: supportDirectory
+        ).isEmpty)
+    }
+
+    // Codex is hook-capable but, like Antigravity, its wiring travels
+    // through configureHooks's shared-file write, not launchArguments.
+    func testLaunchArgumentsEmptyForCodexEvenThoughItSupportsHooks() {
+        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .codexCLI))
         XCTAssertTrue(HookConfigurationWriter.launchArguments(
             for: .codexCLI,
             sessionID: UUID(),
@@ -603,6 +629,96 @@ final class HookConfigurationWriterTests: XCTestCase {
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertNotNil(root["some-other-hook"], "an unrelated top-level hook entry must survive")
         XCTAssertNotNil(root["flotilla-status"])
+    }
+
+    private var codexHooksFile: URL {
+        workingDirectory.appendingPathComponent(".codex/hooks.json")
+    }
+
+    func testCodexWritesWrapperScriptAndHooksForBothEvents() throws {
+        let writer = HookConfigurationWriter()
+        let sessionID = UUID()
+        let succeeded = writer.configureHooks(
+            for: .codexCLI,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+        XCTAssertTrue(succeeded)
+
+        let scriptPath = supportDirectory
+            .appendingPathComponent("hooks", isDirectory: true)
+            .appendingPathComponent("\(sessionID.uuidString)-codex.sh", isDirectory: false)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: scriptPath.path))
+        let attributes = try FileManager.default.attributesOfItem(atPath: scriptPath.path)
+        let permissions = try XCTUnwrap(attributes[.posixPermissions] as? Int)
+        XCTAssertEqual(permissions & 0o111, 0o111, "the wrapper script must be executable")
+
+        // Codex's script must never answer a decision — PermissionRequest,
+        // the only decision-blocking event, is deliberately not wired.
+        let scriptContents = try String(contentsOf: scriptPath, encoding: .utf8)
+        XCTAssertFalse(scriptContents.contains("decision"))
+
+        let data = try Data(contentsOf: codexHooksFile)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        XCTAssertNil(hooks["PermissionRequest"], "PermissionRequest must not be wired until its decision contract is verified")
+        for event in ["PostToolUse", "Stop"] {
+            let groups = try XCTUnwrap(hooks[event] as? [[String: Any]], "\(event) must be present")
+            let commands = try XCTUnwrap(groups.first?["hooks"] as? [[String: Any]])
+            let command = try XCTUnwrap(commands.first?["command"] as? String)
+            XCTAssertTrue(command.contains(scriptPath.path))
+            XCTAssertTrue(command.hasSuffix(event), "the event name must be passed as the script's argument")
+        }
+    }
+
+    func testCodexRelaunchIsIdempotentNotAccumulating() throws {
+        let writer = HookConfigurationWriter()
+        let sessionID = UUID()
+        for _ in 0..<3 {
+            _ = writer.configureHooks(
+                for: .codexCLI,
+                sessionID: sessionID,
+                workingDirectory: workingDirectory,
+                supportDirectory: supportDirectory
+            )
+        }
+
+        let data = try Data(contentsOf: codexHooksFile)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        for event in ["PostToolUse", "Stop"] {
+            let groups = try XCTUnwrap(hooks[event] as? [[String: Any]])
+            XCTAssertEqual(groups.count, 1, "relaunching the same session must replace, not accumulate, its own entry for \(event)")
+        }
+    }
+
+    func testCodexPreservesUnrelatedExistingHooksConfig() throws {
+        let codexDir = workingDirectory.appendingPathComponent(".codex", isDirectory: true)
+        try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
+        let existing: [String: Any] = [
+            "permissions": ["allow": ["shell(git *)"]],
+            "hooks": [
+                "PostToolUse": [
+                    ["hooks": [["type": "command", "command": "echo user-configured"]]]
+                ]
+            ]
+        ]
+        try JSONSerialization.data(withJSONObject: existing).write(to: codexHooksFile)
+
+        let writer = HookConfigurationWriter()
+        _ = writer.configureHooks(
+            for: .codexCLI,
+            sessionID: UUID(),
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+
+        let data = try Data(contentsOf: codexHooksFile)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNotNil(root["permissions"], "unrelated top-level keys must survive the merge")
+        let postToolUse = try XCTUnwrap((root["hooks"] as? [String: Any])?["PostToolUse"] as? [[String: Any]])
+        XCTAssertEqual(postToolUse.count, 2, "the user's existing PostToolUse hook must not be replaced")
     }
 }
 

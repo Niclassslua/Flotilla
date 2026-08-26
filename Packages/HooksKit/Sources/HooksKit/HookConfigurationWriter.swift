@@ -5,10 +5,28 @@ import SessionKit
 /// file, so `HookEventReceiver` can read exact, structured status instead
 /// of `TerminalScreenHeuristic` guessing from rendered text.
 ///
-/// Claude Code and Antigravity are wired today. Codex CLI and OpenCode fall
+/// Claude Code, Antigravity, and Codex CLI are wired today. OpenCode falls
 /// back to `TerminalScreenHeuristic` permanently for now — this is not a
 /// temporary gap to be filled in later, it's tracked as separate,
 /// per-provider follow-up work.
+///
+/// Codex's wiring in particular carries two assumptions never verified
+/// against a real Codex session (no `codex` binary was available while this
+/// was written): that `.codex/hooks.json`'s schema is Claude-Code-shaped
+/// (event key → array of `{matcher, hooks: [{type, command}]}` groups), and
+/// — since the wrapper script synthesizes its own self-describing event
+/// line regardless — that Codex's `PostToolUse`/`Stop` actually fire that
+/// often and mean what Claude Code's do. Deliberately *not* wired: Codex's
+/// `PermissionRequest`, even though it's documented as the provider's
+/// advantage over Antigravity for permission-prompt detection. Real-world
+/// evidence (a third-party tool's source comments) describes Claude Code's
+/// and Codex's `PermissionRequest` as *decision-blocking* — the same shape
+/// as Antigravity's `PreToolUse`, which required answering
+/// `{"decision":"allow"}` to avoid hanging the CLI. Guessing that response
+/// contract wrong for Codex risks actively breaking a real user's session
+/// (a hang, or a silently-denied action) rather than just producing an
+/// inaccurate status — a materially worse failure mode than staying on
+/// `TerminalScreenHeuristic`, so it stays there until live-verified.
 ///
 /// Claude Code's own config is passed via `launchArguments`'s `--settings`
 /// flag rather than written into `<workingDirectory>/.claude/settings.json`
@@ -49,8 +67,8 @@ public struct HookConfigurationWriter: Sendable {
     /// spin up a `HookEventReceiver`.
     public static func supportsHooks(for kind: AgentKind) -> Bool {
         switch kind {
-        case .claudeCode, .antigravity: return true
-        case .codexCLI, .openCode: return false
+        case .claudeCode, .antigravity, .codexCLI: return true
+        case .openCode: return false
         }
     }
 
@@ -70,6 +88,14 @@ public struct HookConfigurationWriter: Sendable {
         supportDirectory
             .appendingPathComponent("hooks", isDirectory: true)
             .appendingPathComponent("\(sessionID.uuidString)-antigravity.sh", isDirectory: false)
+    }
+
+    /// The per-session wrapper script Codex's hooks invoke (see
+    /// `configureCodexHooks`).
+    private static func codexWrapperScriptPath(for sessionID: UUID, supportDirectory: URL) -> URL {
+        supportDirectory
+            .appendingPathComponent("hooks", isDirectory: true)
+            .appendingPathComponent("\(sessionID.uuidString)-codex.sh", isDirectory: false)
     }
 
     /// Prepares `eventFilePath` (and, for Antigravity, its wrapper script)
@@ -113,7 +139,14 @@ public struct HookConfigurationWriter: Sendable {
                 supportDirectory: supportDirectory,
                 eventFile: eventFile
             )
-        case .codexCLI, .openCode:
+        case .codexCLI:
+            return Self.configureCodexHooks(
+                sessionID: sessionID,
+                workingDirectory: workingDirectory,
+                supportDirectory: supportDirectory,
+                eventFile: eventFile
+            )
+        case .openCode:
             return false
         }
     }
@@ -221,7 +254,8 @@ public struct HookConfigurationWriter: Sendable {
                 at: scriptPath.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try Data(antigravityWrapperScriptContents(eventFile: eventFile).utf8).write(to: scriptPath, options: .atomic)
+            let contents = wrapperScriptContents(eventFile: eventFile, decisionRequiredFor: ["PreToolUse"])
+            try Data(contents.utf8).write(to: scriptPath, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
         } catch {
             return false
@@ -291,16 +325,108 @@ public struct HookConfigurationWriter: Sendable {
         "\"\(path.replacingOccurrences(of: "\"", with: "\\\""))\""
     }
 
-    private static func antigravityWrapperScriptContents(eventFile: URL) -> String {
+    /// Shared by every provider whose payload doesn't self-describe its own
+    /// event name: the script is invoked as `<script> <EventName>` (baked
+    /// into the config's command per-event, not read from stdin) and
+    /// synthesizes a self-describing JSON line before appending it, so
+    /// `HookEventReceiver` can treat every such provider's event file
+    /// uniformly as "one self-describing JSON object per line".
+    ///
+    /// `decisionRequiredFor` names the events whose stdout the launching
+    /// CLI reads as a live allow/deny decision rather than ignoring —
+    /// getting this wrong (omitting an event that needs it) risks hanging
+    /// or silently blocking the CLI, so it's only ever populated for events
+    /// this has actually been confirmed to require it for (see call sites).
+    private static func wrapperScriptContents(eventFile: URL, decisionRequiredFor: Set<String>) -> String {
         let path = eventFile.path.replacingOccurrences(of: "\"", with: "\\\"")
-        return """
+        var script = """
         #!/bin/sh
         event="$1"
         payload="$(cat)"
         printf '{"event":"%s","payload":%s}\\n' "$event" "$payload" >> "\(path)"
-        if [ "$event" = "PreToolUse" ]; then
-            printf '{"decision":"allow"}\\n'
-        fi
         """
+        for event in decisionRequiredFor.sorted() {
+            script += """
+            \nif [ "$event" = "\(event)" ]; then
+                printf '{"decision":"allow"}\\n'
+            fi
+            """
+        }
+        return script
+    }
+
+    // MARK: - Codex CLI
+
+    /// Writes this session's wrapper script and merges its hook group into
+    /// `<workingDirectory>/.codex/hooks.json`. See this file's top-level doc
+    /// comment for the assumptions this rests on and why `PermissionRequest`
+    /// is deliberately not wired here.
+    ///
+    /// Only `PostToolUse` (→ `working`) and `Stop` (→ `ready`) are wired —
+    /// both fire-and-forget/informational in Claude Code's equivalent
+    /// events, unlike the decision-blocking `PermissionRequest`, so no event
+    /// here needs the `{"decision":"allow"}` stdout contract Antigravity's
+    /// `PreToolUse` does. `waitingForInput` (both the free-text-question and
+    /// permission-prompt cases) stays on `TerminalScreenHeuristic` for this
+    /// provider until `PermissionRequest`'s response contract is verified.
+    private static func configureCodexHooks(
+        sessionID: UUID,
+        workingDirectory: URL,
+        supportDirectory: URL,
+        eventFile: URL
+    ) -> Bool {
+        let scriptPath = codexWrapperScriptPath(for: sessionID, supportDirectory: supportDirectory)
+        do {
+            try FileManager.default.createDirectory(
+                at: scriptPath.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let contents = wrapperScriptContents(eventFile: eventFile, decisionRequiredFor: [])
+            try Data(contents.utf8).write(to: scriptPath, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+        } catch {
+            return false
+        }
+
+        let configDirectory = workingDirectory.appendingPathComponent(".codex", isDirectory: true)
+        let configFile = configDirectory.appendingPathComponent("hooks.json", isDirectory: false)
+
+        // Same idempotent-replace-by-marker approach as Antigravity's
+        // shared file — see that method's comment for why it's safe.
+        let sessionMarker = scriptPath.lastPathComponent
+
+        sharedConfigFileLock.lock()
+        defer { sharedConfigFileLock.unlock() }
+
+        var settings: [String: Any] = [:]
+        if let existing = try? Data(contentsOf: configFile),
+           let decoded = try? JSONSerialization.jsonObject(with: existing) as? [String: Any] {
+            settings = decoded
+        }
+
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+        for event in ["PostToolUse", "Stop"] {
+            var groups = hooks[event] as? [[String: Any]] ?? []
+            groups.removeAll { group in
+                Self.commands(in: group).contains { $0.contains(sessionMarker) }
+            }
+            groups.append([
+                "matcher": "",
+                "hooks": [
+                    ["type": "command", "command": "\(Self.quoted(scriptPath.path)) \(event)"]
+                ]
+            ])
+            hooks[event] = groups
+        }
+        settings["hooks"] = hooks
+
+        do {
+            try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
+            let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: configFile, options: .atomic)
+            return true
+        } catch {
+            return false
+        }
     }
 }

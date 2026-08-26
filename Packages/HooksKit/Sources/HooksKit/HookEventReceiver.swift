@@ -100,7 +100,18 @@ public final class HookEventReceiver: @unchecked Sendable {
             default:
                 return nil
             }
-        case .codexCLI, .openCode:
+        case .codexCLI:
+            // Same wrapper-script-synthesized shape as Antigravity's — see
+            // HookConfigurationWriter.wrapperScriptContents. Only
+            // PostToolUse/Stop are wired (PermissionRequest deliberately
+            // isn't — see HookConfigurationWriter's top-level doc comment).
+            guard let eventName = object["event"] as? String else { return nil }
+            switch eventName {
+            case "PostToolUse": return .working
+            case "Stop": return .ready
+            default: return nil
+            }
+        case .openCode:
             return nil
         }
     }
