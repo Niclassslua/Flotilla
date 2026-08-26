@@ -158,28 +158,16 @@ struct FlotillaApp: App {
                 }
                 .keyboardShortcut("3", modifiers: [.command, .control])
                 Divider()
-                Button("Terminal") {
-                    navigator.selection = .allSessions
-                    navigator.presentation = .focus
-                    navigator.sessionLens = .terminal
-                }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
                 Button("Changes") {
-                    navigator.selection = .allSessions
-                    navigator.presentation = .focus
-                    navigator.sessionLens = .changes
+                    navigator.openProjectPanel(.git, scopedTo: store.selectedSession)
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 Button("Files") {
-                    navigator.selection = .allSessions
-                    navigator.presentation = .focus
-                    navigator.sessionLens = .files
+                    navigator.openProjectPanel(.files, scopedTo: store.selectedSession)
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 Button("Instructions") {
-                    navigator.selection = .allSessions
-                    navigator.presentation = .focus
-                    navigator.sessionLens = .instructions
+                    navigator.openProjectPanel(.rules, scopedTo: store.selectedSession)
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
                 Divider()

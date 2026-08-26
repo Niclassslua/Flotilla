@@ -16,15 +16,19 @@ final class RulesPanelUITests: XCTestCase {
         XCTAssertTrue(fastWait(sessionRow, timeout: 8))
         sessionRow.click()
 
-        let instructionsLens = app.descendants(matching: .any)["Session.Lens.instructions"].firstMatch
-        XCTAssertTrue(fastWait(instructionsLens, timeout: 3))
-        instructionsLens.click()
+        // No toolbar button for Rules — reach it the way a user would, via
+        // the Workspace menu's shortcut, which jumps to the project's Rules tab.
+        app.typeKey("i", modifierFlags: [.command, .shift])
 
-        let claudeFile = app.descendants(matching: .any)["RulesPanel.File-CLAUDE.md"].firstMatch
+        let claudeFile = app.descendants(matching: .any)["Knowledge.Item-CLAUDE.md"].firstMatch
         XCTAssertTrue(fastWait(claudeFile, timeout: 3))
         claudeFile.click()
 
-        let editor = app.descendants(matching: .any)["RulesPanel.Editor"].firstMatch
+        let editButton = app.descendants(matching: .any)["Knowledge.Detail.Edit"].firstMatch
+        XCTAssertTrue(fastWait(editButton, timeout: 3))
+        editButton.click()
+
+        let editor = app.descendants(matching: .any)["Knowledge.Detail.Editor"].firstMatch
         XCTAssertTrue(fastWait(editor, timeout: 3))
         editor.click()
 
@@ -32,11 +36,11 @@ final class RulesPanelUITests: XCTestCase {
         editor.typeKey(XCUIKeyboardKey.end.rawValue, modifierFlags: [.command])
         editor.typeText(marker)
 
-        let saveButton = app.descendants(matching: .any)["RulesPanel.SaveButton"].firstMatch
+        let saveButton = app.descendants(matching: .any)["Knowledge.Detail.Save"].firstMatch
         XCTAssertTrue(fastWait(saveButton, timeout: 3))
         saveButton.click()
 
-        let confirmation = app.descendants(matching: .any)["RulesPanel.SaveConfirmation"].firstMatch
+        let confirmation = app.descendants(matching: .any)["Knowledge.Detail.SaveStatus"].firstMatch
         XCTAssertTrue(fastWait(confirmation, timeout: 3))
         XCTAssertEqual(confirmation.label, "Saved")
 

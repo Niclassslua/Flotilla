@@ -31,7 +31,6 @@
 		13AD6C3EBF870E22C4317313 /* graphql.svg in Resources */ = {isa = PBXBuildFile; fileRef = ECBC98B1E339659FBE0A518F /* graphql.svg */; };
 		13DDECE9DF49F365919AF8A3 /* folder-src-open.svg in Resources */ = {isa = PBXBuildFile; fileRef = EABEEEBD06DAED8662FB1529 /* folder-src-open.svg */; };
 		13F7F806BEA419E6C5B71988 /* ruby.svg in Resources */ = {isa = PBXBuildFile; fileRef = A7403957F3F54FB0A8391F06 /* ruby.svg */; };
-		145A2732B20693F46822ED38 /* SessionToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D7CAD485A9E53F7081934CA /* SessionToolbarView.swift */; };
 		158BCD6C862F3D846B298674 /* tune.svg in Resources */ = {isa = PBXBuildFile; fileRef = 9157CC2DB6B0B8B42FDD71A5 /* tune.svg */; };
 		195CD176EEA524BA2246BA0C /* RealPipelineReproTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BBC083783BD10EC9D3923E7 /* RealPipelineReproTests.swift */; };
 		1BA564B75F34CD5864136580 /* LaunchpadDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EB51705DB89C9D2D870B82A /* LaunchpadDesign.swift */; };
@@ -160,7 +159,6 @@
 		88A33D5781ABAD3F6EFE1B7E /* markdown.svg in Resources */ = {isa = PBXBuildFile; fileRef = 1FC1C84E56E80E1E8DDC7FC9 /* markdown.svg */; };
 		88EB1629A37A87E41973001A /* vite.svg in Resources */ = {isa = PBXBuildFile; fileRef = DB73DD8DFEFD13BC2394C2AC /* vite.svg */; };
 		898E0363CFDA00161E6395C4 /* SkillFrontmatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E981131F173F30668314C97 /* SkillFrontmatterTests.swift */; };
-		89BF5939FF2551BAF6E7E264 /* RulesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3969819C322299477C9B95A /* RulesPanelView.swift */; };
 		8BB819546CCDD0A9D304BF31 /* KnowledgeCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F3851925DB6241070D4A78 /* KnowledgeCatalogView.swift */; };
 		8BD8492768B3EC20D5A9C56A /* SessionKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6D93705F55A5D34EE54781 /* SessionKitTests.swift */; };
 		8E071726EB1EDF2A2FE8C4CF /* folder-config.svg in Resources */ = {isa = PBXBuildFile; fileRef = 574B82EAE6596EA2D265D335 /* folder-config.svg */; };
@@ -299,7 +297,6 @@
 		07F3851925DB6241070D4A78 /* KnowledgeCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeCatalogView.swift; sourceTree = "<group>"; };
 		07FA1C674D1DF28D56ED1CA5 /* json.svg */ = {isa = PBXFileReference; path = json.svg; sourceTree = "<group>"; };
 		0B745DEE71EB8AF1D04B67E7 /* StatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusPresentation.swift; sourceTree = "<group>"; };
-		0D7CAD485A9E53F7081934CA /* SessionToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionToolbarView.swift; sourceTree = "<group>"; };
 		0D81B338EB6C55CEF1B88F7F /* next.svg */ = {isa = PBXFileReference; path = next.svg; sourceTree = "<group>"; };
 		0E32DCA022EAEDFF38BA2A93 /* AgentSelfReportCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSelfReportCoordinatorTests.swift; sourceTree = "<group>"; };
 		10E145E46FA66C4B797A708D /* EffortLevelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffortLevelPicker.swift; sourceTree = "<group>"; };
@@ -479,7 +476,6 @@
 		C038C5B8AB4AE5F31A21ECD0 /* TmuxSessionWrapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TmuxSessionWrapping.swift; sourceTree = "<group>"; };
 		C1C8B09D3B46D48A26D09B62 /* video.svg */ = {isa = PBXFileReference; path = video.svg; sourceTree = "<group>"; };
 		C317F155B41EC64784FE603E /* SessionKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SessionKit; path = Packages/SessionKit; sourceTree = SOURCE_ROOT; };
-		C3969819C322299477C9B95A /* RulesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesPanelView.swift; sourceTree = "<group>"; };
 		C5EB5FF1FDC1128604459E68 /* Flotilla.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Flotilla.icon; sourceTree = "<group>"; };
 		C6ACC2BF0E8EE3D8EBC67C71 /* HomeComposerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeComposerUITests.swift; sourceTree = "<group>"; };
 		C8908D6EE67B334DA6268785 /* SessionScreenReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionScreenReader.swift; sourceTree = "<group>"; };
@@ -615,7 +611,6 @@
 				EE2E8E12BEEF83058926206E /* SessionCard.swift */,
 				19D56D1BE955038251814650 /* SessionRow.swift */,
 				C8908D6EE67B334DA6268785 /* SessionScreenReader.swift */,
-				0D7CAD485A9E53F7081934CA /* SessionToolbarView.swift */,
 				22BC89FA739AB982526D7A98 /* SyntaxHighlightedTextEditor.swift */,
 				94A5A3A97EA3DF9A5D933D80 /* TerminalHostView.swift */,
 				1301A0CFAE4DF97657770E3D /* TerminalManager.swift */,
@@ -1007,7 +1002,6 @@
 				4C9E7D5F5502118689A74D89 /* ProjectRulesView.swift */,
 				05018E554FDC79B823BEC790 /* ProjectSkillsView.swift */,
 				1E1C0937F2E58789838D1B26 /* ProjectWorktreeSection.swift */,
-				C3969819C322299477C9B95A /* RulesPanelView.swift */,
 				AFA5C693D8E21F7988DCE777 /* Knowledge */,
 			);
 			path = Projects;
@@ -1378,7 +1372,6 @@
 				B5785D70AF40B3143A97E8B4 /* ProjectSkillsView.swift in Sources */,
 				7730D03B91922716AB8EE277 /* ProjectWorktreeSection.swift in Sources */,
 				532A187D3F4773945864B4BC /* ProviderLogo.swift in Sources */,
-				89BF5939FF2551BAF6E7E264 /* RulesPanelView.swift in Sources */,
 				E3D5654B50AD21C134302C39 /* SessionActivityStore.swift in Sources */,
 				5F306FD048B5795A6DC38471 /* SessionCard.swift in Sources */,
 				1DA404831D242EE3F828F4D0 /* SessionDraft.swift in Sources */,
@@ -1387,7 +1380,6 @@
 				7A12A2072075BB0ECD30B256 /* SessionRow.swift in Sources */,
 				F086E4FE605D679C303753C4 /* SessionScreenReader.swift in Sources */,
 				086753F1FC0C729EB93423C4 /* SessionTileChrome.swift in Sources */,
-				145A2732B20693F46822ED38 /* SessionToolbarView.swift in Sources */,
 				2FFAFBA7EEDA9EE12049052F /* SettingsView.swift in Sources */,
 				804943542EEC842EA348197E /* SettingsViewModel.swift in Sources */,
 				5B4DA6C73B9B52469D9BCB42 /* StartupCheckViewModel.swift in Sources */,

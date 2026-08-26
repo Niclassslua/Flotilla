@@ -2,7 +2,6 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 import TerminalKit
-import GitKit
 
 struct DetailColumn: View {
     @Environment(\.openSettings) private var openSettings
@@ -102,16 +101,7 @@ case .grid:
 
     @ViewBuilder
     private func sessionSurface(for session: Session) -> some View {
-        switch navigator.sessionLens {
-        case .terminal:
-            terminal(for: session)
-        case .changes:
-            DiffPanelView(viewModel: DiffPanelViewModel(session: session, gitService: store.gitService, ghService: store.ghService))
-        case .files:
-            FileBrowserView(viewModel: navigator.fileBrowserViewModel(for: workspaceRoot(for: session)))
-        case .instructions:
-            RulesPanelView(rootURL: workspaceRoot(for: session), filter: .all)
-        }
+        terminal(for: session)
     }
 
     @ViewBuilder
@@ -232,10 +222,6 @@ case .grid:
                 }
             }
         }
-    }
-
-    private func workspaceRoot(for session: Session) -> URL {
-        session.worktree?.worktreePath ?? session.workingDirectory
     }
 }
 

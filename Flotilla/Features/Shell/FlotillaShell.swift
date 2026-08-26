@@ -323,19 +323,12 @@ struct FlotillaShell: View {
         case .showTerminal:
             navigator.selection = .allSessions
             navigator.presentation = .focus
-            navigator.sessionLens = .terminal
         case .showFiles:
-            navigator.selection = .allSessions
-            navigator.presentation = .focus
-            navigator.sessionLens = .files
+            navigator.openProjectPanel(.files, scopedTo: store.selectedSession)
         case .showInstructions:
-            navigator.selection = .allSessions
-            navigator.presentation = .focus
-            navigator.sessionLens = .instructions
+            navigator.openProjectPanel(.rules, scopedTo: store.selectedSession)
         case .showChanges:
-            navigator.selection = .allSessions
-            navigator.presentation = .focus
-            navigator.sessionLens = .changes
+            navigator.openProjectPanel(.git, scopedTo: store.selectedSession)
         case .restoreSessions:
             navigator.presentedSheet = .restore
         case .showSettings:

@@ -57,8 +57,8 @@ final class CreateSessionUITests: XCTestCase {
         XCTAssertTrue(element(app, "CreateSession.CreateButton").waitForNonExistence(timeout: 5))
 
         XCTAssertTrue(fastWait(element(app, "SessionRow-Flaky CI"), timeout: 3))
-        XCTAssertTrue(fastWait(element(app, "SessionToolbar.Agent"), timeout: 3))
-        XCTAssertEqual(element(app, "SessionToolbar.Agent").value as? String, "Codex CLI")
+        XCTAssertTrue(fastWait(element(app, "SessionRow-Flaky CI-Agent"), timeout: 3))
+        XCTAssertEqual(element(app, "SessionRow-Flaky CI-Agent").value as? String, "Codex CLI")
 
         // MARK: Project session in a new worktree
 
@@ -78,9 +78,8 @@ final class CreateSessionUITests: XCTestCase {
         XCTAssertTrue(element(app, "CreateSession.CreateButton").waitForNonExistence(timeout: 5))
 
         XCTAssertTrue(fastWait(element(app, "SessionRow-Dark mode"), timeout: 3))
-        XCTAssertTrue(fastWait(element(app, "SessionToolbar.Branch"), timeout: 3))
-        let label = element(app, "SessionToolbar.Branch")
-        let branch = "\(label.label) \(label.value as? String ?? "")"
+        XCTAssertTrue(fastWait(element(app, "SessionRow-Dark mode-Branch"), timeout: 3))
+        let branch = element(app, "SessionRow-Dark mode-Branch").value as? String ?? ""
         XCTAssertTrue(branch.contains("dark-mode"), branch)
     }
 

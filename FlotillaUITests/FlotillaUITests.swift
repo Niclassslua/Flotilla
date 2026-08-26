@@ -29,27 +29,22 @@ final class FlotillaUITests: XCTestCase {
     func testNavigationAndSessionSelection() {
         let app = launchedApp()
 
-        // 1. Session selection updates toolbar and detail
+        // 1. Session selection updates the window title and detail
         let firstRow = app.descendants(matching: .any)["SessionRow-Fix login bug"].firstMatch
         XCTAssertTrue(fastWait(firstRow, timeout: 8))
         firstRow.click()
 
-        let toolbar = app.descendants(matching: .any)["SessionToolbar.Agent"].firstMatch
-        XCTAssertTrue(fastWait(toolbar, timeout: 3))
-
-        let branchLabel = app.descendants(matching: .any)["SessionToolbar.Branch"].firstMatch
-        XCTAssertTrue(fastWait(branchLabel, timeout: 3))
-        let branch = "\(branchLabel.label) \(branchLabel.value as? String ?? "")"
-        XCTAssertTrue(branch.contains("fix-login-bug"))
+        // Session identity now lives in the window title bar, set via
+        // DetailColumn's navigationTitle/navigationSubtitle.
+        let window = app.windows.firstMatch
+        XCTAssertTrue(fastWait(window, timeout: 3))
+        XCTAssertEqual(window.title, "Fix login bug")
 
         let secondRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
         XCTAssertTrue(fastWait(secondRow, timeout: 3))
         secondRow.click()
-
-        let updatedBranchLabel = app.descendants(matching: .any)["SessionToolbar.Branch"].firstMatch
-        XCTAssertTrue(fastWait(updatedBranchLabel, timeout: 3))
-        let updatedBranch = "\(updatedBranchLabel.label) \(updatedBranchLabel.value as? String ?? "")"
-        XCTAssertTrue(updatedBranch.contains("main"))
+        XCTAssertTrue(fastWait(window, timeout: 3))
+        XCTAssertEqual(window.title, "Refactor sidebar")
 
         // 2. Global Overview and Project drilldown navigation
         let homeButton = app.descendants(matching: .any)["Sidebar.Overview"].firstMatch

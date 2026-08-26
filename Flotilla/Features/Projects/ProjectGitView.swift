@@ -176,9 +176,11 @@ struct ProjectGitView: View {
     private var changesPane: some View {
         let targetSession = matchingSession(for: selectedScopeURL) ?? dummySession(for: selectedScopeURL)
         return DiffPanelView(
-            session: targetSession,
-            gitService: store.gitService,
-            ghService: store.ghService
+            viewModel: navigator.diffPanelViewModel(
+                for: targetSession,
+                gitService: store.gitService,
+                ghService: store.ghService
+            )
         )
     }
 

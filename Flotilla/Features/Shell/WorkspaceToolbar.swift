@@ -54,33 +54,47 @@ struct WorkspaceToolbar: ToolbarContent {
         }
 
         ToolbarItemGroup(placement: .principal) {
-            if case .session(let sessionID) = navigator.selection,
-               let session = store.sessions.first(where: { $0.id == sessionID }) {
-                SessionToolbarView(
-                    session: session,
-                    project: store.project(for: session),
-                    gitService: store.gitService,
-                    selectedLens: $navigator.sessionLens
-                )
-                .id(session.id)
-            } else {
-                // Presentation picker - only show when in fleet scope
-                if showsPresentationPicker {
-                    Picker("Presentation", selection: presentation) {
-                        ForEach([WorkspacePresentation.grid, .board]) { mode in
-                            Text(mode.title).tag(mode)
-                        }
+            // Presentation picker - only show when in fleet scope
+            if showsPresentationPicker {
+                Picker("Presentation", selection: presentation) {
+                    ForEach([WorkspacePresentation.grid, .board]) { mode in
+                        Text(mode.title).tag(mode)
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 116)
-                    .help("Switch presentation")
-                    .accessibilityIdentifier("Toolbar.PresentationPicker")
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 116)
+                .help("Switch presentation")
+                .accessibilityIdentifier("Toolbar.PresentationPicker")
+            }
 
-                if isFleetScope, navigator.presentation == .grid {
-                    GridLayoutControls(settingsViewModel: settingsViewModel)
+            if isFleetScope, navigator.presentation == .grid {
+                GridLayoutControls(settingsViewModel: settingsViewModel)
+            }
+        }
+
+        if case .session(let sessionID) = navigator.selection,
+           let session = store.sessions.first(where: { $0.id == sessionID }) {
+            ToolbarItem(placement: .primaryAction) {
+                Divider()
+            }
+
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    navigator.openProjectPanel(.git, scopedTo: session)
+                } label: {
+                    Image(systemName: "arrow.triangle.branch")
                 }
+                .help("Review this session's changes")
+                .accessibilityIdentifier("Toolbar.OpenProjectGit")
+
+                Button {
+                    navigator.openProjectPanel(.files, scopedTo: session)
+                } label: {
+                    Image(systemName: "folder")
+                }
+                .help("Browse project files")
+                .accessibilityIdentifier("Toolbar.OpenProjectFiles")
             }
         }
 

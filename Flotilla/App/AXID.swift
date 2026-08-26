@@ -18,6 +18,8 @@ public enum AXID: String, Sendable {
     case toolbarInspectorToggle = "Toolbar.InspectorToggle"
     case toolbarOverflow = "Toolbar.Overflow"
     case toolbarPresentationPicker = "Toolbar.PresentationPicker"
+    case toolbarOpenProjectGit = "Toolbar.OpenProjectGit"
+    case toolbarOpenProjectFiles = "Toolbar.OpenProjectFiles"
 
     // MARK: - Command Palette
     case commandPaletteButton = "CommandPaletteButton"
@@ -179,14 +181,6 @@ public enum AXID: String, Sendable {
     case sessionRowDeleteMenuItem = "SessionRow-DeleteMenuItem"
 
     // MARK: - Session Toolbar (Legacy - preserved for test compatibility)
-    case sessionToolbarAgent = "SessionToolbar.Agent"
-    case sessionToolbarBranch = "SessionToolbar.Branch"
-    case sessionToolbarPath = "SessionToolbar.Path"
-    case sessionToolbarStatus = "SessionToolbar.Status"
-    case sessionToolbarDetailsButton = "SessionToolbar.DetailsButton"
-    case sessionLensTerminal = "Session.Lens.terminal"
-    case sessionLensFiles = "Session.Lens.files"
-    case sessionLensInstructions = "Session.Lens.instructions"
     case sessionGitInspectorButton = "Session.GitInspectorButton"
 
     // MARK: - Global Bar (Legacy - preserved for test compatibility)

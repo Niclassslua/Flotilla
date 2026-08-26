@@ -20,13 +20,16 @@ final class DiffAndFilesUITests: XCTestCase {
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 8))
         sessionRow.click()
 
-        // 1. Test Diff panel via Changes lens
-        let changesLens = app.descendants(matching: .any)["Session.Lens.changes"].firstMatch
-        XCTAssertTrue(changesLens.waitForExistence(timeout: 3))
-        changesLens.click()
+        // 1. Test Diff panel via the toolbar's "Git Changes" jump, scoped to this session's worktree
+        let openGitButton = app.descendants(matching: .any)["Toolbar.OpenProjectGit"].firstMatch
+        XCTAssertTrue(openGitButton.waitForExistence(timeout: 3))
+        openGitButton.click()
 
+        // Longer timeout than the other checks: navigating here now goes
+        // through the project's worktree resolution first, which is slower
+        // than the old in-place lens swap was.
         let emptyState = app.descendants(matching: .any)["DiffPanel.Empty"].firstMatch
-        XCTAssertTrue(emptyState.waitForExistence(timeout: 3))
+        XCTAssertTrue(emptyState.waitForExistence(timeout: 6))
 
         let simulateEditButton = app.descendants(matching: .any)["DiffPanel.SimulateEditButton"].firstMatch
         XCTAssertTrue(simulateEditButton.waitForExistence(timeout: 3))
@@ -40,10 +43,19 @@ final class DiffAndFilesUITests: XCTestCase {
         refreshButton.click()
         XCTAssertTrue(app.descendants(matching: .any)["DiffPanel.File-README.md"].firstMatch.waitForExistence(timeout: 3))
 
-        // 2. Test Files panel via Files lens
-        let filesLens = app.descendants(matching: .any)["Session.Lens.files"].firstMatch
-        XCTAssertTrue(filesLens.waitForExistence(timeout: 3))
-        filesLens.click()
+        // 2. Test Files panel via the sidebar session row, then the toolbar's "File Browser" jump.
+        // Reviewing changes above navigated away to the project's Git tab, so
+        // get back to the session the same way a user would: through the sidebar.
+        if sessionsButton.waitForExistence(timeout: 3) {
+            sessionsButton.click()
+        }
+        let secondSessionRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
+        XCTAssertTrue(secondSessionRow.waitForExistence(timeout: 3))
+        secondSessionRow.click()
+
+        let openFilesButton = app.descendants(matching: .any)["Toolbar.OpenProjectFiles"].firstMatch
+        XCTAssertTrue(openFilesButton.waitForExistence(timeout: 3))
+        openFilesButton.click()
 
         let readmeRow = app.descendants(matching: .any)["FileBrowser.Row-README.md"].firstMatch
         XCTAssertTrue(readmeRow.waitForExistence(timeout: 3))

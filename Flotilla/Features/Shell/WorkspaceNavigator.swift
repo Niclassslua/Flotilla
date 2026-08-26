@@ -27,6 +27,7 @@ final class WorkspaceNavigator {
     private var projectGitSubTabs: [UUID: ProjectGitView.GitSubTab] = [:]
     @ObservationIgnored private var fileBrowserViewModels: [URL: FileBrowserViewModel] = [:]
     @ObservationIgnored private var projectGraphViewModels: [URL: ProjectGraphViewModel] = [:]
+    @ObservationIgnored private var diffPanelViewModels: [URL: DiffPanelViewModel] = [:]
 
     // Legacy compatibility - one-way flow from navigator to store
     var selectedSessionID: UUID? {
@@ -48,8 +49,6 @@ final class WorkspaceNavigator {
             if let newValue { selection = .project(newValue) }
         }
     }
-
-    var sessionLens: SessionLens = .terminal
 
     /// Returns to the place the user last occupied in the Overview facet.
     /// Sessions are a sibling workspace, so visiting them must not flatten a
@@ -77,6 +76,18 @@ final class WorkspaceNavigator {
 
     func setProjectGitScope(_ scope: URL?, for projectID: UUID) {
         projectGitScopes[projectID] = scope
+    }
+
+    /// Jumps from a focused session into the project's Git/Files/Rules tab,
+    /// scoping the Git tab to that session's own worktree so "Review this
+    /// session's changes" lands on the right diff, not the project default.
+    func openProjectPanel(_ tab: ProjectDetailView.ProjectTab, scopedTo session: Session?) {
+        guard let session, let projectID = session.projectID else { return }
+        if tab == .git {
+            setProjectGitScope(session.worktree?.worktreePath ?? session.workingDirectory, for: projectID)
+        }
+        setProjectTab(tab, for: projectID)
+        selection = .project(projectID)
     }
 
     func projectGitSubTab(for projectID: UUID) -> ProjectGitView.GitSubTab {
@@ -115,6 +126,27 @@ final class WorkspaceNavigator {
 
         let viewModel = ProjectGraphViewModel(repoPath: normalizedRoot, gitService: gitService)
         projectGraphViewModels[normalizedRoot] = viewModel
+        return viewModel
+    }
+
+    /// Keyed by the session's repo path (worktree or working directory), not
+    /// session identity — `ProjectGitView` re-derives a session for the
+    /// selected scope on every render (`matchingSession`/`dummySession`), and
+    /// a `DiffPanelView` built fresh from one of those each time would reset
+    /// its view model — losing in-flight staging/commit state — on every
+    /// unrelated re-render of the surrounding view.
+    func diffPanelViewModel(
+        for session: Session,
+        gitService: any GitServiceProtocol,
+        ghService: (any GhServiceProtocol)?
+    ) -> DiffPanelViewModel {
+        let repoPath = (session.worktree?.worktreePath ?? session.workingDirectory).standardizedFileURL
+        if let existing = diffPanelViewModels[repoPath] {
+            return existing
+        }
+
+        let viewModel = DiffPanelViewModel(session: session, gitService: gitService, ghService: ghService)
+        diffPanelViewModels[repoPath] = viewModel
         return viewModel
     }
 
@@ -200,33 +232,6 @@ enum WorkspaceSheet: Identifiable, Equatable, Codable, Sendable {
         case .shortcuts: "shortcuts"
         case .restore: "restore"
         case .deleteSession(let id): "delete-session-\(id)"
-        }
-    }
-}
-
-enum SessionLens: String, CaseIterable, Identifiable, Codable, Sendable {
-    case terminal
-    case changes
-    case files
-    case instructions
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .terminal: return "Terminal"
-        case .changes: return "Changes"
-        case .files: return "Files"
-        case .instructions: return "Instructions"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .terminal: return "terminal"
-        case .changes: return "arrow.triangle.branch"
-        case .files: return "folder"
-        case .instructions: return "doc.badge.gearshape"
         }
     }
 }

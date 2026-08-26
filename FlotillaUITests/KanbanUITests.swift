@@ -46,7 +46,9 @@ final class KanbanUITests: XCTestCase {
         XCTAssertTrue(restartItem.waitForExistence(timeout: 3))
 
         openItem.click()
-        let detailToolbar = app.descendants(matching: .any)["SessionToolbar.Agent"].firstMatch
-        XCTAssertTrue(detailToolbar.waitForExistence(timeout: 5))
+        // Confirms navigation actually landed on a focused session (this
+        // toolbar button only renders in session scope), not just any window.
+        let sessionToolbar = app.descendants(matching: .any)["Toolbar.OpenProjectGit"].firstMatch
+        XCTAssertTrue(sessionToolbar.waitForExistence(timeout: 5))
     }
 }
