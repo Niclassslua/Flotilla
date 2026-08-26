@@ -395,6 +395,24 @@ final class HookEventReceiverTests: XCTestCase {
 
         XCTAssertEqual(observed, [.working, .ready], "PermissionRequest must be ignored — it isn't wired")
     }
+
+    func testOpenCodeMapsEventsIncludingTheSessionIdleNamingTrap() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try append(#"{"event":"tool.execute.after"}"#, to: file)
+        try append(#"{"event":"permission.asked"}"#, to: file)
+        try append(#"{"event":"question.asked"}"#, to: file)
+        // session.idle means Flotilla's .ready, not .idle — see
+        // HookConfigurationWriter's top-level doc comment.
+        try append(#"{"event":"session.idle"}"#, to: file)
+
+        let receiver = HookEventReceiver(filePath: file, agent: .openCode, pollInterval: .milliseconds(30))
+        let observed = await collect(from: receiver, settling: .milliseconds(200))
+
+        XCTAssertEqual(observed, [.working, .waitingForInput, .waitingForInput, .ready])
+    }
 }
 
 final class HookConfigurationWriterTests: XCTestCase {
@@ -422,27 +440,7 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .claudeCode))
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .antigravity))
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .codexCLI))
-        XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .openCode))
-    }
-
-    func testNonHookCapableAgentIsANoOp() {
-        let writer = HookConfigurationWriter()
-        let sessionID = UUID()
-        let succeeded = writer.configureHooks(
-            for: .openCode,
-            sessionID: sessionID,
-            workingDirectory: workingDirectory,
-            supportDirectory: supportDirectory
-        )
-        XCTAssertFalse(succeeded)
-
-        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile.path))
-        XCTAssertTrue(HookConfigurationWriter.launchArguments(
-            for: .openCode,
-            sessionID: sessionID,
-            supportDirectory: supportDirectory
-        ).isEmpty)
+        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .openCode))
     }
 
     func testConfigureHooksNeverTouchesSharedSettingsFile() {
@@ -509,7 +507,10 @@ final class HookConfigurationWriterTests: XCTestCase {
         }
     }
 
-    func testLaunchArgumentsEmptyForNonHookCapableAgent() {
+    // OpenCode is hook-capable but its wiring travels through
+    // configureHooks's per-session plugin-file write, not launchArguments.
+    func testLaunchArgumentsEmptyForOpenCodeEvenThoughItSupportsHooks() {
+        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .openCode))
         XCTAssertTrue(HookConfigurationWriter.launchArguments(
             for: .openCode,
             sessionID: UUID(),
@@ -719,6 +720,71 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertNotNil(root["permissions"], "unrelated top-level keys must survive the merge")
         let postToolUse = try XCTUnwrap((root["hooks"] as? [String: Any])?["PostToolUse"] as? [[String: Any]])
         XCTAssertEqual(postToolUse.count, 2, "the user's existing PostToolUse hook must not be replaced")
+    }
+
+    func testOpenCodeWritesAPerSessionPluginFile() throws {
+        let writer = HookConfigurationWriter()
+        let sessionID = UUID()
+        let succeeded = writer.configureHooks(
+            for: .openCode,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+        XCTAssertTrue(succeeded)
+
+        let pluginPath = workingDirectory
+            .appendingPathComponent(".opencode/plugins", isDirectory: true)
+            .appendingPathComponent("flotilla-status-\(sessionID.uuidString).js", isDirectory: false)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pluginPath.path))
+
+        let contents = try String(contentsOf: pluginPath, encoding: .utf8)
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        // The path is JSON-encoded into the JS source, so forward slashes
+        // are escaped (`\/`) — check for that shape rather than the raw path.
+        let escapedPath = eventFile.path.replacingOccurrences(of: "/", with: "\\/")
+        XCTAssertTrue(contents.contains(escapedPath))
+        XCTAssertTrue(contents.contains("tool.execute.after"))
+        XCTAssertTrue(contents.contains("session.idle"))
+        XCTAssertTrue(contents.contains("permission.asked"))
+        XCTAssertTrue(contents.contains("question.asked"))
+    }
+
+    func testOpenCodeRelaunchOverwritesRatherThanAccumulating() throws {
+        let writer = HookConfigurationWriter()
+        let sessionID = UUID()
+        for _ in 0..<3 {
+            _ = writer.configureHooks(
+                for: .openCode,
+                sessionID: sessionID,
+                workingDirectory: workingDirectory,
+                supportDirectory: supportDirectory
+            )
+        }
+
+        let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
+        let entries = try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path)
+        XCTAssertEqual(entries.count, 1, "relaunching the same session must overwrite, not accumulate, its own plugin file")
+    }
+
+    func testOpenCodeTwoSessionsGetIndependentPluginFiles() throws {
+        let writer = HookConfigurationWriter()
+        _ = writer.configureHooks(
+            for: .openCode,
+            sessionID: UUID(),
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+        _ = writer.configureHooks(
+            for: .openCode,
+            sessionID: UUID(),
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+
+        let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
+        let entries = try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path)
+        XCTAssertEqual(entries.count, 2, "each session must get its own plugin file, never merged into a shared one")
     }
 }
 
