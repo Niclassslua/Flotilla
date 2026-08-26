@@ -99,6 +99,11 @@ struct FleetSessionList: View {
     /// delete anything itself — the sheet is owned by `FlotillaShell`, so
     /// every entry point into deletion shares one confirmation flow.
     let onRequestDelete: (UUID) -> Void
+    /// While the grid is on screen, clicking a row assigns/unassigns that
+    /// session to the grid instead of opening it — there's no reason to
+    /// leave the grid just to build it. `nil` outside that context, which
+    /// keeps every row's normal open-on-click behaviour.
+    var gridSelection: GridSidebarSelection? = nil
 
     private var filtered: SidebarFilterResult { store.sidebarFilter(matching: searchText) }
 
@@ -112,7 +117,7 @@ struct FleetSessionList: View {
                 if !projectSessions.isEmpty {
                     Section(project.name) {
                         ForEach(projectSessions) { session in
-                            SessionSidebarRow(session: session, selection: selection, store: store, onOpenSession: onOpenSession, onRequestDelete: onRequestDelete)
+                            SessionSidebarRow(session: session, selection: selection, store: store, onOpenSession: onOpenSession, onRequestDelete: onRequestDelete, gridSelection: gridSelection)
                         }
                     }
                 }
@@ -120,7 +125,7 @@ struct FleetSessionList: View {
             if !filtered.generalSessions.isEmpty {
                 Section("Unassigned") {
                     ForEach(filtered.generalSessions) { session in
-                        SessionSidebarRow(session: session, selection: selection, store: store, onOpenSession: onOpenSession, onRequestDelete: onRequestDelete)
+                        SessionSidebarRow(session: session, selection: selection, store: store, onOpenSession: onOpenSession, onRequestDelete: onRequestDelete, gridSelection: gridSelection)
                     }
                 }
             }
@@ -130,6 +135,14 @@ struct FleetSessionList: View {
         .background(FlotillaColors.sidebar)
         .accessibilityIdentifier(AXID.sidebarList.rawValue)
     }
+}
+
+/// Bundles what a sidebar row needs to show and toggle grid membership,
+/// passed as one optional value so most call sites (outside grid mode) don't
+/// have to thread three separate parameters through just to pass `nil`.
+struct GridSidebarSelection {
+    let memberIDs: Set<UUID>
+    let onToggle: (UUID) -> Void
 }
 
 // MARK: - Rail facet model
@@ -224,6 +237,21 @@ struct SessionSidebarRow: View {
     let store: AppStore
     let onOpenSession: (UUID) -> Void
     let onRequestDelete: (UUID) -> Void
+    var gridSelection: GridSidebarSelection? = nil
+
+    @State private var isHovering = false
+
+    private var isGridMember: Bool {
+        gridSelection?.memberIDs.contains(session.id) ?? false
+    }
+
+    /// Green says "this session is in the grid"; red on hover previews that
+    /// clicking removes it. Outside grid mode this stays nil and the card's
+    /// own selection styling is untouched.
+    private var gridTint: Color? {
+        guard gridSelection != nil, isGridMember else { return nil }
+        return isHovering ? FlotillaColors.danger : FlotillaColors.success
+    }
 
     var body: some View {
         SessionCard(
@@ -232,7 +260,18 @@ struct SessionSidebarRow: View {
             diffStatStore: store.diffStatStore,
             activityStore: nil,
             isSelected: selection == .session(session.id),
-            onTap: { onOpenSession(session.id) },
+            // The row's own `Button` (see `SessionCard.rowView`) consumes
+            // the click before it ever reaches `List`'s native row-selection
+            // handling, so `FlotillaShell.sidebarSelectionBinding` never
+            // sees it — this has to be the one place that actually toggles
+            // membership.
+            onTap: {
+                if let gridSelection {
+                    gridSelection.onToggle(session.id)
+                } else {
+                    onOpenSession(session.id)
+                }
+            },
             onDelete: { onRequestDelete(session.id) },
             onRestart: { store.restartSession(sessionID: session.id) },
             onRevealInFinder: { },
@@ -240,11 +279,33 @@ struct SessionSidebarRow: View {
             onCopyBranch: { },
             terminal: { EmptyView() }
         )
+        // `List` reserves its own horizontal/vertical inset around every row
+        // before this view ever sees the space; zeroing that out and
+        // re-adding the same amount here (before the tint) lets the tint
+        // reach the row's true full bounds instead of stopping at the inner
+        // content SessionCard itself draws.
+        .padding(.horizontal, 8)
+        .padding(.vertical, 1)
+        .background {
+            if let gridTint {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(gridTint.opacity(0.22))
+            }
+        }
+        .animation(.easeOut(duration: 0.1), value: isHovering)
+        .onHover { isHovering = $0 }
+        .listRowInsets(EdgeInsets())
         .tag(SidebarItem.session(session.id))
         .accessibilityIdentifier(AXID.sessionRow(session.title))
+        .accessibilityAddTraits(isGridMember ? .isSelected : [])
         .contextMenu {
             Button("Open Session") {
                 onOpenSession(session.id)
+            }
+            if let gridSelection {
+                Button(isGridMember ? "Remove from Grid" : "Add to Grid") {
+                    gridSelection.onToggle(session.id)
+                }
             }
             Divider()
             Button("Restart Session") {

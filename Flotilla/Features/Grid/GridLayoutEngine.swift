@@ -1,66 +1,57 @@
 import SwiftUI
-import SessionKit
 import SettingsKit
 
-/// How big a tile wants to be — the grid's single layout knob.
+/// The grid's layout knob: how many columns to show, and how many rows fit
+/// the viewport before it scrolls.
 ///
-/// Density and an explicit column count were two ways of saying the same
-/// thing, and keeping both meant two controls to reason about and a menu to
-/// open. One scale replaces them: the column count is a *result* of tile size,
-/// so widening the window grows tiles and only opens a new column once a whole
-/// one fits.
-///
-/// Stored as the tile's preferred width in `gridMinimumTileWidth`, which is the
-/// value that setting has always held.
-struct GridZoom: Equatable, Sendable {
-    /// Preferred tile width. The realised width is usually larger, since the
-    /// columns share out whatever the window has left over.
-    var tileWidth: CGFloat
+/// Set from the toolbar's grid-size picker — a drag/click swatch modeled on
+/// the "insert table" grids in Office apps, rather than a continuous zoom
+/// slider. Columns are a hard count (not derived from window width), and
+/// rows sets how tall each tile gets: taller for fewer rows, shorter for
+/// more, always clamped so a tile stays legible. Sessions beyond
+/// `columns * rows` simply wrap into further rows and scroll, same as before.
+struct GridDimensions: Equatable, Sendable {
+    var columns: Int
+    var rows: Int
 
-    /// Coarse enough that one step is always a visible change, fine enough
-    /// that stepping to a specific column count is quick.
-    static let steps: [CGFloat] = [260, 300, 350, 410, 480, 560, 660, 780]
+    static let columnRange = 1...4
+    static let rowRange = 1...4
 
-    static let `default` = GridZoom(tileWidth: 410)
+    static let `default` = GridDimensions(columns: 3, rows: 2)
 
-    init(tileWidth: CGFloat) {
-        self.tileWidth = min(max(tileWidth, Self.steps.first!), Self.steps.last!)
+    init(columns: Int, rows: Int) {
+        self.columns = min(max(columns, Self.columnRange.lowerBound), Self.columnRange.upperBound)
+        self.rows = min(max(rows, Self.rowRange.lowerBound), Self.rowRange.upperBound)
     }
 
-    init(setting: Double) {
-        self.init(tileWidth: CGFloat(setting))
+    init(columnSetting: Int, rowSetting: Int) {
+        self.init(columns: columnSetting, rows: rowSetting)
     }
 
-    var setting: Double { Double(tileWidth) }
+    /// "columns×rows", matching the picker's own label under the swatch.
+    var label: String { "\(columns)×\(rows)" }
 
-    /// Tiles shrink to fill the window until they hit this height, then the
-    /// grid scrolls rather than shrinking further. Tied to width so a tile
-    /// keeps a sane shape at every zoom level: the previous grid divided the
-    /// viewport height by the row count unconditionally, so eight sessions
-    /// produced ~100pt tiles with almost no room for the terminal.
-    var minimumTileHeight: CGFloat {
-        min(max(tileWidth * 0.62, 180), 460)
+    /// The most sessions the grid will render at once. Selecting more
+    /// sessions than this doesn't grow the grid — it queues them, visible
+    /// again once the picker is widened.
+    var capacity: Int { columns * rows }
+
+    /// A tile never shrinks below this, however many rows are requested —
+    /// the previous grid divided viewport height by row count unconditionally,
+    /// so a tall row count produced tiles with almost no room for the terminal.
+    static let minimumTileHeight: CGFloat = 180
+
+    var canZoomIn: Bool { columns > Self.columnRange.lowerBound }
+    var canZoomOut: Bool { columns < Self.columnRange.upperBound }
+
+    /// Bigger tiles, fewer columns.
+    func zoomedIn() -> GridDimensions {
+        GridDimensions(columns: columns - 1, rows: rows)
     }
 
-    var canZoomIn: Bool { tileWidth < Self.steps.last! }
-    var canZoomOut: Bool { tileWidth > Self.steps.first! }
-
-    /// Bigger tiles, fewer of them.
-    func zoomedIn() -> GridZoom {
-        GridZoom(tileWidth: Self.steps.first { $0 > tileWidth } ?? tileWidth)
-    }
-
-    /// Smaller tiles, more of them.
-    func zoomedOut() -> GridZoom {
-        GridZoom(tileWidth: Self.steps.last { $0 < tileWidth } ?? tileWidth)
-    }
-
-    /// Continuous zoom, for pinch and Command-scroll. Snaps to the nearest
-    /// step so the discrete controls and the gestures stay in agreement.
-    func scaled(by factor: CGFloat) -> GridZoom {
-        let target = tileWidth * factor
-        let nearest = Self.steps.min { abs($0 - target) < abs($1 - target) } ?? tileWidth
-        return GridZoom(tileWidth: nearest)
+    /// Smaller tiles, more columns.
+    func zoomedOut() -> GridDimensions {
+        GridDimensions(columns: columns + 1, rows: rows)
     }
 }
 
@@ -81,55 +72,36 @@ enum GridLayoutMetrics {
     static let padding: CGFloat = 12
 }
 
-/// Solves column count and tile height for a container, implementing
-/// fit-then-scroll: fill the window while tiles stay readable, then scroll.
+/// Solves column count and tile height for a container: columns come
+/// straight from the picker, tile height fits exactly `dimensions.rows` rows
+/// into the viewport before the grid scrolls for the rest.
 func resolveGridLayout(
     containerSize: CGSize,
     sessionCount: Int,
-    zoom: GridZoom
+    dimensions: GridDimensions
 ) -> ResolvedGridLayout {
     guard sessionCount > 0 else {
-        return ResolvedGridLayout(columnCount: 1, tileHeight: zoom.minimumTileHeight)
+        return ResolvedGridLayout(columnCount: dimensions.columns, tileHeight: GridDimensions.minimumTileHeight)
     }
 
     let gutter = GridLayoutMetrics.gutter
-    let availableWidth = max(1, containerSize.width - GridLayoutMetrics.padding * 2)
     let availableHeight = max(1, containerSize.height - GridLayoutMetrics.padding * 2)
 
     // Clamping to `sessionCount` keeps two sessions from sitting in four skinny
     // columns; this behaviour is carried over from the previous grid.
-    let fitting = Int((availableWidth + gutter) / (zoom.tileWidth + gutter))
-    let columnCount = min(max(1, fitting), sessionCount)
+    let columnCount = min(max(1, dimensions.columns), sessionCount)
 
-    let rowCount = Int(ceil(Double(sessionCount) / Double(columnCount)))
+    // Size rows to how many are actually needed for `sessionCount`, not to
+    // the picker's row setting — otherwise two sessions in a 3×2 grid would
+    // sit in a single half-height row, leaving the bottom of the screen
+    // empty. Only once sessions overflow the picker's row count does that
+    // setting take over, at which point the extra rows scroll as before.
+    let neededRows = Int((Double(sessionCount) / Double(columnCount)).rounded(.up))
+    let rowCount = min(max(1, dimensions.rows), max(1, neededRows))
     let idealHeight = (availableHeight - CGFloat(rowCount - 1) * gutter) / CGFloat(rowCount)
 
-    // Fit-then-scroll: tiles shrink to fill the viewport until they reach the
-    // zoom level's floor, past which the enclosing ScrollView takes over.
     return ResolvedGridLayout(
         columnCount: columnCount,
-        tileHeight: max(idealHeight, zoom.minimumTileHeight)
+        tileHeight: max(idealHeight, GridDimensions.minimumTileHeight)
     )
-}
-
-// MARK: - Session ordering
-
-extension Array where Element == Session {
-    /// Applies the user's saved drag order, keeping any session the order does
-    /// not mention (newly created ones) at the end in their existing order.
-    func ordered(by savedOrder: [String]) -> [Session] {
-        guard !savedOrder.isEmpty else { return self }
-        let rank = Dictionary(
-            uniqueKeysWithValues: savedOrder.enumerated().map { ($0.element, $0.offset) }
-        )
-        return enumerated()
-            .sorted { lhs, rhs in
-                let lhsRank = rank[lhs.element.id.uuidString] ?? Int.max
-                let rhsRank = rank[rhs.element.id.uuidString] ?? Int.max
-                // Fall back to the original index so the sort stays stable for
-                // sessions that share a rank (i.e. both unranked).
-                return lhsRank == rhsRank ? lhs.offset < rhs.offset : lhsRank < rhsRank
-            }
-            .map(\.element)
-    }
 }

@@ -76,6 +76,47 @@ struct FlotillaShell: View {
 
     private var facet: SidebarFacet { SidebarFacet(navigator.selection) }
 
+    /// Non-nil only while the fleet grid is what's on screen — the only
+    /// context where clicking a sidebar row should assign it to the grid
+    /// rather than open it. See `FleetSessionList.gridSelection`.
+    private var gridSidebarSelection: GridSidebarSelection? {
+        guard navigator.selection == .allSessions, navigator.presentation == .grid else { return nil }
+        let dimensions = GridDimensions(
+            columns: settingsViewModel.settings.workspace.gridColumnCount,
+            rows: settingsViewModel.settings.workspace.gridRowCount
+        )
+        return GridSidebarSelection(
+            memberIDs: GridSelection.memberIDs(
+                selectedIDs: settingsViewModel.settings.workspace.gridSelectedSessionIDs,
+                in: store.sessions
+            ),
+            onToggle: { id in
+                settingsViewModel.toggleGridMembership(of: id, in: store.sessions, capacity: dimensions.capacity)
+            }
+        )
+    }
+
+    /// `List(selection:)` is the one thing in the sidebar guaranteed to see
+    /// every click — it's an AppKit table view driving the binding directly,
+    /// not a SwiftUI gesture racing the table for the event. While the grid
+    /// is on screen this reroutes that click into a grid-membership toggle
+    /// instead of letting it flip `navigator.selection` to `.session(id)`,
+    /// which would both fail to toggle anything (`List` set the binding
+    /// itself, bypassing `FleetSessionList.onOpenSession`) and navigate away
+    /// from the grid to a full-screen session.
+    private var sidebarSelectionBinding: Binding<SidebarItem> {
+        Binding(
+            get: { navigator.selection },
+            set: { newValue in
+                if case .session(let id) = newValue, let gridSidebarSelection {
+                    gridSidebarSelection.onToggle(id)
+                    return
+                }
+                navigator.selection = newValue
+            }
+        )
+    }
+
     /// The rail is a sibling of the split view, not its first column — a
     /// fixed-width column is something `NavigationSplitView` does not keep
     /// (see `SidebarRail`). The split view then owns only the session list,
@@ -99,13 +140,14 @@ struct FlotillaShell: View {
             NavigationSplitView(columnVisibility: $navigator.columnVisibility) {
                 FleetSessionList(
                     store: store,
-                    selection: $navigator.selection,
+                    selection: sidebarSelectionBinding,
                     searchText: navigator.searchText,
                     onOpenSession: { id in
                         navigator.selection = .session(id)
                         store.selectedSessionID = id
                     },
-                    onRequestDelete: { navigator.presentedSheet = .deleteSession($0) }
+                    onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
+                    gridSelection: gridSidebarSelection
                 )
                 // AppKit remembers the divider position it was last dragged to
                 // (see `SidebarRail`'s doc comment) and restores it on the next

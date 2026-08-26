@@ -71,28 +71,34 @@ struct SessionCard<Terminal: View>: View {
     // MARK: - Row Variant (Sidebar)
 
     private var rowView: some View {
-        HStack(alignment: .top, spacing: 10) {
-            providerTile
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(session.title)
-                        .font(.callout.weight(.medium))
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(compactTimestamp(for: session.lastActiveAt))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.tertiary)
-                    deleteButton
+        // A real `Button` rather than `.onTapGesture`: inside a `List` on
+        // macOS, a tap gesture on plain row content loses the hit-test race
+        // to the table view's own click handling and silently never fires —
+        // a `Button`'s action is what AppKit reliably routes the click to.
+        Button(action: onTap) {
+            HStack(alignment: .top, spacing: 10) {
+                providerTile
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(session.title)
+                            .font(.callout.weight(.medium))
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(compactTimestamp(for: session.lastActiveAt))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                        deleteButton
+                    }
+                    metadataLine
                 }
-                metadataLine
+                .padding(.top, 1)
             }
-            .padding(.top, 1)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(rowBackground)
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(rowBackground)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .buttonStyle(.plain)
         .contextMenu { contextMenu }
         // `.contain` keeps the row addressable by the identifier the call
         // site assigns while still exposing children (status word, delete

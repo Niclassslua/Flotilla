@@ -12,8 +12,12 @@ struct MissionControlGrid: View {
     let sessions: [Session]
     let store: AppStore
     let terminalManager: TerminalManager
-    let zoom: GridZoom
+    let dimensions: GridDimensions
     let activeSessionID: UUID?
+    /// "Dim unfocused sessions": every tile but the active one fades to
+    /// `1 - dimIntensity` opacity while this is on.
+    var dimEnabled: Bool = false
+    var dimIntensity: Double = 0.4
     let actions: (Session) -> SessionTileActions
 
     var body: some View {
@@ -21,7 +25,7 @@ struct MissionControlGrid: View {
             let layout = resolveGridLayout(
                 containerSize: proxy.size,
                 sessionCount: sessions.count,
-                zoom: zoom
+                dimensions: dimensions
             )
 
             // Always a real vertical ScrollView: an empty axis set
@@ -31,14 +35,18 @@ struct MissionControlGrid: View {
             ScrollView(.vertical) {
                 LazyVGrid(columns: layout.columns, spacing: GridLayoutMetrics.gutter) {
                     ForEach(sessions, id: \.id) { session in
+                        let isActive = activeSessionID == session.id
                         MissionControlTile(
                             session: session,
                             store: store,
                             terminalManager: terminalManager,
-                            isActive: activeSessionID == session.id,
+                            isActive: isActive,
                             actions: actions(session)
                         )
                         .frame(height: layout.tileHeight)
+                        .opacity(dimEnabled && !isActive ? 1 - dimIntensity : 1)
+                        .animation(.easeOut(duration: 0.15), value: dimEnabled)
+                        .animation(.easeOut(duration: 0.15), value: isActive)
                     }
                 }
                 .padding(GridLayoutMetrics.padding)

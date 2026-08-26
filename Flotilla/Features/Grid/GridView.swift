@@ -17,21 +17,36 @@ struct GridView: View {
     @Bindable var settingsViewModel: SettingsViewModel
 
     @State private var pendingDeletion: Session?
+    /// Accumulates pinch/Command-scroll magnification between discrete column
+    /// steps, so a small nudge doesn't jump the grid by a whole column.
+    @State private var zoomAccumulator: CGFloat = 1
 
-    private var zoom: GridZoom {
-        GridZoom(setting: settingsViewModel.settings.workspace.gridMinimumTileWidth)
+    private var dimensions: GridDimensions {
+        GridDimensions(
+            columns: settingsViewModel.settings.workspace.gridColumnCount,
+            rows: settingsViewModel.settings.workspace.gridRowCount
+        )
     }
 
-    private var visibleSessions: [Session] {
-        let scoped = projectFilter.map { filter in
+    private var scopedSessions: [Session] {
+        projectFilter.map { filter in
             store.sessions.filter { $0.projectID == filter }
         } ?? store.sessions
-        return scoped.ordered(by: settingsViewModel.settings.workspace.gridSessionOrder)
+    }
+
+    /// The sessions assigned to the grid, capped at what the picker's
+    /// dimensions can actually show — see `GridSelection`.
+    private var visibleSessions: [Session] {
+        GridSelection.visible(
+            selectedIDs: settingsViewModel.settings.workspace.gridSelectedSessionIDs,
+            in: scopedSessions,
+            capacity: dimensions.capacity
+        )
     }
 
     var body: some View {
         Group {
-            if visibleSessions.isEmpty {
+            if scopedSessions.isEmpty {
                 ContentUnavailableView(
                     store.sessions.isEmpty ? "No Live Sessions" : "No Sessions in This Project",
                     systemImage: "square.grid.2x2",
@@ -40,12 +55,21 @@ struct GridView: View {
                         : "Choose another project or return to all sessions.")
                 )
                 .accessibilityIdentifier("GridEmptyState")
+            } else if visibleSessions.isEmpty {
+                ContentUnavailableView {
+                    Label("No Sessions in the Grid", systemImage: "square.grid.2x2")
+                } description: {
+                    Text("Select sessions from the sidebar, or add as many as fit \(dimensions.label).")
+                } actions: {
+                    Button("Add All") { addAll() }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("Grid.AddAll")
+                }
+                .accessibilityIdentifier("GridEmptyState")
             } else {
                 grid
                     .accessibilityIdentifier("GridView")
-                    .gridZoomGestures(isEnabled: true) { factor in
-                        apply(zoom.scaled(by: factor))
-                    }
+                    .gridZoomGestures(isEnabled: true, onZoom: handleZoom)
                     .onAppear(perform: ensureActiveSession)
                     .onChange(of: visibleSessions.map(\.id)) { ensureActiveSession() }
             }
@@ -75,15 +99,37 @@ struct GridView: View {
             sessions: visibleSessions,
             store: store,
             terminalManager: terminalManager,
-            zoom: zoom,
+            dimensions: dimensions,
             activeSessionID: activeSessionID,
+            dimEnabled: settingsViewModel.settings.workspace.gridDimEnabled,
+            dimIntensity: settingsViewModel.settings.workspace.gridDimIntensity,
             actions: actions(for:)
         )
     }
 
-    private func apply(_ newZoom: GridZoom) {
-        guard newZoom != zoom else { return }
-        settingsViewModel.settings.workspace.gridMinimumTileWidth = newZoom.setting
+    private func addAll() {
+        settingsViewModel.addAllToGrid(from: scopedSessions, capacity: dimensions.capacity)
+    }
+
+    private func apply(_ newDimensions: GridDimensions) {
+        guard newDimensions != dimensions else { return }
+        settingsViewModel.settings.workspace.gridColumnCount = newDimensions.columns
+        settingsViewModel.settings.workspace.gridRowCount = newDimensions.rows
+    }
+
+    /// Pinch-out/Command-scroll-down grows the column count (smaller tiles);
+    /// the reverse shrinks it. Magnification arrives as many small factors in
+    /// a row, so they're multiplied together until the accumulated change is
+    /// big enough to justify moving a whole column.
+    private func handleZoom(_ factor: CGFloat) {
+        zoomAccumulator *= factor
+        if zoomAccumulator > 1.15 {
+            apply(dimensions.zoomedIn())
+            zoomAccumulator = 1
+        } else if zoomAccumulator < 0.85 {
+            apply(dimensions.zoomedOut())
+            zoomAccumulator = 1
+        }
     }
 
     private func actions(for session: Session) -> SessionTileActions {
@@ -124,10 +170,11 @@ struct GridView: View {
         ordered.insert(draggedID, at: to)
 
         let reordered = ordered.map(\.uuidString)
-        // Sessions outside the current filter keep their saved position.
-        let untouched = settingsViewModel.settings.workspace.gridSessionOrder
+        // Sessions outside the current filter (or past capacity) keep their
+        // saved position.
+        let untouched = settingsViewModel.settings.workspace.gridSelectedSessionIDs
             .filter { !reordered.contains($0) }
-        settingsViewModel.settings.workspace.gridSessionOrder = reordered + untouched
+        settingsViewModel.settings.workspace.gridSelectedSessionIDs = reordered + untouched
     }
 
     private func ensureActiveSession() {

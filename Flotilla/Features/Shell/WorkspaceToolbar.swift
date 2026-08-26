@@ -29,6 +29,13 @@ struct WorkspaceToolbar: ToolbarContent {
         }
     }
 
+    private var gridDimensions: GridDimensions {
+        GridDimensions(
+            columns: settingsViewModel.settings.workspace.gridColumnCount,
+            rows: settingsViewModel.settings.workspace.gridRowCount
+        )
+    }
+
     private var presentation: Binding<WorkspacePresentation> {
         Binding(
             get: { navigator.presentation },
@@ -59,10 +66,6 @@ struct WorkspaceToolbar: ToolbarContent {
                 .help("Switch presentation")
                 .accessibilityIdentifier("Toolbar.PresentationPicker")
             }
-
-            if isFleetScope, navigator.presentation == .grid {
-                GridLayoutControls(settingsViewModel: settingsViewModel)
-            }
         }
 
         if case .session(let sessionID) = navigator.selection,
@@ -88,6 +91,20 @@ struct WorkspaceToolbar: ToolbarContent {
             ToolbarSpacer(.fixed, placement: .primaryAction)
         }
 
+        // Its own glass container next to the other icon-button groups,
+        // rather than living beside the presentation picker — an unrelated
+        // control shouldn't share a background with it.
+        if isFleetScope, navigator.presentation == .grid {
+            ToolbarItemGroup(placement: .primaryAction) {
+                GridDimensionsPicker(settingsViewModel: settingsViewModel)
+                GridAddAllButton(store: store, settingsViewModel: settingsViewModel, dimensions: gridDimensions)
+                GridDimControl(settingsViewModel: settingsViewModel)
+                GridEmptyButton(store: store, settingsViewModel: settingsViewModel)
+            }
+
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
+
         ToolbarItemGroup(placement: .primaryAction) {
             Button(action: onCommandPalette) {
                 Image(systemName: "command")
@@ -101,73 +118,5 @@ struct WorkspaceToolbar: ToolbarContent {
             .help("Settings (⌘,)")
             .accessibilityIdentifier("Toolbar.Settings")
         }
-    }
-}
-
-/// Tile size, as a two-button stepper.
-///
-/// One click per step, nothing to open first. Command-plus and Command-minus
-/// are attached here so the shortcuts live with the buttons they mirror;
-/// pinch and Command-scroll are handled on the grid itself.
-///
-/// Bound straight to the persisted setting — the previous grid kept a second
-/// copy of the tile width in a `@Binding`, and the two copies disagreeing is
-/// why the old density control appeared to do nothing.
-private struct GridLayoutControls: View {
-    @Bindable var settingsViewModel: SettingsViewModel
-
-    private var zoom: GridZoom {
-        GridZoom(setting: settingsViewModel.settings.workspace.gridMinimumTileWidth)
-    }
-
-    private func apply(_ newZoom: GridZoom) {
-        settingsViewModel.settings.workspace.gridMinimumTileWidth = newZoom.setting
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Button {
-                apply(zoom.zoomedOut())
-            } label: {
-                Image(systemName: "minus")
-                    .frame(width: 26, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .disabled(!zoom.canZoomOut)
-            .help("Smaller tiles (⌘−)")
-            .keyboardShortcut("-", modifiers: .command)
-            .accessibilityIdentifier("Toolbar.GridZoomOut")
-
-            Image(systemName: "square.grid.2x2")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .frame(width: 22)
-                .accessibilityHidden(true)
-
-            Button {
-                apply(zoom.zoomedIn())
-            } label: {
-                Image(systemName: "plus")
-                    .frame(width: 26, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .disabled(!zoom.canZoomIn)
-            .help("Larger tiles (⌘+)")
-            .keyboardShortcut("+", modifiers: .command)
-            .accessibilityIdentifier("Toolbar.GridZoomIn")
-
-            // `⌘+` needs Shift on most layouts, so bind the unshifted `⌘=`
-            // that users actually press. A button can carry only one shortcut,
-            // hence the zero-sized twin.
-            Button { apply(zoom.zoomedIn()) } label: { EmptyView() }
-                .keyboardShortcut("=", modifiers: .command)
-                .disabled(!zoom.canZoomIn)
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
-        .buttonStyle(.borderless)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Tile size")
     }
 }

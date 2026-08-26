@@ -51,8 +51,8 @@ public enum AXID: String, Sendable {
     case gridTile = "GridTile-"
     case gridTileStatus = "GridTile-Status-"
     case gridTileFocusButton = "GridTile-FocusButton-"
-    case gridLayoutColumns = "GridLayout.Columns"
-    case gridLayoutDensity = "GridLayout.Density"
+    case gridLayoutPicker = "GridLayout.Picker"
+    case gridLayoutPickerCell = "GridLayout.Picker.Cell-"
 
     // MARK: - Kanban
     case kanbanBoard = "KanbanBoard"

@@ -291,10 +291,20 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
     public var selectedSessionID: String?
     public var viewMode: String
     public var detailPanel: String
-    /// The grid's single layout knob: how wide a tile wants to be. The column
-    /// count follows from it, so there is no separate column setting.
-    public var gridMinimumTileWidth: Double
-    public var gridSessionOrder: [String]
+    /// The grid's layout knob: how many columns to show, and how many rows
+    /// fit the viewport before it scrolls. Set from the toolbar's grid-size
+    /// picker (drag/click a cell in the N×M swatch).
+    public var gridColumnCount: Int
+    public var gridRowCount: Int
+    /// Which sessions are assigned to the grid, in placement order. This is
+    /// membership, not just ordering: the grid only ever renders sessions
+    /// whose ID is in this list, capped at `gridColumnCount * gridRowCount`.
+    public var gridSelectedSessionIDs: [String]
+    /// "Dim unfocused sessions": every tile but the active one is faded by
+    /// `gridDimIntensity` while this is on.
+    public var gridDimEnabled: Bool
+    /// 0...0.8 — how much to fade unfocused tiles when dimming is on.
+    public var gridDimIntensity: Double
     /// Shows a text label under each sidebar rail icon (Overview/Sessions/
     /// Projects/New) instead of icon-only with a hover tooltip.
     public var sidebarRailLabels: Bool
@@ -303,20 +313,27 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         selectedSessionID: String? = nil,
         viewMode: String = "single",
         detailPanel: String = "terminal",
-        gridMinimumTileWidth: Double = 410,
-        gridSessionOrder: [String] = [],
+        gridColumnCount: Int = 3,
+        gridRowCount: Int = 2,
+        gridSelectedSessionIDs: [String] = [],
+        gridDimEnabled: Bool = false,
+        gridDimIntensity: Double = 0.4,
         sidebarRailLabels: Bool = false
     ) {
         self.selectedSessionID = selectedSessionID
         self.viewMode = viewMode
         self.detailPanel = detailPanel
-        self.gridMinimumTileWidth = gridMinimumTileWidth
-        self.gridSessionOrder = gridSessionOrder
+        self.gridColumnCount = gridColumnCount
+        self.gridRowCount = gridRowCount
+        self.gridSelectedSessionIDs = gridSelectedSessionIDs
+        self.gridDimEnabled = gridDimEnabled
+        self.gridDimIntensity = gridDimIntensity
         self.sidebarRailLabels = sidebarRailLabels
     }
 
     private enum CodingKeys: String, CodingKey {
-        case selectedSessionID, viewMode, detailPanel, gridMinimumTileWidth, gridSessionOrder, sidebarRailLabels
+        case selectedSessionID, viewMode, detailPanel, gridColumnCount, gridRowCount
+        case gridSelectedSessionIDs, gridDimEnabled, gridDimIntensity, sidebarRailLabels
     }
 
     public init(from decoder: Decoder) throws {
@@ -324,8 +341,11 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         selectedSessionID = try container.decodeIfPresent(String.self, forKey: .selectedSessionID)
         viewMode = try container.decodeIfPresent(String.self, forKey: .viewMode) ?? "single"
         detailPanel = try container.decodeIfPresent(String.self, forKey: .detailPanel) ?? "terminal"
-        gridMinimumTileWidth = try container.decodeIfPresent(Double.self, forKey: .gridMinimumTileWidth) ?? 410
-        gridSessionOrder = try container.decodeIfPresent([String].self, forKey: .gridSessionOrder) ?? []
+        gridColumnCount = try container.decodeIfPresent(Int.self, forKey: .gridColumnCount) ?? 3
+        gridRowCount = try container.decodeIfPresent(Int.self, forKey: .gridRowCount) ?? 2
+        gridSelectedSessionIDs = try container.decodeIfPresent([String].self, forKey: .gridSelectedSessionIDs) ?? []
+        gridDimEnabled = try container.decodeIfPresent(Bool.self, forKey: .gridDimEnabled) ?? false
+        gridDimIntensity = try container.decodeIfPresent(Double.self, forKey: .gridDimIntensity) ?? 0.4
         sidebarRailLabels = try container.decodeIfPresent(Bool.self, forKey: .sidebarRailLabels) ?? false
     }
 
@@ -334,8 +354,11 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         try container.encodeIfPresent(selectedSessionID, forKey: .selectedSessionID)
         try container.encodeIfPresent(viewMode, forKey: .viewMode)
         try container.encodeIfPresent(detailPanel, forKey: .detailPanel)
-        try container.encodeIfPresent(gridMinimumTileWidth, forKey: .gridMinimumTileWidth)
-        try container.encodeIfPresent(gridSessionOrder, forKey: .gridSessionOrder)
+        try container.encodeIfPresent(gridColumnCount, forKey: .gridColumnCount)
+        try container.encodeIfPresent(gridRowCount, forKey: .gridRowCount)
+        try container.encodeIfPresent(gridSelectedSessionIDs, forKey: .gridSelectedSessionIDs)
+        try container.encodeIfPresent(gridDimEnabled, forKey: .gridDimEnabled)
+        try container.encodeIfPresent(gridDimIntensity, forKey: .gridDimIntensity)
         try container.encodeIfPresent(sidebarRailLabels, forKey: .sidebarRailLabels)
     }
 

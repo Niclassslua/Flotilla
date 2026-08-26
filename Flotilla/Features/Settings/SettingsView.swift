@@ -251,27 +251,6 @@ private struct GeneralSettingsPane: View {
             }
 
             Section {
-                LabeledContent("Tile density") {
-                    HStack(spacing: 12) {
-                        Slider(
-                            value: $viewModel.settings.workspace.gridMinimumTileWidth,
-                            in: 280...560,
-                            step: 20
-                        )
-                        .frame(width: 190)
-                        Text(densityLabel)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 70, alignment: .trailing)
-                    }
-                }
-                Text("Smaller tiles show more live sessions at once; larger tiles favor terminal readability.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("Grid Workspace", systemImage: "rectangle.3.group")
-            }
-
-            Section {
                 Toggle("Show labels on sidebar icons", isOn: $viewModel.settings.workspace.sidebarRailLabels)
                     .toggleStyle(.switch)
                 Text("Labels make Overview, Sessions, and Projects easier to tell apart at a glance, at the cost of a wider rail.")
@@ -282,14 +261,6 @@ private struct GeneralSettingsPane: View {
             }
         }
         .flotillaSettingsFormLayout()
-    }
-
-    private var densityLabel: String {
-        switch viewModel.settings.workspace.gridMinimumTileWidth {
-        case ..<340: "Dense"
-        case 340..<460: "Balanced"
-        default: "Roomy"
-        }
     }
 
     private func chooseWorktreeDirectory() {
