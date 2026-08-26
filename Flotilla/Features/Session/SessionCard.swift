@@ -398,17 +398,8 @@ struct SessionCard<Terminal: View>: View {
             Text("·")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
-            if let branch = session.worktree?.branchName {
-                Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 8, weight: .medium))
-                Text(branch)
-                    .font(.caption2.monospaced())
-                    .truncationMode(.middle)
-                    .layoutPriority(-1)
-            } else {
-                Text(session.agent.displayName)
-                    .font(.caption2)
-            }
+            Text(session.agent.displayName)
+                .font(.caption2)
             if let diffStatStore {
                 Spacer(minLength: 2)
                 SessionDiffStatView(session: session, diffStatStore: diffStatStore)
