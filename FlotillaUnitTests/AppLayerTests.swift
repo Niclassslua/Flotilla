@@ -317,11 +317,19 @@ final class AppStoreLifecycleTests: XCTestCase {
         let startedArguments = try XCTUnwrap(factory.processes.first?.startedArguments)
         // `agentManagedTitleEnabled` defaults to true, so the setup-step
         // title instructions apply here too, Claude Code's own native title
-        // generation notwithstanding (see AppStore.createSession).
-        XCTAssertEqual(startedArguments.dropLast(), ["--session-id", createdSession.id.uuidString])
-        let goalArg = try XCTUnwrap(startedArguments.last)
+        // generation notwithstanding (see AppStore.createSession). The launch
+        // also carries a trailing `--settings <json>` pair (see
+        // HookConfigurationWriter.launchArguments) so this session's own
+        // hook wiring travels with the process rather than through a file
+        // other sessions could also read — checked for shape, not exact
+        // content, since the JSON payload's own coverage lives in
+        // HooksKitTests.
+        XCTAssertEqual(Array(startedArguments.prefix(2)), ["--session-id", createdSession.id.uuidString])
+        let goalArg = try XCTUnwrap(startedArguments.dropFirst(2).first)
         XCTAssertTrue(goalArg.contains("Choose a concise 2–5 word noun-phrase title"))
         XCTAssertTrue(goalArg.hasSuffix("Find the race"))
+        XCTAssertEqual(Array(startedArguments.suffix(2).prefix(1)), ["--settings"])
+        XCTAssertTrue((startedArguments.last ?? "").contains("\"hooks\""))
         XCTAssertTrue(factory.processes.first?.sentInput.isEmpty == true)
     }
 
@@ -1366,7 +1374,10 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         )
 
         let proc = try XCTUnwrap(factory.processes.first)
-        let goalArg = try XCTUnwrap(proc.startedArguments.last)
+        // Not `.last`: a trailing `--settings <json>` pair now follows the
+        // goal argument (see HookConfigurationWriter.launchArguments), so
+        // find the goal by content rather than position.
+        let goalArg = try XCTUnwrap(proc.startedArguments.first { $0.contains("Choose a concise 2–5 word noun-phrase title") })
         XCTAssertTrue(goalArg.contains("Choose a concise 2–5 word noun-phrase title"))
     }
 }

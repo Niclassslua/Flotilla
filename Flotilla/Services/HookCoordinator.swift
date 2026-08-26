@@ -83,10 +83,10 @@ final class HookCoordinator {
     /// `HookConfigurationWriter` supports — a `HookEventReceiver` alongside
     /// it, both feeding the same `handle` funnel. This is deliberately
     /// "both, always" rather than "hook primary, screen fallback on
-    /// timeout": a broken hook pipe (write failure, agent restyle, a
-    /// project directory Flotilla couldn't write `.claude/settings.json`
-    /// into) then degrades to exactly today's screen-only behavior instead
-    /// of to no status at all, with no timeout/cutover logic to get wrong.
+    /// timeout": a broken hook pipe (event-file creation failure, agent
+    /// restyle) then degrades to exactly today's screen-only behavior
+    /// instead of to no status at all, with no timeout/cutover logic to get
+    /// wrong.
     /// `applyObservedStatus`'s existing no-op-on-unchanged-status guard
     /// keeps two agreeing sources from being noisier than one.
     private func observe(sessionID: UUID) {
