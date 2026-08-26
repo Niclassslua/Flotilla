@@ -27,6 +27,7 @@ struct CommandBarDesign: View {
 
     @State private var mode: Mode = .goal
     @State private var chipQuery = ""
+    @State private var highlightedIndex = 0
     @FocusState private var goalFocused: Bool
     @FocusState private var chipSearchFocused: Bool
 
@@ -57,6 +58,8 @@ struct CommandBarDesign: View {
         }
         .flotillaShadow(.level3)
         .onChange(of: draft.goal) { _, newValue in syncTypedTrigger(newValue) }
+        .onChange(of: mode) { _, _ in highlightedIndex = 0 }
+        .onChange(of: chipQuery) { _, _ in highlightedIndex = 0 }
         .onAppear { goalFocused = true }
         .background { hiddenActions }
     }
@@ -72,21 +75,7 @@ struct CommandBarDesign: View {
                 .font(.system(size: 18, weight: .regular))
                 .lineLimit(1...4)
                 .focused($goalFocused)
-                .onKeyPress { press in
-                    if press.key == .return {
-                        if press.modifiers.contains(.shift) || press.modifiers.contains(.option) {
-                            return .ignored
-                        }
-                        if draft.canLaunch {
-                            actions.launch(true)
-                        }
-                        return .handled
-                    } else if press.key == .escape {
-                        actions.cancel()
-                        return .handled
-                    }
-                    return .ignored
-                }
+                .onKeyPress { press in handleKeyPress(press) }
                 .accessibilityIdentifier("CreateSession.GoalField")
 
             if draft.isCreating {
@@ -183,19 +172,21 @@ struct CommandBarDesign: View {
                     .textFieldStyle(.plain)
                     .font(FlotillaTypography.caption)
                     .focused($chipSearchFocused)
+                    .onKeyPress { press in handleKeyPress(press) }
                     .accessibilityIdentifier("CreateSession.ProjectFilter")
             }
             .padding(.horizontal, FlotillaSpacing.medium)
             .padding(.vertical, FlotillaSpacing.xSmall)
         }
 
-        let query = typed ? String(draft.goal.dropFirst()) : chipQuery
-        ForEach(draft.filteredChoices(query: query)) { choice in
+        let choices = currentProjectChoices
+        ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
             resultRow(
                 symbol: choice.symbolName,
                 title: choice.displayName,
                 detail: choice.displayPath,
-                isSelected: choice == draft.projectChoice
+                isSelected: choice == draft.projectChoice,
+                isHighlighted: index == highlightedIndex
             ) {
                 draft.projectChoice = choice
                 dismissPicker(clearingTypedTrigger: typed)
@@ -205,7 +196,13 @@ struct CommandBarDesign: View {
             )
         }
 
-        resultRow(symbol: "folder.badge.plus", title: "Choose folder…", detail: nil, isSelected: false) {
+        resultRow(
+            symbol: "folder.badge.plus",
+            title: "Choose folder…",
+            detail: nil,
+            isSelected: false,
+            isHighlighted: highlightedIndex == choices.count
+        ) {
             dismissPicker(clearingTypedTrigger: typed)
             draft.chooseFolderFromPanel()
         }
@@ -214,7 +211,7 @@ struct CommandBarDesign: View {
 
     @ViewBuilder
     private var agentResults: some View {
-        ForEach(AgentKind.allCases) { kind in
+        ForEach(Array(AgentKind.allCases.enumerated()), id: \.element.id) { index, kind in
             Button {
                 draft.selectAgent(kind)
                 dismissPicker(clearingTypedTrigger: isTypedAgentMode)
@@ -237,6 +234,10 @@ struct CommandBarDesign: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .background {
+                RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                    .fill(FlotillaColors.accent.opacity(index == highlightedIndex ? FlotillaStateOpacity.hover : 0))
+            }
             .accessibilityIdentifier("CreateSession.Agent.\(kind.rawValue)")
         }
     }
@@ -246,6 +247,7 @@ struct CommandBarDesign: View {
         title: String,
         detail: String?,
         isSelected: Bool,
+        isHighlighted: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -276,6 +278,10 @@ struct CommandBarDesign: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .background {
+            RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                .fill(FlotillaColors.accent.opacity(isHighlighted ? FlotillaStateOpacity.hover : 0))
+        }
     }
 
     // MARK: - Chips
@@ -486,6 +492,7 @@ struct CommandBarDesign: View {
         } else if case .agent(true) = mode {
             mode = .goal
         }
+        highlightedIndex = 0
     }
 
     /// A typed trigger leaves `@query` sitting in the goal; it is scaffolding
@@ -495,6 +502,111 @@ struct CommandBarDesign: View {
         if clearingTypedTrigger { draft.goal = "" }
         mode = .goal
         goalFocused = true
+    }
+
+    /// Closes the picker without acting on it — the `@`/`/` scaffolding text
+    /// goes with it, same as a resolved search, or Escape would just reopen
+    /// the picker it was meant to close.
+    private func cancelPicker() {
+        switch mode {
+        case .project(true), .agent(true):
+            dismissPicker(clearingTypedTrigger: true)
+        default:
+            dismissPicker(clearingTypedTrigger: false)
+        }
+    }
+
+    // MARK: - Keyboard navigation
+
+    /// The project choices for whichever query is currently active — typed
+    /// `@query` in the goal field, or the chip's own filter field.
+    private var currentProjectChoices: [ProjectChoice] {
+        guard case .project(let typed) = mode else { return [] }
+        let query = typed ? String(draft.goal.dropFirst()) : chipQuery
+        return draft.filteredChoices(query: query)
+    }
+
+    /// Row count for the open picker, including the trailing "Choose
+    /// folder…" row in project mode — that row is a valid arrow-key stop too.
+    private var pickerRowCount: Int {
+        switch mode {
+        case .goal: 0
+        case .project: currentProjectChoices.count + 1
+        case .agent: AgentKind.allCases.count
+        }
+    }
+
+    private func moveHighlight(by delta: Int) {
+        let count = pickerRowCount
+        guard count > 0 else { return }
+        highlightedIndex = min(max(highlightedIndex + delta, 0), count - 1)
+    }
+
+    /// Activates whatever row is currently highlighted — the Enter-key
+    /// equivalent of clicking it.
+    private func selectHighlighted() {
+        switch mode {
+        case .goal:
+            break
+        case .project(let typed):
+            let choices = currentProjectChoices
+            if highlightedIndex < choices.count {
+                draft.projectChoice = choices[highlightedIndex]
+                dismissPicker(clearingTypedTrigger: typed)
+            } else {
+                dismissPicker(clearingTypedTrigger: typed)
+                draft.chooseFolderFromPanel()
+            }
+        case .agent:
+            let kinds = AgentKind.allCases
+            if highlightedIndex < kinds.count {
+                draft.selectAgent(kinds[highlightedIndex])
+                dismissPicker(clearingTypedTrigger: isTypedAgentMode)
+            }
+        }
+    }
+
+    /// Shared by the goal field and the chip's project-filter field: arrow
+    /// keys move the highlight, Return activates the highlighted row while a
+    /// picker is open (so `@flotilla` + Return launches into that project
+    /// without ever touching the mouse), and Escape backs out of the picker
+    /// before it backs out of the whole overlay.
+    private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
+        if isPicking {
+            switch press.key {
+            case .downArrow:
+                moveHighlight(by: 1)
+                return .handled
+            case .upArrow:
+                moveHighlight(by: -1)
+                return .handled
+            case .return:
+                if press.modifiers.contains(.shift) || press.modifiers.contains(.option) {
+                    return .ignored
+                }
+                selectHighlighted()
+                return .handled
+            case .escape:
+                cancelPicker()
+                return .handled
+            default:
+                return .ignored
+            }
+        }
+
+        if press.key == .return {
+            if press.modifiers.contains(.shift) || press.modifiers.contains(.option) {
+                return .ignored
+            }
+            if draft.canLaunch {
+                actions.launch(true)
+            }
+            return .handled
+        } else if press.key == .escape {
+            actions.cancel()
+            return .handled
+        }
+        return .ignored
     }
 
     private var hiddenActions: some View {
