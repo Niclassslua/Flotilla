@@ -5,11 +5,9 @@ import SessionKit
 /// file, so `HookEventReceiver` can read exact, structured status instead
 /// of `TerminalScreenHeuristic` guessing from rendered text.
 ///
-/// Only Claude Code is wired today — its `hooks` config (JSON, per-event
-/// shell command, documented at claude.ai/code) is expressive enough to
-/// cover working/waiting/ready with three events. Every other agent kind
-/// falls back to `TerminalScreenHeuristic` permanently for now — this is
-/// not a temporary gap to be filled in later, it's tracked as separate,
+/// Claude Code and Antigravity are wired today. Codex CLI and OpenCode fall
+/// back to `TerminalScreenHeuristic` permanently for now — this is not a
+/// temporary gap to be filled in later, it's tracked as separate,
 /// per-provider follow-up work.
 ///
 /// Claude Code's own config is passed via `launchArguments`'s `--settings`
@@ -24,14 +22,36 @@ import SessionKit
 /// project's own settings, so a session's own hook group passed this way is
 /// never visible to any other process — cross-firing becomes structurally
 /// impossible instead of merely mitigated.
+///
+/// Antigravity has no `--settings`-equivalent per-invocation flag, so its
+/// wiring still goes through a shared `<workingDirectory>/.agents/hooks.json`
+/// — the same cross-session-contamination shape Claude Code's old approach
+/// had, mitigated the same way (session-marker-based idempotent replace
+/// under a lock) but not eliminated. Antigravity's own payload carries a
+/// `conversationId` that could filter this out properly, but Flotilla
+/// doesn't know a fresh session's `conversationId` until its first event
+/// arrives — closing this gap is tracked as follow-up work, not solved here.
 public struct HookConfigurationWriter: Sendable {
     public init() {}
+
+    /// Guards the read-modify-write into a provider's *shared* config file
+    /// (only Antigravity today — Claude Code's own wiring travels via
+    /// `launchArguments` and never touches a shared file). Agent-managed-
+    /// worktree sessions all launch with `workingDirectory` set to the
+    /// project root, so every such session in the same project shares one
+    /// `.agents/hooks.json`. One process-wide lock is enough: the critical
+    /// section is a small synchronous file write, and nothing outside this
+    /// type touches the file.
+    private static let sharedConfigFileLock = NSLock()
 
     /// Whether `configureHooks`/`launchArguments` can do anything useful for
     /// this agent kind. `HookCoordinator` checks this before bothering to
     /// spin up a `HookEventReceiver`.
     public static func supportsHooks(for kind: AgentKind) -> Bool {
-        kind == .claudeCode
+        switch kind {
+        case .claudeCode, .antigravity: return true
+        case .codexCLI, .openCode: return false
+        }
     }
 
     /// The append-only file a launched session's hook command writes one
@@ -42,13 +62,23 @@ public struct HookConfigurationWriter: Sendable {
             .appendingPathComponent("\(sessionID.uuidString).jsonl", isDirectory: false)
     }
 
-    /// Prepares `eventFilePath` for a fresh launch. This is the only
-    /// filesystem side effect left in `configureHooks` — the hook wiring
-    /// itself now travels with the launched process via `launchArguments`,
-    /// not through a file other sessions could also read or write.
+    /// The per-session wrapper script Antigravity's hooks invoke (see
+    /// `configureAntigravityHooks`). Modeled on
+    /// `TmuxSessionWrapping.writeConfigurationFile`'s pattern of generating a
+    /// small support file into `supportDirectory` at runtime.
+    private static func antigravityWrapperScriptPath(for sessionID: UUID, supportDirectory: URL) -> URL {
+        supportDirectory
+            .appendingPathComponent("hooks", isDirectory: true)
+            .appendingPathComponent("\(sessionID.uuidString)-antigravity.sh", isDirectory: false)
+    }
+
+    /// Prepares `eventFilePath` (and, for Antigravity, its wrapper script)
+    /// for a fresh launch, and — for agent kinds whose wiring can't travel
+    /// via `launchArguments` — merges this session's hook group into that
+    /// provider's shared config file.
     ///
     /// Best-effort by design: returns `false` (does not throw) when the
-    /// agent kind isn't hook-capable or the write fails, so a broken/
+    /// agent kind isn't hook-capable or a write fails, so a broken/
     /// read-only project directory never blocks a session launch — the
     /// caller falls back to `TerminalScreenHeuristic` either way.
     @discardableResult
@@ -69,8 +99,21 @@ public struct HookConfigurationWriter: Sendable {
             // Truncate any stale content from a previous launch of this
             // session ID before the new process starts appending to it.
             try Data().write(to: eventFile, options: .atomic)
-            return true
         } catch {
+            return false
+        }
+
+        switch kind {
+        case .claudeCode:
+            return true
+        case .antigravity:
+            return Self.configureAntigravityHooks(
+                sessionID: sessionID,
+                workingDirectory: workingDirectory,
+                supportDirectory: supportDirectory,
+                eventFile: eventFile
+            )
+        case .codexCLI, .openCode:
             return false
         }
     }
@@ -78,9 +121,8 @@ public struct HookConfigurationWriter: Sendable {
     /// Extra CLI arguments the launched process needs so its own hook
     /// wiring travels with it, rather than being written to a file other
     /// sessions could also read. Empty for an agent kind `supportsHooks`
-    /// doesn't recognize, or when `configureHooks` hasn't successfully
-    /// prepared this session's event file (there would be nothing valid to
-    /// point the hooks at).
+    /// doesn't recognize, or for a kind (Antigravity) whose wiring instead
+    /// goes through `configureHooks`'s shared-file write.
     ///
     /// For Claude Code: a `--settings '<json>'` flag carrying only this
     /// session's own `Notification`/`Stop`/`PostToolUse` hook groups, each
@@ -128,5 +170,137 @@ public struct HookConfigurationWriter: Sendable {
     private static func shellCommand(appendingTo eventFile: URL) -> String {
         let path = eventFile.path.replacingOccurrences(of: "\"", with: "\\\"")
         return "cat >> \"\(path)\" && printf '\\n' >> \"\(path)\""
+    }
+
+    // MARK: - Antigravity
+
+    /// Writes this session's wrapper script and merges its hook group into
+    /// `<workingDirectory>/.agents/hooks.json`.
+    ///
+    /// Two things Antigravity needs that Claude Code doesn't, both handled
+    /// by the wrapper script rather than a bare `cat >>` one-liner:
+    ///
+    /// 1. Antigravity's hook payload has no `hook_event_name`-equivalent
+    ///    field, so the script is invoked as `<script> <EventName>` (the
+    ///    event name is baked into the `hooks.json` command per-event, not
+    ///    read from stdin) and synthesizes a self-describing JSON line
+    ///    itself before appending it — `HookEventReceiver` can then treat
+    ///    every provider's event file as "one self-describing JSON object
+    ///    per line" uniformly.
+    /// 2. `PreToolUse`'s stdout is interpreted as a live permission
+    ///    decision (unlike Claude Code, where a silent exit 0 is fine) — the
+    ///    script must also print `{"decision":"allow"}` for that event, or
+    ///    Antigravity may hang waiting for a decision that never comes.
+    ///
+    /// Only `PreToolUse`/`PostToolUse` (matcher `*`, catching every tool
+    /// call) and `Stop` are wired. `HookEventReceiver` decides `working` vs.
+    /// `waitingForInput` for `PreToolUse` by inspecting the real payload's
+    /// `toolCall.name` (`"ask_question"` is Antigravity's own tool for
+    /// asking the user something, free-text or multi-choice — there is no
+    /// separate permission-prompt event; tool/file approval dialogs are
+    /// confirmed invisible to every hook Antigravity exposes and stay on
+    /// `TerminalScreenHeuristic` permanently for this provider). `Stop` only
+    /// means `ready` when its own `fullyIdle` field is `true` — `false`
+    /// means an async tool call (e.g. a long-running shell command) is
+    /// still outstanding and no status change should happen yet.
+    ///
+    /// (A `planFinished`-shaped signal — `PostToolUse` where
+    /// `toolCall.name == "write_to_file"` and
+    /// `args.ArtifactMetadata.RequestFeedback == true` — was also found but
+    /// has no corresponding `SessionStatus` case; this is where its
+    /// detection would hook in if that case is ever added.)
+    private static func configureAntigravityHooks(
+        sessionID: UUID,
+        workingDirectory: URL,
+        supportDirectory: URL,
+        eventFile: URL
+    ) -> Bool {
+        let scriptPath = antigravityWrapperScriptPath(for: sessionID, supportDirectory: supportDirectory)
+        do {
+            try FileManager.default.createDirectory(
+                at: scriptPath.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data(antigravityWrapperScriptContents(eventFile: eventFile).utf8).write(to: scriptPath, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+        } catch {
+            return false
+        }
+
+        let configDirectory = workingDirectory.appendingPathComponent(".agents", isDirectory: true)
+        let configFile = configDirectory.appendingPathComponent("hooks.json", isDirectory: false)
+
+        // This session's own filename uniquely identifies any hook group
+        // this method previously wrote for it — every other session's
+        // command references a different script path. That's what makes
+        // the replace-not-append below safe: it only ever touches this
+        // session's own entries, never a sibling session's.
+        let sessionMarker = scriptPath.lastPathComponent
+
+        sharedConfigFileLock.lock()
+        defer { sharedConfigFileLock.unlock() }
+
+        var root: [String: Any] = [:]
+        if let existing = try? Data(contentsOf: configFile),
+           let decoded = try? JSONSerialization.jsonObject(with: existing) as? [String: Any] {
+            root = decoded
+        }
+
+        var group = root["flotilla-status"] as? [String: Any] ?? [:]
+        for event in ["PreToolUse", "PostToolUse"] {
+            var entries = group[event] as? [[String: Any]] ?? []
+            entries.removeAll { entry in
+                Self.commands(in: entry).contains { $0.contains(sessionMarker) }
+            }
+            entries.append([
+                "matcher": "*",
+                "hooks": [
+                    ["type": "command", "command": "\(Self.quoted(scriptPath.path)) \(event)", "timeout": 10]
+                ]
+            ])
+            group[event] = entries
+        }
+        var stopEntries = group["Stop"] as? [[String: Any]] ?? []
+        stopEntries.removeAll { entry in
+            (entry["command"] as? String)?.contains(sessionMarker) == true
+        }
+        stopEntries.append([
+            "type": "command",
+            "command": "\(Self.quoted(scriptPath.path)) Stop",
+            "timeout": 10
+        ])
+        group["Stop"] = stopEntries
+        root["flotilla-status"] = group
+
+        do {
+            try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
+            let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: configFile, options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func commands(in entry: [String: Any]) -> [String] {
+        guard let hooks = entry["hooks"] as? [[String: Any]] else { return [] }
+        return hooks.compactMap { $0["command"] as? String }
+    }
+
+    private static func quoted(_ path: String) -> String {
+        "\"\(path.replacingOccurrences(of: "\"", with: "\\\""))\""
+    }
+
+    private static func antigravityWrapperScriptContents(eventFile: URL) -> String {
+        let path = eventFile.path.replacingOccurrences(of: "\"", with: "\\\"")
+        return """
+        #!/bin/sh
+        event="$1"
+        payload="$(cat)"
+        printf '{"event":"%s","payload":%s}\\n' "$event" "$payload" >> "\(path)"
+        if [ "$event" = "PreToolUse" ]; then
+            printf '{"decision":"allow"}\\n'
+        fi
+        """
     }
 }
