@@ -285,7 +285,7 @@ struct SessionSidebarRow: View {
         // reach the row's true full bounds instead of stopping at the inner
         // content SessionCard itself draws.
         .padding(.horizontal, 8)
-        .padding(.vertical, 1)
+        .padding(.vertical, 3)
         .background {
             if let gridTint {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
