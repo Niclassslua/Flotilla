@@ -31,3 +31,7 @@ Carthage/Build/
 # Playgrounds
 timeline.xctimeline
 playground.xcworkspace
+
+# Local scratch — notes and test fixtures, not versioned
+Ideas/
+fixtures/
