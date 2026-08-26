@@ -7,26 +7,29 @@ import SessionKit
 ///
 /// Only Claude Code is wired today — its `hooks` config (JSON, per-event
 /// shell command, documented at claude.ai/code) is expressive enough to
-/// cover working/waiting/ready with three events. Codex's `notify`
-/// mechanism is coarser and is a deliberate fast-follow, not implemented
-/// here; every other agent kind falls back to `TerminalScreenHeuristic`
-/// permanently — this is not a temporary gap to be filled in later.
+/// cover working/waiting/ready with three events. Every other agent kind
+/// falls back to `TerminalScreenHeuristic` permanently for now — this is
+/// not a temporary gap to be filled in later, it's tracked as separate,
+/// per-provider follow-up work.
+///
+/// Claude Code's own config is passed via `launchArguments`'s `--settings`
+/// flag rather than written into `<workingDirectory>/.claude/settings.json`
+/// (the previous approach). That file is shared by every session running
+/// in the same project directory (agent-managed-worktree sessions all
+/// launch with `workingDirectory` set to the project root), and Claude
+/// Code runs *every* hook group registered for an event whenever it fires,
+/// with no per-session scoping of its own — so a shared-file entry for
+/// session B fires on session A's events too, marking B `working` when it
+/// did nothing. `--settings` is per-process and merges additively with the
+/// project's own settings, so a session's own hook group passed this way is
+/// never visible to any other process — cross-firing becomes structurally
+/// impossible instead of merely mitigated.
 public struct HookConfigurationWriter: Sendable {
     public init() {}
 
-    /// Guards the read-modify-write below. Agent-managed-worktree sessions
-    /// all launch with `workingDirectory` set to the *project root* (the
-    /// agent creates its own worktree later), so every such session in the
-    /// same project shares one `.claude/settings.json`. Two sessions
-    /// launched close together previously raced an unguarded read-modify-
-    /// write on that file — a lost update at best. One process-wide lock is
-    /// enough: the critical section is a small synchronous file write, and
-    /// nothing outside this type touches the file.
-    private static let settingsFileLock = NSLock()
-
-    /// Whether `configureHooks` can do anything useful for this agent kind.
-    /// `HookCoordinator` checks this before bothering to spin up a
-    /// `HookEventReceiver`.
+    /// Whether `configureHooks`/`launchArguments` can do anything useful for
+    /// this agent kind. `HookCoordinator` checks this before bothering to
+    /// spin up a `HookEventReceiver`.
     public static func supportsHooks(for kind: AgentKind) -> Bool {
         kind == .claudeCode
     }
@@ -39,12 +42,10 @@ public struct HookConfigurationWriter: Sendable {
             .appendingPathComponent("\(sessionID.uuidString).jsonl", isDirectory: false)
     }
 
-    /// Merges a `hooks` block into `<workingDirectory>/.claude/settings.json`
-    /// for `Notification`, `Stop`, and `PostToolUse`, each appending (never
-    /// replacing) a hook group that runs a shell one-liner forwarding the
-    /// hook's own JSON stdin — which already carries `hook_event_name` — into
-    /// `eventFilePath`. Every other key already in the file, and any other
-    /// hook already configured for these events, is preserved untouched.
+    /// Prepares `eventFilePath` for a fresh launch. This is the only
+    /// filesystem side effect left in `configureHooks` — the hook wiring
+    /// itself now travels with the launched process via `launchArguments`,
+    /// not through a file other sessions could also read or write.
     ///
     /// Best-effort by design: returns `false` (does not throw) when the
     /// agent kind isn't hook-capable or the write fails, so a broken/
@@ -68,62 +69,57 @@ public struct HookConfigurationWriter: Sendable {
             // Truncate any stale content from a previous launch of this
             // session ID before the new process starts appending to it.
             try Data().write(to: eventFile, options: .atomic)
-        } catch {
-            return false
-        }
-
-        let settingsDirectory = workingDirectory.appendingPathComponent(".claude", isDirectory: true)
-        let settingsFile = settingsDirectory.appendingPathComponent("settings.json", isDirectory: false)
-
-        // This session's own filename (`<uuid>.jsonl`) uniquely identifies
-        // any hook group this method previously wrote for it — every other
-        // session's command references a different filename. That's what
-        // makes the replace-not-append below safe: it only ever touches
-        // this session's own entries, never a sibling session's.
-        let sessionMarker = eventFile.lastPathComponent
-
-        Self.settingsFileLock.lock()
-        defer { Self.settingsFileLock.unlock() }
-
-        var settings: [String: Any] = [:]
-        if let existing = try? Data(contentsOf: settingsFile),
-           let decoded = try? JSONSerialization.jsonObject(with: existing) as? [String: Any] {
-            settings = decoded
-        }
-
-        var hooks = settings["hooks"] as? [String: Any] ?? [:]
-        let command = Self.shellCommand(appendingTo: eventFile)
-        for event in ["Notification", "Stop", "PostToolUse"] {
-            var groups = hooks[event] as? [[String: Any]] ?? []
-            // Idempotent: drop any group this session wrote on a previous
-            // start/resume/restart before appending the fresh one, so
-            // relaunching the same session doesn't accumulate duplicate
-            // hook groups in this shared file forever.
-            groups.removeAll { group in
-                Self.commands(in: group).contains { $0.contains(sessionMarker) }
-            }
-            groups.append([
-                "hooks": [
-                    ["type": "command", "command": command]
-                ]
-            ])
-            hooks[event] = groups
-        }
-        settings["hooks"] = hooks
-
-        do {
-            try FileManager.default.createDirectory(at: settingsDirectory, withIntermediateDirectories: true)
-            let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: settingsFile, options: .atomic)
             return true
         } catch {
             return false
         }
     }
 
-    private static func commands(in group: [String: Any]) -> [String] {
-        guard let entries = group["hooks"] as? [[String: Any]] else { return [] }
-        return entries.compactMap { $0["command"] as? String }
+    /// Extra CLI arguments the launched process needs so its own hook
+    /// wiring travels with it, rather than being written to a file other
+    /// sessions could also read. Empty for an agent kind `supportsHooks`
+    /// doesn't recognize, or when `configureHooks` hasn't successfully
+    /// prepared this session's event file (there would be nothing valid to
+    /// point the hooks at).
+    ///
+    /// For Claude Code: a `--settings '<json>'` flag carrying only this
+    /// session's own `Notification`/`Stop`/`PostToolUse` hook groups, each
+    /// running a shell one-liner that forwards the hook's own JSON stdin —
+    /// which already carries `hook_event_name` — into `eventFilePath`.
+    /// Claude Code merges `--settings` additively with the project's own
+    /// `.claude/settings.json` rather than replacing it, so nothing a user
+    /// or another tool configured there is disturbed.
+    public static func launchArguments(
+        for kind: AgentKind,
+        sessionID: UUID,
+        supportDirectory: URL
+    ) -> [String] {
+        guard supportsHooks(for: kind) else { return [] }
+
+        switch kind {
+        case .claudeCode:
+            let eventFile = eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+            let command = shellCommand(appendingTo: eventFile)
+            let hookGroup: [String: Any] = [
+                "hooks": [
+                    ["type": "command", "command": command]
+                ]
+            ]
+            let settings: [String: Any] = [
+                "hooks": [
+                    "Notification": [hookGroup],
+                    "Stop": [hookGroup],
+                    "PostToolUse": [hookGroup]
+                ]
+            ]
+            guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]),
+                  let json = String(data: data, encoding: .utf8) else {
+                return []
+            }
+            return ["--settings", json]
+        case .codexCLI, .openCode, .antigravity:
+            return []
+        }
     }
 
     /// Appends the hook's stdin JSON verbatim, plus a trailing newline —

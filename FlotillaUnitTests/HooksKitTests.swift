@@ -373,12 +373,6 @@ final class HookConfigurationWriterTests: XCTestCase {
         workingDirectory.appendingPathComponent(".claude/settings.json")
     }
 
-    private func readSettings() -> [String: Any] {
-        guard let data = try? Data(contentsOf: settingsFile),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
-        return json
-    }
-
     func testOnlyClaudeCodeSupportsHooks() {
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .claudeCode))
         XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .codexCLI))
@@ -388,17 +382,25 @@ final class HookConfigurationWriterTests: XCTestCase {
 
     func testNonHookCapableAgentIsANoOp() {
         let writer = HookConfigurationWriter()
+        let sessionID = UUID()
         let succeeded = writer.configureHooks(
             for: .codexCLI,
-            sessionID: UUID(),
+            sessionID: sessionID,
             workingDirectory: workingDirectory,
             supportDirectory: supportDirectory
         )
         XCTAssertFalse(succeeded)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: settingsFile.path))
+
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile.path))
+        XCTAssertTrue(HookConfigurationWriter.launchArguments(
+            for: .codexCLI,
+            sessionID: sessionID,
+            supportDirectory: supportDirectory
+        ).isEmpty)
     }
 
-    func testCreatesSettingsFileWithHooksForAllThreeEvents() {
+    func testConfigureHooksNeverTouchesSharedSettingsFile() {
         let writer = HookConfigurationWriter()
         let sessionID = UUID()
         let succeeded = writer.configureHooks(
@@ -409,42 +411,65 @@ final class HookConfigurationWriterTests: XCTestCase {
         )
 
         XCTAssertTrue(succeeded)
-        let settings = readSettings()
-        let hooks = settings["hooks"] as? [String: Any]
-        XCTAssertNotNil(hooks?["Notification"])
-        XCTAssertNotNil(hooks?["Stop"])
-        XCTAssertNotNil(hooks?["PostToolUse"])
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: settingsFile.path),
+            "hook wiring travels via launch arguments now, not a file every session in this project shares"
+        )
 
         let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         XCTAssertTrue(FileManager.default.fileExists(atPath: eventFile.path))
     }
 
-    func testPreservesUnrelatedExistingSettingsAndHooks() throws {
-        let claudeDir = workingDirectory.appendingPathComponent(".claude", isDirectory: true)
-        try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
-        let existing: [String: Any] = [
-            "permissions": ["allow": ["Bash(git *)"]],
-            "hooks": [
-                "PostToolUse": [
-                    ["hooks": [["type": "command", "command": "echo user-configured"]]]
-                ]
-            ]
-        ]
-        try JSONSerialization.data(withJSONObject: existing).write(to: settingsFile)
-
+    func testConfigureHooksTruncatesStaleEventFileOnRelaunch() throws {
         let writer = HookConfigurationWriter()
+        let sessionID = UUID()
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        try FileManager.default.createDirectory(at: eventFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("stale from a previous launch\n".utf8).write(to: eventFile)
+
         _ = writer.configureHooks(
             for: .claudeCode,
-            sessionID: UUID(),
+            sessionID: sessionID,
             workingDirectory: workingDirectory,
             supportDirectory: supportDirectory
         )
 
-        let settings = readSettings()
-        XCTAssertNotNil(settings["permissions"], "unrelated top-level keys must survive the merge")
+        let contents = try String(contentsOf: eventFile, encoding: .utf8)
+        XCTAssertTrue(contents.isEmpty)
+    }
 
-        let postToolUse = settings["hooks"].flatMap { $0 as? [String: Any] }?["PostToolUse"] as? [[String: Any]]
-        XCTAssertEqual(postToolUse?.count, 2, "the user's existing PostToolUse hook must not be replaced")
+    func testLaunchArgumentsCarryOnlyThisSessionsHookGroups() throws {
+        let sessionID = UUID()
+        let arguments = HookConfigurationWriter.launchArguments(
+            for: .claudeCode,
+            sessionID: sessionID,
+            supportDirectory: supportDirectory
+        )
+
+        XCTAssertEqual(arguments.first, "--settings")
+        let json = try XCTUnwrap(arguments.dropFirst().first)
+        let settings = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        )
+        let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        for event in ["Notification", "Stop", "PostToolUse"] {
+            let groups = try XCTUnwrap(hooks[event] as? [[String: Any]], "\(event) must be present")
+            let commands = try XCTUnwrap(groups.first?["hooks"] as? [[String: Any]])
+            let command = try XCTUnwrap(commands.first?["command"] as? String)
+            XCTAssertTrue(
+                command.contains(eventFile.path),
+                "\(event)'s command must point at this session's own event file"
+            )
+        }
+    }
+
+    func testLaunchArgumentsEmptyForNonHookCapableAgent() {
+        XCTAssertTrue(HookConfigurationWriter.launchArguments(
+            for: .antigravity,
+            sessionID: UUID(),
+            supportDirectory: supportDirectory
+        ).isEmpty)
     }
 }
 

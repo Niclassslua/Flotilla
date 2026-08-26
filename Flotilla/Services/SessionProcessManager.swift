@@ -189,7 +189,7 @@ final class SessionProcessManager {
         // picks up structured status from the same session ID; when it
         // doesn't (or the agent kind isn't hook-capable), status still
         // comes from TerminalScreenHeuristic as before.
-        hookConfigurationWriter.configureHooks(
+        let hooksConfigured = hookConfigurationWriter.configureHooks(
             for: session.agent,
             sessionID: session.id,
             workingDirectory: session.workingDirectory,
@@ -225,7 +225,7 @@ final class SessionProcessManager {
             effectiveGoal = nil
         }
 
-        let plan = provider.launchPlan(
+        var plan = provider.launchPlan(
             goal: effectiveGoal,
             model: session.model,
             effort: session.effort,
@@ -233,6 +233,17 @@ final class SessionProcessManager {
             settings: settings,
             baseEnvironment: baseEnvironment
         )
+        // Hook wiring travels with the process as launch arguments (see
+        // HookConfigurationWriter's doc comment for why) rather than
+        // through a file other sessions could also read — only added once
+        // configureHooks has actually prepared this session's event file.
+        if hooksConfigured {
+            plan.arguments += HookConfigurationWriter.launchArguments(
+                for: session.agent,
+                sessionID: session.id,
+                supportDirectory: hookSupportDirectory
+            )
+        }
         guard let resolvedExecutable = resolveExecutable(plan: plan) else {
             throw LaunchError.executableNotFound(
                 agent: session.agent,
