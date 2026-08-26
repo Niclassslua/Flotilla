@@ -211,7 +211,7 @@ struct CommandBarDesign: View {
 
     @ViewBuilder
     private var agentResults: some View {
-        ForEach(Array(AgentKind.allCases.enumerated()), id: \.element.id) { index, kind in
+        ForEach(Array(currentAgentChoices.enumerated()), id: \.element.id) { index, kind in
             Button {
                 draft.selectAgent(kind)
                 dismissPicker(clearingTypedTrigger: isTypedAgentMode)
@@ -526,13 +526,24 @@ struct CommandBarDesign: View {
         return draft.filteredChoices(query: query)
     }
 
+    /// The agent choices for whichever query is currently active — typed
+    /// `/query` in the goal field filters by name, same as `@query` does for
+    /// projects; an untyped (chip-opened) picker shows every agent.
+    private var currentAgentChoices: [AgentKind] {
+        guard case .agent(let typed) = mode else { return [] }
+        guard typed else { return AgentKind.allCases }
+        let query = String(draft.goal.dropFirst()).trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return AgentKind.allCases }
+        return AgentKind.allCases.filter { $0.displayName.localizedCaseInsensitiveContains(query) }
+    }
+
     /// Row count for the open picker, including the trailing "Choose
     /// folder…" row in project mode — that row is a valid arrow-key stop too.
     private var pickerRowCount: Int {
         switch mode {
         case .goal: 0
         case .project: currentProjectChoices.count + 1
-        case .agent: AgentKind.allCases.count
+        case .agent: currentAgentChoices.count
         }
     }
 
@@ -558,7 +569,7 @@ struct CommandBarDesign: View {
                 draft.chooseFolderFromPanel()
             }
         case .agent:
-            let kinds = AgentKind.allCases
+            let kinds = currentAgentChoices
             if highlightedIndex < kinds.count {
                 draft.selectAgent(kinds[highlightedIndex])
                 dismissPicker(clearingTypedTrigger: isTypedAgentMode)
