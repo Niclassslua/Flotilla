@@ -12,13 +12,15 @@ import SessionKit
 /// session it's watching.
 public final class HookEventReceiver: @unchecked Sendable {
     private let filePath: URL
+    private let agent: AgentKind
     private let pollInterval: Duration
     private let continuation: AsyncStream<SessionStatus>.Continuation
     public let statusStream: AsyncStream<SessionStatus>
     private var task: Task<Void, Never>?
 
-    public init(filePath: URL, pollInterval: Duration = .milliseconds(400)) {
+    public init(filePath: URL, agent: AgentKind, pollInterval: Duration = .milliseconds(400)) {
         self.filePath = filePath
+        self.agent = agent
         self.pollInterval = pollInterval
         var continuation: AsyncStream<SessionStatus>.Continuation!
         self.statusStream = AsyncStream { continuation = $0 }
@@ -28,6 +30,7 @@ public final class HookEventReceiver: @unchecked Sendable {
     public func start() {
         guard task == nil else { return }
         let filePath = self.filePath
+        let agent = self.agent
         let pollInterval = self.pollInterval
         let continuation = self.continuation
 
@@ -48,7 +51,7 @@ public final class HookEventReceiver: @unchecked Sendable {
                             // being written — hold it back either way.
                             pendingLine = lines.last ?? ""
                             for line in lines.dropLast() where !line.isEmpty {
-                                if let status = Self.status(forLine: line) {
+                                if let status = Self.status(forLine: line, agent: agent) {
                                     continuation.yield(status)
                                 }
                             }
@@ -70,15 +73,35 @@ public final class HookEventReceiver: @unchecked Sendable {
         task = nil
     }
 
-    static func status(forLine line: String) -> SessionStatus? {
+    static func status(forLine line: String, agent: AgentKind) -> SessionStatus? {
         guard let data = line.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let eventName = object["hook_event_name"] as? String else { return nil }
-        switch eventName {
-        case "Notification": return .waitingForInput
-        case "Stop": return .ready
-        case "PostToolUse": return .working
-        default: return nil
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+
+        switch agent {
+        case .claudeCode:
+            guard let eventName = object["hook_event_name"] as? String else { return nil }
+            switch eventName {
+            case "Notification": return .waitingForInput
+            case "Stop": return .ready
+            case "PostToolUse": return .working
+            default: return nil
+            }
+        case .antigravity:
+            guard let eventName = object["event"] as? String,
+                  let payload = object["payload"] as? [String: Any] else { return nil }
+            switch eventName {
+            case "PreToolUse":
+                let toolName = (payload["toolCall"] as? [String: Any])?["name"] as? String
+                return toolName == "ask_question" ? .waitingForInput : .working
+            case "PostToolUse":
+                return .working
+            case "Stop":
+                return (payload["fullyIdle"] as? Bool) == true ? .ready : nil
+            default:
+                return nil
+            }
+        case .codexCLI, .openCode:
+            return nil
         }
     }
 }

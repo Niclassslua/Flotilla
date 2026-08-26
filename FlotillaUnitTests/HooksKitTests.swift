@@ -307,7 +307,7 @@ final class HookEventReceiverTests: XCTestCase {
         FileManager.default.createFile(atPath: file.path, contents: nil)
         defer { try? FileManager.default.removeItem(at: file) }
 
-        let receiver = HookEventReceiver(filePath: file, pollInterval: .milliseconds(30))
+        let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
         let statuses = StatusBox()
         let collector = Task {
             for await status in receiver.statusStream { await statuses.append(status) }
@@ -336,7 +336,7 @@ final class HookEventReceiverTests: XCTestCase {
         try append("not json at all", to: file)
         try append(#"{"hook_event_name":"Stop"}"#, to: file)
 
-        let receiver = HookEventReceiver(filePath: file, pollInterval: .milliseconds(30))
+        let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
         XCTAssertEqual(observed, [.ready])
@@ -345,10 +345,40 @@ final class HookEventReceiverTests: XCTestCase {
     func testMissingFileYieldsNothingRatherThanCrashing() async {
         let receiver = HookEventReceiver(
             filePath: FileManager.default.temporaryDirectory.appendingPathComponent("flotilla-hook-tests-does-not-exist.jsonl"),
+            agent: .claudeCode,
             pollInterval: .milliseconds(30)
         )
         let observed = await collect(from: receiver, settling: .milliseconds(150))
         XCTAssertTrue(observed.isEmpty)
+    }
+
+    func testAntigravityPreToolUseAskQuestionMeansWaitingForInput() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try append(#"{"event":"PreToolUse","payload":{"toolCall":{"name":"ask_question"}}}"#, to: file)
+        try append(#"{"event":"PreToolUse","payload":{"toolCall":{"name":"run_command"}}}"#, to: file)
+        try append(#"{"event":"PostToolUse","payload":{"toolCall":{"name":"ask_question"}}}"#, to: file)
+
+        let receiver = HookEventReceiver(filePath: file, agent: .antigravity, pollInterval: .milliseconds(30))
+        let observed = await collect(from: receiver, settling: .milliseconds(200))
+
+        XCTAssertEqual(observed, [.waitingForInput, .working, .working])
+    }
+
+    func testAntigravityStopOnlyMeansReadyWhenFullyIdle() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try append(#"{"event":"Stop","payload":{"fullyIdle":false}}"#, to: file)
+        try append(#"{"event":"Stop","payload":{"fullyIdle":true}}"#, to: file)
+
+        let receiver = HookEventReceiver(filePath: file, agent: .antigravity, pollInterval: .milliseconds(30))
+        let observed = await collect(from: receiver, settling: .milliseconds(200))
+
+        XCTAssertEqual(observed, [.ready], "fullyIdle: false must not emit any status")
     }
 }
 
@@ -373,11 +403,11 @@ final class HookConfigurationWriterTests: XCTestCase {
         workingDirectory.appendingPathComponent(".claude/settings.json")
     }
 
-    func testOnlyClaudeCodeSupportsHooks() {
+    func testSupportsHooksMatchesImplementedProviders() {
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .claudeCode))
+        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .antigravity))
         XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .codexCLI))
         XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .openCode))
-        XCTAssertFalse(HookConfigurationWriter.supportsHooks(for: .antigravity))
     }
 
     func testNonHookCapableAgentIsANoOp() {
@@ -466,10 +496,113 @@ final class HookConfigurationWriterTests: XCTestCase {
 
     func testLaunchArgumentsEmptyForNonHookCapableAgent() {
         XCTAssertTrue(HookConfigurationWriter.launchArguments(
+            for: .codexCLI,
+            sessionID: UUID(),
+            supportDirectory: supportDirectory
+        ).isEmpty)
+    }
+
+    // Antigravity is hook-capable but its wiring travels through
+    // `configureHooks`'s shared-file write, not `launchArguments` — unlike
+    // Claude Code, which has no per-invocation settings-override flag.
+    func testLaunchArgumentsEmptyForAntigravityEvenThoughItSupportsHooks() {
+        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .antigravity))
+        XCTAssertTrue(HookConfigurationWriter.launchArguments(
             for: .antigravity,
             sessionID: UUID(),
             supportDirectory: supportDirectory
         ).isEmpty)
+    }
+
+    private var antigravityHooksFile: URL {
+        workingDirectory.appendingPathComponent(".agents/hooks.json")
+    }
+
+    private func readAntigravityHooks() throws -> [String: Any] {
+        let data = try Data(contentsOf: antigravityHooksFile)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return try XCTUnwrap(root["flotilla-status"] as? [String: Any])
+    }
+
+    func testAntigravityWritesWrapperScriptAndHooksForAllThreeEvents() throws {
+        let writer = HookConfigurationWriter()
+        let sessionID = UUID()
+        let succeeded = writer.configureHooks(
+            for: .antigravity,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+        XCTAssertTrue(succeeded)
+
+        let scriptPath = supportDirectory
+            .appendingPathComponent("hooks", isDirectory: true)
+            .appendingPathComponent("\(sessionID.uuidString)-antigravity.sh", isDirectory: false)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: scriptPath.path))
+        let attributes = try FileManager.default.attributesOfItem(atPath: scriptPath.path)
+        let permissions = try XCTUnwrap(attributes[.posixPermissions] as? Int)
+        XCTAssertEqual(permissions & 0o111, 0o111, "the wrapper script must be executable")
+
+        let scriptContents = try String(contentsOf: scriptPath, encoding: .utf8)
+        XCTAssertTrue(scriptContents.contains(#"$1"#), "event name must be read from the invocation argument, not stdin")
+        XCTAssertTrue(scriptContents.contains(#"{"decision":"allow"}"#), "PreToolUse's stdout must be a live decision or Antigravity may hang")
+
+        let group = try readAntigravityHooks()
+        for event in ["PreToolUse", "PostToolUse"] {
+            let entries = try XCTUnwrap(group[event] as? [[String: Any]], "\(event) must be present")
+            XCTAssertEqual(entries.first?["matcher"] as? String, "*")
+            let commands = try XCTUnwrap(entries.first?["hooks"] as? [[String: Any]])
+            let command = try XCTUnwrap(commands.first?["command"] as? String)
+            XCTAssertTrue(command.contains(scriptPath.path))
+            XCTAssertTrue(command.hasSuffix(event), "the event name must be passed as the script's argument")
+        }
+        let stopEntries = try XCTUnwrap(group["Stop"] as? [[String: Any]])
+        XCTAssertNil(stopEntries.first?["matcher"], "Stop doesn't support a matcher")
+        let stopCommand = try XCTUnwrap(stopEntries.first?["command"] as? String)
+        XCTAssertTrue(stopCommand.hasSuffix("Stop"))
+    }
+
+    func testAntigravityRelaunchIsIdempotentNotAccumulating() throws {
+        let writer = HookConfigurationWriter()
+        let sessionID = UUID()
+        for _ in 0..<3 {
+            _ = writer.configureHooks(
+                for: .antigravity,
+                sessionID: sessionID,
+                workingDirectory: workingDirectory,
+                supportDirectory: supportDirectory
+            )
+        }
+
+        let group = try readAntigravityHooks()
+        for event in ["PreToolUse", "PostToolUse", "Stop"] {
+            let entries = try XCTUnwrap(group[event] as? [[String: Any]])
+            XCTAssertEqual(entries.count, 1, "relaunching the same session must replace, not accumulate, its own entry for \(event)")
+        }
+    }
+
+    func testAntigravityPreservesUnrelatedExistingHooksConfig() throws {
+        let agentsDir = workingDirectory.appendingPathComponent(".agents", isDirectory: true)
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+        let existing: [String: Any] = [
+            "some-other-hook": [
+                "Stop": [["type": "command", "command": "echo user-configured"]]
+            ]
+        ]
+        try JSONSerialization.data(withJSONObject: existing).write(to: antigravityHooksFile)
+
+        let writer = HookConfigurationWriter()
+        _ = writer.configureHooks(
+            for: .antigravity,
+            sessionID: UUID(),
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+
+        let data = try Data(contentsOf: antigravityHooksFile)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNotNil(root["some-other-hook"], "an unrelated top-level hook entry must survive")
+        XCTAssertNotNil(root["flotilla-status"])
     }
 }
 

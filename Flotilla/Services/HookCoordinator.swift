@@ -101,7 +101,8 @@ final class HookCoordinator {
         var hookReceiver: HookEventReceiver?
         if HookConfigurationWriter.supportsHooks(for: session.agent) {
             let receiver = HookEventReceiver(
-                filePath: HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: hookSupportDirectory)
+                filePath: HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: hookSupportDirectory),
+                agent: session.agent
             )
             hookReceivers[sessionID] = receiver
             hookReceiver = receiver
