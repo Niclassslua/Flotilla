@@ -95,7 +95,6 @@ struct SessionCard<Terminal: View>: View {
             }
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(rowBackground)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -441,23 +440,6 @@ struct SessionCard<Terminal: View>: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(StatusPresentation.label(for: session.status))
         .accessibilityIdentifier("SessionRow-\(session.title)-Status")
-    }
-
-    private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(backgroundFill)
-            .overlay {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(FlotillaColors.separator, lineWidth: 0.5)
-                }
-            }
-    }
-
-    private var backgroundFill: Color {
-        if isSelected { return FlotillaColors.surfaceElevated }
-        if session.status == .waitingForInput { return FlotillaColors.statusWaitingForInput.opacity(isSelected ? 0.13 : 0.08) }
-        return isSelected ? Color.white.opacity(0.035) : .clear
     }
 
     private func compactTimestamp(for date: Date, relativeTo now: Date = Date()) -> String {

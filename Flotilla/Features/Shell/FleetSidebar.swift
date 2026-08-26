@@ -245,12 +245,27 @@ struct SessionSidebarRow: View {
         gridSelection?.memberIDs.contains(session.id) ?? false
     }
 
+    private var isSelected: Bool {
+        selection == .session(session.id)
+    }
+
     /// Green says "this session is in the grid"; red on hover previews that
     /// clicking removes it. Outside grid mode this stays nil and the card's
     /// own selection styling is untouched.
     private var gridTint: Color? {
         guard gridSelection != nil, isGridMember else { return nil }
         return isHovering ? FlotillaColors.danger : FlotillaColors.success
+    }
+
+    /// Drawn at the row's full padded bounds (see the `.padding` note below)
+    /// rather than inside `SessionCard`, so selection/attention tints reach
+    /// the same rounded rect the grid tint does instead of stopping at the
+    /// card's own inner content frame.
+    private var rowFill: Color {
+        if let gridTint { return gridTint.opacity(0.22) }
+        if isSelected { return FlotillaColors.surfaceElevated }
+        if session.status == .waitingForInput { return FlotillaColors.statusWaitingForInput.opacity(0.08) }
+        return .clear
     }
 
     var body: some View {
@@ -287,10 +302,14 @@ struct SessionSidebarRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background {
-            if let gridTint {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(gridTint.opacity(0.22))
-            }
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(rowFill)
+                .overlay {
+                    if isSelected && gridTint == nil {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(FlotillaColors.separator, lineWidth: 0.5)
+                    }
+                }
         }
         .animation(.easeOut(duration: 0.1), value: isHovering)
         .onHover { isHovering = $0 }
