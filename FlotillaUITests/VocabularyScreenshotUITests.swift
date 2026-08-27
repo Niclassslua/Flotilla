@@ -36,6 +36,15 @@ final class VocabularyScreenshotUITests: XCTestCase {
 
     // MARK: - Harness
 
+    /// A failed capture raises a test failure rather than throwing, so without
+    /// this the first unreachable surface aborts the whole walk and every later
+    /// surface goes uncaptured. Letting it continue turns one run into a full
+    /// report of what worked and what didn't.
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = true
+    }
+
     private func launchedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
