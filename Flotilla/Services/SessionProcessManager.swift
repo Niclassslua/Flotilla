@@ -33,7 +33,7 @@ final class SessionProcessManager {
     private let tmuxServerProbe: any TmuxServerProbing
     private let tmuxClientProbe: any TmuxClientProbing
     private let conversationOwnershipChecker: any AgentConversationOwnershipChecking
-    private let hookConfigurationWriter: HookConfigurationWriter
+    private let hookConfigurationWriter: any HookConfiguring
     private let hookSupportDirectory: URL
     private var intentionallyTerminating = Set<UUID>()
     private var tmuxProbeCache: (usable: Bool, probedAt: Date)?
@@ -78,7 +78,7 @@ final class SessionProcessManager {
         tmuxServerProbe: any TmuxServerProbing = ProcessTmuxServerProbe(),
         tmuxClientProbe: any TmuxClientProbing = ProcessTmuxClientProbe(),
         conversationOwnershipChecker: any AgentConversationOwnershipChecking = ProcessAgentConversationOwnershipChecker(),
-        hookConfigurationWriter: HookConfigurationWriter = HookConfigurationWriter(),
+        hookConfigurationWriter: any HookConfiguring = HookConfigurationWriter(),
         hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
         gitService: any GitServiceProtocol = GitService()
     ) {
@@ -203,6 +203,13 @@ final class SessionProcessManager {
         // attribution hook safe to leave installed: without these variables it
         // no-ops, so the user's own commits are never stamped.
         var baseEnvironment = ProcessInfo.processInfo.environment
+        if hooksConfigured {
+            baseEnvironment[HookConfigurationWriter.eventFileEnvironmentKey] =
+                HookConfigurationWriter.eventFilePath(
+                    for: session.id,
+                    supportDirectory: hookSupportDirectory
+                ).path
+        }
         if settings.git.stampAgentTrailer,
            let attributionEnvironment = agentAttributionEnvironment(for: session, base: baseEnvironment) {
             baseEnvironment = attributionEnvironment
@@ -238,9 +245,8 @@ final class SessionProcessManager {
         // through a file other sessions could also read — only added once
         // configureHooks has actually prepared this session's event file.
         if hooksConfigured {
-            plan.arguments += HookConfigurationWriter.launchArguments(
+            plan.arguments += hookConfigurationWriter.launchArguments(
                 for: session.agent,
-                sessionID: session.id,
                 supportDirectory: hookSupportDirectory
             )
         }

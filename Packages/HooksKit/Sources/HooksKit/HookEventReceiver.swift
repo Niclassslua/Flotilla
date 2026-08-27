@@ -16,6 +16,7 @@ public final class HookEventReceiver: @unchecked Sendable {
     private let pollInterval: Duration
     private let continuation: AsyncStream<SessionStatus>.Continuation
     public let statusStream: AsyncStream<SessionStatus>
+    private let taskLock = NSLock()
     private var task: Task<Void, Never>?
 
     public init(filePath: URL, agent: AgentKind, pollInterval: Duration = .milliseconds(400)) {
@@ -28,6 +29,8 @@ public final class HookEventReceiver: @unchecked Sendable {
     }
 
     public func start() {
+        taskLock.lock()
+        defer { taskLock.unlock() }
         guard task == nil else { return }
         let filePath = self.filePath
         let agent = self.agent
@@ -36,31 +39,38 @@ public final class HookEventReceiver: @unchecked Sendable {
 
         task = Task {
             var readOffset: UInt64 = 0
-            var pendingLine = ""
+            var fileIdentity: UInt64?
+            var pendingData = Data()
             while !Task.isCancelled {
                 if let handle = try? FileHandle(forReadingFrom: filePath) {
                     defer { try? handle.close() }
-                    if (try? handle.seekToEnd()) ?? 0 >= readOffset {
+                    let attributes = try? FileManager.default.attributesOfItem(atPath: filePath.path)
+                    let currentIdentity = (attributes?[.systemFileNumber] as? NSNumber)?.uint64Value
+                    let endOffset = (try? handle.seekToEnd()) ?? 0
+                    if fileIdentity != currentIdentity || endOffset < readOffset {
+                        // Atomic replacement and truncation both start a new
+                        // event-file generation. Identity matters because a
+                        // replacement can regrow past the old offset between
+                        // polls, which a size-only check would miss.
+                        fileIdentity = currentIdentity
+                        readOffset = 0
+                        pendingData.removeAll(keepingCapacity: true)
+                    }
+                    if endOffset >= readOffset {
                         try? handle.seek(toOffset: readOffset)
                         if let data = try? handle.readToEnd(), !data.isEmpty {
                             readOffset += UInt64(data.count)
-                            pendingLine += String(decoding: data, as: UTF8.self)
-                            let lines = pendingLine.components(separatedBy: "\n")
-                            // The last element is either "" (the file ended
-                            // exactly on a newline) or a partial line still
-                            // being written — hold it back either way.
-                            pendingLine = lines.last ?? ""
-                            for line in lines.dropLast() where !line.isEmpty {
+                            pendingData.append(data)
+                            while let newlineIndex = pendingData.firstIndex(of: 0x0A) {
+                                let lineData = Data(pendingData[..<newlineIndex])
+                                pendingData.removeSubrange(...newlineIndex)
+                                guard !lineData.isEmpty,
+                                      let line = String(data: lineData, encoding: .utf8) else { continue }
                                 if let status = Self.status(forLine: line, agent: agent) {
                                     continuation.yield(status)
                                 }
                             }
                         }
-                    } else {
-                        // The file shrank (session restarted, event file
-                        // truncated for a fresh launch) — start over.
-                        readOffset = 0
-                        pendingLine = ""
                     }
                 }
                 try? await Task.sleep(for: pollInterval)
@@ -69,8 +79,16 @@ public final class HookEventReceiver: @unchecked Sendable {
     }
 
     public func stop() {
-        task?.cancel()
+        taskLock.lock()
+        let taskToCancel = task
         task = nil
+        taskLock.unlock()
+        taskToCancel?.cancel()
+    }
+
+    deinit {
+        task?.cancel()
+        continuation.finish()
     }
 
     static func status(forLine line: String, agent: AgentKind) -> SessionStatus? {
@@ -101,18 +119,19 @@ public final class HookEventReceiver: @unchecked Sendable {
                 return nil
             }
         case .codexCLI:
-            // Same wrapper-script-synthesized shape as Antigravity's — see
-            // HookConfigurationWriter.wrapperScriptContents. Only
-            // PostToolUse/Stop are wired (PermissionRequest deliberately
-            // isn't — see HookConfigurationWriter's top-level doc comment).
-            guard let eventName = object["event"] as? String else { return nil }
+            // Codex provides a self-describing hook_event_name in every
+            // command-hook payload. PermissionRequest is observational: the
+            // wrapper exits successfully without output, leaving Codex's
+            // normal approval prompt intact.
+            guard let eventName = object["hook_event_name"] as? String else { return nil }
             switch eventName {
             case "PostToolUse": return .working
             case "Stop": return .ready
+            case "PermissionRequest": return .waitingForInput
             default: return nil
             }
         case .openCode:
-            // Written by the generated per-session plugin file (see
+            // Written by the generated stable project plugin (see
             // HookConfigurationWriter.openCodePluginContents) as a flat
             // {"event": "<name>"} line — no nested payload needed for any
             // of these mappings. session.idle is a naming trap: it means

@@ -5,6 +5,7 @@ import GitKit
 import PersistenceKit
 import SettingsKit
 import TerminalKit
+import HooksKit
 @testable import Flotilla
 
 private struct FixedExecutableLocator: ExecutableLocating {
@@ -160,7 +161,21 @@ final class SessionProcessManagerTests: XCTestCase {
         let mock = try XCTUnwrap(process as? MockPTYProcess)
 
         XCTAssertEqual(mock.startedExecutable?.path, "/usr/bin/env")
-        XCTAssertEqual(mock.startedArguments, ["--profile", "careful", "Resolve every compiler error"])
+        XCTAssertEqual(
+            Array(mock.startedArguments.prefix(3)),
+            ["--profile", "careful", "Resolve every compiler error"]
+        )
+        XCTAssertTrue(mock.startedArguments.contains("features.hooks=true"))
+        for event in ["PermissionRequest", "PostToolUse", "Stop"] {
+            XCTAssertTrue(mock.startedArguments.contains { $0.hasPrefix("hooks.\(event)=") })
+        }
+        XCTAssertEqual(
+            mock.startedEnvironment[HookConfigurationWriter.eventFileEnvironmentKey],
+            HookConfigurationWriter.eventFilePath(
+                for: model.id,
+                supportDirectory: TmuxSessionWrapping.defaultSupportDirectory()
+            ).path
+        )
         XCTAssertEqual(mock.startedWorkingDirectory, model.workingDirectory)
         XCTAssertTrue(mock.sentInput.isEmpty)
     }
@@ -330,6 +345,13 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(goalArg.hasSuffix("Find the race"))
         XCTAssertEqual(Array(startedArguments.suffix(2).prefix(1)), ["--settings"])
         XCTAssertTrue((startedArguments.last ?? "").contains("\"hooks\""))
+        XCTAssertEqual(
+            factory.processes.first?.startedEnvironment[HookConfigurationWriter.eventFileEnvironmentKey],
+            HookConfigurationWriter.eventFilePath(
+                for: createdSession.id,
+                supportDirectory: TmuxSessionWrapping.defaultSupportDirectory()
+            ).path
+        )
         XCTAssertTrue(factory.processes.first?.sentInput.isEmpty == true)
     }
 
@@ -1188,7 +1210,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
 
         let proc = try XCTUnwrap(factory.processes.first)
         XCTAssertEqual(proc.startedEnvironment["FLOTILLA_SELF_REPORT_PATH"], descPath.path)
-        let combinedGoal = try XCTUnwrap(proc.startedArguments.last)
+        let combinedGoal = try XCTUnwrap(proc.startedArguments.first { $0.contains("Do the work") })
         XCTAssertTrue(combinedGoal.hasPrefix("Before starting, write to"))
         XCTAssertTrue(combinedGoal.contains("Do the work"))
     }
@@ -1381,4 +1403,3 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         XCTAssertTrue(goalArg.contains("Choose a concise 2–5 word noun-phrase title"))
     }
 }
-

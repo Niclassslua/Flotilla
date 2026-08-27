@@ -18,6 +18,7 @@ public final class SessionScreenMonitor: @unchecked Sendable {
     private let pollInterval: Duration
     private let continuation: AsyncStream<SessionStatus>.Continuation
     public let statusStream: AsyncStream<SessionStatus>
+    private let taskLock = NSLock()
     private var task: Task<Void, Never>?
 
     public init(
@@ -36,6 +37,8 @@ public final class SessionScreenMonitor: @unchecked Sendable {
     }
 
     public func start() {
+        taskLock.lock()
+        defer { taskLock.unlock() }
         guard task == nil else { return }
         let sessionID = self.sessionID
         let reader = self.reader
@@ -67,7 +70,15 @@ public final class SessionScreenMonitor: @unchecked Sendable {
     }
 
     public func stop() {
-        task?.cancel()
+        taskLock.lock()
+        let taskToCancel = task
         task = nil
+        taskLock.unlock()
+        taskToCancel?.cancel()
+    }
+
+    deinit {
+        task?.cancel()
+        continuation.finish()
     }
 }

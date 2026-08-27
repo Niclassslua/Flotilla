@@ -1,29 +1,37 @@
 import Foundation
+import Darwin
 import SessionKit
+
+/// Configures provider-native lifecycle hooks for one launched session.
+///
+/// The protocol keeps process launch code testable without coupling it to
+/// filesystem-backed configuration details.
+public protocol HookConfiguring: Sendable {
+    func configureHooks(
+        for kind: AgentKind,
+        sessionID: UUID,
+        workingDirectory: URL,
+        supportDirectory: URL
+    ) -> Bool
+
+    func launchArguments(for kind: AgentKind, supportDirectory: URL) -> [String]
+}
 
 /// Wires a launching agent's own event mechanism to a per-session status
 /// file, so `HookEventReceiver` can read exact, structured status instead
 /// of `TerminalScreenHeuristic` guessing from rendered text.
 ///
-/// All four supported agent kinds are wired today.
+/// All four supported agent kinds are wired today. Every provider process
+/// receives `FLOTILLA_HOOK_EVENT_FILE`, which points at that Flotilla
+/// session's JSONL file. Providers whose project config is shared install a
+/// single stable hook that reads this per-process value; they never bake a
+/// session ID or event-file path into shared project files.
 ///
-/// Codex's wiring in particular carries two assumptions never verified
-/// against a real Codex session (no `codex` binary was available while this
-/// was written): that `.codex/hooks.json`'s schema is Claude-Code-shaped
-/// (event key → array of `{matcher, hooks: [{type, command}]}` groups), and
-/// — since the wrapper script synthesizes its own self-describing event
-/// line regardless — that Codex's `PostToolUse`/`Stop` actually fire that
-/// often and mean what Claude Code's do. Deliberately *not* wired: Codex's
-/// `PermissionRequest`, even though it's documented as the provider's
-/// advantage over Antigravity for permission-prompt detection. Real-world
-/// evidence (a third-party tool's source comments) describes Claude Code's
-/// and Codex's `PermissionRequest` as *decision-blocking* — the same shape
-/// as Antigravity's `PreToolUse`, which required answering
-/// `{"decision":"allow"}` to avoid hanging the CLI. Guessing that response
-/// contract wrong for Codex risks actively breaking a real user's session
-/// (a hang, or a silently-denied action) rather than just producing an
-/// inaccurate status — a materially worse failure mode than staying on
-/// `TerminalScreenHeuristic`, so it stays there until live-verified.
+/// Codex uses its documented lifecycle-hook schema through inline `--config`
+/// overrides and its self-describing `hook_event_name` payload.
+/// `PermissionRequest` is purely observational: the wrapper exits 0 without
+/// stdout, so Codex continues to its normal approval prompt while Flotilla
+/// records `waitingForInput`.
 ///
 /// Claude Code's own config is passed via `launchArguments`'s `--settings`
 /// flag rather than written into `<workingDirectory>/.claude/settings.json`
@@ -39,46 +47,30 @@ import SessionKit
 /// impossible instead of merely mitigated.
 ///
 /// Antigravity has no `--settings`-equivalent per-invocation flag, so its
-/// wiring still goes through a shared `<workingDirectory>/.agents/hooks.json`
-/// — the same cross-session-contamination shape Claude Code's old approach
-/// had, mitigated the same way (session-marker-based idempotent replace
-/// under a lock) but not eliminated. Antigravity's own payload carries a
-/// `conversationId` that could filter this out properly, but Flotilla
-/// doesn't know a fresh session's `conversationId` until its first event
-/// arrives — closing this gap is tracked as follow-up work, not solved here.
+/// stable wrapper is registered in shared `<workingDirectory>/.agents/hooks.json`.
+/// The wrapper routes through the per-process event-file value, eliminating
+/// sibling-session cross-firing without needing a conversation ID. It still
+/// emits Antigravity's required allow response for `PreToolUse`.
 ///
-/// OpenCode is structurally different from the other three: not a JSON
-/// config to merge but a TS/JS plugin file, and — live-verified this
-/// session with two co-installed plugin files run side by side via
-/// `opencode run` — multiple plugin files coexist cleanly, each getting the
-/// full event stream independently. That means OpenCode gets its own file
-/// *per session* (`.opencode/plugins/flotilla-status-<sessionID>.js`,
-/// fully overwritten on relaunch) rather than a shared merged file, which
-/// sidesteps the Claude-Code/Antigravity-style cross-session-contamination
-/// problem entirely rather than mitigating it — no lock needed. Also
-/// live-verified: `tool.execute.before`/`tool.execute.after` (separate
-/// named hook functions, not part of the event stream) and `session.idle`
-/// (which — naming trap — means "turn ended, composer free", i.e.
-/// Flotilla's `.ready`, not `.idle`). Not directly triggered this session:
-/// `permission.asked`/`question.asked` (the project's default policy ran
-/// shell commands unprompted, never surfacing either) — wired anyway on the
-/// strength of every other event name from the same documentation source
-/// checking out exactly as documented, and because OpenCode's generic
-/// `event` handler is a pure subscription with no response Flotilla must
-/// get right, unlike Codex's decision-blocking `PermissionRequest`: a wrong
-/// event name here just never fires, it can't hang or misdirect a real
-/// permission decision.
-public struct HookConfigurationWriter: Sendable {
+/// OpenCode uses one stable project plugin (`flotilla-status.js`). Multiple
+/// plugin files all receive the same process event stream, so per-session
+/// plugin files would cross-contaminate siblings; environment-based routing
+/// keeps the shared plugin constant and every write session-specific.
+public struct HookConfigurationWriter: HookConfiguring {
     public init() {}
 
+    /// Scoped to the launched provider process. Shared project hook files
+    /// read this value to route an event to the correct Flotilla session.
+    public static let eventFileEnvironmentKey = "FLOTILLA_HOOK_EVENT_FILE"
+
     /// Guards the read-modify-write into a provider's *shared* config file
-    /// (only Antigravity today — Claude Code's own wiring travels via
+    /// (Antigravity — Claude Code and Codex wiring travels via
     /// `launchArguments` and never touches a shared file). Agent-managed-
     /// worktree sessions all launch with `workingDirectory` set to the
     /// project root, so every such session in the same project shares one
-    /// `.agents/hooks.json`. One process-wide lock is enough: the critical
-    /// section is a small synchronous file write, and nothing outside this
-    /// type touches the file.
+    /// provider config. A process-wide lock plus a POSIX advisory file lock
+    /// serializes Flotilla instances; atomic writes and fail-closed parsing
+    /// protect user config.
     private static let sharedConfigFileLock = NSLock()
 
     /// Whether `configureHooks`/`launchArguments` can do anything useful for
@@ -98,25 +90,25 @@ public struct HookConfigurationWriter: Sendable {
             .appendingPathComponent("\(sessionID.uuidString).jsonl", isDirectory: false)
     }
 
-    /// The per-session wrapper script Antigravity's hooks invoke (see
+    /// The stable wrapper script Antigravity's hooks invoke (see
     /// `configureAntigravityHooks`). Modeled on
     /// `TmuxSessionWrapping.writeConfigurationFile`'s pattern of generating a
     /// small support file into `supportDirectory` at runtime.
-    private static func antigravityWrapperScriptPath(for sessionID: UUID, supportDirectory: URL) -> URL {
+    private static func antigravityWrapperScriptPath(supportDirectory: URL) -> URL {
         supportDirectory
             .appendingPathComponent("hooks", isDirectory: true)
-            .appendingPathComponent("\(sessionID.uuidString)-antigravity.sh", isDirectory: false)
+            .appendingPathComponent("flotilla-antigravity.sh", isDirectory: false)
     }
 
-    /// The per-session wrapper script Codex's hooks invoke (see
+    /// The stable wrapper script Codex's hooks invoke (see
     /// `configureCodexHooks`).
-    private static func codexWrapperScriptPath(for sessionID: UUID, supportDirectory: URL) -> URL {
+    private static func codexWrapperScriptPath(supportDirectory: URL) -> URL {
         supportDirectory
             .appendingPathComponent("hooks", isDirectory: true)
-            .appendingPathComponent("\(sessionID.uuidString)-codex.sh", isDirectory: false)
+            .appendingPathComponent("flotilla-codex.sh", isDirectory: false)
     }
 
-    /// Prepares `eventFilePath` (and, for Antigravity, its wrapper script)
+    /// Prepares `eventFilePath` and provider support files
     /// for a fresh launch, and — for agent kinds whose wiring can't travel
     /// via `launchArguments` — merges this session's hook group into that
     /// provider's shared config file.
@@ -152,23 +144,14 @@ public struct HookConfigurationWriter: Sendable {
             return true
         case .antigravity:
             return Self.configureAntigravityHooks(
-                sessionID: sessionID,
                 workingDirectory: workingDirectory,
-                supportDirectory: supportDirectory,
-                eventFile: eventFile
+                supportDirectory: supportDirectory
             )
         case .codexCLI:
-            return Self.configureCodexHooks(
-                sessionID: sessionID,
-                workingDirectory: workingDirectory,
-                supportDirectory: supportDirectory,
-                eventFile: eventFile
-            )
+            return Self.configureCodexHooks(supportDirectory: supportDirectory)
         case .openCode:
             return Self.configureOpenCodeHooks(
-                sessionID: sessionID,
-                workingDirectory: workingDirectory,
-                eventFile: eventFile
+                workingDirectory: workingDirectory
             )
         }
     }
@@ -186,17 +169,21 @@ public struct HookConfigurationWriter: Sendable {
     /// Claude Code merges `--settings` additively with the project's own
     /// `.claude/settings.json` rather than replacing it, so nothing a user
     /// or another tool configured there is disturbed.
-    public static func launchArguments(
-        for kind: AgentKind,
-        sessionID: UUID,
-        supportDirectory: URL
-    ) -> [String] {
+    ///
+    /// For Codex: enables the stable hooks feature and supplies three inline
+    /// hook groups. The command path is TOML-encoded and remains constant
+    /// across sessions, while the destination stays process-scoped in the
+    /// environment.
+    public func launchArguments(for kind: AgentKind, supportDirectory: URL) -> [String] {
+        Self.launchArguments(for: kind, supportDirectory: supportDirectory)
+    }
+
+    public static func launchArguments(for kind: AgentKind, supportDirectory: URL) -> [String] {
         guard supportsHooks(for: kind) else { return [] }
 
         switch kind {
         case .claudeCode:
-            let eventFile = eventFilePath(for: sessionID, supportDirectory: supportDirectory)
-            let command = shellCommand(appendingTo: eventFile)
+            let command = eventForwardingShellCommand()
             let hookGroup: [String: Any] = [
                 "hooks": [
                     ["type": "command", "command": command]
@@ -214,22 +201,31 @@ public struct HookConfigurationWriter: Sendable {
                 return []
             }
             return ["--settings", json]
-        case .codexCLI, .openCode, .antigravity:
+        case .codexCLI:
+            let scriptPath = codexWrapperScriptPath(supportDirectory: supportDirectory)
+            let commandLiteral = tomlStringLiteral(quoted(scriptPath.path))
+            let hookGroup = "[{matcher=\"\",hooks=[{type=\"command\",command=\(commandLiteral)}]}]"
+            return [
+                "--config", "features.hooks=true",
+                "--config", "hooks.PermissionRequest=\(hookGroup)",
+                "--config", "hooks.PostToolUse=\(hookGroup)",
+                "--config", "hooks.Stop=\(hookGroup)"
+            ]
+        case .openCode, .antigravity:
             return []
         }
     }
 
-    /// Appends the hook's stdin JSON verbatim, plus a trailing newline —
-    /// Claude sends one compact JSON object per hook invocation with no
-    /// terminator, so the newline is what keeps the file line-delimited.
-    private static func shellCommand(appendingTo eventFile: URL) -> String {
-        let path = eventFile.path.replacingOccurrences(of: "\"", with: "\\\"")
-        return "cat >> \"\(path)\" && printf '\\n' >> \"\(path)\""
+    /// Appends self-describing hook stdin JSON verbatim plus a trailing
+    /// newline. Claude and Codex send one compact object per invocation with
+    /// no terminator, so the newline keeps the file line-delimited.
+    private static func eventForwardingShellCommand() -> String {
+        return #"event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; cat >> "$event_file" && printf '\n' >> "$event_file""#
     }
 
     // MARK: - Antigravity
 
-    /// Writes this session's wrapper script and merges its hook group into
+    /// Writes the stable wrapper script and replaces Flotilla's hook group in
     /// `<workingDirectory>/.agents/hooks.json`.
     ///
     /// Two things Antigravity needs that Claude Code doesn't, both handled
@@ -265,18 +261,16 @@ public struct HookConfigurationWriter: Sendable {
     /// has no corresponding `SessionStatus` case; this is where its
     /// detection would hook in if that case is ever added.)
     private static func configureAntigravityHooks(
-        sessionID: UUID,
         workingDirectory: URL,
-        supportDirectory: URL,
-        eventFile: URL
+        supportDirectory: URL
     ) -> Bool {
-        let scriptPath = antigravityWrapperScriptPath(for: sessionID, supportDirectory: supportDirectory)
+        let scriptPath = antigravityWrapperScriptPath(supportDirectory: supportDirectory)
         do {
             try FileManager.default.createDirectory(
                 at: scriptPath.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let contents = wrapperScriptContents(eventFile: eventFile, decisionRequiredFor: ["PreToolUse"])
+            let contents = wrapperScriptContents(decisionRequiredFor: ["PreToolUse"])
             try Data(contents.utf8).write(to: scriptPath, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
         } catch {
@@ -286,65 +280,93 @@ public struct HookConfigurationWriter: Sendable {
         let configDirectory = workingDirectory.appendingPathComponent(".agents", isDirectory: true)
         let configFile = configDirectory.appendingPathComponent("hooks.json", isDirectory: false)
 
-        // This session's own filename uniquely identifies any hook group
-        // this method previously wrote for it — every other session's
-        // command references a different script path. That's what makes
-        // the replace-not-append below safe: it only ever touches this
-        // session's own entries, never a sibling session's.
-        let sessionMarker = scriptPath.lastPathComponent
-
-        sharedConfigFileLock.lock()
-        defer { sharedConfigFileLock.unlock() }
-
-        var root: [String: Any] = [:]
-        if let existing = try? Data(contentsOf: configFile),
-           let decoded = try? JSONSerialization.jsonObject(with: existing) as? [String: Any] {
-            root = decoded
-        }
-
-        var group = root["flotilla-status"] as? [String: Any] ?? [:]
-        for event in ["PreToolUse", "PostToolUse"] {
-            var entries = group[event] as? [[String: Any]] ?? []
-            entries.removeAll { entry in
-                Self.commands(in: entry).contains { $0.contains(sessionMarker) }
-            }
-            entries.append([
-                "matcher": "*",
-                "hooks": [
-                    ["type": "command", "command": "\(Self.quoted(scriptPath.path)) \(event)", "timeout": 10]
-                ]
-            ])
-            group[event] = entries
-        }
-        var stopEntries = group["Stop"] as? [[String: Any]] ?? []
-        stopEntries.removeAll { entry in
-            (entry["command"] as? String)?.contains(sessionMarker) == true
-        }
-        stopEntries.append([
-            "type": "command",
-            "command": "\(Self.quoted(scriptPath.path)) Stop",
-            "timeout": 10
-        ])
-        group["Stop"] = stopEntries
-        root["flotilla-status"] = group
-
         do {
-            try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
-            let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: configFile, options: .atomic)
+            try withSharedConfigLock(supportDirectory: supportDirectory) {
+                var root = try loadJSONObject(at: configFile)
+                let hookCommand: (String) -> [String: Any] = { event in
+                    [
+                        "type": "command",
+                        "command": "\(Self.quoted(scriptPath.path)) \(event)",
+                        "timeout": 10
+                    ]
+                }
+                root["flotilla-status"] = [
+                    "PreToolUse": [["matcher": "*", "hooks": [hookCommand("PreToolUse")]]],
+                    "PostToolUse": [["matcher": "*", "hooks": [hookCommand("PostToolUse")]]],
+                    "Stop": [hookCommand("Stop")]
+                ]
+                try writeJSONObject(root, to: configFile, creating: configDirectory)
+            }
             return true
         } catch {
             return false
         }
     }
 
-    private static func commands(in entry: [String: Any]) -> [String] {
-        guard let hooks = entry["hooks"] as? [[String: Any]] else { return [] }
-        return hooks.compactMap { $0["command"] as? String }
+    private static func quoted(_ path: String) -> String {
+        "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
-    private static func quoted(_ path: String) -> String {
-        "\"\(path.replacingOccurrences(of: "\"", with: "\\\""))\""
+    private static func tomlStringLiteral(_ value: String) -> String {
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: value,
+            options: [.fragmentsAllowed, .withoutEscapingSlashes]
+        ), let encoded = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return encoded
+    }
+
+    private enum ConfigurationError: Error {
+        case invalidJSONObject(URL)
+        case lockUnavailable(URL)
+    }
+
+    /// Serializes Flotilla's read-modify-write across app processes. The
+    /// provider itself and external editors do not honor this lock, so the
+    /// final write remains atomic and malformed/intermediate JSON fails
+    /// closed rather than being replaced.
+    private static func withSharedConfigLock<T>(
+        supportDirectory: URL,
+        operation: () throws -> T
+    ) throws -> T {
+        sharedConfigFileLock.lock()
+        defer { sharedConfigFileLock.unlock() }
+
+        let hooksDirectory = supportDirectory.appendingPathComponent("hooks", isDirectory: true)
+        try FileManager.default.createDirectory(at: hooksDirectory, withIntermediateDirectories: true)
+        let lockFile = hooksDirectory.appendingPathComponent("shared-config.lock")
+        if !FileManager.default.fileExists(atPath: lockFile.path),
+           !FileManager.default.createFile(atPath: lockFile.path, contents: nil) {
+            throw ConfigurationError.lockUnavailable(lockFile)
+        }
+
+        let handle = try FileHandle(forUpdating: lockFile)
+        defer { try? handle.close() }
+        guard Darwin.lockf(handle.fileDescriptor, F_LOCK, 0) == 0 else {
+            throw ConfigurationError.lockUnavailable(lockFile)
+        }
+        defer { _ = Darwin.lockf(handle.fileDescriptor, F_ULOCK, 0) }
+        return try operation()
+    }
+
+    private static func loadJSONObject(at file: URL) throws -> [String: Any] {
+        guard FileManager.default.fileExists(atPath: file.path) else { return [:] }
+        let data = try Data(contentsOf: file)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ConfigurationError.invalidJSONObject(file)
+        }
+        return object
+    }
+
+    private static func writeJSONObject(
+        _ object: [String: Any],
+        to file: URL,
+        creating directory: URL
+    ) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: file, options: .atomic)
     }
 
     /// Shared by every provider whose payload doesn't self-describe its own
@@ -359,13 +381,15 @@ public struct HookConfigurationWriter: Sendable {
     /// getting this wrong (omitting an event that needs it) risks hanging
     /// or silently blocking the CLI, so it's only ever populated for events
     /// this has actually been confirmed to require it for (see call sites).
-    private static func wrapperScriptContents(eventFile: URL, decisionRequiredFor: Set<String>) -> String {
-        let path = eventFile.path.replacingOccurrences(of: "\"", with: "\\\"")
+    private static func wrapperScriptContents(decisionRequiredFor: Set<String>) -> String {
         var script = """
         #!/bin/sh
         event="$1"
         payload="$(cat)"
-        printf '{"event":"%s","payload":%s}\\n' "$event" "$payload" >> "\(path)"
+        event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"
+        if [ -n "$event_file" ]; then
+            printf '{"event":"%s","payload":%s}\\n' "$event" "$payload" >> "$event_file"
+        fi
         """
         for event in decisionRequiredFor.sorted() {
             script += """
@@ -379,124 +403,71 @@ public struct HookConfigurationWriter: Sendable {
 
     // MARK: - Codex CLI
 
-    /// Writes this session's wrapper script and merges its hook group into
-    /// `<workingDirectory>/.codex/hooks.json`. See this file's top-level doc
-    /// comment for the assumptions this rests on and why `PermissionRequest`
-    /// is deliberately not wired here.
+    /// Writes the stable wrapper script. Hook groups travel via per-launch
+    /// `--config` overrides, so Codex never modifies the project.
     ///
-    /// Only `PostToolUse` (→ `working`) and `Stop` (→ `ready`) are wired —
-    /// both fire-and-forget/informational in Claude Code's equivalent
-    /// events, unlike the decision-blocking `PermissionRequest`, so no event
-    /// here needs the `{"decision":"allow"}` stdout contract Antigravity's
-    /// `PreToolUse` does. `waitingForInput` (both the free-text-question and
-    /// permission-prompt cases) stays on `TerminalScreenHeuristic` for this
-    /// provider until `PermissionRequest`'s response contract is verified.
+    /// `PostToolUse` maps to working, `Stop` to ready, and
+    /// `PermissionRequest` to waiting. The wrapper copies Codex's own JSON
+    /// payload and deliberately prints no response, preserving the normal
+    /// approval flow.
     private static func configureCodexHooks(
-        sessionID: UUID,
-        workingDirectory: URL,
-        supportDirectory: URL,
-        eventFile: URL
+        supportDirectory: URL
     ) -> Bool {
-        let scriptPath = codexWrapperScriptPath(for: sessionID, supportDirectory: supportDirectory)
+        let scriptPath = codexWrapperScriptPath(supportDirectory: supportDirectory)
         do {
             try FileManager.default.createDirectory(
                 at: scriptPath.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let contents = wrapperScriptContents(eventFile: eventFile, decisionRequiredFor: [])
+            let contents = eventForwardingShellCommand() + "\n"
             try Data(contents.utf8).write(to: scriptPath, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
         } catch {
             return false
         }
 
-        let configDirectory = workingDirectory.appendingPathComponent(".codex", isDirectory: true)
-        let configFile = configDirectory.appendingPathComponent("hooks.json", isDirectory: false)
-
-        // Same idempotent-replace-by-marker approach as Antigravity's
-        // shared file — see that method's comment for why it's safe.
-        let sessionMarker = scriptPath.lastPathComponent
-
-        sharedConfigFileLock.lock()
-        defer { sharedConfigFileLock.unlock() }
-
-        var settings: [String: Any] = [:]
-        if let existing = try? Data(contentsOf: configFile),
-           let decoded = try? JSONSerialization.jsonObject(with: existing) as? [String: Any] {
-            settings = decoded
-        }
-
-        var hooks = settings["hooks"] as? [String: Any] ?? [:]
-        for event in ["PostToolUse", "Stop"] {
-            var groups = hooks[event] as? [[String: Any]] ?? []
-            groups.removeAll { group in
-                Self.commands(in: group).contains { $0.contains(sessionMarker) }
-            }
-            groups.append([
-                "matcher": "",
-                "hooks": [
-                    ["type": "command", "command": "\(Self.quoted(scriptPath.path)) \(event)"]
-                ]
-            ])
-            hooks[event] = groups
-        }
-        settings["hooks"] = hooks
-
-        do {
-            try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
-            let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: configFile, options: .atomic)
-            return true
-        } catch {
-            return false
-        }
+        return true
     }
 
     // MARK: - OpenCode
 
-    /// This session's own plugin file — unlike the other three providers,
-    /// OpenCode gets one file per session rather than a shared merged one
-    /// (see this file's top-level doc comment for why that's safe here).
-    private static func openCodePluginPath(for sessionID: UUID, workingDirectory: URL) -> URL {
+    /// The stable project plugin. Its destination comes from the launched
+    /// process environment, not from project-shared source code.
+    private static func openCodePluginPath(workingDirectory: URL) -> URL {
         workingDirectory
             .appendingPathComponent(".opencode/plugins", isDirectory: true)
-            .appendingPathComponent("flotilla-status-\(sessionID.uuidString).js", isDirectory: false)
+            .appendingPathComponent("flotilla-status.js", isDirectory: false)
     }
 
-    /// Writes (fully overwrites — no merge, no lock; see top-level doc
-    /// comment) this session's plugin file. `tool.execute.after` → working
+    /// Writes (fully overwrites — no merge, no lock) the stable plugin file.
+    /// `tool.execute.after` → working
     /// and `session.idle` → ready are live-verified; `permission.asked`/
     /// `question.asked` → waitingForInput are wired on the strength of
     /// every other event name from the same source checking out live, not
     /// directly observed themselves.
     private static func configureOpenCodeHooks(
-        sessionID: UUID,
-        workingDirectory: URL,
-        eventFile: URL
+        workingDirectory: URL
     ) -> Bool {
-        let pluginPath = openCodePluginPath(for: sessionID, workingDirectory: workingDirectory)
+        let pluginPath = openCodePluginPath(workingDirectory: workingDirectory)
         do {
             try FileManager.default.createDirectory(
                 at: pluginPath.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try Data(openCodePluginContents(eventFile: eventFile).utf8).write(to: pluginPath, options: .atomic)
+            try Data(openCodePluginContents().utf8).write(to: pluginPath, options: .atomic)
+            try removeLegacyOpenCodePlugins(in: pluginPath.deletingLastPathComponent())
             return true
         } catch {
             return false
         }
     }
 
-    private static func openCodePluginContents(eventFile: URL) -> String {
-        // JSON-encoded (not just quoted) so the path round-trips safely as
-        // a JS string literal regardless of what characters it contains.
-        let pathLiteral = (try? JSONSerialization.data(withJSONObject: eventFile.path, options: .fragmentsAllowed))
-            .flatMap { String(data: $0, encoding: .utf8) }
-            ?? "\"\(eventFile.path)\""
+    private static func openCodePluginContents() -> String {
         return """
         import fs from "node:fs";
-        const eventFile = \(pathLiteral);
+        const eventFile = process.env.FLOTILLA_HOOK_EVENT_FILE;
         function append(event) {
+          if (!eventFile) return;
           try { fs.appendFileSync(eventFile, JSON.stringify({ event }) + "\\n"); } catch {}
         }
         export const FlotillaStatus = async () => {
@@ -510,5 +481,14 @@ public struct HookConfigurationWriter: Sendable {
           };
         };
         """
+    }
+
+    private static func removeLegacyOpenCodePlugins(in directory: URL) throws {
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        for name in names where name.hasPrefix("flotilla-status-") && name.hasSuffix(".js") {
+            // Concurrent launches can both discover the same legacy file.
+            // Whichever removes it first wins; absence is already success.
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        }
     }
 }

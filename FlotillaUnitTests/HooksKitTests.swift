@@ -352,6 +352,58 @@ final class HookEventReceiverTests: XCTestCase {
         XCTAssertTrue(observed.isEmpty)
     }
 
+    func testBuffersSplitUTF8ScalarsUntilTheLineIsComplete() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
+        let statuses = StatusBox()
+        let collector = Task {
+            for await status in receiver.statusStream { await statuses.append(status) }
+        }
+        receiver.start()
+
+        let complete = Data(#"{"message":"Grüße","hook_event_name":"Stop"}"#.utf8)
+        let split = try XCTUnwrap(complete.firstIndex(of: 0xC3)) + 1
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.write(contentsOf: complete.prefix(split))
+        try await Task.sleep(for: .milliseconds(80))
+        try handle.write(contentsOf: complete.dropFirst(split) + Data([0x0A]))
+        try handle.close()
+        try await Task.sleep(for: .milliseconds(150))
+
+        receiver.stop()
+        collector.cancel()
+        let observed = await statuses.values
+        XCTAssertEqual(observed, [.ready])
+    }
+
+    func testAtomicReplacementResetsOffsetEvenWhenNewFileIsLarger() async throws {
+        let file = tempFile()
+        try Data((String(repeating: "x", count: 80) + "\n").utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
+        let statuses = StatusBox()
+        let collector = Task {
+            for await status in receiver.statusStream { await statuses.append(status) }
+        }
+        receiver.start()
+        try await Task.sleep(for: .milliseconds(80))
+
+        let replacement = Array(repeating: #"{"hook_event_name":"Stop"}"#, count: 6)
+            .joined(separator: "\n") + "\n"
+        XCTAssertGreaterThan(replacement.utf8.count, 80)
+        try Data(replacement.utf8).write(to: file, options: .atomic)
+        try await Task.sleep(for: .milliseconds(180))
+
+        receiver.stop()
+        collector.cancel()
+        let observed = await statuses.values
+        XCTAssertEqual(observed, Array(repeating: .ready, count: 6))
+    }
+
     func testAntigravityPreToolUseAskQuestionMeansWaitingForInput() async throws {
         let file = tempFile()
         FileManager.default.createFile(atPath: file.path, contents: nil)
@@ -381,19 +433,19 @@ final class HookEventReceiverTests: XCTestCase {
         XCTAssertEqual(observed, [.ready], "fullyIdle: false must not emit any status")
     }
 
-    func testCodexMapsPostToolUseAndStopOnly() async throws {
+    func testCodexMapsDocumentedLifecycleEvents() async throws {
         let file = tempFile()
         FileManager.default.createFile(atPath: file.path, contents: nil)
         defer { try? FileManager.default.removeItem(at: file) }
 
-        try append(#"{"event":"PostToolUse","payload":{}}"#, to: file)
-        try append(#"{"event":"PermissionRequest","payload":{}}"#, to: file)
-        try append(#"{"event":"Stop","payload":{}}"#, to: file)
+        try append(#"{"hook_event_name":"PostToolUse"}"#, to: file)
+        try append(#"{"hook_event_name":"PermissionRequest"}"#, to: file)
+        try append(#"{"hook_event_name":"Stop"}"#, to: file)
 
         let receiver = HookEventReceiver(filePath: file, agent: .codexCLI, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
-        XCTAssertEqual(observed, [.working, .ready], "PermissionRequest must be ignored — it isn't wired")
+        XCTAssertEqual(observed, [.working, .waitingForInput, .ready])
     }
 
     func testOpenCodeMapsEventsIncludingTheSessionIdleNamingTrap() async throws {
@@ -434,6 +486,30 @@ final class HookConfigurationWriterTests: XCTestCase {
 
     private var settingsFile: URL {
         workingDirectory.appendingPathComponent(".claude/settings.json")
+    }
+
+    private func runScript(
+        at script: URL,
+        arguments: [String] = [],
+        stdin: String,
+        eventFile: URL
+    ) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [script.path] + arguments
+        var environment = ProcessInfo.processInfo.environment
+        environment[HookConfigurationWriter.eventFileEnvironmentKey] = eventFile.path
+        process.environment = environment
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        try process.run()
+        input.fileHandleForWriting.write(Data(stdin.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     }
 
     func testSupportsHooksMatchesImplementedProviders() {
@@ -482,10 +558,8 @@ final class HookConfigurationWriterTests: XCTestCase {
     }
 
     func testLaunchArgumentsCarryOnlyThisSessionsHookGroups() throws {
-        let sessionID = UUID()
         let arguments = HookConfigurationWriter.launchArguments(
             for: .claudeCode,
-            sessionID: sessionID,
             supportDirectory: supportDirectory
         )
 
@@ -495,38 +569,33 @@ final class HookConfigurationWriterTests: XCTestCase {
             JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
         )
         let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
-        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         for event in ["Notification", "Stop", "PostToolUse"] {
             let groups = try XCTUnwrap(hooks[event] as? [[String: Any]], "\(event) must be present")
             let commands = try XCTUnwrap(groups.first?["hooks"] as? [[String: Any]])
             let command = try XCTUnwrap(commands.first?["command"] as? String)
-            XCTAssertTrue(
-                command.contains(eventFile.path),
-                "\(event)'s command must point at this session's own event file"
-            )
+            XCTAssertTrue(command.contains(HookConfigurationWriter.eventFileEnvironmentKey))
         }
     }
 
     // OpenCode is hook-capable but its wiring travels through
-    // configureHooks's per-session plugin-file write, not launchArguments.
+    // configureHooks's stable project-plugin write, not launchArguments.
     func testLaunchArgumentsEmptyForOpenCodeEvenThoughItSupportsHooks() {
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .openCode))
         XCTAssertTrue(HookConfigurationWriter.launchArguments(
             for: .openCode,
-            sessionID: UUID(),
             supportDirectory: supportDirectory
         ).isEmpty)
     }
 
-    // Codex is hook-capable but, like Antigravity, its wiring travels
-    // through configureHooks's shared-file write, not launchArguments.
-    func testLaunchArgumentsEmptyForCodexEvenThoughItSupportsHooks() {
+    func testLaunchArgumentsEnableStableCodexHooksFeature() {
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .codexCLI))
-        XCTAssertTrue(HookConfigurationWriter.launchArguments(
-            for: .codexCLI,
-            sessionID: UUID(),
-            supportDirectory: supportDirectory
-        ).isEmpty)
+        XCTAssertEqual(
+            Array(HookConfigurationWriter.launchArguments(
+                for: .codexCLI,
+                supportDirectory: supportDirectory
+            ).prefix(2)),
+            ["--config", "features.hooks=true"]
+        )
     }
 
     // Antigravity is hook-capable but its wiring travels through
@@ -536,7 +605,6 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .antigravity))
         XCTAssertTrue(HookConfigurationWriter.launchArguments(
             for: .antigravity,
-            sessionID: UUID(),
             supportDirectory: supportDirectory
         ).isEmpty)
     }
@@ -564,7 +632,7 @@ final class HookConfigurationWriterTests: XCTestCase {
 
         let scriptPath = supportDirectory
             .appendingPathComponent("hooks", isDirectory: true)
-            .appendingPathComponent("\(sessionID.uuidString)-antigravity.sh", isDirectory: false)
+            .appendingPathComponent("flotilla-antigravity.sh", isDirectory: false)
         XCTAssertTrue(FileManager.default.fileExists(atPath: scriptPath.path))
         let attributes = try FileManager.default.attributesOfItem(atPath: scriptPath.path)
         let permissions = try XCTUnwrap(attributes[.posixPermissions] as? Int)
@@ -572,6 +640,7 @@ final class HookConfigurationWriterTests: XCTestCase {
 
         let scriptContents = try String(contentsOf: scriptPath, encoding: .utf8)
         XCTAssertTrue(scriptContents.contains(#"$1"#), "event name must be read from the invocation argument, not stdin")
+        XCTAssertTrue(scriptContents.contains(HookConfigurationWriter.eventFileEnvironmentKey))
         XCTAssertTrue(scriptContents.contains(#"{"decision":"allow"}"#), "PreToolUse's stdout must be a live decision or Antigravity may hang")
 
         let group = try readAntigravityHooks()
@@ -587,6 +656,29 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertNil(stopEntries.first?["matcher"], "Stop doesn't support a matcher")
         let stopCommand = try XCTUnwrap(stopEntries.first?["command"] as? String)
         XCTAssertTrue(stopCommand.hasSuffix("Stop"))
+    }
+
+    func testAntigravityWrapperRoutesThroughProcessEnvironment() throws {
+        let sessionID = UUID()
+        XCTAssertTrue(HookConfigurationWriter().configureHooks(
+            for: .antigravity,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        ))
+        let script = supportDirectory.appendingPathComponent("hooks/flotilla-antigravity.sh")
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+
+        let stdout = try runScript(
+            at: script,
+            arguments: ["PreToolUse"],
+            stdin: #"{"toolCall":{"name":"ask_question"}}"#,
+            eventFile: eventFile
+        )
+
+        XCTAssertEqual(stdout, "{\"decision\":\"allow\"}\n")
+        let event = try String(contentsOf: eventFile, encoding: .utf8)
+        XCTAssertTrue(event.contains(#"{"event":"PreToolUse","payload":{"toolCall":{"name":"ask_question"}}}"#))
     }
 
     func testAntigravityRelaunchIsIdempotentNotAccumulating() throws {
@@ -632,11 +724,24 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertNotNil(root["flotilla-status"])
     }
 
-    private var codexHooksFile: URL {
-        workingDirectory.appendingPathComponent(".codex/hooks.json")
+    func testAntigravityDoesNotReplaceMalformedUserConfig() throws {
+        let agentsDir = workingDirectory.appendingPathComponent(".agents", isDirectory: true)
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+        let malformed = Data("user data that is not JSON".utf8)
+        try malformed.write(to: antigravityHooksFile)
+
+        let succeeded = HookConfigurationWriter().configureHooks(
+            for: .antigravity,
+            sessionID: UUID(),
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(try Data(contentsOf: antigravityHooksFile), malformed)
     }
 
-    func testCodexWritesWrapperScriptAndHooksForBothEvents() throws {
+    func testCodexWritesWrapperScriptAndBuildsInlineHookArguments() throws {
         let writer = HookConfigurationWriter()
         let sessionID = UUID()
         let succeeded = writer.configureHooks(
@@ -649,77 +754,91 @@ final class HookConfigurationWriterTests: XCTestCase {
 
         let scriptPath = supportDirectory
             .appendingPathComponent("hooks", isDirectory: true)
-            .appendingPathComponent("\(sessionID.uuidString)-codex.sh", isDirectory: false)
+            .appendingPathComponent("flotilla-codex.sh", isDirectory: false)
         XCTAssertTrue(FileManager.default.fileExists(atPath: scriptPath.path))
         let attributes = try FileManager.default.attributesOfItem(atPath: scriptPath.path)
         let permissions = try XCTUnwrap(attributes[.posixPermissions] as? Int)
         XCTAssertEqual(permissions & 0o111, 0o111, "the wrapper script must be executable")
 
-        // Codex's script must never answer a decision — PermissionRequest,
-        // the only decision-blocking event, is deliberately not wired.
+        // Codex's script is observational: no output means the provider's
+        // normal approval prompt remains in control.
         let scriptContents = try String(contentsOf: scriptPath, encoding: .utf8)
         XCTAssertFalse(scriptContents.contains("decision"))
+        XCTAssertTrue(scriptContents.contains(HookConfigurationWriter.eventFileEnvironmentKey))
 
-        let data = try Data(contentsOf: codexHooksFile)
-        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
-        XCTAssertNil(hooks["PermissionRequest"], "PermissionRequest must not be wired until its decision contract is verified")
-        for event in ["PostToolUse", "Stop"] {
-            let groups = try XCTUnwrap(hooks[event] as? [[String: Any]], "\(event) must be present")
-            let commands = try XCTUnwrap(groups.first?["hooks"] as? [[String: Any]])
-            let command = try XCTUnwrap(commands.first?["command"] as? String)
-            XCTAssertTrue(command.contains(scriptPath.path))
-            XCTAssertTrue(command.hasSuffix(event), "the event name must be passed as the script's argument")
+        let arguments = HookConfigurationWriter.launchArguments(
+            for: .codexCLI,
+            supportDirectory: supportDirectory
+        )
+        XCTAssertEqual(Array(arguments.prefix(2)), ["--config", "features.hooks=true"])
+        for event in ["PermissionRequest", "PostToolUse", "Stop"] {
+            let value = try XCTUnwrap(arguments.first { $0.hasPrefix("hooks.\(event)=") })
+            XCTAssertTrue(value.contains(scriptPath.path))
         }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: workingDirectory.appendingPathComponent(".codex").path))
     }
 
-    func testCodexRelaunchIsIdempotentNotAccumulating() throws {
-        let writer = HookConfigurationWriter()
+    func testCodexWrapperCopiesSelfDescribingPayloadWithoutDecision() throws {
         let sessionID = UUID()
-        for _ in 0..<3 {
-            _ = writer.configureHooks(
-                for: .codexCLI,
-                sessionID: sessionID,
-                workingDirectory: workingDirectory,
-                supportDirectory: supportDirectory
-            )
-        }
+        XCTAssertTrue(HookConfigurationWriter().configureHooks(
+            for: .codexCLI,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        ))
+        let script = supportDirectory.appendingPathComponent("hooks/flotilla-codex.sh")
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        let payload = #"{"hook_event_name":"PermissionRequest"}"#
 
-        let data = try Data(contentsOf: codexHooksFile)
+        let stdout = try runScript(at: script, stdin: payload, eventFile: eventFile)
+
+        XCTAssertTrue(stdout.isEmpty)
+        XCTAssertEqual(try String(contentsOf: eventFile, encoding: .utf8), payload + "\n")
+    }
+
+    func testConcurrentAntigravityConfigurationRemainsValidAndBounded() async throws {
+        let workingDirectory = try XCTUnwrap(workingDirectory)
+        let supportDirectory = try XCTUnwrap(supportDirectory)
+        let results = await withTaskGroup(of: Bool.self, returning: [Bool].self) { group in
+            for _ in 0..<12 {
+                group.addTask {
+                    HookConfigurationWriter().configureHooks(
+                        for: .antigravity,
+                        sessionID: UUID(),
+                        workingDirectory: workingDirectory,
+                        supportDirectory: supportDirectory
+                    )
+                }
+            }
+            var values: [Bool] = []
+            for await value in group { values.append(value) }
+            return values
+        }
+        XCTAssertTrue(results.allSatisfy { $0 })
+
+        let data = try Data(contentsOf: workingDirectory.appendingPathComponent(".agents/hooks.json"))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
-        for event in ["PostToolUse", "Stop"] {
-            let groups = try XCTUnwrap(hooks[event] as? [[String: Any]])
-            XCTAssertEqual(groups.count, 1, "relaunching the same session must replace, not accumulate, its own entry for \(event)")
+        let hooks = try XCTUnwrap(root["flotilla-status"] as? [String: Any])
+        for event in ["PreToolUse", "PostToolUse", "Stop"] {
+            XCTAssertEqual((hooks[event] as? [[String: Any]])?.count, 1)
         }
     }
 
-    func testCodexPreservesUnrelatedExistingHooksConfig() throws {
+    func testCodexNeverTouchesExistingProjectConfiguration() throws {
         let codexDir = workingDirectory.appendingPathComponent(".codex", isDirectory: true)
         try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
-        let existing: [String: Any] = [
-            "permissions": ["allow": ["shell(git *)"]],
-            "hooks": [
-                "PostToolUse": [
-                    ["hooks": [["type": "command", "command": "echo user-configured"]]]
-                ]
-            ]
-        ]
-        try JSONSerialization.data(withJSONObject: existing).write(to: codexHooksFile)
+        let configFile = codexDir.appendingPathComponent("hooks.json")
+        let existing = Data("user-owned, even if malformed".utf8)
+        try existing.write(to: configFile)
 
-        let writer = HookConfigurationWriter()
-        _ = writer.configureHooks(
+        XCTAssertTrue(HookConfigurationWriter().configureHooks(
             for: .codexCLI,
             sessionID: UUID(),
             workingDirectory: workingDirectory,
             supportDirectory: supportDirectory
-        )
+        ))
 
-        let data = try Data(contentsOf: codexHooksFile)
-        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertNotNil(root["permissions"], "unrelated top-level keys must survive the merge")
-        let postToolUse = try XCTUnwrap((root["hooks"] as? [String: Any])?["PostToolUse"] as? [[String: Any]])
-        XCTAssertEqual(postToolUse.count, 2, "the user's existing PostToolUse hook must not be replaced")
+        XCTAssertEqual(try Data(contentsOf: configFile), existing)
     }
 
     func testOpenCodeWritesAPerSessionPluginFile() throws {
@@ -735,15 +854,11 @@ final class HookConfigurationWriterTests: XCTestCase {
 
         let pluginPath = workingDirectory
             .appendingPathComponent(".opencode/plugins", isDirectory: true)
-            .appendingPathComponent("flotilla-status-\(sessionID.uuidString).js", isDirectory: false)
+            .appendingPathComponent("flotilla-status.js", isDirectory: false)
         XCTAssertTrue(FileManager.default.fileExists(atPath: pluginPath.path))
 
         let contents = try String(contentsOf: pluginPath, encoding: .utf8)
-        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
-        // The path is JSON-encoded into the JS source, so forward slashes
-        // are escaped (`\/`) — check for that shape rather than the raw path.
-        let escapedPath = eventFile.path.replacingOccurrences(of: "/", with: "\\/")
-        XCTAssertTrue(contents.contains(escapedPath))
+        XCTAssertTrue(contents.contains(HookConfigurationWriter.eventFileEnvironmentKey))
         XCTAssertTrue(contents.contains("tool.execute.after"))
         XCTAssertTrue(contents.contains("session.idle"))
         XCTAssertTrue(contents.contains("permission.asked"))
@@ -764,10 +879,10 @@ final class HookConfigurationWriterTests: XCTestCase {
 
         let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
         let entries = try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path)
-        XCTAssertEqual(entries.count, 1, "relaunching the same session must overwrite, not accumulate, its own plugin file")
+        XCTAssertEqual(entries.count, 1, "relaunching must overwrite, not accumulate, the stable plugin file")
     }
 
-    func testOpenCodeTwoSessionsGetIndependentPluginFiles() throws {
+    func testOpenCodeTwoSessionsShareOneEnvironmentRoutedPlugin() throws {
         let writer = HookConfigurationWriter()
         _ = writer.configureHooks(
             for: .openCode,
@@ -784,7 +899,50 @@ final class HookConfigurationWriterTests: XCTestCase {
 
         let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
         let entries = try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path)
-        XCTAssertEqual(entries.count, 2, "each session must get its own plugin file, never merged into a shared one")
+        XCTAssertEqual(entries, ["flotilla-status.js"], "one stable plugin routes each process to its own event file")
+    }
+
+    func testConcurrentOpenCodeConfigurationKeepsOneStablePlugin() async throws {
+        let workingDirectory = try XCTUnwrap(workingDirectory)
+        let supportDirectory = try XCTUnwrap(supportDirectory)
+        let results = await withTaskGroup(of: Bool.self, returning: [Bool].self) { group in
+            for _ in 0..<12 {
+                group.addTask {
+                    HookConfigurationWriter().configureHooks(
+                        for: .openCode,
+                        sessionID: UUID(),
+                        workingDirectory: workingDirectory,
+                        supportDirectory: supportDirectory
+                    )
+                }
+            }
+            var values: [Bool] = []
+            for await value in group { values.append(value) }
+            return values
+        }
+        XCTAssertTrue(results.allSatisfy { $0 })
+
+        let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path), ["flotilla-status.js"])
+    }
+
+    func testOpenCodeRemovesLegacyPerSessionPlugins() throws {
+        let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let legacy = pluginsDirectory.appendingPathComponent("flotilla-status-\(UUID().uuidString).js")
+        let userPlugin = pluginsDirectory.appendingPathComponent("user-plugin.js")
+        try Data().write(to: legacy)
+        try Data().write(to: userPlugin)
+
+        XCTAssertTrue(HookConfigurationWriter().configureHooks(
+            for: .openCode,
+            sessionID: UUID(),
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        ))
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: userPlugin.path))
     }
 }
 
