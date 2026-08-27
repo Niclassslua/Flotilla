@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 
 /// Screenshot harness for `docs/ui-vocabulary.md` — **not an assertion test.**
 ///
@@ -68,11 +69,41 @@ final class VocabularyScreenshotUITests: XCTestCase {
         continueAfterFailure = true
     }
 
+    /// SwiftUI's window-frame autosave key for the main window, read from the
+    /// app's own defaults. Overriding it is the only way to control where the
+    /// window opens.
+    private static let windowFrameKey = """
+        NSWindow Frame SwiftUI.WindowGroup<SwiftUI.ModifiedContent<Flotilla.FlotillaShell, \
+        SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>>-1-AppWindow-1
+        """
+
     private func launchedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
+
+        // Screen capture fails outright ("Image creation failed") for a window
+        // on the secondary display, and that error aborts the test method.
+        // The app persists its frame at x=2560 and rewrites it on every quit,
+        // so editing the stored default doesn't survive. NSArgumentDomain
+        // outranks the persisted domain and is applied fresh at each launch.
+        // `NSScreen.screens[0]` is the display carrying the menu bar, which is
+        // always at origin — the one whose windows can be captured here.
+        let screen = (NSScreen.screens.first ?? NSScreen.main)?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        let w = Int(screen.width), h = Int(screen.height)
+        let frame = "0 0 \(w) \(h) 0 0 \(w) \(h) "
+        app.launchArguments.append(contentsOf: ["-\(Self.windowFrameKey)", frame])
+
         app.launchEnvironment["UI_TESTING"] = "1"
         app.launch()
+
+        // Log where it actually landed, so a failure to reposition is visible
+        // in the manifest instead of showing up as an unexplained capture error.
+        let window = app.windows.firstMatch
+        if fastWait(window, timeout: 8) {
+            let f = window.frame
+            let placement = f.minX < 1 ? "PRIMARY (capturable)" : "SECONDARY — capture will fail"
+            Self.note("WINDOW    x=\(Int(f.minX)) y=\(Int(f.minY)) \(Int(f.width))x\(Int(f.height)) — \(placement)")
+        }
         return app
     }
 
