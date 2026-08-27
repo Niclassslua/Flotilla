@@ -308,6 +308,25 @@ DeleteSessionDialog.Cancel
 DeleteSessionDialog.DeleteWithWorktree
 ```
 
+### UI Vocabulary Screenshot Pipeline
+
+`VocabularyScreenshotUITests` is a documentation generator, not a visual-regression test. Its purpose is to keep the visual appendix in `docs/ui-vocabulary.md` aligned with the app's current UI so contributors can connect canonical vocabulary such as **navigation rail**, **grid presentation**, and **diff panel** to the actual interface. It uses the deterministic `UI_TESTING=1` fixtures and deliberately makes no pixel-level styling assertions.
+
+To refresh the screenshots, open the project in Xcode, select the **UI Vocabulary Screenshots** scheme, and choose **Product → Test**. Run this workflow through Xcode rather than `xcodebuild` in a terminal because macOS UI automation requires Accessibility permission from the process driving the test. The dedicated scheme is declared in `project.yml`, selects only `VocabularyScreenshotUITests`, disables parallel execution, and runs `Scripts/update-ui-vocabulary-screenshots.sh` as its post-test action. Running the screenshot class through another scheme captures raw files but does not publish them.
+
+The pipeline works as follows:
+
+1. The test launches Flotilla with deterministic fixtures, moves capture windows onto the primary display, navigates the documented surfaces, and saves both persistent XCTest attachments and raw Retina PNGs in the UI-test runner's sandbox at `~/Library/Containers/com.niclassslua.FlotillaUITests.xctrunner/Data/Documents/flotilla-vocab-shots/`.
+2. Class teardown writes `manifest.txt`. It contains `COMPLETE  schema=1` only when every image required by the documentation was captured successfully.
+3. The scheme post-action runs `Scripts/update-ui-vocabulary-screenshots.swift`. The publisher validates the completed manifest and all required inputs, derives the documented crops, retains high-resolution output (up to 3,200 px wide for full-window images), and stages the complete 21-image set before writing to `docs/images/ui-vocabulary/`.
+4. If the test is partial, a required capture is missing, or rendering fails, publication stops and the checked-in documentation images remain unchanged.
+
+After changing a documented surface, capture name, or visual-reference entry, update these together: `VocabularyScreenshotUITests.requiredCaptureNames`, the publication table in `Scripts/update-ui-vocabulary-screenshots.swift`, and the image references in `docs/ui-vocabulary.md`. Run the dedicated scheme, inspect the refreshed PNGs visually, and commit the image changes with the code. To rerun only publication from the most recent complete capture, use:
+
+```bash
+/bin/bash Scripts/update-ui-vocabulary-screenshots.sh
+```
+
 ### Accessibility
 
 - Extensive use of `.accessibilityIdentifier()` with dot-notation namespacing

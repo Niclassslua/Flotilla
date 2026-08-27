@@ -108,3 +108,20 @@ schemes:
           environmentVariables:
             UI_TESTING: "1"
         - FlotillaUITests
+
+  UI Vocabulary Screenshots:
+    build:
+      targets:
+        Flotilla: all
+        FlotillaUITests: [test]
+    test:
+      targets:
+        - name: FlotillaUITests
+          parallelizable: false
+          selectedTests:
+            - VocabularyScreenshotUITests
+      postActions:
+        - name: Publish UI vocabulary screenshots
+          settingsTarget: Flotilla
+          script: |
+            /bin/bash "$SRCROOT/Scripts/update-ui-vocabulary-screenshots.sh"

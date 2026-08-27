@@ -127,7 +127,9 @@ struct SettingsView: View {
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 720, idealWidth: 800, minHeight: 540, idealHeight: 620)
         .tint(FlotillaColors.accent)
+        .background { uiTestWindowPlacer }
         #if DEBUG
+        .onAppear { applyUITestSelectionIfNeeded() }
         .overlay(alignment: .topLeading) {
             Text("Settings")
                 .accessibilityIdentifier("SettingsView")
@@ -137,6 +139,24 @@ struct SettingsView: View {
         }
         #endif
     }
+
+    @ViewBuilder
+    private var uiTestWindowPlacer: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["UI_TESTING"] == "1" {
+            UITestWindowPlacer(placement: .topLeading)
+        }
+        #endif
+    }
+
+    #if DEBUG
+    private func applyUITestSelectionIfNeeded() {
+        guard ProcessInfo.processInfo.environment["UI_TESTING"] == "1",
+              let tabID = ProcessInfo.processInfo.environment["UI_TEST_SETTINGS_SECTION"],
+              SettingsTab(rawValue: tabID) != nil else { return }
+        selectedTabID = tabID
+    }
+    #endif
 
     private var selectedTab: SettingsTab {
         SettingsTab(rawValue: selectedTabID) ?? .general

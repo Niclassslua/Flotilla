@@ -247,3 +247,77 @@ If you need to point at something this list doesn't name:
 
 When a name here and the code disagree, the code wins — and this file should be updated
 in the same change.
+
+---
+
+## Visual reference
+
+These screenshots are navigation aids for the vocabulary above, not pixel-accuracy specifications. They use Flotilla's deterministic UI-testing fixtures.
+
+### Shell, Home, and Sessions
+
+| Window shell with Home dashboard | Sessions facet with session list |
+| --- | --- |
+| ![Flotilla window shell showing the navigation rail and Home dashboard](images/ui-vocabulary/shell-home-dashboard.png) | ![Sessions facet showing the navigation rail, session list, and detail column](images/ui-vocabulary/sessions-facet.png) |
+
+The Home view above contains the **composer**, **summary line**, **attention queue**, **recent sessions**, and **projects gallery** named in sections 1 and 2.
+
+### Fleet presentations and session cards
+
+| Grid presentation | Grid tile / session card |
+| --- | --- |
+| ![Grid presentation with its toolbar and three terminal tiles](images/ui-vocabulary/grid-presentation.png) | ![A grid tile showing the tile header, status, branch, focus control, and terminal surface](images/ui-vocabulary/grid-tile.png) |
+| **Board presentation** | **Focus presentation** |
+| ![Board presentation with status columns and session cards](images/ui-vocabulary/board-presentation.png) | ![Focus presentation with one terminal occupying the detail column](images/ui-vocabulary/focus-presentation.png) |
+
+### Project workspace
+
+![Project Overview tab showing active sessions, worktrees, and recent sessions](images/ui-vocabulary/project-overview.png)
+
+**Worktree section**
+
+![The worktree section and its main-checkout worktree card](images/ui-vocabulary/worktree-section.png)
+
+| Commit graph and history | Knowledge catalog ledger |
+| --- | --- |
+| ![Git Commits tab showing the commit graph, history list, and commit detail](images/ui-vocabulary/commit-graph.png) | ![Skills tab showing the knowledge catalog ledger and inspector](images/ui-vocabulary/knowledge-ledger.png) |
+
+**Knowledge detail**
+
+![Rules tab showing the knowledge catalog ledger and a selected knowledge detail](images/ui-vocabulary/knowledge-detail.png)
+
+### Diff and files
+
+| Diff panel | File browser |
+| --- | --- |
+| ![Git Changes tab showing a populated diff panel and changed file row](images/ui-vocabulary/diff-panel.png) | ![Files tab showing the file browser's tree and editor pane](images/ui-vocabulary/file-browser.png) |
+
+| File tree region | Editor pane region |
+| --- | --- |
+| ![File tree with filter field and selected README file](images/ui-vocabulary/file-tree.png) | ![Editor pane showing a rendered Markdown preview and its toolbar](images/ui-vocabulary/editor-pane.png) |
+
+### Launchers and modals
+
+| New Session window and command bar | Command palette and palette panel |
+| --- | --- |
+| ![New Session window showing the command bar over its scrim](images/ui-vocabulary/new-session-window.png) | ![Command palette floating over the Home dashboard](images/ui-vocabulary/command-palette.png) |
+
+**Delete session sheet**
+
+![Delete session sheet with keep-worktree and delete-worktree actions](images/ui-vocabulary/delete-session-sheet.png)
+
+### Settings
+
+| Terminal & Editor pane | Git & Worktrees pane | Coding Agents pane |
+| --- | --- | --- |
+| ![Settings window showing the Terminal and Editor pane](images/ui-vocabulary/settings-terminal-editor.png) | ![Settings window showing the Git and Worktrees pane](images/ui-vocabulary/settings-git-worktrees.png) | ![Settings window showing the Coding Agents pane](images/ui-vocabulary/settings-coding-agents.png) |
+
+### Refreshing the visual reference
+
+In Xcode, select the **UI Vocabulary Screenshots** scheme and choose **Product → Test**. The scheme runs only `VocabularyScreenshotUITests`; after every complete, successful capture it validates the manifest, crops the documentation variants, retains a high-resolution 2× master, and republishes the 21 PNGs in `docs/images/ui-vocabulary/`.
+
+Run this workflow from Xcode so the UI-test runner inherits Xcode's Accessibility permission. A failed or partial run leaves the checked-in documentation images unchanged. To retry only the publishing step after a completed run, use:
+
+```bash
+/bin/bash Scripts/update-ui-vocabulary-screenshots.sh
+```

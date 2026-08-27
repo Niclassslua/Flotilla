@@ -1,48 +1,76 @@
-import XCTest
 import AppKit
+import XCTest
 
-/// Screenshot harness for `docs/ui-vocabulary.md` — **not an assertion test.**
+/// Captures the deterministic UI-testing fixtures used by
+/// `docs/ui-vocabulary.md`.
 ///
-/// Walks the app to each surface the vocabulary document names and captures it
-/// two ways, because the UI-test runner is sandboxed:
-///
-/// 1. As an `XCTAttachment` with `.keepAlways`, which lands in the `.xcresult`
-///    bundle and always survives. Extract with
-///    `xcrun xcresulttool export attachments --path <run>.xcresult --output-path <dir>`.
-/// 2. As a PNG under the runner's own container `Documents` directory — the
-///    only filesystem location the sandbox permits. Writing to `/tmp` is
-///    silently denied, which is why an earlier version of this file produced a
-///    green run and no files at all.
-///
-/// The resolved output directory and a per-surface result line are printed to
-/// the test log, so a run is legible even if both storage paths fail.
-///
-/// Nothing here asserts on visuals (see CLAUDE.md's testing scope) — it exists
-/// purely to produce illustrations for the doc, and can be deleted once they're
-/// captured.
+/// This is a documentation pipeline rather than a visual-regression test: it
+/// deliberately makes no pixel assertions. Each screenshot is kept as an
+/// xcresult attachment and written to the UI-test runner's sandbox. The
+/// dedicated `UI Vocabulary Screenshots` scheme publishes the completed set to
+/// the documentation after the test action succeeds.
 @MainActor
 final class VocabularyScreenshotUITests: XCTestCase {
-    /// The runner's sandbox container, not the real `~/Documents`.
-    private static let outputDirectory: URL = {
-        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("flotilla-vocab-shots", isDirectory: true)
+    /// The runner's sandbox container, not the developer's real Documents
+    /// directory. It is the stable handoff point to the scheme post-action.
+    nonisolated private static let outputDirectory: URL = {
+        FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("flotilla-vocab-shots", isDirectory: true)
     }()
 
-    private static var log: [String] = []
+    /// Only captures consumed by the visual appendix are required for a
+    /// publishable run. Additional captures can be added without changing the
+    /// publisher contract.
+    nonisolated private static let requiredCaptureNames: Set<String> = [
+        "01-home-dashboard",
+        "07-sessions-focus",
+        "10-presentation-grid",
+        "11-grid-view",
+        "13-presentation-board",
+        "15-presentation-focus",
+        "20-new-session-command-bar",
+        "21-command-palette",
+        "22-delete-session-sheet",
+        "24-settings-terminal",
+        "25-settings-git",
+        "26-settings-agents",
+        "30-project-overview",
+        "34-diff-panel-populated",
+        "36-project-git-commits",
+        "37-project-files",
+        "39-project-skills",
+        "41-knowledge-detail",
+    ]
+
+    nonisolated(unsafe) private static var capturedNames: Set<String> = []
+    nonisolated(unsafe) private static var log: [String] = []
 
     override class func setUp() {
         super.setUp()
         try? FileManager.default.removeItem(at: outputDirectory)
+        capturedNames = []
+
         do {
-            try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
-            log = ["output directory: \(outputDirectory.path)"]
+            try FileManager.default.createDirectory(
+                at: outputDirectory,
+                withIntermediateDirectories: true
+            )
+            log = ["SCHEMA    1", "OUTPUT    \(outputDirectory.path)"]
         } catch {
-            log = ["output directory UNUSABLE (\(error.localizedDescription)) — rely on xcresult attachments"]
+            log = ["SCHEMA    1", "UNUSABLE  \(error.localizedDescription)"]
         }
-        print("[vocab-shots] \(log[0])")
+        print("[vocab-shots] \(log.joined(separator: "\n[vocab-shots] "))")
     }
 
     override class func tearDown() {
+        let missing = requiredCaptureNames.subtracting(capturedNames).sorted()
+        if missing.isEmpty {
+            log.append("COMPLETE  schema=1 captures=\(capturedNames.count)")
+        } else {
+            log.append("INCOMPLETE missing=\(missing.joined(separator: ","))")
+        }
+
         let manifest = log.joined(separator: "\n") + "\n"
         try? manifest.write(
             to: outputDirectory.appendingPathComponent("manifest.txt"),
@@ -53,6 +81,13 @@ final class VocabularyScreenshotUITests: XCTestCase {
         super.tearDown()
     }
 
+    override func setUp() {
+        super.setUp()
+        // A missed surface should not prevent the remaining documentation
+        // captures from being attempted in the same run.
+        continueAfterFailure = true
+    }
+
     private static func note(_ line: String) {
         log.append(line)
         print("[vocab-shots] \(line)")
@@ -60,29 +95,21 @@ final class VocabularyScreenshotUITests: XCTestCase {
 
     // MARK: - Harness
 
-    /// A failed capture raises a test failure rather than throwing, so without
-    /// this the first unreachable surface aborts the whole walk and every later
-    /// surface goes uncaptured. Letting it continue turns one run into a full
-    /// report of what worked and what didn't.
-    override func setUp() {
-        super.setUp()
-        continueAfterFailure = true
-    }
-
     private func launchedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
-
         app.launchEnvironment["UI_TESTING"] = "1"
+        app.launchEnvironment["UI_TEST_SETTINGS_SECTION"] = "general"
         app.launch()
 
-        // Log where it actually landed, so a failure to reposition is visible
-        // in the manifest instead of showing up as an unexplained capture error.
         let window = app.windows.firstMatch
         if fastWait(window, timeout: 8) {
-            let f = window.frame
-            let placement = f.minX < 1 ? "PRIMARY (capturable)" : "SECONDARY — capture will fail"
-            Self.note("WINDOW    x=\(Int(f.minX)) y=\(Int(f.minY)) \(Int(f.width))x\(Int(f.height)) — \(placement)")
+            let frame = window.frame
+            let placement = frame.minX < 1 ? "PRIMARY" : "SECONDARY"
+            Self.note(
+                "WINDOW    x=\(Int(frame.minX)) y=\(Int(frame.minY)) "
+                    + "\(Int(frame.width))x\(Int(frame.height)) \(placement)"
+            )
         }
         return app
     }
@@ -91,8 +118,7 @@ final class VocabularyScreenshotUITests: XCTestCase {
         app.descendants(matching: .any)[identifier].firstMatch
     }
 
-    /// Lets SwiftUI's transitions land before the frame is grabbed. The shell
-    /// animates selection (0.22s) and presentation (0.18s) changes.
+    /// Lets SwiftUI's short selection and presentation transitions settle.
     private func settle(_ seconds: TimeInterval = 0.6) {
         RunLoop.current.run(until: Date().addingTimeInterval(seconds))
     }
@@ -105,16 +131,36 @@ final class VocabularyScreenshotUITests: XCTestCase {
 
         let url = Self.outputDirectory.appendingPathComponent("\(name).png")
         do {
-            try screenshot.pngRepresentation.write(to: url)
+            try screenshot.pngRepresentation.write(to: url, options: .atomic)
+            Self.capturedNames.insert(name)
             Self.note("OK        \(name).png — \(note)")
         } catch {
-            Self.note("ATTACHONLY \(name) — \(note) [file write failed: \(error.localizedDescription)]")
+            Self.note("ATTACHONLY \(name) — \(note) [\(error.localizedDescription)]")
         }
     }
 
-    private func shootWindow(_ app: XCUIApplication, _ name: String, _ note: String) {
+    private func shootWindow(
+        _ app: XCUIApplication,
+        _ name: String,
+        _ note: String,
+        containing identifier: String? = nil
+    ) {
         settle()
-        guard let window = app.windows.allElementsBoundByIndex.first(where: { $0.exists }) else {
+
+        if let identifier {
+            _ = fastWait(element(app, identifier), timeout: 4)
+        }
+        let windows = app.windows.allElementsBoundByIndex.filter(\.exists)
+        let window: XCUIElement?
+        if let identifier {
+            window = windows.first {
+                $0.descendants(matching: .any)[identifier].firstMatch.exists
+            }
+        } else {
+            window = windows.first
+        }
+
+        guard let window else {
             Self.note("NOWINDOW  \(name) — \(note)")
             return
         }
@@ -123,31 +169,35 @@ final class VocabularyScreenshotUITests: XCTestCase {
 
     private func shootElement(_ app: XCUIApplication, id: String, _ name: String, _ note: String) {
         guard let target = largestMatch(app, id, timeout: 3) else {
-            Self.note("MISSING   \(name) — no element '\(id)' (\(note))")
+            Self.note("MISSING   \(name) — no element '\(id)' [\(note)]")
             return
         }
         settle(0.3)
         save(target.screenshot(), named: name, note: "\(note) [element \(id)]")
     }
 
-    /// SwiftUI propagates an `accessibilityIdentifier` to descendants, so a
-    /// query can match both a container and the text inside it. The container
-    /// is the one carrying the tap gesture and the one worth photographing —
-    /// and it's always the largest by area.
-    private func largestMatch(_ app: XCUIApplication, _ identifier: String, timeout: TimeInterval) -> XCUIElement? {
+    /// SwiftUI can propagate an accessibility identifier to descendants. The
+    /// largest match is generally the actual tappable container.
+    private func largestMatch(
+        _ app: XCUIApplication,
+        _ identifier: String,
+        timeout: TimeInterval
+    ) -> XCUIElement? {
         let matches = app.descendants(matching: .any).matching(identifier: identifier)
         guard fastWait(matches.firstMatch, timeout: timeout) else { return nil }
-        let candidates = matches.allElementsBoundByIndex.filter(\.exists)
-        guard !candidates.isEmpty else { return nil }
-        return candidates.max { lhs, rhs in
-            (lhs.frame.width * lhs.frame.height) < (rhs.frame.width * rhs.frame.height)
-        }
+        return matches.allElementsBoundByIndex
+            .filter(\.exists)
+            .max {
+                ($0.frame.width * $0.frame.height) < ($1.frame.width * $1.frame.height)
+            }
     }
 
-    /// Clicks the container carrying an identifier. Reports and moves on if
-    /// it isn't there — a missed step must not abort the rest of the walk.
     @discardableResult
-    private func click(_ app: XCUIApplication, _ identifier: String, timeout: TimeInterval = 4) -> Bool {
+    private func click(
+        _ app: XCUIApplication,
+        _ identifier: String,
+        timeout: TimeInterval = 4
+    ) -> Bool {
         guard let target = largestMatch(app, identifier, timeout: timeout) else {
             Self.note("NAVFAIL   could not find '\(identifier)' to click")
             return false
@@ -157,11 +207,40 @@ final class VocabularyScreenshotUITests: XCTestCase {
         return true
     }
 
-    private func goToOverview(_ app: XCUIApplication) { click(app, "Sidebar.Overview") }
-    private func goToSessions(_ app: XCUIApplication) { click(app, "Sidebar.AllSessions") }
+    /// Falls back to the visible button title because AppKit occasionally
+    /// exposes only the label, rather than the SwiftUI identifier, to XCTest.
+    @discardableResult
+    private func clickButton(
+        _ app: XCUIApplication,
+        title: String,
+        identifier: String,
+        timeout: TimeInterval = 4
+    ) -> Bool {
+        if let target = largestMatch(app, identifier, timeout: timeout) {
+            target.click()
+            settle(0.5)
+            return true
+        }
 
-    /// The presentation picker is a segmented control; its segments surface as
-    /// radio buttons on this macOS version and as buttons on others.
+        let button = app.buttons[title].firstMatch
+        if fastWait(button, timeout: 2) {
+            button.click()
+            settle(0.5)
+            return true
+        }
+
+        Self.note("NAVFAIL   could not find '\(identifier)' or button '\(title)'")
+        return false
+    }
+
+    private func goToOverview(_ app: XCUIApplication) {
+        click(app, "Sidebar.Overview")
+    }
+
+    private func goToSessions(_ app: XCUIApplication) {
+        click(app, "Sidebar.AllSessions")
+    }
+
     private func choosePresentation(_ app: XCUIApplication, _ title: String) {
         let radio = app.radioButtons[title].firstMatch
         if fastWait(radio, timeout: 2) {
@@ -169,6 +248,7 @@ final class VocabularyScreenshotUITests: XCTestCase {
             settle(0.6)
             return
         }
+
         let segment = element(app, "Toolbar.PresentationPicker").buttons[title].firstMatch
         if fastWait(segment, timeout: 2) {
             segment.click()
@@ -178,71 +258,58 @@ final class VocabularyScreenshotUITests: XCTestCase {
         Self.note("NAVFAIL   no presentation segment '\(title)'")
     }
 
-    // MARK: - 1. Shell, Home, and the fleet presentations
+    private func assertCaptured(_ names: [String]) {
+        let missing = names.filter { !Self.capturedNames.contains($0) }
+        XCTAssertTrue(missing.isEmpty, "Missing documentation captures: \(missing.joined(separator: ", "))")
+    }
+
+    // MARK: - Shell, Home, and fleet presentations
 
     func testCaptureShellAndFleetSurfaces() {
         let app = launchedApp()
-        XCTAssertTrue(fastWait(element(app, "HomeDashboard"), timeout: 12), "app never reached the home dashboard")
+        XCTAssertTrue(
+            fastWait(element(app, "HomeDashboard"), timeout: 12),
+            "app never reached the home dashboard"
+        )
 
-        // §1 Window shell + §2 Home / Overview
-        shootWindow(app, "01-home-dashboard", "Shell: rail + detail column showing the Home dashboard")
-        shootElement(app, id: "HomeDashboard", "02-home-dashboard-element", "Home dashboard on its own")
+        shootWindow(app, "01-home-dashboard", "Shell and Home dashboard")
+        shootElement(app, id: "HomeDashboard", "02-home-dashboard-element", "Home dashboard")
         shootElement(app, id: "Home.AttentionQueue", "03-home-attention-queue", "Attention queue")
-        shootElement(app, id: "Home.RecentSessions", "04-home-recent-sessions", "Recent sessions list")
+        shootElement(app, id: "Home.RecentSessions", "04-home-recent-sessions", "Recent sessions")
         shootElement(app, id: "Home.RecentProjects", "05-home-projects-gallery", "Projects gallery")
-        shootElement(app, id: "Home.LaunchSummary", "06-composer-summary-line", "Composer's summary line")
+        shootElement(app, id: "Home.LaunchSummary", "06-composer-summary-line", "Composer summary")
 
-        // §1 Session list — the Sessions facet is the only one with a sidebar column
         goToSessions(app)
-        shootWindow(app, "07-sessions-focus", "Sessions facet: rail + session list + Focus presentation")
-        shootElement(app, id: "SidebarList", "08-session-list", "Session list (sidebar column)")
-        shootElement(app, id: "SessionRow-Fix login bug", "09-session-sidebar-row", "Session sidebar row / session card, row variant")
+        shootWindow(app, "07-sessions-focus", "Sessions facet and Focus presentation")
+        shootElement(app, id: "SidebarList", "08-session-list", "Session list")
+        shootElement(app, id: "SessionRow-Fix login bug", "09-session-sidebar-row", "Session row")
 
-        // §3 Grid. The grid starts empty — without adding sessions it renders
-        // GridEmptyState and there are no tiles to photograph.
         choosePresentation(app, "Grid")
         click(app, "Grid.AddAllButton")
         settle(1.0)
-        shootWindow(app, "10-presentation-grid", "Grid presentation with the grid toolbar controls")
+        shootWindow(app, "10-presentation-grid", "Grid presentation")
         shootElement(app, id: "GridView", "11-grid-view", "Mission control grid")
-        // The tile container has no identifier of its own — only
-        // `GridTile-<title>-Status` and `-FocusButton` are applied
-        // (SessionTileChrome.swift:39,121). `AXID.gridTile(_:)` is dead code.
-        // Crop a tile out of `11-grid-view.png` instead of shooting it here.
-        shootElement(app, id: "GridTile-Fix login bug-FocusButton", "12-tile-focus-button", "Tile focus button")
 
-        // §3 Board
         choosePresentation(app, "Board")
         shootWindow(app, "13-presentation-board", "Board presentation")
         shootElement(app, id: "KanbanBoard", "14-kanban-board", "Kanban board")
 
-        // §3 Focus — a single session's terminal filling the detail column
         goToSessions(app)
         click(app, "SessionRow-Fix login bug")
-        shootWindow(app, "15-presentation-focus", "Focus presentation: one terminal host filling the detail column")
+        shootWindow(app, "15-presentation-focus", "Focused terminal presentation")
+
+        assertCaptured([
+            "01-home-dashboard", "07-sessions-focus", "10-presentation-grid",
+            "11-grid-view", "13-presentation-board", "15-presentation-focus",
+        ])
     }
 
-    // MARK: - 2. Launchers and modals
+    // MARK: - Launchers, sheets, and settings
 
     func testCaptureLaunchersAndModals() {
         let app = launchedApp()
         XCTAssertTrue(fastWait(element(app, "HomeDashboard"), timeout: 12))
 
-        // §7 New Session window — the command bar design
-        app.typeKey("n", modifierFlags: .command)
-        settle(1.0)
-        shootWindow(app, "20-new-session-command-bar", "New Session window (CommandBarDesign) over its scrim")
-        app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
-        settle(1.2)
-
-        // §7 Command palette
-        app.typeKey("k", modifierFlags: .command)
-        settle(1.0)
-        shootWindow(app, "21-command-palette", "Command palette overlay")
-        app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
-        settle(1.2)
-
-        // §7 Delete session sheet — a real AppKit sheet, not an overlay
         goToSessions(app)
         if click(app, "SessionRow-Fix login bug") {
             app.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: .command)
@@ -251,72 +318,82 @@ final class VocabularyScreenshotUITests: XCTestCase {
             click(app, "DeleteSessionDialog.Cancel")
         }
 
-        // §8 Settings — a separate window. The sidebar rows are identified by
-        // `settings.sidebar.<rawValue>`, not the stale `Settings.*Tab` names in AXID.
+        goToOverview(app)
+        app.typeKey("n", modifierFlags: .command)
+        settle(1.0)
+        shootWindow(app, "20-new-session-command-bar", "New Session command bar")
+        app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        settle(1.0)
+
+        app.typeKey("k", modifierFlags: .command)
+        settle(1.0)
+        shootWindow(app, "21-command-palette", "Command palette")
+        app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        settle(1.0)
+
         app.typeKey(",", modifierFlags: .command)
-        settle(1.4)
-        shootWindow(app, "23-settings-general", "Settings window, General pane")
-        if click(app, "settings.sidebar.terminal") {
-            shootWindow(app, "24-settings-terminal", "Settings window, Terminal & Editor pane")
+        XCTAssertTrue(fastWait(element(app, "SettingsView"), timeout: 6))
+        shootWindow(app, "23-settings-general", "Settings General pane", containing: "SettingsView")
+
+        if clickButton(app, title: "Terminal & Editor", identifier: "settings.sidebar.terminal") {
+            shootWindow(app, "24-settings-terminal", "Settings Terminal & Editor pane", containing: "SettingsView")
         }
-        if click(app, "settings.sidebar.git") {
-            shootWindow(app, "25-settings-git", "Settings window, Git & Worktrees pane")
+        if clickButton(app, title: "Git & Worktrees", identifier: "settings.sidebar.git") {
+            shootWindow(app, "25-settings-git", "Settings Git & Worktrees pane", containing: "SettingsView")
         }
-        if click(app, "settings.sidebar.agents") {
-            shootWindow(app, "26-settings-agents", "Settings window, Agents pane")
+        if clickButton(app, title: "Coding Agents", identifier: "settings.sidebar.agents") {
+            shootWindow(app, "26-settings-agents", "Settings Coding Agents pane", containing: "SettingsView")
         }
+
+        assertCaptured([
+            "20-new-session-command-bar", "21-command-palette", "22-delete-session-sheet",
+            "24-settings-terminal", "25-settings-git", "26-settings-agents",
+        ])
     }
 
-    // MARK: - 3. Project workspace
+    // MARK: - Project workspace
 
     func testCaptureProjectWorkspace() {
         let app = launchedApp()
         XCTAssertTrue(fastWait(element(app, "HomeDashboard"), timeout: 12))
 
-        // The project card drills in via `.onTapGesture` on its container, so
-        // the click has to land on the container rather than a StaticText child.
         goToOverview(app)
-        click(app, "ProjectRow-Flotilla")
+        clickButton(app, title: "Flotilla", identifier: "ProjectRow-Flotilla")
         settle(1.0)
+        shootWindow(app, "30-project-overview", "Project Overview tab")
 
-        shootWindow(app, "30-project-overview", "Project detail: header, mode tabs, Overview tab")
-        shootElement(app, id: "ProjectOverview", "31-project-overview-element", "Project overview tab content")
-        shootElement(app, id: "ProjectWorktreesSection", "32-worktree-section", "Worktree section")
-
-        // §5 Git tab — Changes sub-tab hosts the diff panel
-        if click(app, "ProjectDetail.ModeTab-Git") {
-            shootWindow(app, "33-project-git-changes", "Git tab, Changes sub-tab, with the scope picker")
-            // Seed a change so the diff panel shows file rows, not its empty state.
-            if click(app, "DiffPanel.SimulateEditButton", timeout: 3) {
+        if clickButton(app, title: "Git", identifier: "ProjectDetail.ModeTab-Git") {
+            shootWindow(app, "33-project-git-changes", "Git Changes sub-tab")
+            if clickButton(app, title: "Simulate Edit", identifier: "DiffPanel.SimulateEditButton") {
                 settle(1.0)
-                shootWindow(app, "34-diff-panel-populated", "Diff panel with a changed file")
-                shootElement(app, id: "DiffPanel", "35-diff-panel-element", "Diff panel")
+                shootWindow(app, "34-diff-panel-populated", "Populated diff panel")
             }
-            if click(app, "ProjectGit.SubTab-Commits") {
-                settle(1.2)
-                shootWindow(app, "36-project-git-commits", "Git tab, Commits sub-tab: the commit graph")
+            if clickButton(app, title: "Commits", identifier: "ProjectGit.SubTab-Commits") {
+                settle(1.0)
+                shootWindow(app, "36-project-git-commits", "Commit graph and history")
             }
         }
 
-        // §5 Files tab — the file browser
-        if click(app, "ProjectDetail.ModeTab-Files") {
+        if clickButton(app, title: "Files", identifier: "ProjectDetail.ModeTab-Files") {
             settle(1.0)
-            shootWindow(app, "37-project-files", "Files tab: file tree + editor pane")
-            shootElement(app, id: "FileBrowser", "38-file-browser-element", "File browser")
+            shootWindow(app, "37-project-files", "File tree and editor pane")
         }
-
-        // §5 Skills and Rules tabs — both are the knowledge catalog
-        if click(app, "ProjectDetail.ModeTab-Skills") {
+        if clickButton(app, title: "Skills", identifier: "ProjectDetail.ModeTab-Skills") {
             settle(1.0)
-            shootWindow(app, "39-project-skills", "Skills tab: knowledge catalog, ledger design")
+            shootWindow(app, "39-project-skills", "Knowledge catalog ledger")
         }
-        if click(app, "ProjectDetail.ModeTab-Rules") {
+        if clickButton(app, title: "Rules", identifier: "ProjectDetail.ModeTab-Rules") {
             settle(1.0)
-            shootWindow(app, "40-project-rules", "Rules tab: knowledge catalog with the Add Template menu")
+            shootWindow(app, "40-project-rules", "Rules knowledge catalog")
             if click(app, "Knowledge.Item-CLAUDE.md") {
                 settle(0.8)
-                shootWindow(app, "41-knowledge-detail", "Knowledge detail pane rendering a rules file")
+                shootWindow(app, "41-knowledge-detail", "Knowledge detail pane")
             }
         }
+
+        assertCaptured([
+            "30-project-overview", "34-diff-panel-populated", "36-project-git-commits",
+            "37-project-files", "39-project-skills", "41-knowledge-detail",
+        ])
     }
 }

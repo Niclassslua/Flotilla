@@ -245,6 +245,7 @@
 		E26D09AD781C65D3B9F9C687 /* KnowledgeItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD408488BFF9C6CA7DFEB01A /* KnowledgeItemTests.swift */; };
 		E2C2A0347DCDD53F597ECCBE /* webpack.svg in Resources */ = {isa = PBXBuildFile; fileRef = ED25D359CAC4403EA0C7C322 /* webpack.svg */; };
 		E3D5654B50AD21C134302C39 /* SessionActivityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */; };
+		E48462CC0334836D16CCBA14 /* UITestWindowPlacer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A311B269879399C20B86A4F2 /* UITestWindowPlacer.swift */; };
 		E6D650C6ABC486AA43EAA808 /* folder-hook.svg in Resources */ = {isa = PBXBuildFile; fileRef = 8B92EDEF9A089878F5FAB62C /* folder-hook.svg */; };
 		E76DDCBA01511749C21BB8EF /* ProcessKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E3398E0DBBE2055AA3506D /* ProcessKitTests.swift */; };
 		E78CCDC78DB4736082465172 /* PersistenceKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A61B9F980C1F13B20C49816 /* PersistenceKitTests.swift */; };
@@ -442,6 +443,7 @@
 		A08DF18AC1D720EF07098FF9 /* folder-attachment.svg */ = {isa = PBXFileReference; path = "folder-attachment.svg"; sourceTree = "<group>"; };
 		A222B07A171441944E120CE6 /* folder-images.svg */ = {isa = PBXFileReference; path = "folder-images.svg"; sourceTree = "<group>"; };
 		A2B50E34FD372A5B5B90A202 /* svg.svg */ = {isa = PBXFileReference; path = svg.svg; sourceTree = "<group>"; };
+		A311B269879399C20B86A4F2 /* UITestWindowPlacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestWindowPlacer.swift; sourceTree = "<group>"; };
 		A3348D6A0B9FA97635592129 /* gemfile.svg */ = {isa = PBXFileReference; path = gemfile.svg; sourceTree = "<group>"; };
 		A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffPanelViewModelTests.swift; sourceTree = "<group>"; };
 		A632307236D4D1877F74269E /* kotlin.svg */ = {isa = PBXFileReference; path = kotlin.svg; sourceTree = "<group>"; };
@@ -967,6 +969,7 @@
 				179ED2D6FC5AA9AEAF3BE74D /* FlotillaApp.swift */,
 				21B8F05E680043FBA0A1BDE3 /* FlotillaNotificationDelegate.swift */,
 				1BD0E51ECF35F3C9E7E50FB0 /* PerfLog.swift */,
+				A311B269879399C20B86A4F2 /* UITestWindowPlacer.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1385,6 +1388,7 @@
 				56EC7892F3B39162BFBD3136 /* TerminalHostView.swift in Sources */,
 				9084A8560CCCC470111E48D6 /* TerminalManager.swift in Sources */,
 				E869833291FD222D50F4143B /* TmuxSessionWrapping.swift in Sources */,
+				E48462CC0334836D16CCBA14 /* UITestWindowPlacer.swift in Sources */,
 				FAB72A24183523FBDF448F9C /* WorkspaceNavigation.swift in Sources */,
 				1EE083B23BC3D3935B8148E9 /* WorkspaceNavigator.swift in Sources */,
 				083EA44A9ACE8EFFB94A9377 /* WorkspaceToolbar.swift in Sources */,

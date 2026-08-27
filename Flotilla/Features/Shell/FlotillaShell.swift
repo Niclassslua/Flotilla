@@ -78,9 +78,11 @@ struct FlotillaShell: View {
     /// Inert outside UI testing.
     @ViewBuilder
     private var uiTestWindowPlacer: some View {
+        #if DEBUG
         if ProcessInfo.processInfo.environment["UI_TESTING"] == "1" {
-            UITestWindowPlacer()
+            UITestWindowPlacer(placement: .fillPrimaryDisplay)
         }
+        #endif
     }
 
     private var facet: SidebarFacet { SidebarFacet(navigator.selection) }
@@ -477,32 +479,4 @@ private struct EscapeKeyCatcher: NSViewRepresentable {
             }
         }
     }
-}
-
-/// Moves the window onto the primary display while UI testing.
-///
-/// `XCUIScreenshot` cannot capture a window on a secondary display — it fails
-/// with "Image creation failed", and that error aborts the whole test method.
-/// Where macOS opens the window is not something the test can influence: the
-/// window server picks the display, and neither the persisted
-/// `NSWindow Frame …` default, `-ApplePersistenceIgnoreState`, nor an
-/// `NSArgumentDomain` override changes its mind. Positioning the window from
-/// inside the app is the one approach that actually works.
-///
-/// Only mounted under `UI_TESTING=1` (see `FlotillaShell.uiTestWindowPlacer`),
-/// so it has no effect on a real launch.
-private struct UITestWindowPlacer: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        // The window isn't attached yet during `makeNSView`.
-        DispatchQueue.main.async {
-            guard let window = view.window,
-                  let primary = NSScreen.screens.first else { return }
-            guard window.frame.minX > 1 || window.frame.minY < 0 else { return }
-            window.setFrame(primary.visibleFrame, display: true)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
 }
