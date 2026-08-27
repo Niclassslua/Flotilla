@@ -24,8 +24,9 @@ packages:
     path: Packages/PersistenceKit
   SettingsKit:
     path: Packages/SettingsKit
-  MarkdownParser:
-    path: Packages/MarkdownParser
+  Textual:
+    url: https://github.com/gonzalezreal/textual
+    from: 0.5.0
 
 settings:
   base:
@@ -62,7 +63,8 @@ targets:
       - package: TerminalKit
       - package: PersistenceKit
       - package: SettingsKit
-      - package: MarkdownParser
+      - package: Textual
+        product: Textual
 
   FlotillaUnitTests:
     type: bundle.unit-test
@@ -80,7 +82,6 @@ targets:
       - package: TerminalKit
       - package: PersistenceKit
       - package: SettingsKit
-      - package: MarkdownParser
     settings:
       ENABLE_HARDENED_RUNTIME: NO
 
@@ -91,7 +92,6 @@ targets:
       - path: FlotillaUITests
     dependencies:
       - target: Flotilla
-      - package: MarkdownParser
     settings:
       ENABLE_HARDENED_RUNTIME: NO
 
