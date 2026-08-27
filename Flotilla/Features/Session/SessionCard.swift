@@ -144,12 +144,12 @@ struct SessionCard<Terminal: View>: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                StatusBadge(session.status, variant: .compact)
-                Text(StatusPresentation.label(for: session.status))
+                StatusBadge(session.status, waitingReason: session.waitingReason, variant: .compact)
+                Text(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
                     .font(.caption2.weight(.medium))
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(StatusPresentation.label(for: session.status))
+            .accessibilityLabel(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
             .accessibilityIdentifier(variant == .board ? "KanbanCard-\(session.title)-Status" : "GridTile-\(session.title)-Status")
 
             Button(action: onTap) {
@@ -263,7 +263,7 @@ struct SessionCard<Terminal: View>: View {
 
     private var cardHeader: some View {
         HStack(spacing: 8) {
-            StatusBadge(session.status, variant: .compact)
+            StatusBadge(session.status, waitingReason: session.waitingReason, variant: .compact)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.title)
@@ -339,7 +339,7 @@ struct SessionCard<Terminal: View>: View {
     // MARK: - Compact Variant (Activity strip, etc.)
 
     private var compactView: some View {
-        StatusBadge(session.status, variant: .compact)
+        StatusBadge(session.status, waitingReason: session.waitingReason, variant: .compact)
     }
 
     // MARK: - Shared Components
@@ -377,14 +377,7 @@ struct SessionCard<Terminal: View>: View {
     }
 
     private var statusColor: Color {
-        switch session.status {
-        case .working: return FlotillaColors.statusWorking
-        case .idle: return FlotillaColors.statusIdle
-        case .waitingForInput: return FlotillaColors.statusWaitingForInput
-        case .ready: return FlotillaColors.statusReady
-        case .finished: return FlotillaColors.statusFinished
-        case .crashed: return FlotillaColors.statusCrashed
-        }
+        StatusPresentation.color(for: session.status)
     }
 
     private var metadataLine: some View {
@@ -418,17 +411,18 @@ struct SessionCard<Terminal: View>: View {
             ForEach(StatusPresentation.attentionOrder, id: \.self) { status in
                 Text(StatusPresentation.label(for: status)).hidden()
             }
-            Text(StatusPresentation.label(for: session.status))
+            Text(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
                 .foregroundStyle(statusColor)
         }
         .font(.caption2.weight(.semibold))
         .fixedSize()
         .animation(.easeInOut(duration: 0.18), value: session.status)
+        .animation(.easeInOut(duration: 0.18), value: session.waitingReason)
         // Collapsed into one element so the word reports the status as its
         // label; the UI suite asserts on exactly this (same pattern as the
         // grid tile status dot).
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(StatusPresentation.label(for: session.status))
+        .accessibilityLabel(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
         .accessibilityIdentifier("SessionRow-\(session.title)-Status")
     }
 

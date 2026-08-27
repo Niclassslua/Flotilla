@@ -163,14 +163,14 @@ public struct HookConfigurationWriter: HookConfiguring {
     /// goes through `configureHooks`'s shared-file write.
     ///
     /// For Claude Code: a `--settings '<json>'` flag carrying only this
-    /// session's own `Notification`/`Stop`/`PostToolUse` hook groups, each
+    /// session's own lifecycle and interactive hook groups, each
     /// running a shell one-liner that forwards the hook's own JSON stdin —
     /// which already carries `hook_event_name` — into `eventFilePath`.
     /// Claude Code merges `--settings` additively with the project's own
     /// `.claude/settings.json` rather than replacing it, so nothing a user
     /// or another tool configured there is disturbed.
     ///
-    /// For Codex: enables the stable hooks feature and supplies three inline
+    /// For Codex: enables the stable hooks feature and supplies four inline
     /// hook groups. The command path is TOML-encoded and remains constant
     /// across sessions, while the destination stays process-scoped in the
     /// environment.
@@ -189,9 +189,17 @@ public struct HookConfigurationWriter: HookConfiguring {
                     ["type": "command", "command": command]
                 ]
             ]
+            let interactiveHookGroup: [String: Any] = [
+                "matcher": "AskUserQuestion|ExitPlanMode",
+                "hooks": [
+                    ["type": "command", "command": command]
+                ]
+            ]
             let settings: [String: Any] = [
                 "hooks": [
                     "Notification": [hookGroup],
+                    "PreToolUse": [interactiveHookGroup],
+                    "PermissionRequest": [hookGroup],
                     "Stop": [hookGroup],
                     "PostToolUse": [hookGroup]
                 ]
@@ -207,6 +215,7 @@ public struct HookConfigurationWriter: HookConfiguring {
             let hookGroup = "[{matcher=\"\",hooks=[{type=\"command\",command=\(commandLiteral)}]}]"
             return [
                 "--config", "features.hooks=true",
+                "--config", "hooks.PreToolUse=\(hookGroup)",
                 "--config", "hooks.PermissionRequest=\(hookGroup)",
                 "--config", "hooks.PostToolUse=\(hookGroup)",
                 "--config", "hooks.Stop=\(hookGroup)"
@@ -255,11 +264,10 @@ public struct HookConfigurationWriter: HookConfiguring {
     /// means an async tool call (e.g. a long-running shell command) is
     /// still outstanding and no status change should happen yet.
     ///
-    /// (A `planFinished`-shaped signal — `PostToolUse` where
+    /// A `planFinished`-shaped signal — `PostToolUse` where
     /// `toolCall.name == "write_to_file"` and
-    /// `args.ArtifactMetadata.RequestFeedback == true` — was also found but
-    /// has no corresponding `SessionStatus` case; this is where its
-    /// detection would hook in if that case is ever added.)
+    /// `args.ArtifactMetadata.RequestFeedback == true` — is classified as a
+    /// plan waiting for approval by `HookEventReceiver`.
     private static func configureAntigravityHooks(
         workingDirectory: URL,
         supportDirectory: URL
@@ -442,7 +450,8 @@ public struct HookConfigurationWriter: HookConfiguring {
     /// Writes (fully overwrites — no merge, no lock) the stable plugin file.
     /// `tool.execute.after` → working
     /// and `session.idle` → ready are live-verified; `permission.asked`/
-    /// `question.asked` → waitingForInput are wired on the strength of
+    /// `question.asked` → waitingForInput with distinct reasons are wired on
+    /// the strength of
     /// every other event name from the same source checking out live, not
     /// directly observed themselves.
     private static func configureOpenCodeHooks(

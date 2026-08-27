@@ -171,12 +171,13 @@ struct SessionRow: View {
             ForEach(StatusPresentation.attentionOrder, id: \.self) { status in
                 Text(StatusPresentation.label(for: status)).hidden()
             }
-            Text(StatusPresentation.label(for: session.status))
+            Text(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
                 .foregroundStyle(statusColor)
         }
         .font(.caption2.weight(.semibold))
         .fixedSize()
         .animation(.easeInOut(duration: 0.18), value: session.status)
+        .animation(.easeInOut(duration: 0.18), value: session.waitingReason)
     }
 
     private var rowBackground: some View {

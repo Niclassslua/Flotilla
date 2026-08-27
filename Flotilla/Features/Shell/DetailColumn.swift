@@ -195,7 +195,7 @@ case .grid:
         case .allSessions:
             let working = store.sessions.filter { $0.status == .working }.count
             let needsInput = store.sessions.filter { $0.status == .waitingForInput }.count
-            let ready = store.sessions.filter { $0.status == .ready }.count
+            let ready = store.sessions.filter { $0.status == .readyForReview }.count
             return "\(working) working · \(needsInput) need input · \(ready) ready"
         case .project(let id):
             let sessions = store.sessions.filter { $0.projectID == id }

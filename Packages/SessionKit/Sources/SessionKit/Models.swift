@@ -71,11 +71,23 @@ public enum AgentEffort: String, Codable, CaseIterable, Sendable, Identifiable {
 
 public enum SessionStatus: String, Codable, Sendable, CaseIterable, Identifiable {
     case working
-    case idle
     case waitingForInput
-    case ready
-    case finished
+    /// The agent's turn ended, or its process exited cleanly, and the work is
+    /// there to look at. Absorbs what used to be split across `idle` and
+    /// `finished`. Not terminal: an agent that resumes moves back to `working`.
+    case readyForReview
     case crashed
+
+    public var id: String { rawValue }
+}
+
+/// The action a blocked agent needs from the user. Kept separate from
+/// `SessionStatus` so status-based boards can continue grouping every
+/// blocked session under `waitingForInput` while the UI says what is needed.
+public enum SessionWaitingReason: String, Codable, Sendable, CaseIterable, Identifiable {
+    case permission
+    case question
+    case planApproval
 
     public var id: String { rawValue }
 }
@@ -152,12 +164,15 @@ public struct KanbanColumn: Codable, Hashable, Sendable, Identifiable {
 
     public static func defaultStatusColumns() -> [KanbanColumn] {
         [
-            KanbanColumn(id: builtInID(kind: 1, index: 0), title: "Working", order: 0, statusFilter: .working),
-            KanbanColumn(id: builtInID(kind: 1, index: 1), title: "Waiting", order: 1, statusFilter: .waitingForInput),
-            KanbanColumn(id: builtInID(kind: 1, index: 2), title: "Ready", order: 2, statusFilter: .ready),
-            KanbanColumn(id: builtInID(kind: 1, index: 3), title: "Idle", order: 3, statusFilter: .idle),
-            KanbanColumn(id: builtInID(kind: 1, index: 4), title: "Finished", order: 4, statusFilter: .finished),
-            KanbanColumn(id: builtInID(kind: 1, index: 5), title: "Crashed", order: 5, statusFilter: .crashed),
+            // `statusFilter: nil` is the "no status yet" column: created, no
+            // work observed. `getSessionsForColumn` matches on
+            // `column.statusFilter == session.status`, so a nil filter meets a
+            // nil status here and nothing else does.
+            KanbanColumn(id: builtInID(kind: 1, index: 6), title: "Unstarted", order: 0, statusFilter: nil),
+            KanbanColumn(id: builtInID(kind: 1, index: 0), title: "Working", order: 1, statusFilter: .working),
+            KanbanColumn(id: builtInID(kind: 1, index: 1), title: "Waiting", order: 2, statusFilter: .waitingForInput),
+            KanbanColumn(id: builtInID(kind: 1, index: 2), title: "Ready for Review", order: 3, statusFilter: .readyForReview),
+            KanbanColumn(id: builtInID(kind: 1, index: 5), title: "Crashed", order: 4, statusFilter: .crashed),
         ]
     }
 
@@ -245,7 +260,13 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public var projectID: UUID?
     public var workingDirectory: URL
     public var worktree: WorktreeInfo?
-    public var status: SessionStatus
+    /// `nil` until the agent has been observed doing or finishing anything —
+    /// a session that was created but whose process has produced no status
+    /// signal yet. Once set it never returns to `nil`.
+    public var status: SessionStatus?
+    /// More specific meaning for `waitingForInput`; always `nil` in every
+    /// other status.
+    public var waitingReason: SessionWaitingReason?
     /// Kanban board column assignment (for custom column mode)
     public var kanbanColumnID: UUID?
     /// Workflow stage (for workflow column mode)
@@ -268,7 +289,8 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         projectID: UUID?,
         workingDirectory: URL,
         worktree: WorktreeInfo? = nil,
-        status: SessionStatus = .idle,
+        status: SessionStatus? = nil,
+        waitingReason: SessionWaitingReason? = nil,
         kanbanColumnID: UUID? = nil,
         workflowStage: WorkflowStage? = nil,
         agentSessionID: String? = nil,
@@ -286,6 +308,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         self.workingDirectory = workingDirectory
         self.worktree = worktree
         self.status = status
+        self.waitingReason = status == .waitingForInput ? waitingReason : nil
         self.kanbanColumnID = kanbanColumnID
         self.workflowStage = workflowStage
         self.agentSessionID = agentSessionID

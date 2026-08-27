@@ -22,7 +22,7 @@ Provider hook/plugin
   └─ appends one self-describing JSON object per line
 
 HookEventReceiver                       SessionScreenMonitor
-  └─ maps structured events                 └─ classifies terminal UI
+  └─ maps status + waiting reason            └─ classifies terminal UI
                     └──────────┬───────────┘
                          HookCoordinator
                               ├─ AppStore.applyObservedStatus
@@ -61,17 +61,36 @@ created and deleted.
 | Provider | Installation | Structured event | Flotilla status | Notes |
 | --- | --- | --- | --- | --- |
 | Claude Code | Per-process `--settings <json>` | `PostToolUse` | `working` | Does not modify `.claude/settings.json`. |
-| Claude Code | Per-process `--settings <json>` | `Notification` | `waitingForInput` | Provider payload already contains `hook_event_name`. |
-| Claude Code | Per-process `--settings <json>` | `Stop` | `ready` | Project settings remain additive and untouched. |
+| Claude Code | Per-process `--settings <json>` | `PreToolUse` for `AskUserQuestion` / `ExitPlanMode` | `waitingForInput` (`question` / `planApproval`) | Exact interactive-tool signal. |
+| Claude Code | Per-process `--settings <json>` | `PermissionRequest` | `waitingForInput` (`permission`, or the interactive-tool reason) | Exact approval signal. |
+| Claude Code | Per-process `--settings <json>` | `Notification` | `readyForReview` for `idle_prompt`; waiting for `permission_prompt` / `elicitation_dialog` | Notification subtype is retained instead of treating every notification as blocked. |
+| Claude Code | Per-process `--settings <json>` | `Stop` | `readyForReview` | Project settings remain additive and untouched. |
+| Codex CLI | Per-process inline `--config` hooks | `PreToolUse` | `working`, or `waitingForInput` (`question`) for `request_user_input` | Gives questions a structured reason before the answer arrives. |
 | Codex CLI | Per-process inline `--config` hooks | `PostToolUse` | `working` | The stable support wrapper copies Codex's self-describing JSON stdin; no project file is changed. |
-| Codex CLI | Per-process inline `--config` hooks | `PermissionRequest` | `waitingForInput` | Wrapper exits 0 with no stdout, so the normal approval UI remains authoritative. |
-| Codex CLI | Per-process inline `--config` hooks | `Stop` | `ready` | Hook execution is enabled for the launch with `features.hooks=true`. |
+| Codex CLI | Per-process inline `--config` hooks | `PermissionRequest` | `waitingForInput` (`permission`) | Wrapper exits 0 with no stdout, so the normal approval UI remains authoritative. |
+| Codex CLI | Per-process inline `--config` hooks | `Stop` | `readyForReview`, or `waitingForInput` (`planApproval`) when Plan mode reports a null normal assistant message | Hook execution is enabled for the launch with `features.hooks=true`. |
 | OpenCode | Stable `.opencode/plugins/flotilla-status.js` | `tool.execute.after` | `working` | Legacy per-session Flotilla plugins are removed on configuration. |
-| OpenCode | Stable project plugin | `permission.asked`, `question.asked` | `waitingForInput` | The event handler is observational and supplies no decision. |
-| OpenCode | Stable project plugin | `session.idle` | `ready` | OpenCode's `idle` means the turn ended and the composer is available. |
-| Antigravity | Stable `.agents/hooks.json` `flotilla-status` group | `PreToolUse` | `working` | `ask_question` is mapped to `waitingForInput` instead. |
-| Antigravity | Stable shared hook group | `PostToolUse` | `working` | Wrapper adds the event name because the provider payload omits it. |
-| Antigravity | Stable shared hook group | `Stop` with `fullyIdle: true` | `ready` | `fullyIdle: false` is ignored while asynchronous work remains. |
+| OpenCode | Stable project plugin | `permission.asked`, `question.asked` | `waitingForInput` (`permission` / `question`) | The event handler is observational and supplies no decision. |
+| OpenCode | Stable project plugin | `session.idle` | `readyForReview` | OpenCode's `idle` means the turn ended and the composer is available. |
+| Antigravity | Stable `.agents/hooks.json` `flotilla-status` group | `PreToolUse` | `working` | `ask_question` maps to `waitingForInput` (`question`) instead. |
+| Antigravity | Stable shared hook group | `PostToolUse` | `working`, or `waitingForInput` (`planApproval`) when an artifact requests plan feedback | Wrapper adds the event name because the provider payload omits it. |
+| Antigravity | Stable shared hook group | `Stop` with `fullyIdle: true` | `readyForReview` | `fullyIdle: false` is ignored while asynchronous work remains. |
+
+`SessionStatus` is the broad board/filter state and has four values:
+`working`, `waitingForInput`, `readyForReview`, and `crashed`. A session
+that has produced no signal yet — created, but not yet observed doing or
+finishing anything — has **no** status (`Session.status` is `nil`); it sits
+in the board's "Unstarted" column and shows no status badge. Once set, a
+status never returns to `nil`. `readyForReview` folds in what were two
+separate states — `idle` (a quiet end-of-turn) and `finished` (a clean
+process exit) — and is not terminal. `crashed` is: it reopens only through
+`working`, where an explicit restart lands.
+
+When the status is `waitingForInput`, `SessionWaitingReason` supplies the
+action shown in the UI: `permission` → **Needs Permission**, `question` →
+**Needs Answer**, and `planApproval` → **Plan Ready**. The reason is
+persisted with the session and cleared whenever the session leaves
+`waitingForInput`.
 
 Antigravity interprets `PreToolUse` stdout as a live decision. Every generated
 wrapper therefore returns `{"decision":"allow"}` for that event after
@@ -93,40 +112,46 @@ Two independent sources move a session between states: the provider hook
 stream (`HookEventReceiver`) and the rendered terminal
 (`SessionScreenMonitor` / `TerminalScreenHeuristic`). Either can reach any
 state below. `SessionStatusObservationArbiter` lets a structured hook
-Ready/waiting observation suppress a contradictory screen Idle/Ready
-fallback, and every accepted observation must still be a legal
-`SessionStatusMachine` transition.
+waiting observation survive a contradictory screen fallback, and every
+accepted observation must still be a legal `SessionStatusMachine`
+transition.
 
 Each cell lists the hook event(s) that map to that status for that provider.
-The bottom row is the shared terminal-screen fallback, which applies to
-every provider and stays active even when hooks are wired; it inspects only
-the bottom `inspectedTailLines` (8) non-empty lines, case-insensitively.
-A dash means no hook event of that provider produces the status — it is
-reachable only through the screen fallback (or, for `idle`, as the initial
-status). In the **Waiting** column, `→ reason` is the `SessionWaitingReason`
-persisted with the status: `permission` → **Needs Permission**, `question` →
-**Needs Answer**, `planApproval` → **Plan Ready**.
+The **Terminal-screen fallback** row is shared by every provider and stays
+active even when hooks are wired; it inspects only the bottom
+`inspectedTailLines` (8) non-empty lines, case-insensitively. A dash means
+no hook event of that provider produces the status — it is reachable only
+through the screen fallback (or, for `crashed`, only through an
+authoritative process exit). In the **Waiting** column, `→ reason` is the
+`SessionWaitingReason` persisted with the status: `permission` → **Needs
+Permission**, `question` → **Needs Answer**, `planApproval` → **Plan Ready**.
 
-| Source | Working | Waiting (`waitingForInput`) | Ready | Idle | Finished |
-| --- | --- | --- | --- | --- | --- |
-| **Claude Code** | `PostToolUse`; `PreToolUse` for any tool other than `AskUserQuestion` / `ExitPlanMode` | `PreToolUse` or `PermissionRequest` for `AskUserQuestion` → `question`, for `ExitPlanMode` → `planApproval`; any other `PermissionRequest` → `permission`; `Notification`/`permission_prompt` → `permission` (`planApproval` if the message mentions a plan); `Notification`/`elicitation_dialog` → `question` | `Stop`; `Notification`/`idle_prompt` | — | — |
-| **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — | — |
-| **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — | — |
-| **Antigravity** | `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval` | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation) | — | — |
-| **Terminal-screen fallback** (every provider) | an interrupt hint — `esc to interrupt`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; or shows a numbered choice list with a selection caret; or the prompt heuristic reads the prompt as waiting | a composer prompt (`❯`, `> `, `› `) with non-empty transcript text somewhere above it | the inspected tail has no interrupt hint, no plan / permission / question marker, no finished marker, and no composer-with-transcript — an empty composer with nothing above it. Also the status a session is persisted with before its process emits anything | the inspected tail contains `agent exited`, `pane is dead`, or `process finished`. Also set directly when the agent process exits with status code 0 (a non-zero exit code produces `crashed`) |
+There is no column for the absence of a status (`nil`, "Unstarted"): no hook
+or screen observation produces it. It is only ever the value a session is
+created with, before its process has been observed doing anything.
 
-Two `SessionStatusMachine` constraints shape which of these are reachable
-when:
+| Source | Working | Waiting (`waitingForInput`) | Ready for Review | Crashed |
+| --- | --- | --- | --- | --- |
+| **Claude Code** | `PostToolUse`; `PreToolUse` for any tool other than `AskUserQuestion` / `ExitPlanMode` | `PreToolUse` or `PermissionRequest` for `AskUserQuestion` → `question`, for `ExitPlanMode` → `planApproval`; any other `PermissionRequest` → `permission`; `Notification`/`permission_prompt` → `permission` (`planApproval` if the message mentions a plan); `Notification`/`elicitation_dialog` → `question` | `Stop`; `Notification`/`idle_prompt` | — |
+| **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — |
+| **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — |
+| **Antigravity** | `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval` | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation) | — |
+| **Terminal-screen fallback** (every provider) | an interrupt hint — `esc to interrupt`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; or shows a numbered choice list with a selection caret; or the prompt heuristic reads the prompt as waiting | anything else: a composer prompt with transcript above it, a dead-pane marker (`agent exited`, `pane is dead`, `process finished`), or an otherwise unremarkable screen | — |
+| **Process exit** | — | — | exit status code 0 (also fires `onSessionFinished`) | any non-zero exit code, or a launch/relaunch failure |
 
-- There is no `idle → ready` edge, so a session reaches **Ready** only from
-  Working or Waiting — never straight from a freshly created Idle.
-- **Finished** is terminal apart from an explicit restart
-  (`finished → working`).
+`SessionStatusMachine` shapes which of these are reachable when:
 
-A screen `idle` or `ready` is also dropped by
-`SessionStatusObservationArbiter` while the most recent hook observation was
-`ready` or `waitingForInput`, so a recognised structured event is not undone
-by an unrecognised prompt style.
+- `working`, `waitingForInput`, and `readyForReview` interchange freely, so a
+  session that looked review-ready and then resumes work simply moves back.
+- `crashed` is near-terminal: it reopens only via `working`, which is where
+  an explicit restart lands. No screen- or hook-derived status can leave it.
+- A session with no status yet (`nil`) accepts any first value.
+
+A screen `readyForReview` is dropped by `SessionStatusObservationArbiter`
+while the most recent hook observation was `waitingForInput`, so a
+recognised Plan Ready / permission event is not undone by an unrecognised
+prompt style. Visible work (a `working` observation) starts a new episode
+and clears that hold.
 
 ## Components
 
@@ -168,16 +193,20 @@ do nothing without `FLOTILLA_HOOK_EVENT_FILE`.
 ### `HookEventReceiver`
 
 Tails one session's JSONL file at a 400 ms interval and maps only known event
-names. Unknown events, malformed lines, missing files, and provider payloads
-without required fields produce no status. `start()` and `stop()` are
+names into `SessionStatusObservation` values. Unknown events, malformed lines,
+missing files, and provider payloads without required fields produce no
+observation. `start()` and `stop()` are
 idempotent and lock-protected; deinitialization cancels polling and finishes
 the stream.
 
 ### `HookCoordinator`
 
 Runs one `HookEventReceiver` and one `SessionScreenMonitor` for each live
-process. Both sources use the same status funnel and `SessionStatusMachine`,
-so illegal terminal-state transitions are rejected centrally. A
+process. Both sources use the same observation funnel and
+`SessionStatusMachine`, so an illegal `crashed → …` transition is rejected
+centrally. A structured `waitingForInput` hook observation outranks an
+ambiguous screen `readyForReview` fallback, preventing the fallback poller
+from immediately undoing an exact event. A
 `WaitingNotificationGate` sends one notification per waiting episode rather
 than one per poll or hook event.
 
@@ -193,8 +222,10 @@ than one per poll or hook event.
 - Event file replaced on restart: receiver resets its generation and reads
   from byte zero.
 - Unknown provider event: no status transition.
-- Competing status source: all changes still pass through
-  `SessionStatusMachine`; unchanged and illegal transitions are no-ops.
+- Competing status source: a structured `waitingForInput` observation
+  suppresses a weaker screen `readyForReview` fallback; accepted changes
+  still pass through `SessionStatusMachine`, where unchanged and illegal
+  transitions are no-ops.
 
 ## Testing
 
@@ -222,7 +253,7 @@ xcodebuild -project Flotilla.xcodeproj -scheme Flotilla \
 Use provider CLIs for end-to-end validation because unit tests verify the
 generated contracts, not whether a third-party release fires every documented
 event. For Codex, open `/hooks` to review the session hook source and confirm
-the three Flotilla event groups are active.
+the four Flotilla event groups are active.
 
 ## Adding or changing a provider
 

@@ -1,34 +1,28 @@
 import Foundation
 
-/// The only place transition legality is decided. A cleanly finished task is
-/// terminal; a crashed CLI may be explicitly restarted after configuration
-/// or environment issues are corrected.
+/// The only place transition legality is decided.
+///
+/// A session with no status yet (`nil` — created, no work observed) accepts
+/// any first status. `crashed` is the one near-terminal state: it reopens
+/// only through `working`, which is where an explicit restart lands.
+/// Everything else moves freely, so a session that looked review-ready and
+/// then resumes work is never stuck.
 public struct SessionStatusMachine: Sendable {
     public init() {}
 
-    public func canTransition(from: SessionStatus, to: SessionStatus) -> Bool {
-        switch (from, to) {
-        // An idle session can absolutely need input: an agent that has been
-        // quiet long enough to look idle then asks for permission. Blocking
-        // this edge left those sessions reading "Idle" forever.
-        case (.idle, .working), (.idle, .waitingForInput), (.idle, .finished), (.idle, .crashed):
+    public func canTransition(from: SessionStatus?, to: SessionStatus) -> Bool {
+        guard let from else {
+            // First observed status for a brand-new session.
             return true
-        case (.working, .idle), (.working, .waitingForInput), (.working, .ready), (.working, .finished), (.working, .crashed):
-            return true
-        case (.waitingForInput, .working), (.waitingForInput, .idle),
-             (.waitingForInput, .ready), (.waitingForInput, .finished), (.waitingForInput, .crashed):
-            return true
-        case (.ready, .working), (.ready, .waitingForInput), (.ready, .idle), (.ready, .finished), (.ready, .crashed):
-            return true
-        case (.crashed, .working):
-            return true
-        case (.finished, .working):
-            // Allow restarting a finished session — the agent may have completed
-            // its task and is now waiting for new instructions at the prompt.
-            return true
-        default:
+        }
+        if from == to {
+            // Self-transitions are no-ops handled by callers, never legal here.
             return false
         }
+        if from == .crashed {
+            return to == .working
+        }
+        return true
     }
 
     /// Returns `session` unchanged if the transition isn't legal, and logs the
@@ -37,11 +31,14 @@ public struct SessionStatusMachine: Sendable {
         guard canTransition(from: session.status, to: newStatus) else {
             // Log illegal transition for diagnostics — this used to be a silent
             // no-op, which made it hard to understand why sessions got stuck.
-            print("SessionStatusMachine: illegal transition from \(session.status) to \(newStatus), session \(session.id) unchanged")
+            print("SessionStatusMachine: illegal transition from \(session.status.map { "\($0)" } ?? "nil") to \(newStatus), session \(session.id) unchanged")
             return session
         }
         var updated = session
         updated.status = newStatus
+        if newStatus != .waitingForInput {
+            updated.waitingReason = nil
+        }
         updated.lastActiveAt = now
         return updated
     }

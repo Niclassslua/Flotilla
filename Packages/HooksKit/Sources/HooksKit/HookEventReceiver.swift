@@ -2,9 +2,10 @@ import Foundation
 import SessionKit
 
 /// Tails the JSONL file `HookConfigurationWriter` points a launched agent's
-/// hooks at, and emits the status each event implies.
+/// hooks at, and emits the status and waiting reason each event implies.
 ///
-/// Same `AsyncStream<SessionStatus>` shape as `SessionScreenMonitor`, so
+/// Same `AsyncStream<SessionStatusObservation>` shape as
+/// `SessionScreenMonitor`, so
 /// `HookCoordinator` can run this alongside the screen monitor with no
 /// change to how either stream is consumed — see `HookCoordinator.observe`.
 /// Strictly observational, matching HooksKit's module-wide constraint: this
@@ -14,8 +15,8 @@ public final class HookEventReceiver: @unchecked Sendable {
     private let filePath: URL
     private let agent: AgentKind
     private let pollInterval: Duration
-    private let continuation: AsyncStream<SessionStatus>.Continuation
-    public let statusStream: AsyncStream<SessionStatus>
+    private let continuation: AsyncStream<SessionStatusObservation>.Continuation
+    public let observationStream: AsyncStream<SessionStatusObservation>
     private let taskLock = NSLock()
     private var task: Task<Void, Never>?
 
@@ -23,8 +24,8 @@ public final class HookEventReceiver: @unchecked Sendable {
         self.filePath = filePath
         self.agent = agent
         self.pollInterval = pollInterval
-        var continuation: AsyncStream<SessionStatus>.Continuation!
-        self.statusStream = AsyncStream { continuation = $0 }
+        var continuation: AsyncStream<SessionStatusObservation>.Continuation!
+        self.observationStream = AsyncStream { continuation = $0 }
         self.continuation = continuation
     }
 
@@ -66,8 +67,8 @@ public final class HookEventReceiver: @unchecked Sendable {
                                 pendingData.removeSubrange(...newlineIndex)
                                 guard !lineData.isEmpty,
                                       let line = String(data: lineData, encoding: .utf8) else { continue }
-                                if let status = Self.status(forLine: line, agent: agent) {
-                                    continuation.yield(status)
+                                if let observation = Self.observation(forLine: line, agent: agent) {
+                                    continuation.yield(observation)
                                 }
                             }
                         }
@@ -91,7 +92,7 @@ public final class HookEventReceiver: @unchecked Sendable {
         continuation.finish()
     }
 
-    static func status(forLine line: String, agent: AgentKind) -> SessionStatus? {
+    static func observation(forLine line: String, agent: AgentKind) -> SessionStatusObservation? {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
@@ -99,9 +100,29 @@ public final class HookEventReceiver: @unchecked Sendable {
         case .claudeCode:
             guard let eventName = object["hook_event_name"] as? String else { return nil }
             switch eventName {
-            case "Notification": return .waitingForInput
-            case "Stop": return .ready
-            case "PostToolUse": return .working
+            case "Notification":
+                switch (object["notification_type"] as? String)?.lowercased() {
+                case "idle_prompt":
+                    // Claude emits this after a completed turn. It means the
+                    // composer is free, not that Claude is blocked mid-turn.
+                    return SessionStatusObservation(.readyForReview)
+                case "permission_prompt":
+                    let message = (object["message"] as? String)?.lowercased() ?? ""
+                    let reason: SessionWaitingReason = message.contains("plan") ? .planApproval : .permission
+                    return SessionStatusObservation(.waitingForInput, waitingReason: reason)
+                case "elicitation_dialog":
+                    return SessionStatusObservation(.waitingForInput, waitingReason: .question)
+                default:
+                    return nil
+                }
+            case "PreToolUse":
+                return Self.claudeInteractiveObservation(toolName: object["tool_name"] as? String)
+                    ?? SessionStatusObservation(.working)
+            case "PermissionRequest":
+                return Self.claudeInteractiveObservation(toolName: object["tool_name"] as? String)
+                    ?? SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+            case "Stop": return SessionStatusObservation(.readyForReview)
+            case "PostToolUse": return SessionStatusObservation(.working)
             default: return nil
             }
         case .antigravity:
@@ -110,11 +131,16 @@ public final class HookEventReceiver: @unchecked Sendable {
             switch eventName {
             case "PreToolUse":
                 let toolName = (payload["toolCall"] as? [String: Any])?["name"] as? String
-                return toolName == "ask_question" ? .waitingForInput : .working
+                return toolName == "ask_question"
+                    ? SessionStatusObservation(.waitingForInput, waitingReason: .question)
+                    : SessionStatusObservation(.working)
             case "PostToolUse":
-                return .working
+                if Self.antigravityRequestsPlanFeedback(payload) {
+                    return SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
+                }
+                return SessionStatusObservation(.working)
             case "Stop":
-                return (payload["fullyIdle"] as? Bool) == true ? .ready : nil
+                return (payload["fullyIdle"] as? Bool) == true ? SessionStatusObservation(.readyForReview) : nil
             default:
                 return nil
             }
@@ -125,9 +151,22 @@ public final class HookEventReceiver: @unchecked Sendable {
             // normal approval prompt intact.
             guard let eventName = object["hook_event_name"] as? String else { return nil }
             switch eventName {
-            case "PostToolUse": return .working
-            case "Stop": return .ready
-            case "PermissionRequest": return .waitingForInput
+            case "PreToolUse":
+                let toolName = (object["tool_name"] as? String)?.lowercased()
+                if toolName == "request_user_input" || toolName == "askuserquestion" {
+                    return SessionStatusObservation(.waitingForInput, waitingReason: .question)
+                }
+                return SessionStatusObservation(.working)
+            case "PostToolUse": return SessionStatusObservation(.working)
+            case "Stop":
+                // Codex renders a finalized Plan-mode response specially and
+                // reports `last_assistant_message: null` on the Stop hook.
+                if object["last_assistant_message"] is NSNull {
+                    return SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
+                }
+                return SessionStatusObservation(.readyForReview)
+            case "PermissionRequest":
+                return SessionStatusObservation(.waitingForInput, waitingReason: .permission)
             default: return nil
             }
         case .openCode:
@@ -135,14 +174,36 @@ public final class HookEventReceiver: @unchecked Sendable {
             // HookConfigurationWriter.openCodePluginContents) as a flat
             // {"event": "<name>"} line — no nested payload needed for any
             // of these mappings. session.idle is a naming trap: it means
-            // "turn ended, composer free" (Flotilla's .ready), not .idle.
+            // "turn ended, composer free" (Flotilla's .readyForReview).
             guard let eventName = object["event"] as? String else { return nil }
             switch eventName {
-            case "tool.execute.after": return .working
-            case "session.idle": return .ready
-            case "permission.asked", "question.asked": return .waitingForInput
+            case "tool.execute.after": return SessionStatusObservation(.working)
+            case "session.idle": return SessionStatusObservation(.readyForReview)
+            case "permission.asked":
+                return SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+            case "question.asked":
+                return SessionStatusObservation(.waitingForInput, waitingReason: .question)
             default: return nil
             }
         }
+    }
+
+    private static func claudeInteractiveObservation(toolName: String?) -> SessionStatusObservation? {
+        switch toolName?.lowercased() {
+        case "exitplanmode":
+            return SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
+        case "askuserquestion":
+            return SessionStatusObservation(.waitingForInput, waitingReason: .question)
+        default:
+            return nil
+        }
+    }
+
+    private static func antigravityRequestsPlanFeedback(_ payload: [String: Any]) -> Bool {
+        guard let toolCall = payload["toolCall"] as? [String: Any],
+              toolCall["name"] as? String == "write_to_file" else { return false }
+        let arguments = (toolCall["args"] as? [String: Any]) ?? (payload["args"] as? [String: Any])
+        let metadata = arguments?["ArtifactMetadata"] as? [String: Any]
+        return metadata?["RequestFeedback"] as? Bool == true
     }
 }

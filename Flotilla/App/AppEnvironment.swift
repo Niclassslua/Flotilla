@@ -131,8 +131,7 @@ final class AppEnvironment {
             goal: "Simplify the sidebar view hierarchy",
             agent: .codexCLI,
             projectID: project.id,
-            workingDirectory: project.rootPath,
-            status: .idle
+            workingDirectory: project.rootPath
         ))
         try? repository.save(Session(
             title: "General chat",

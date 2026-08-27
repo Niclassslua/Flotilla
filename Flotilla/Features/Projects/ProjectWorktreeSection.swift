@@ -98,7 +98,7 @@ struct ProjectWorktreeSection: View {
                 Spacer()
 
                 if let session {
-                    StatusBadge(session.status, size: .micro, showLabel: false)
+                    StatusBadge(session.status, waitingReason: session.waitingReason, size: .micro, showLabel: false)
                     Text(session.agent.displayName)
                         .font(FlotillaTypography.caption)
                         .foregroundStyle(FlotillaColors.textSecondary)

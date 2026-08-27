@@ -27,7 +27,8 @@ final class PersistenceKitTests: XCTestCase {
                 worktreePath: URL(fileURLWithPath: "/Users/dev/.flotilla/worktrees/fix-login"),
                 baseCheckoutPath: URL(fileURLWithPath: "/Users/dev/Flotilla")
             ),
-            status: .working,
+            status: .waitingForInput,
+            waitingReason: .planApproval,
             terminalScrollback: Data("restored terminal output\n".utf8),
             createdAt: Self.fixedDate,
             lastActiveAt: Self.fixedDate
@@ -47,7 +48,7 @@ final class PersistenceKitTests: XCTestCase {
             agent: .codexCLI,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .idle
+            status: nil
         )
         try repo.save(session)
 
@@ -69,7 +70,7 @@ final class PersistenceKitTests: XCTestCase {
             agent: .openCode,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .idle
+            status: nil
         )
         try repo.save(session)
         try repo.delete(sessionID: session.id)
@@ -128,7 +129,7 @@ final class PersistenceKitTests: XCTestCase {
             agent: .claudeCode,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .idle,
+            status: nil,
             createdAt: Self.fixedDate,
             lastActiveAt: Self.fixedDate
         )
@@ -154,7 +155,7 @@ final class PersistenceKitTests: XCTestCase {
             agent: .antigravity,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .idle,
+            status: nil,
             agentSessionID: "agy-conv-12345",
             createdAt: Self.fixedDate,
             lastActiveAt: Self.fixedDate
@@ -164,5 +165,37 @@ final class PersistenceKitTests: XCTestCase {
         let (_, sessions) = try repo.loadAll()
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.agentSessionID, "agy-conv-12345")
+    }
+
+    /// Rows written before the status collapse carried `idle` / `finished` /
+    /// `ready`; all three now decode to `readyForReview`.
+    func testLegacyStatusStringsFoldIntoReadyForReview() {
+        XCTAssertEqual(SessionStatus.parseLegacy(rawValue: "idle"), .readyForReview)
+        XCTAssertEqual(SessionStatus.parseLegacy(rawValue: "finished"), .readyForReview)
+        XCTAssertEqual(SessionStatus.parseLegacy(rawValue: "ready"), .readyForReview)
+        XCTAssertEqual(SessionStatus.parseLegacy(rawValue: "working"), .working)
+        XCTAssertEqual(SessionStatus.parseLegacy(rawValue: "crashed"), .crashed)
+        XCTAssertNil(SessionStatus.parseLegacy(rawValue: "nonsense"))
+    }
+
+    /// A session with no observed status yet round-trips as `nil`, not as a
+    /// decode failure.
+    func testNilStatusRoundTrips() throws {
+        let repo = try GRDBSessionRepository()
+        let session = Session(
+            title: "Fresh",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: nil,
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        )
+        try repo.save(session)
+
+        let (_, sessions) = try repo.loadAll()
+        XCTAssertEqual(sessions, [session])
+        XCTAssertNil(sessions.first?.status)
     }
 }

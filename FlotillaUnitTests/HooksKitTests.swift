@@ -30,7 +30,7 @@ final class WaitingNotificationGateTests: XCTestCase {
 
     func testNeverFiresForNonWaitingStatuses() {
         let gate = WaitingNotificationGate()
-        for status: SessionStatus in [.idle, .working, .finished, .crashed] {
+        for status: SessionStatus in [.working, .readyForReview, .crashed] {
             XCTAssertFalse(gate.shouldNotify(for: status))
         }
     }
@@ -73,12 +73,15 @@ final class TerminalScreenHeuristicTests: XCTestCase {
         XCTAssertEqual(heuristic.status(forScreen: workingScreen), .working)
     }
 
-    func testComposerWithNoInterruptHintMeansIdle() {
-        XCTAssertEqual(heuristic.status(forScreen: idleScreen), .idle)
+    func testComposerWithProviderFooterMeansReady() {
+        XCTAssertEqual(heuristic.status(forScreen: idleScreen), .readyForReview)
     }
 
     func testPermissionPromptMeansWaiting() {
-        XCTAssertEqual(heuristic.status(forScreen: permissionScreen), .waitingForInput)
+        XCTAssertEqual(
+            heuristic.observation(forScreen: permissionScreen),
+            SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+        )
     }
 
     /// A prompt outranks a spinner: some CLIs keep drawing the busy line
@@ -112,7 +115,7 @@ final class TerminalScreenHeuristicTests: XCTestCase {
           main ✱ 3 files changed
           claude-opus-5
         """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .idle)
+        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
     }
 
     /// A numbered list the agent merely printed is not an open question —
@@ -126,7 +129,58 @@ final class TerminalScreenHeuristicTests: XCTestCase {
 
         │ >                                        │
         """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .idle)
+        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
+    }
+
+    func testLiveCodexComposerWithFooterMeansReady() {
+        let screen = """
+        • Plan implemented and the worktree remains clean.
+
+        ────────────────────────────────────────────
+        › Ask Codex to do anything
+
+          gpt-5.6-sol medium · ~/Documents/Projects/SwiftUi/Flotilla
+        """
+        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
+    }
+
+    func testLiveClaudeComposerWithSeveralFootersMeansReady() {
+        let screen = """
+        ⏺ The requested change is complete.
+        ✻ Worked for 42s
+        ─────────────────────────────── test-plan-mode ─
+        ❯ clean up the worktree and branch
+        ────────────────────────────────────────────────
+        Est. usage: 1 Standard request
+        ⏵⏵ auto mode on · 1 file changed
+        """
+        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
+    }
+
+    func testCodexQuestionCarriesAnswerReason() {
+        let screen = """
+        Question 1/1 (1 unanswered)
+        Which approach should I take?
+        ❯ 1. Keep compatibility
+          2. Simplify the API
+        """
+        XCTAssertEqual(
+            heuristic.observation(forScreen: screen),
+            SessionStatusObservation(.waitingForInput, waitingReason: .question)
+        )
+    }
+
+    func testPlanApprovalCarriesPlanReadyReason() {
+        let screen = """
+        Proposed Plan
+        1. Update the model
+        2. Wire the UI
+        Approve this plan?
+        """
+        XCTAssertEqual(
+            heuristic.observation(forScreen: screen),
+            SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
+        )
     }
 }
 
@@ -152,10 +206,10 @@ final class SessionScreenMonitorTests: XCTestCase {
     private func collect(
         from monitor: SessionScreenMonitor,
         settling: Duration = .milliseconds(400)
-    ) async -> [SessionStatus] {
-        let statuses = StatusBox()
+    ) async -> [SessionStatusObservation] {
+        let statuses = ObservationBox()
         let collector = Task {
-            for await status in monitor.statusStream { await statuses.append(status) }
+            for await observation in monitor.observationStream { await statuses.append(observation) }
         }
         monitor.start()
         try? await Task.sleep(for: settling)
@@ -164,9 +218,9 @@ final class SessionScreenMonitorTests: XCTestCase {
         return await statuses.values
     }
 
-    private actor StatusBox {
-        private(set) var values: [SessionStatus] = []
-        func append(_ status: SessionStatus) { values.append(status) }
+    private actor ObservationBox {
+        private(set) var values: [SessionStatusObservation] = []
+        func append(_ observation: SessionStatusObservation) { values.append(observation) }
     }
 
     /// The property that fixes the reported bug: a screen that keeps saying
@@ -180,7 +234,7 @@ final class SessionScreenMonitorTests: XCTestCase {
             pollInterval: .milliseconds(30)
         )
         let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [.idle])
+        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)])
         let readCount = await reader.readCount
         XCTAssertGreaterThan(readCount, 1, "the monitor should have polled repeatedly")
     }
@@ -195,10 +249,10 @@ final class SessionScreenMonitorTests: XCTestCase {
             pollInterval: .milliseconds(30)
         )
         let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [.working])
+        XCTAssertEqual(observed, [SessionStatusObservation(.working)])
     }
 
-    func testFollowsTheScreenFromWorkingToIdle() async {
+    func testFollowsTheScreenFromWorkingToReady() async {
         let reader = ScriptedScreenReader([
             "✻ Thinking… (esc to interrupt)",
             "✻ Thinking… (esc to interrupt)",
@@ -210,7 +264,7 @@ final class SessionScreenMonitorTests: XCTestCase {
             pollInterval: .milliseconds(30)
         )
         let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [.working, .idle])
+        XCTAssertEqual(observed, [SessionStatusObservation(.working), SessionStatusObservation(.readyForReview)])
     }
 
     /// An unreadable screen is "no information" — the status must be left
@@ -254,8 +308,8 @@ final class NotificationDispatchingTests: XCTestCase {
         let dispatcher = RecordingDispatcher()
 
         let collectorTask = Task {
-            for await status in monitor.statusStream {
-                if gate.shouldNotify(for: status) {
+            for await observation in monitor.observationStream {
+                if gate.shouldNotify(for: observation.status) {
                     await dispatcher.notifyWaitingForInput(sessionTitle: "Test Session", sessionID: UUID())
                 }
             }
@@ -278,10 +332,10 @@ final class HookEventReceiverTests: XCTestCase {
     private func collect(
         from receiver: HookEventReceiver,
         settling: Duration = .milliseconds(500)
-    ) async -> [SessionStatus] {
-        let statuses = StatusBox()
+    ) async -> [SessionStatusObservation] {
+        let statuses = ObservationBox()
         let collector = Task {
-            for await status in receiver.statusStream { await statuses.append(status) }
+            for await observation in receiver.observationStream { await statuses.append(observation) }
         }
         receiver.start()
         try? await Task.sleep(for: settling)
@@ -290,9 +344,9 @@ final class HookEventReceiverTests: XCTestCase {
         return await statuses.values
     }
 
-    private actor StatusBox {
-        private(set) var values: [SessionStatus] = []
-        func append(_ status: SessionStatus) { values.append(status) }
+    private actor ObservationBox {
+        private(set) var values: [SessionStatusObservation] = []
+        func append(_ observation: SessionStatusObservation) { values.append(observation) }
     }
 
     private func append(_ line: String, to url: URL) throws {
@@ -308,15 +362,15 @@ final class HookEventReceiverTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: file) }
 
         let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
-        let statuses = StatusBox()
+        let statuses = ObservationBox()
         let collector = Task {
-            for await status in receiver.statusStream { await statuses.append(status) }
+            for await observation in receiver.observationStream { await statuses.append(observation) }
         }
         receiver.start()
         try await Task.sleep(for: .milliseconds(60))
         try append(#"{"hook_event_name":"PostToolUse","session_id":"abc"}"#, to: file)
         try await Task.sleep(for: .milliseconds(80))
-        try append(#"{"hook_event_name":"Notification","session_id":"abc"}"#, to: file)
+        try append(#"{"hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude Code needs your approval for the plan","session_id":"abc"}"#, to: file)
         try await Task.sleep(for: .milliseconds(80))
         try append(#"{"hook_event_name":"Stop","session_id":"abc"}"#, to: file)
         try await Task.sleep(for: .milliseconds(150))
@@ -324,7 +378,11 @@ final class HookEventReceiverTests: XCTestCase {
         collector.cancel()
 
         let observed = await statuses.values
-        XCTAssertEqual(observed, [.working, .waitingForInput, .ready])
+        XCTAssertEqual(observed, [
+            SessionStatusObservation(.working),
+            SessionStatusObservation(.waitingForInput, waitingReason: .planApproval),
+            SessionStatusObservation(.readyForReview),
+        ])
     }
 
     func testIgnoresUnknownEventNamesAndMalformedLines() async throws {
@@ -339,7 +397,7 @@ final class HookEventReceiverTests: XCTestCase {
         let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
-        XCTAssertEqual(observed, [.ready])
+        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)])
     }
 
     func testMissingFileYieldsNothingRatherThanCrashing() async {
@@ -358,9 +416,9 @@ final class HookEventReceiverTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: file) }
 
         let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
-        let statuses = StatusBox()
+        let statuses = ObservationBox()
         let collector = Task {
-            for await status in receiver.statusStream { await statuses.append(status) }
+            for await observation in receiver.observationStream { await statuses.append(observation) }
         }
         receiver.start()
 
@@ -376,7 +434,7 @@ final class HookEventReceiverTests: XCTestCase {
         receiver.stop()
         collector.cancel()
         let observed = await statuses.values
-        XCTAssertEqual(observed, [.ready])
+        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)])
     }
 
     func testAtomicReplacementResetsOffsetEvenWhenNewFileIsLarger() async throws {
@@ -385,9 +443,9 @@ final class HookEventReceiverTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: file) }
 
         let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
-        let statuses = StatusBox()
+        let statuses = ObservationBox()
         let collector = Task {
-            for await status in receiver.statusStream { await statuses.append(status) }
+            for await observation in receiver.observationStream { await statuses.append(observation) }
         }
         receiver.start()
         try await Task.sleep(for: .milliseconds(80))
@@ -401,7 +459,7 @@ final class HookEventReceiverTests: XCTestCase {
         receiver.stop()
         collector.cancel()
         let observed = await statuses.values
-        XCTAssertEqual(observed, Array(repeating: .ready, count: 6))
+        XCTAssertEqual(observed, Array(repeating: SessionStatusObservation(.readyForReview), count: 6))
     }
 
     func testAntigravityPreToolUseAskQuestionMeansWaitingForInput() async throws {
@@ -416,7 +474,11 @@ final class HookEventReceiverTests: XCTestCase {
         let receiver = HookEventReceiver(filePath: file, agent: .antigravity, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
-        XCTAssertEqual(observed, [.waitingForInput, .working, .working])
+        XCTAssertEqual(observed, [
+            SessionStatusObservation(.waitingForInput, waitingReason: .question),
+            SessionStatusObservation(.working),
+            SessionStatusObservation(.working),
+        ])
     }
 
     func testAntigravityStopOnlyMeansReadyWhenFullyIdle() async throws {
@@ -430,7 +492,47 @@ final class HookEventReceiverTests: XCTestCase {
         let receiver = HookEventReceiver(filePath: file, agent: .antigravity, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
-        XCTAssertEqual(observed, [.ready], "fullyIdle: false must not emit any status")
+        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)], "fullyIdle: false must not emit any status")
+    }
+
+    func testAntigravityPlanArtifactMeansPlanReady() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try append(
+            #"{"event":"PostToolUse","payload":{"toolCall":{"name":"write_to_file","args":{"ArtifactMetadata":{"RequestFeedback":true}}}}}"#,
+            to: file
+        )
+
+        let receiver = HookEventReceiver(filePath: file, agent: .antigravity, pollInterval: .milliseconds(30))
+        let observed = await collect(from: receiver, settling: .milliseconds(200))
+
+        XCTAssertEqual(
+            observed,
+            [SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)]
+        )
+    }
+
+    func testClaudeDistinguishesIdlePermissionQuestionAndPlan() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try append(#"{"hook_event_name":"Notification","notification_type":"idle_prompt"}"#, to: file)
+        try append(#"{"hook_event_name":"PermissionRequest","tool_name":"Bash"}"#, to: file)
+        try append(#"{"hook_event_name":"PreToolUse","tool_name":"AskUserQuestion"}"#, to: file)
+        try append(#"{"hook_event_name":"PreToolUse","tool_name":"ExitPlanMode"}"#, to: file)
+
+        let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
+        let observed = await collect(from: receiver, settling: .milliseconds(200))
+
+        XCTAssertEqual(observed, [
+            SessionStatusObservation(.readyForReview),
+            SessionStatusObservation(.waitingForInput, waitingReason: .permission),
+            SessionStatusObservation(.waitingForInput, waitingReason: .question),
+            SessionStatusObservation(.waitingForInput, waitingReason: .planApproval),
+        ])
     }
 
     func testCodexMapsDocumentedLifecycleEvents() async throws {
@@ -438,14 +540,22 @@ final class HookEventReceiverTests: XCTestCase {
         FileManager.default.createFile(atPath: file.path, contents: nil)
         defer { try? FileManager.default.removeItem(at: file) }
 
+        try append(#"{"hook_event_name":"PreToolUse","tool_name":"request_user_input"}"#, to: file)
         try append(#"{"hook_event_name":"PostToolUse"}"#, to: file)
         try append(#"{"hook_event_name":"PermissionRequest"}"#, to: file)
-        try append(#"{"hook_event_name":"Stop"}"#, to: file)
+        try append(#"{"hook_event_name":"Stop","last_assistant_message":null}"#, to: file)
+        try append(#"{"hook_event_name":"Stop","last_assistant_message":"Done"}"#, to: file)
 
         let receiver = HookEventReceiver(filePath: file, agent: .codexCLI, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
-        XCTAssertEqual(observed, [.working, .waitingForInput, .ready])
+        XCTAssertEqual(observed, [
+            SessionStatusObservation(.waitingForInput, waitingReason: .question),
+            SessionStatusObservation(.working),
+            SessionStatusObservation(.waitingForInput, waitingReason: .permission),
+            SessionStatusObservation(.waitingForInput, waitingReason: .planApproval),
+            SessionStatusObservation(.readyForReview),
+        ])
     }
 
     func testOpenCodeMapsEventsIncludingTheSessionIdleNamingTrap() async throws {
@@ -463,7 +573,60 @@ final class HookEventReceiverTests: XCTestCase {
         let receiver = HookEventReceiver(filePath: file, agent: .openCode, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
-        XCTAssertEqual(observed, [.working, .waitingForInput, .waitingForInput, .ready])
+        XCTAssertEqual(observed, [
+            SessionStatusObservation(.working),
+            SessionStatusObservation(.waitingForInput, waitingReason: .permission),
+            SessionStatusObservation(.waitingForInput, waitingReason: .question),
+            SessionStatusObservation(.readyForReview),
+        ])
+    }
+}
+
+final class SessionStatusObservationArbiterTests: XCTestCase {
+    /// A structured waiting hook is not undone by the screen falling back to
+    /// a bare Ready for Review because it did not recognise the prompt.
+    func testHookWaitingSurvivesAmbiguousScreenReadyForReview() {
+        var arbiter = SessionStatusObservationArbiter()
+        let permission = SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+        XCTAssertEqual(arbiter.accept(permission, from: .hook), permission)
+        XCTAssertNil(arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen))
+    }
+
+    func testHookPlanReadySurvivesScreenFallbackUntilWorkResumes() {
+        var arbiter = SessionStatusObservationArbiter()
+        let planReady = SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
+        XCTAssertEqual(arbiter.accept(planReady, from: .hook), planReady)
+        // A screen that only sees a composer must not drop Plan Ready.
+        XCTAssertNil(arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen))
+        // A different, screen-guessed waiting reason is held off too.
+        XCTAssertNil(
+            arbiter.accept(
+                SessionStatusObservation(.waitingForInput, waitingReason: .question),
+                from: .screen
+            )
+        )
+        // Visible work is a new episode: it, and everything after it, stands.
+        XCTAssertEqual(
+            arbiter.accept(SessionStatusObservation(.working), from: .screen),
+            SessionStatusObservation(.working)
+        )
+        XCTAssertEqual(
+            arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen),
+            SessionStatusObservation(.readyForReview)
+        )
+    }
+
+    /// With no structured hook to defer to, every screen observation passes
+    /// straight through.
+    func testScreenObservationsPassThroughWithoutAHook() {
+        var arbiter = SessionStatusObservationArbiter()
+        for observation in [
+            SessionStatusObservation(.working),
+            SessionStatusObservation(.readyForReview),
+            SessionStatusObservation(.waitingForInput, waitingReason: .permission),
+        ] {
+            XCTAssertEqual(arbiter.accept(observation, from: .screen), observation)
+        }
     }
 }
 
@@ -569,12 +732,14 @@ final class HookConfigurationWriterTests: XCTestCase {
             JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
         )
         let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
-        for event in ["Notification", "Stop", "PostToolUse"] {
+        for event in ["Notification", "PreToolUse", "PermissionRequest", "Stop", "PostToolUse"] {
             let groups = try XCTUnwrap(hooks[event] as? [[String: Any]], "\(event) must be present")
             let commands = try XCTUnwrap(groups.first?["hooks"] as? [[String: Any]])
             let command = try XCTUnwrap(commands.first?["command"] as? String)
             XCTAssertTrue(command.contains(HookConfigurationWriter.eventFileEnvironmentKey))
         }
+        let preToolGroups = try XCTUnwrap(hooks["PreToolUse"] as? [[String: Any]])
+        XCTAssertEqual(preToolGroups.first?["matcher"] as? String, "AskUserQuestion|ExitPlanMode")
     }
 
     // OpenCode is hook-capable but its wiring travels through
@@ -771,7 +936,7 @@ final class HookConfigurationWriterTests: XCTestCase {
             supportDirectory: supportDirectory
         )
         XCTAssertEqual(Array(arguments.prefix(2)), ["--config", "features.hooks=true"])
-        for event in ["PermissionRequest", "PostToolUse", "Stop"] {
+        for event in ["PreToolUse", "PermissionRequest", "PostToolUse", "Stop"] {
             let value = try XCTUnwrap(arguments.first { $0.hasPrefix("hooks.\(event)=") })
             XCTAssertTrue(value.contains(scriptPath.path))
         }

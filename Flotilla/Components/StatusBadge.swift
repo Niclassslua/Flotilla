@@ -49,7 +49,9 @@ public enum StatusBadgeSize {
 }
 
 public struct StatusBadge: View {
-    private let status: SessionStatus
+    /// `nil` — no status observed yet — renders nothing at all.
+    private let status: SessionStatus?
+    private let waitingReason: SessionWaitingReason?
     private let size: StatusBadgeSize
     private let showLabel: Bool
     private let showGlyph: Bool
@@ -58,48 +60,29 @@ public struct StatusBadge: View {
     @State private var isPulsing = false
 
     public init(
-        _ status: SessionStatus,
+        _ status: SessionStatus?,
+        waitingReason: SessionWaitingReason? = nil,
         size: StatusBadgeSize = .small,
         showLabel: Bool = true,
         showGlyph: Bool = false
     ) {
         self.status = status
+        self.waitingReason = status == .waitingForInput ? waitingReason : nil
         self.size = size
         self.showLabel = showLabel
         self.showGlyph = showGlyph
     }
 
     private var statusColor: Color {
-        switch status {
-        case .working: return FlotillaColors.statusWorking
-        case .idle: return FlotillaColors.statusIdle
-        case .waitingForInput: return FlotillaColors.statusWaitingForInput
-        case .ready: return FlotillaColors.statusReady
-        case .finished: return FlotillaColors.statusFinished
-        case .crashed: return FlotillaColors.statusCrashed
-        }
+        StatusPresentation.color(for: status)
     }
 
     private var statusLabel: String {
-        switch status {
-        case .working: return "Working"
-        case .idle: return "Idle"
-        case .waitingForInput: return "Waiting for Input"
-        case .ready: return "Ready"
-        case .finished: return "Finished"
-        case .crashed: return "Crashed"
-        }
+        StatusPresentation.label(for: status, waitingReason: waitingReason)
     }
 
     private var statusGlyph: String {
-        switch status {
-        case .working: return "gearshape.2"
-        case .idle: return "circle"
-        case .waitingForInput: return "exclamationmark.circle"
-        case .ready: return "hand.raised"
-        case .finished: return "checkmark.circle"
-        case .crashed: return "xmark.octagon"
-        }
+        StatusPresentation.glyph(for: status, waitingReason: waitingReason)
     }
 
     private var shouldPulse: Bool {
@@ -113,7 +96,14 @@ public struct StatusBadge: View {
         ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
     }
 
+    @ViewBuilder
     public var body: some View {
+        if status != nil {
+            badgeBody
+        }
+    }
+
+    private var badgeBody: some View {
         HStack(spacing: size.spacing) {
             ZStack {
                 Circle()
@@ -160,18 +150,19 @@ public struct StatusBadge: View {
 
 public extension StatusBadge {
     init(
-        _ status: SessionStatus,
+        _ status: SessionStatus?,
+        waitingReason: SessionWaitingReason? = nil,
         variant: Variant = .default
     ) {
         switch variant {
         case .default:
-            self.init(status, size: .small, showLabel: true, showGlyph: false)
+            self.init(status, waitingReason: waitingReason, size: .small, showLabel: true, showGlyph: false)
         case .compact:
-            self.init(status, size: .micro, showLabel: false, showGlyph: true)
+            self.init(status, waitingReason: waitingReason, size: .micro, showLabel: false, showGlyph: true)
         case .inline:
-            self.init(status, size: .small, showLabel: true, showGlyph: false)
+            self.init(status, waitingReason: waitingReason, size: .small, showLabel: true, showGlyph: false)
         case .prominent:
-            self.init(status, size: .medium, showLabel: true, showGlyph: true)
+            self.init(status, waitingReason: waitingReason, size: .medium, showLabel: true, showGlyph: true)
         }
     }
 

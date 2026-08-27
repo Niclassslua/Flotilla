@@ -33,9 +33,9 @@ struct TileTitleLockup: View {
         HStack(spacing: 6) {
             // Collapsed into one element so the dot reports the status as its
             // label; the UI suite asserts on exactly this.
-            StatusBadge(session.status, variant: .compact)
+            StatusBadge(session.status, waitingReason: session.waitingReason, variant: .compact)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(StatusPresentation.label(for: session.status))
+                .accessibilityLabel(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
                 .accessibilityIdentifier("GridTile-\(session.title)-Status")
 
             Text(session.title)
@@ -272,7 +272,7 @@ private struct TileDragPreview: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            StatusBadge(session.status, variant: .compact)
+            StatusBadge(session.status, waitingReason: session.waitingReason, variant: .compact)
             Text(session.title)
                 .font(.caption.weight(.medium))
                 .lineLimit(1)

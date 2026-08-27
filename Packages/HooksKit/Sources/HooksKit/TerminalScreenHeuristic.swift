@@ -32,10 +32,9 @@ public struct TerminalScreenHeuristic: Sendable {
         "ctrl+c to stop",
     ]
 
-    /// Blocking questions. Checked before the working markers: some CLIs
-    /// keep a spinner on screen underneath a permission prompt, and needing
-    /// the user always outranks being busy.
-    private static let waitingMarkers = [
+    /// Approval prompts. Checked before the working markers: some CLIs keep
+    /// a spinner underneath a prompt, and needing the user outranks busy.
+    private static let permissionMarkers = [
         "do you want to",
         "do you trust",
         "permission required",
@@ -48,6 +47,27 @@ public struct TerminalScreenHeuristic: Sendable {
         "yes/no",
         "allow this",
         "approve?",
+    ]
+
+    /// Provider-specific signals that the agent has produced a plan and is
+    /// waiting for the user to review or approve it.
+    private static let planApprovalMarkers = [
+        "approval for the plan",
+        "approve the plan",
+        "approve this plan",
+        "plan is ready",
+        "plan ready for approval",
+        "proposed plan",
+        "<proposed_plan>",
+    ]
+
+    /// A genuine question from the agent, distinct from a tool permission.
+    private static let questionMarkers = [
+        " unanswered)",
+        "waiting for your answer",
+        "answer the question",
+        "provide your answer",
+        "question for you",
     ]
 
     /// Markers indicating the process or agent exited.
@@ -71,20 +91,53 @@ public struct TerminalScreenHeuristic: Sendable {
         self.promptHeuristic = promptHeuristic
     }
 
-    /// Classifies the screen. Always returns a status — a screen is a
-    /// complete description of the session's state, so there is no "no
-    /// opinion" case the way there was for a single chunk of output.
-    public func status(forScreen screen: String) -> SessionStatus {
+    /// Classifies the screen. Always returns a concrete status — a screen is
+    /// a complete description of the session's state, so there is no "no
+    /// opinion" case the way there was for a single chunk of output. (A
+    /// missing status, `nil`, only ever comes from a session that has drawn
+    /// nothing yet, which is decided before the screen is ever read.)
+    public func observation(forScreen screen: String) -> SessionStatusObservation {
         let tail = Self.tail(of: screen)
         let lowered = tail.lowercased()
 
-        if Self.waitingMarkers.contains(where: lowered.contains) { return .waitingForInput }
-        if promptHeuristic.detectStatus(in: tail) == .waitingForInput { return .waitingForInput }
-        if Self.showsChoiceList(in: tail) { return .waitingForInput }
-        if Self.finishedMarkers.contains(where: lowered.contains) { return .finished }
-        if Self.workingMarkers.contains(where: lowered.contains) { return .working }
-        if Self.hasComposerWithTranscript(tail) { return .ready }
-        return .idle
+        if Self.planApprovalMarkers.contains(where: lowered.contains) {
+            return SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
+        }
+        if Self.permissionMarkers.contains(where: lowered.contains) {
+            return SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+        }
+        if Self.questionMarkers.contains(where: lowered.contains) {
+            return SessionStatusObservation(.waitingForInput, waitingReason: .question)
+        }
+        if Self.showsChoiceList(in: tail) {
+            return SessionStatusObservation(.waitingForInput, waitingReason: .question)
+        }
+        if promptHeuristic.detectStatus(in: tail) == .waitingForInput {
+            return SessionStatusObservation(.waitingForInput)
+        }
+        // A dead pane, a bare composer with transcript, and an unremarkable
+        // screen all mean the same thing now: the turn is over and the work
+        // is there to look at. Only an authoritative non-zero process exit
+        // produces `crashed`, and that never comes from here. The branches
+        // are kept distinct because their ordering relative to the working
+        // marker still matters — a stale "esc to interrupt" left on a dead
+        // pane must not read as `working`.
+        if Self.finishedMarkers.contains(where: lowered.contains) {
+            return SessionStatusObservation(.readyForReview)
+        }
+        if Self.workingMarkers.contains(where: lowered.contains) {
+            return SessionStatusObservation(.working)
+        }
+        if Self.hasComposerWithTranscript(tail) {
+            return SessionStatusObservation(.readyForReview)
+        }
+        return SessionStatusObservation(.readyForReview)
+    }
+
+    /// Compatibility convenience for callers interested only in the broad
+    /// state. New observation pipelines should retain `waitingReason`.
+    public func status(forScreen screen: String) -> SessionStatus {
+        observation(forScreen: screen).status
     }
 
     /// The bottom `inspectedTailLines` non-empty lines, which is where the
@@ -103,12 +156,29 @@ public struct TerminalScreenHeuristic: Sendable {
     private static func hasComposerWithTranscript(_ tail: String) -> Bool {
         let lines = tail.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         guard lines.count >= 2 else { return false }
-        // Last line should have a ready marker (composer prompt)
-        let lastLine = lines.last ?? ""
-        let hasReadyMarker = Self.readyMarkers.contains { lastLine.hasPrefix($0) }
-        // And there should be transcript content above (non-marker lines)
-        let hasTranscript = lines.dropLast().contains { !$0.isEmpty }
-        return hasReadyMarker && hasTranscript
+        // Codex and Claude both draw model/path/usage footers *after* their
+        // composer. Search the tail instead of requiring the prompt to be
+        // the final non-empty line.
+        guard let composerIndex = lines.lastIndex(where: Self.isComposerLine), composerIndex > 0 else {
+            return false
+        }
+        return lines[..<composerIndex].contains(where: Self.isTranscriptLine)
+    }
+
+    private static func isComposerLine(_ line: String) -> Bool {
+        var content = line.trimmingCharacters(in: .whitespaces)
+        while let first = content.first, first == "│" || first == "┃" || first == "║" {
+            content.removeFirst()
+            content = content.trimmingCharacters(in: .whitespaces)
+        }
+        return Self.readyMarkers.contains { content.hasPrefix($0) }
+    }
+
+    private static func isTranscriptLine(_ line: String) -> Bool {
+        let content = line.trimmingCharacters(in: .whitespaces)
+        guard !content.isEmpty else { return false }
+        let decoration = CharacterSet(charactersIn: "─━═-╭╮╰╯┌┐└┘│┃║ ")
+        return content.unicodeScalars.contains { !decoration.contains($0) }
     }
 
     /// An interactive picker — several numbered options with a selection
