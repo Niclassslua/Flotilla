@@ -46,6 +46,7 @@ Flotilla/
 │   ├── Services/                  # SessionProcessManager, HookCoordinator, WorkspaceRegistry, ActivityStore
 │   ├── Components/                # StatusBadge, MaterialFileIcon, ProviderLogo, AgentBrand, pickers
 │   └── Resources/                 # Assets.xcassets, MaterialIcons SVG catalog
+├── docs/                          # Long-form references (provider hooks, UI vocabulary)
 ├── FlotillaUnitTests/             # Unit tests (28 test suites)
 ├── FlotillaUITests/               # UI tests
 ├── Packages/                      # 10 local Swift packages
@@ -54,6 +55,14 @@ Flotilla/
 ├── .impeccable.md                 # Brand/design guidelines
 └── AGENTS.md                      # This file
 ```
+
+### Reference documents
+
+| File | Covers |
+|------|--------|
+| `docs/ui-vocabulary.md` | Canonical names for every UI region and component — use these terms in prompts, issues, and review comments |
+| `docs/provider-hooks.md` | Per-provider hook wiring and the status-transition matrix |
+| `.impeccable.md` | Brand and visual design guidelines |
 
 ## Architecture
 
