@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import UserNotifications
 import ProcessKit
 import SettingsKit
@@ -16,6 +17,11 @@ struct FlotillaApp: App {
     @State private var notificationDelegate: FlotillaNotificationDelegate
 
     init() {
+        // Flotilla is a single-window workspace app with its own navigation
+        // model; suppress AppKit's automatic window tabbing so the View menu
+        // never shows "Show Tab Bar" / "Show All Tabs".
+        NSWindow.allowsAutomaticWindowTabbing = false
+
         let environment = AppEnvironment()
         let settingsStore: UserDefaultsSettingsStore
         if environment.isUITesting {
