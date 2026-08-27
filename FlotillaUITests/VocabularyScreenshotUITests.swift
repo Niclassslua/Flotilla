@@ -69,51 +69,9 @@ final class VocabularyScreenshotUITests: XCTestCase {
         continueAfterFailure = true
     }
 
-    /// SwiftUI's window-frame autosave key for the main window, as observed in
-    /// the app's defaults. Used as a fallback only — the key embeds generic
-    /// type names and changes if `FlotillaShell` is renamed or rewrapped, so
-    /// `windowFrameKeys()` prefers whatever the app has actually written.
-    private static let fallbackWindowFrameKey = """
-        NSWindow Frame SwiftUI.WindowGroup<SwiftUI.ModifiedContent<Flotilla.FlotillaShell, \
-        SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>>-1-AppWindow-1
-        """
-
-    /// Every window-frame key the app has persisted for its main window. Read
-    /// live so a renamed view doesn't silently strand the override on a stale
-    /// key; falls back to the literal above when the app's domain is
-    /// unreadable (the runner is sandboxed, so that's a real possibility).
-    private static func windowFrameKeys() -> [String] {
-        let discovered = UserDefaults(suiteName: "com.niclassslua.flotilla")?
-            .dictionaryRepresentation()
-            .keys
-            .filter { $0.hasPrefix("NSWindow Frame") && $0.contains("FlotillaShell") } ?? []
-        return discovered.isEmpty ? [fallbackWindowFrameKey] : Array(discovered)
-    }
-
     private func launchedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
-
-        // Screen capture fails outright ("Image creation failed") for a window
-        // on a secondary display, and that error aborts the test method. The
-        // app persists its frame at x=2560 and rewrites it on every quit, so
-        // editing the stored default doesn't survive. NSArgumentDomain
-        // outranks the persisted domain and is applied fresh at each launch.
-        //
-        // Only worth doing with more than one display attached: on a single
-        // screen everything is already at the origin, and forcing a frame
-        // there would just override whatever size suits that machine.
-        if NSScreen.screens.count > 1,
-           let screen = (NSScreen.screens.first ?? NSScreen.main)?.visibleFrame {
-            let w = Int(screen.width), h = Int(screen.height)
-            let frame = "0 0 \(w) \(h) 0 0 \(w) \(h) "
-            for key in Self.windowFrameKeys() {
-                app.launchArguments.append(contentsOf: ["-\(key)", frame])
-            }
-            Self.note("PLACEMENT \(NSScreen.screens.count) displays — pinning window to \(w)x\(h) at origin")
-        } else {
-            Self.note("PLACEMENT single display — no override needed")
-        }
 
         app.launchEnvironment["UI_TESTING"] = "1"
         app.launch()
