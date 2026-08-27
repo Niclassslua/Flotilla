@@ -74,6 +74,7 @@
 		399A999D2D97E668AD71393F /* ProcessKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2DAA1A8E8B9098BF7CD621CE /* ProcessKit */; };
 		39ABB49EA1A6E08BF0845119 /* nodejs.svg in Resources */ = {isa = PBXBuildFile; fileRef = E4AF6BC418E84CE09D13946F /* nodejs.svg */; };
 		3A101257C0B5AA57C285210F /* TerminalKit in Frameworks */ = {isa = PBXBuildFile; productRef = 552CA51FA37DB75CAE8F6175 /* TerminalKit */; };
+		3FF408A7A83C6BFB8FF50AC0 /* VocabularyScreenshotUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA3EC024D3B5C2BB547EA212 /* VocabularyScreenshotUITests.swift */; };
 		40E4144C522F51072D9D5345 /* GridLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620CED7B87823AB08CD08B83 /* GridLayoutEngine.swift */; };
 		42B8EAAFFDEE6F537E6F53A7 /* table.svg in Resources */ = {isa = PBXBuildFile; fileRef = 1D3F1C8A7DEA2B2DF648146F /* table.svg */; };
 		43A4D21424AEED786AE4CE1F /* SettingsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 39463F934BA5F312F4731DD2 /* SettingsKit */; };
@@ -528,6 +529,7 @@
 		F826B96C866E5F1F1BEDB070 /* GridDimensionsPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridDimensionsPicker.swift; sourceTree = "<group>"; };
 		F88CCB0EF5E481D579CB0EDB /* LedgerDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerDesign.swift; sourceTree = "<group>"; };
 		F9F0079146D1AF9E1A0A6F9F /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		FA3EC024D3B5C2BB547EA212 /* VocabularyScreenshotUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyScreenshotUITests.swift; sourceTree = "<group>"; };
 		FA83C6EA780D98B29510CDE6 /* folder-server.svg */ = {isa = PBXFileReference; path = "folder-server.svg"; sourceTree = "<group>"; };
 		FC3CF03B14D4EBC0D35B06AB /* CreateSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSessionView.swift; sourceTree = "<group>"; };
 		FCCCB074F672295EAE2B75E1 /* GridZoomGestures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridZoomGestures.swift; sourceTree = "<group>"; };
@@ -589,6 +591,7 @@
 				E4A98AEF98A101073B3ECE81 /* SettingsUITests.swift */,
 				8A5491FDE4DC8E390D1F339D /* StartupCheckUITests.swift */,
 				D9A4531D93B3A63280F51879 /* TerminalUITests.swift */,
+				FA3EC024D3B5C2BB547EA212 /* VocabularyScreenshotUITests.swift */,
 				FD6F5A981356BB62560D89BD /* ZZPerfProbeUITests.swift */,
 			);
 			path = FlotillaUITests;
@@ -1407,6 +1410,7 @@
 				65A0C5DF6D0EA6406B9CE77A /* SettingsUITests.swift in Sources */,
 				D65DAD38EB19053828B3A1F6 /* StartupCheckUITests.swift in Sources */,
 				94DB32B0489F507550BE625C /* TerminalUITests.swift in Sources */,
+				3FF408A7A83C6BFB8FF50AC0 /* VocabularyScreenshotUITests.swift in Sources */,
 				574E88C18A374F18D3D13243 /* ZZPerfProbeUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
