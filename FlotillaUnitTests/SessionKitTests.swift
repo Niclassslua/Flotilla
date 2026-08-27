@@ -4,7 +4,7 @@ import SessionKit
 final class SessionStatusMachineTests: XCTestCase {
     private let machine = SessionStatusMachine()
 
-    private func makeSession(status: SessionStatus) -> Session {
+    private func makeSession(status: SessionStatus?) -> Session {
         Session(
             title: "Test",
             goal: "Do the thing",
@@ -15,50 +15,34 @@ final class SessionStatusMachineTests: XCTestCase {
         )
     }
 
-    // Every legal transition, exhaustively.
+    // Every legal transition, exhaustively. `working`, `waitingForInput` and
+    // `readyForReview` interchange freely; `nil` (no status yet) accepts any
+    // first value; `crashed` reopens only via `working`.
     func testLegalTransitions() {
-        let legalPairs: [(SessionStatus, SessionStatus)] = [
-            (.idle, .working),
-            (.idle, .waitingForInput),
-            (.idle, .ready),
-            (.idle, .finished),
-            (.idle, .crashed),
-            (.working, .idle),
-            (.working, .waitingForInput),
-            (.working, .ready),
-            (.working, .finished),
-            (.working, .crashed),
-            (.waitingForInput, .working),
-            (.waitingForInput, .idle),
-            (.waitingForInput, .ready),
-            (.waitingForInput, .finished),
-            (.waitingForInput, .crashed),
-            (.ready, .working),
-            (.ready, .waitingForInput),
-            (.ready, .idle),
-            (.ready, .finished),
-            (.ready, .crashed),
-            (.crashed, .working),
-            (.finished, .working),
-        ]
-        for (from, to) in legalPairs {
-            XCTAssertTrue(machine.canTransition(from: from, to: to), "\(from) -> \(to) should be legal")
+        let free: [SessionStatus] = [.working, .waitingForInput, .readyForReview]
+        for from in free {
+            for to in free where from != to {
+                XCTAssertTrue(machine.canTransition(from: from, to: to), "\(from) -> \(to) should be legal")
+            }
+            XCTAssertTrue(machine.canTransition(from: from, to: .crashed), "\(from) -> crashed should be legal")
         }
+        for to in SessionStatus.allCases {
+            XCTAssertTrue(machine.canTransition(from: nil, to: to), "nil -> \(to) should be legal")
+        }
+        XCTAssertTrue(machine.canTransition(from: .crashed, to: .working))
     }
 
-    /// Both terminal states are re-enterable only through `.working`, the
-    /// status an explicit restart moves a session to. Nothing else may
-    /// reopen them — in particular no output-derived status, which is what
-    /// keeps a stray repaint from resurrecting a session that is done.
-    func testTerminalStatesOnlyReopenViaExplicitRestart() {
+    /// `crashed` is re-enterable only through `.working`, the status an
+    /// explicit restart moves a session to. Nothing else may reopen it — in
+    /// particular no output-derived status, which is what keeps a stray
+    /// repaint from resurrecting a session that has stopped.
+    func testCrashedOnlyReopensViaExplicitRestart() {
         for target in SessionStatus.allCases {
-            for terminal: SessionStatus in [.finished, .crashed] {
-                XCTAssertEqual(
-                    machine.canTransition(from: terminal, to: target),
-                    target == .working,
-                    "\(terminal) may transition only to working"
-                )
-            }
+            XCTAssertEqual(
+                machine.canTransition(from: .crashed, to: target),
+                target == .working,
+                "crashed may transition only to working"
+            )
         }
     }
 
@@ -68,16 +52,22 @@ final class SessionStatusMachineTests: XCTestCase {
         }
     }
 
+    func testFirstStatusFromNilIsAlwaysLegal() {
+        let session = makeSession(status: nil)
+        let result = machine.transition(session, to: .readyForReview)
+        XCTAssertEqual(result.status, .readyForReview)
+    }
+
     func testIllegalTransitionLeavesSessionUnchanged() {
-        let session = makeSession(status: .finished)
-        // A finished session cannot drift back to idle on its own.
-        let result = machine.transition(session, to: .idle)
-        XCTAssertEqual(result.status, .finished)
+        let session = makeSession(status: .crashed)
+        // A crashed session cannot drift back to readyForReview on its own.
+        let result = machine.transition(session, to: .readyForReview)
+        XCTAssertEqual(result.status, .crashed)
         XCTAssertEqual(result.lastActiveAt, session.lastActiveAt)
     }
 
     func testLegalTransitionUpdatesStatusAndTimestamp() {
-        let session = makeSession(status: .idle)
+        let session = makeSession(status: nil)
         let later = session.createdAt.addingTimeInterval(60)
         let result = machine.transition(session, to: .working, now: later)
         XCTAssertEqual(result.status, .working)

@@ -9,8 +9,8 @@ final class ProjectOverviewTests: XCTestCase {
     func testActiveSessionFilteringSelectsWorkingAndWaitingForInput() {
         let working = fixtureSession(title: "Worker", status: .working)
         let waiting = fixtureSession(title: "Waiter", status: .waitingForInput)
-        let idle = fixtureSession(title: "Idler", status: .idle)
-        let finished = fixtureSession(title: "Done", status: .finished)
+        let idle = fixtureSession(title: "Idler", status: nil)
+        let finished = fixtureSession(title: "Done", status: .readyForReview)
         let crashed = fixtureSession(title: "Crashed", status: .crashed)
 
         let all = [working, waiting, idle, finished, crashed]
@@ -22,9 +22,9 @@ final class ProjectOverviewTests: XCTestCase {
     }
 
     func testActiveSessionFilteringExcludesTerminalStates() {
-        let finished = fixtureSession(title: "Finished", status: .finished)
+        let finished = fixtureSession(title: "Finished", status: .readyForReview)
         let crashed = fixtureSession(title: "Crashed", status: .crashed)
-        let idle = fixtureSession(title: "Idle", status: .idle)
+        let idle = fixtureSession(title: "Idle", status: nil)
 
         let all = [finished, crashed, idle]
         let active = all.filter { $0.status == .working || $0.status == .waitingForInput }
@@ -36,7 +36,7 @@ final class ProjectOverviewTests: XCTestCase {
 
     func testRecentSessionsExcludesActiveSessions() {
         let working = fixtureSession(title: "Active", status: .working)
-        let idle = fixtureSession(title: "Recent", status: .idle)
+        let idle = fixtureSession(title: "Recent", status: nil)
 
         let all = [working, idle]
         let activeIDs = Set(all.filter { $0.status == .working || $0.status == .waitingForInput }.map(\.id))
@@ -123,7 +123,7 @@ final class ProjectOverviewTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func fixtureSession(title: String, status: SessionStatus) -> Session {
+    private func fixtureSession(title: String, status: SessionStatus?) -> Session {
         Session(
             title: title,
             goal: "Test goal",

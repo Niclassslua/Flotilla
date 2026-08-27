@@ -354,7 +354,10 @@ struct RestoreSessionsView: View {
     @State private var selectedIDs: Set<UUID> = []
 
     private var stoppedSessions: [Session] {
-        sessions.filter { $0.status == .finished || $0.status == .crashed }
+        // Only a crashed session is unambiguously stopped and needing a
+        // manual restart. A cleanly-exited session now reads as
+        // `readyForReview` and is restarted automatically on next launch.
+        sessions.filter { $0.status == .crashed }
     }
 
     var body: some View {

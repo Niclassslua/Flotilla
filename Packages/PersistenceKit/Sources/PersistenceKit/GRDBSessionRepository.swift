@@ -121,6 +121,27 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 table.add(column: "waitingReason", .text)
             }
         }
+        migrator.registerMigration("v7_collapseStatuses") { db in
+            // `idle` and `finished` are gone; both read as `readyForReview`
+            // now, and `ready` is renamed to it. A brand-new session with no
+            // observed work is stored as an empty status string (decoded as
+            // nil) — every existing row already carries a real value, so
+            // none is rewritten to empty here.
+            try db.execute(sql: """
+                UPDATE session SET status = 'readyForReview'
+                WHERE status IN ('idle', 'finished', 'ready')
+                """)
+            // Custom-board columns never match on statusFilter, but keep the
+            // stored value coherent for anything that inspects it later.
+            try db.execute(sql: """
+                UPDATE kanban_column SET statusFilter = 'readyForReview'
+                WHERE statusFilter = 'ready'
+                """)
+            try db.execute(sql: """
+                UPDATE kanban_column SET statusFilter = NULL
+                WHERE statusFilter IN ('idle', 'finished')
+                """)
+        }
         return migrator
     }
 

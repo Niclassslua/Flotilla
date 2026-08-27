@@ -91,9 +91,11 @@ public struct TerminalScreenHeuristic: Sendable {
         self.promptHeuristic = promptHeuristic
     }
 
-    /// Classifies the screen. Always returns a status — a screen is a
-    /// complete description of the session's state, so there is no "no
-    /// opinion" case the way there was for a single chunk of output.
+    /// Classifies the screen. Always returns a concrete status — a screen is
+    /// a complete description of the session's state, so there is no "no
+    /// opinion" case the way there was for a single chunk of output. (A
+    /// missing status, `nil`, only ever comes from a session that has drawn
+    /// nothing yet, which is decided before the screen is ever read.)
     public func observation(forScreen screen: String) -> SessionStatusObservation {
         let tail = Self.tail(of: screen)
         let lowered = tail.lowercased()
@@ -113,16 +115,23 @@ public struct TerminalScreenHeuristic: Sendable {
         if promptHeuristic.detectStatus(in: tail) == .waitingForInput {
             return SessionStatusObservation(.waitingForInput)
         }
+        // A dead pane, a bare composer with transcript, and an unremarkable
+        // screen all mean the same thing now: the turn is over and the work
+        // is there to look at. Only an authoritative non-zero process exit
+        // produces `crashed`, and that never comes from here. The branches
+        // are kept distinct because their ordering relative to the working
+        // marker still matters — a stale "esc to interrupt" left on a dead
+        // pane must not read as `working`.
         if Self.finishedMarkers.contains(where: lowered.contains) {
-            return SessionStatusObservation(.finished)
+            return SessionStatusObservation(.readyForReview)
         }
         if Self.workingMarkers.contains(where: lowered.contains) {
             return SessionStatusObservation(.working)
         }
         if Self.hasComposerWithTranscript(tail) {
-            return SessionStatusObservation(.ready)
+            return SessionStatusObservation(.readyForReview)
         }
-        return SessionStatusObservation(.idle)
+        return SessionStatusObservation(.readyForReview)
     }
 
     /// Compatibility convenience for callers interested only in the broad

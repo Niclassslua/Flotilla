@@ -18,8 +18,8 @@ final class AppStore {
     var selectedKanbanBoardID: UUID?
     var lastCreationError: String?
     var lastOperationError: String?
-    /// Called once per clean process exit (never on `.crashed`) after the
-    /// session's status has already landed on `.finished` — the app layer
+    /// Called once per clean process exit (never on `.crashed`), after the
+    /// session's status has landed on `.readyForReview` — the app layer
     /// decides whether/how to notify from here, so this stays a plain
     /// closure rather than pulling a notification dependency into AppStore.
     var onSessionFinished: ((Session) -> Void)?
@@ -134,7 +134,9 @@ final class AppStore {
             try? repository.save(mergingLiveScrollback(sessions[index]))
         }
 
-        for index in sessions.indices where !sessions[index].status.isTerminal {
+        // A session with no status yet (never observed) is restarted like any
+        // other live session; only a crashed one is left alone.
+        for index in sessions.indices where sessions[index].status?.isTerminal != true {
             do {
                 if sessions[index].agentSessionID != nil {
                     sessionResumeStarts[sessions[index].id] = Date()
@@ -461,9 +463,6 @@ final class AppStore {
         } catch {
             lastOperationError = "Session status could not be saved: \(error.localizedDescription)"
         }
-        if updated.status == .finished {
-            onSessionFinished?(updated)
-        }
     }
 
     /// Asynchronously queries the active agent's native storage/API for an
@@ -547,7 +546,7 @@ final class AppStore {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return false }
         return session.status == .working
             || session.status == .waitingForInput
-            || session.status == .idle
+            || session.status == nil
     }
 
     /// Updates a session's title from discovered agent metadata.
@@ -1086,8 +1085,7 @@ final class AppStore {
                 effort: effort,
                 projectID: projectID,
                 workingDirectory: workingDirectory,
-                worktree: worktreeInfo,
-                status: .idle
+                worktree: worktreeInfo
             )
             try processManager.start(
                 session: session,
@@ -1171,7 +1169,13 @@ final class AppStore {
                 }
             }
             sessionResumeStarts.removeValue(forKey: sessionID)
-            applyObservedStatus(exitCode == 0 ? .finished : .crashed, toSessionID: sessionID)
+            applyObservedStatus(exitCode == 0 ? .readyForReview : .crashed, toSessionID: sessionID)
+            if exitCode == 0, let session = sessions.first(where: { $0.id == sessionID }) {
+                // A clean exit is still a "session finished" event for the
+                // notification layer, even though the status now lands on
+                // `readyForReview` alongside a quiet end-of-turn.
+                onSessionFinished?(session)
+            }
         case .launchedWithoutTmux:
             lastOperationError = "tmux is running but not answering clients, so the session was started without it. It will work normally, but will not survive quitting Flotilla."
         }
@@ -1180,6 +1184,6 @@ final class AppStore {
 
 private extension SessionStatus {
     var isTerminal: Bool {
-        self == .finished || self == .crashed
+        self == .crashed
     }
 }

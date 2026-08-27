@@ -49,7 +49,8 @@ public enum StatusBadgeSize {
 }
 
 public struct StatusBadge: View {
-    private let status: SessionStatus
+    /// `nil` — no status observed yet — renders nothing at all.
+    private let status: SessionStatus?
     private let waitingReason: SessionWaitingReason?
     private let size: StatusBadgeSize
     private let showLabel: Bool
@@ -59,7 +60,7 @@ public struct StatusBadge: View {
     @State private var isPulsing = false
 
     public init(
-        _ status: SessionStatus,
+        _ status: SessionStatus?,
         waitingReason: SessionWaitingReason? = nil,
         size: StatusBadgeSize = .small,
         showLabel: Bool = true,
@@ -95,7 +96,14 @@ public struct StatusBadge: View {
         ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
     }
 
+    @ViewBuilder
     public var body: some View {
+        if status != nil {
+            badgeBody
+        }
+    }
+
+    private var badgeBody: some View {
         HStack(spacing: size.spacing) {
             ZStack {
                 Circle()
@@ -142,7 +150,7 @@ public struct StatusBadge: View {
 
 public extension StatusBadge {
     init(
-        _ status: SessionStatus,
+        _ status: SessionStatus?,
         waitingReason: SessionWaitingReason? = nil,
         variant: Variant = .default
     ) {

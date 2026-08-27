@@ -4,25 +4,26 @@ import DesignSystem
 
 /// Maps SessionKit's domain status into presentation — kept in the App
 /// layer so DesignSystem and SessionKit stay decoupled from each other.
+///
+/// A `nil` status means the session has produced no signal yet ("Unstarted").
+/// It presents quietly: a muted dot, and `StatusBadge` renders nothing at all.
 enum StatusPresentation {
-    static func color(for status: SessionStatus) -> Color {
+    static func color(for status: SessionStatus?) -> Color {
         switch status {
         case .working: return FlotillaColors.statusWorking
-        case .idle: return FlotillaColors.statusIdle
         case .waitingForInput: return FlotillaColors.statusWaitingForInput
-        case .ready: return FlotillaColors.statusReady
-        case .finished: return FlotillaColors.statusFinished
+        case .readyForReview: return FlotillaColors.statusReady
         case .crashed: return FlotillaColors.statusCrashed
+        case nil: return FlotillaColors.statusIdle
         }
     }
 
     static func label(
-        for status: SessionStatus,
+        for status: SessionStatus?,
         waitingReason: SessionWaitingReason? = nil
     ) -> String {
         switch status {
         case .working: return "Working"
-        case .idle: return "Idle"
         case .waitingForInput:
             switch waitingReason {
             case .permission: return "Needs Permission"
@@ -30,19 +31,18 @@ enum StatusPresentation {
             case .planApproval: return "Plan Ready"
             case nil: return "Waiting for Input"
             }
-        case .ready: return "Ready"
-        case .finished: return "Finished"
+        case .readyForReview: return "Ready for Review"
         case .crashed: return "Crashed"
+        case nil: return "Unstarted"
         }
     }
 
     static func glyph(
-        for status: SessionStatus,
+        for status: SessionStatus?,
         waitingReason: SessionWaitingReason? = nil
     ) -> String {
         switch status {
         case .working: return "gearshape.2"
-        case .idle: return "circle"
         case .waitingForInput:
             switch waitingReason {
             case .permission: return "lock.open"
@@ -50,9 +50,9 @@ enum StatusPresentation {
             case .planApproval: return "list.clipboard"
             case nil: return "exclamationmark.circle"
             }
-        case .ready: return "hand.raised"
-        case .finished: return "checkmark.circle"
+        case .readyForReview: return "checkmark.circle"
         case .crashed: return "xmark.octagon"
+        case nil: return "circle.dotted"
         }
     }
 
@@ -61,10 +61,8 @@ enum StatusPresentation {
     static func compactLabel(for status: SessionStatus) -> String {
         switch status {
         case .working: return "working"
-        case .idle: return "idle"
         case .waitingForInput: return "waiting"
-        case .ready: return "ready"
-        case .finished: return "finished"
+        case .readyForReview: return "review"
         case .crashed: return "crashed"
         }
     }
@@ -72,5 +70,5 @@ enum StatusPresentation {
     /// Statuses ordered by how urgently they need attention. Drives the
     /// sidebar's fleet composition bar and legend so the most actionable
     /// state is always read first.
-    static let attentionOrder: [SessionStatus] = [.waitingForInput, .working, .ready, .idle, .finished, .crashed]
+    static let attentionOrder: [SessionStatus] = [.waitingForInput, .working, .readyForReview, .crashed]
 }

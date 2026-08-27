@@ -34,7 +34,7 @@ final class KanbanPersistenceTests: XCTestCase {
         XCTAssertNotNil(loaded)
         XCTAssertEqual(loaded?.name, "Test Board")
         XCTAssertEqual(loaded?.columnMode, .status)
-        XCTAssertEqual(loaded?.customColumns.count, 6)
+        XCTAssertEqual(loaded?.customColumns.count, 5)
     }
 
     func testKanbanBoardWithCustomColumns() throws {
@@ -103,7 +103,7 @@ final class KanbanPersistenceTests: XCTestCase {
         XCTAssertEqual(board.projectID, projectID)
         XCTAssertEqual(board.name, "Project Board")
         XCTAssertEqual(board.columnMode, .status)
-        XCTAssertEqual(board.customColumns.count, 6)
+        XCTAssertEqual(board.customColumns.count, 5)
 
         // Second call should return same board
         let board2 = try repo.getOrCreateDefaultKanbanBoard(forProject: projectID, name: "Project Board")
@@ -114,7 +114,7 @@ final class KanbanPersistenceTests: XCTestCase {
         XCTAssertNil(globalBoard.projectID)
         XCTAssertEqual(globalBoard.name, "All Projects")
         XCTAssertEqual(globalBoard.columnMode, .status)
-        XCTAssertEqual(globalBoard.customColumns.count, 6)
+        XCTAssertEqual(globalBoard.customColumns.count, 5)
     }
 
     func testDeleteKanbanBoard() throws {
@@ -248,10 +248,14 @@ final class KanbanAppStoreTests: XCTestCase {
         let board = try XCTUnwrap(store.selectedKanbanBoard)
 
         let columns = store.getColumnsForBoard(board)
-        XCTAssertEqual(columns.count, 6)
-        XCTAssertEqual(columns[0].title, "Working")
-        XCTAssertEqual(columns[0].statusFilter, .working)
-        XCTAssertEqual(columns[5].title, "Crashed")
+        XCTAssertEqual(columns.count, 5)
+        XCTAssertEqual(columns[0].title, "Unstarted")
+        XCTAssertNil(columns[0].statusFilter)
+        XCTAssertEqual(columns[1].title, "Working")
+        XCTAssertEqual(columns[1].statusFilter, .working)
+        XCTAssertEqual(columns[3].title, "Ready for Review")
+        XCTAssertEqual(columns[3].statusFilter, .readyForReview)
+        XCTAssertEqual(columns[4].title, "Crashed")
     }
 
     func testGetColumnsForBoardAgentsMode() throws {
@@ -381,7 +385,7 @@ final class KanbanAppStoreTests: XCTestCase {
             checkoutMode: .mainCheckout
         )
         let session2 = store.sessions.first { $0.title == "Idle Session" }!
-        store.moveSessionToStatus(sessionID: session2.id, status: .idle)
+        store.moveSessionToStatus(sessionID: session2.id, status: .readyForReview)
 
         let board = try XCTUnwrap(store.selectedKanbanBoard)
         let workingColumn = board.customColumns.first { $0.statusFilter == .working }!
@@ -389,7 +393,7 @@ final class KanbanAppStoreTests: XCTestCase {
         XCTAssertEqual(workingSessions.count, 1)
         XCTAssertEqual(workingSessions.first?.id, session1.id)
 
-        let idleColumn = board.customColumns.first { $0.statusFilter == .idle }!
+        let idleColumn = board.customColumns.first { $0.statusFilter == .readyForReview }!
         let idleSessions = store.getSessionsForColumn(idleColumn, board: board)
         XCTAssertEqual(idleSessions.count, 1)
         XCTAssertEqual(idleSessions.first?.id, session2.id)

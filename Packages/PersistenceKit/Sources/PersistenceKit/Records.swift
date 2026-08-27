@@ -2,6 +2,21 @@ import Foundation
 import GRDB
 import SessionKit
 
+public extension SessionStatus {
+    /// Decodes a persisted status string, folding the pre-collapse values
+    /// `idle`, `finished`, and `ready` into `readyForReview`. Returns `nil`
+    /// for an unrecognised value; an empty string ("no status yet") is
+    /// handled by callers before this is reached.
+    static func parseLegacy(rawValue: String) -> SessionStatus? {
+        switch rawValue {
+        case "idle", "finished", "ready":
+            return .readyForReview
+        default:
+            return SessionStatus(rawValue: rawValue)
+        }
+    }
+}
+
 enum RecordDecodingError: LocalizedError {
     case invalidProjectID(String)
     case invalidSession(id: String, field: String, value: String)
@@ -78,7 +93,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         worktreeBranchName = session.worktree?.branchName
         worktreePath = session.worktree?.worktreePath.path
         worktreeBaseCheckoutPath = session.worktree?.baseCheckoutPath.path
-        status = session.status.rawValue
+        status = session.status?.rawValue ?? ""
         waitingReason = session.waitingReason?.rawValue
         kanbanColumnID = session.kanbanColumnID?.uuidString
         workflowStage = session.workflowStage?.rawValue
@@ -95,7 +110,15 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         guard let agentKind = AgentKind(rawValue: agent) else {
             throw RecordDecodingError.invalidSession(id: id, field: "agent", value: agent)
         }
-        guard let sessionStatus = SessionStatus(rawValue: status) else {
+        // An empty string is a session with no status yet (`nil`). Legacy
+        // `idle` / `finished` / `ready` fold into `readyForReview`. Anything
+        // else that is non-empty and unrecognised is a real decode error.
+        let sessionStatus: SessionStatus?
+        if status.isEmpty {
+            sessionStatus = nil
+        } else if let parsed = SessionStatus.parseLegacy(rawValue: status) {
+            sessionStatus = parsed
+        } else {
             throw RecordDecodingError.invalidSession(id: id, field: "status", value: status)
         }
         let sessionWaitingReason: SessionWaitingReason?
@@ -199,7 +222,7 @@ struct KanbanColumnRecord: Codable, FetchableRecord, PersistableRecord {
             id: UUID(uuidString: id) ?? UUID(),
             title: title,
             order: order,
-            statusFilter: statusFilter.flatMap(SessionStatus.init(rawValue:)),
+            statusFilter: statusFilter.flatMap(SessionStatus.parseLegacy(rawValue:)),
             agentFilter: agentFilter.flatMap(AgentKind.init(rawValue:)),
             workflowStageFilter: workflowStageFilter.flatMap(WorkflowStage.init(rawValue:)),
             color: color

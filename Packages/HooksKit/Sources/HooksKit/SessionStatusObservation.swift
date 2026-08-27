@@ -13,8 +13,9 @@ public struct SessionStatusObservation: Equatable, Sendable {
 }
 
 /// Structured hook events outrank an ambiguous terminal fallback. This keeps
-/// a hook-reported Ready/Plan Ready state from immediately decaying to Idle
-/// merely because the provider's prompt styling was not recognized.
+/// a hook-reported Plan Ready / waiting state from immediately decaying to a
+/// bare Ready for Review merely because the provider's prompt styling was
+/// not recognized.
 public struct SessionStatusObservationArbiter: Sendable {
     public enum Source: Equatable, Sendable {
         case hook
@@ -35,11 +36,7 @@ public struct SessionStatusObservationArbiter: Sendable {
         }
 
         if let hook = latestHookObservation {
-            if hook.status == .ready, observation.status == .idle {
-                return nil
-            }
-            if hook.status == .waitingForInput,
-               observation.status == .idle || observation.status == .ready {
+            if hook.status == .waitingForInput, observation.status == .readyForReview {
                 return nil
             }
             if hook.status == .waitingForInput,
@@ -53,7 +50,7 @@ public struct SessionStatusObservationArbiter: Sendable {
         // A visibly active or interactive screen belongs to a newer episode
         // than the last terminal hook edge. Let future screen states stand on
         // their own until another structured hook arrives.
-        if observation.status == .working || observation.status == .finished || observation.status == .crashed ||
+        if observation.status == .working || observation.status == .crashed ||
             (observation.status == .waitingForInput && latestHookObservation?.status != .waitingForInput) {
             latestHookObservation = nil
         }

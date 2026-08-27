@@ -30,7 +30,7 @@ final class WaitingNotificationGateTests: XCTestCase {
 
     func testNeverFiresForNonWaitingStatuses() {
         let gate = WaitingNotificationGate()
-        for status: SessionStatus in [.idle, .working, .finished, .crashed] {
+        for status: SessionStatus in [.working, .readyForReview, .crashed] {
             XCTAssertFalse(gate.shouldNotify(for: status))
         }
     }
@@ -74,7 +74,7 @@ final class TerminalScreenHeuristicTests: XCTestCase {
     }
 
     func testComposerWithProviderFooterMeansReady() {
-        XCTAssertEqual(heuristic.status(forScreen: idleScreen), .ready)
+        XCTAssertEqual(heuristic.status(forScreen: idleScreen), .readyForReview)
     }
 
     func testPermissionPromptMeansWaiting() {
@@ -115,7 +115,7 @@ final class TerminalScreenHeuristicTests: XCTestCase {
           main ✱ 3 files changed
           claude-opus-5
         """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .idle)
+        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
     }
 
     /// A numbered list the agent merely printed is not an open question —
@@ -129,7 +129,7 @@ final class TerminalScreenHeuristicTests: XCTestCase {
 
         │ >                                        │
         """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .ready)
+        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
     }
 
     func testLiveCodexComposerWithFooterMeansReady() {
@@ -141,7 +141,7 @@ final class TerminalScreenHeuristicTests: XCTestCase {
 
           gpt-5.6-sol medium · ~/Documents/Projects/SwiftUi/Flotilla
         """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .ready)
+        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
     }
 
     func testLiveClaudeComposerWithSeveralFootersMeansReady() {
@@ -154,7 +154,7 @@ final class TerminalScreenHeuristicTests: XCTestCase {
         Est. usage: 1 Standard request
         ⏵⏵ auto mode on · 1 file changed
         """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .ready)
+        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
     }
 
     func testCodexQuestionCarriesAnswerReason() {
@@ -234,7 +234,7 @@ final class SessionScreenMonitorTests: XCTestCase {
             pollInterval: .milliseconds(30)
         )
         let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [SessionStatusObservation(.idle)])
+        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)])
         let readCount = await reader.readCount
         XCTAssertGreaterThan(readCount, 1, "the monitor should have polled repeatedly")
     }
@@ -264,7 +264,7 @@ final class SessionScreenMonitorTests: XCTestCase {
             pollInterval: .milliseconds(30)
         )
         let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [SessionStatusObservation(.working), SessionStatusObservation(.ready)])
+        XCTAssertEqual(observed, [SessionStatusObservation(.working), SessionStatusObservation(.readyForReview)])
     }
 
     /// An unreadable screen is "no information" — the status must be left
@@ -381,7 +381,7 @@ final class HookEventReceiverTests: XCTestCase {
         XCTAssertEqual(observed, [
             SessionStatusObservation(.working),
             SessionStatusObservation(.waitingForInput, waitingReason: .planApproval),
-            SessionStatusObservation(.ready),
+            SessionStatusObservation(.readyForReview),
         ])
     }
 
@@ -397,7 +397,7 @@ final class HookEventReceiverTests: XCTestCase {
         let receiver = HookEventReceiver(filePath: file, agent: .claudeCode, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
-        XCTAssertEqual(observed, [SessionStatusObservation(.ready)])
+        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)])
     }
 
     func testMissingFileYieldsNothingRatherThanCrashing() async {
@@ -434,7 +434,7 @@ final class HookEventReceiverTests: XCTestCase {
         receiver.stop()
         collector.cancel()
         let observed = await statuses.values
-        XCTAssertEqual(observed, [SessionStatusObservation(.ready)])
+        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)])
     }
 
     func testAtomicReplacementResetsOffsetEvenWhenNewFileIsLarger() async throws {
@@ -459,7 +459,7 @@ final class HookEventReceiverTests: XCTestCase {
         receiver.stop()
         collector.cancel()
         let observed = await statuses.values
-        XCTAssertEqual(observed, Array(repeating: SessionStatusObservation(.ready), count: 6))
+        XCTAssertEqual(observed, Array(repeating: SessionStatusObservation(.readyForReview), count: 6))
     }
 
     func testAntigravityPreToolUseAskQuestionMeansWaitingForInput() async throws {
@@ -492,7 +492,7 @@ final class HookEventReceiverTests: XCTestCase {
         let receiver = HookEventReceiver(filePath: file, agent: .antigravity, pollInterval: .milliseconds(30))
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
-        XCTAssertEqual(observed, [SessionStatusObservation(.ready)], "fullyIdle: false must not emit any status")
+        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)], "fullyIdle: false must not emit any status")
     }
 
     func testAntigravityPlanArtifactMeansPlanReady() async throws {
@@ -528,7 +528,7 @@ final class HookEventReceiverTests: XCTestCase {
         let observed = await collect(from: receiver, settling: .milliseconds(200))
 
         XCTAssertEqual(observed, [
-            SessionStatusObservation(.ready),
+            SessionStatusObservation(.readyForReview),
             SessionStatusObservation(.waitingForInput, waitingReason: .permission),
             SessionStatusObservation(.waitingForInput, waitingReason: .question),
             SessionStatusObservation(.waitingForInput, waitingReason: .planApproval),
@@ -554,7 +554,7 @@ final class HookEventReceiverTests: XCTestCase {
             SessionStatusObservation(.working),
             SessionStatusObservation(.waitingForInput, waitingReason: .permission),
             SessionStatusObservation(.waitingForInput, waitingReason: .planApproval),
-            SessionStatusObservation(.ready),
+            SessionStatusObservation(.readyForReview),
         ])
     }
 
@@ -577,40 +577,56 @@ final class HookEventReceiverTests: XCTestCase {
             SessionStatusObservation(.working),
             SessionStatusObservation(.waitingForInput, waitingReason: .permission),
             SessionStatusObservation(.waitingForInput, waitingReason: .question),
-            SessionStatusObservation(.ready),
+            SessionStatusObservation(.readyForReview),
         ])
     }
 }
 
 final class SessionStatusObservationArbiterTests: XCTestCase {
-    func testHookReadyCannotDecayToAmbiguousScreenIdle() {
+    /// A structured waiting hook is not undone by the screen falling back to
+    /// a bare Ready for Review because it did not recognise the prompt.
+    func testHookWaitingSurvivesAmbiguousScreenReadyForReview() {
         var arbiter = SessionStatusObservationArbiter()
-        XCTAssertEqual(
-            arbiter.accept(SessionStatusObservation(.ready), from: .hook),
-            SessionStatusObservation(.ready)
-        )
-        XCTAssertNil(arbiter.accept(SessionStatusObservation(.idle), from: .screen))
+        let permission = SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+        XCTAssertEqual(arbiter.accept(permission, from: .hook), permission)
+        XCTAssertNil(arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen))
     }
 
-    func testHookPlanReadySurvivesComposerFallbackUntilWorkResumes() {
+    func testHookPlanReadySurvivesScreenFallbackUntilWorkResumes() {
         var arbiter = SessionStatusObservationArbiter()
         let planReady = SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
         XCTAssertEqual(arbiter.accept(planReady, from: .hook), planReady)
-        XCTAssertNil(arbiter.accept(SessionStatusObservation(.ready), from: .screen))
+        // A screen that only sees a composer must not drop Plan Ready.
+        XCTAssertNil(arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen))
+        // A different, screen-guessed waiting reason is held off too.
         XCTAssertNil(
             arbiter.accept(
                 SessionStatusObservation(.waitingForInput, waitingReason: .question),
                 from: .screen
             )
         )
+        // Visible work is a new episode: it, and everything after it, stands.
         XCTAssertEqual(
             arbiter.accept(SessionStatusObservation(.working), from: .screen),
             SessionStatusObservation(.working)
         )
         XCTAssertEqual(
-            arbiter.accept(SessionStatusObservation(.ready), from: .screen),
-            SessionStatusObservation(.ready)
+            arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen),
+            SessionStatusObservation(.readyForReview)
         )
+    }
+
+    /// With no structured hook to defer to, every screen observation passes
+    /// straight through.
+    func testScreenObservationsPassThroughWithoutAHook() {
+        var arbiter = SessionStatusObservationArbiter()
+        for observation in [
+            SessionStatusObservation(.working),
+            SessionStatusObservation(.readyForReview),
+            SessionStatusObservation(.waitingForInput, waitingReason: .permission),
+        ] {
+            XCTAssertEqual(arbiter.accept(observation, from: .screen), observation)
+        }
     }
 }
 

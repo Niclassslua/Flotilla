@@ -105,7 +105,7 @@ public final class HookEventReceiver: @unchecked Sendable {
                 case "idle_prompt":
                     // Claude emits this after a completed turn. It means the
                     // composer is free, not that Claude is blocked mid-turn.
-                    return SessionStatusObservation(.ready)
+                    return SessionStatusObservation(.readyForReview)
                 case "permission_prompt":
                     let message = (object["message"] as? String)?.lowercased() ?? ""
                     let reason: SessionWaitingReason = message.contains("plan") ? .planApproval : .permission
@@ -121,7 +121,7 @@ public final class HookEventReceiver: @unchecked Sendable {
             case "PermissionRequest":
                 return Self.claudeInteractiveObservation(toolName: object["tool_name"] as? String)
                     ?? SessionStatusObservation(.waitingForInput, waitingReason: .permission)
-            case "Stop": return SessionStatusObservation(.ready)
+            case "Stop": return SessionStatusObservation(.readyForReview)
             case "PostToolUse": return SessionStatusObservation(.working)
             default: return nil
             }
@@ -140,7 +140,7 @@ public final class HookEventReceiver: @unchecked Sendable {
                 }
                 return SessionStatusObservation(.working)
             case "Stop":
-                return (payload["fullyIdle"] as? Bool) == true ? SessionStatusObservation(.ready) : nil
+                return (payload["fullyIdle"] as? Bool) == true ? SessionStatusObservation(.readyForReview) : nil
             default:
                 return nil
             }
@@ -164,7 +164,7 @@ public final class HookEventReceiver: @unchecked Sendable {
                 if object["last_assistant_message"] is NSNull {
                     return SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
                 }
-                return SessionStatusObservation(.ready)
+                return SessionStatusObservation(.readyForReview)
             case "PermissionRequest":
                 return SessionStatusObservation(.waitingForInput, waitingReason: .permission)
             default: return nil
@@ -174,11 +174,11 @@ public final class HookEventReceiver: @unchecked Sendable {
             // HookConfigurationWriter.openCodePluginContents) as a flat
             // {"event": "<name>"} line — no nested payload needed for any
             // of these mappings. session.idle is a naming trap: it means
-            // "turn ended, composer free" (Flotilla's .ready), not .idle.
+            // "turn ended, composer free" (Flotilla's .readyForReview).
             guard let eventName = object["event"] as? String else { return nil }
             switch eventName {
             case "tool.execute.after": return SessionStatusObservation(.working)
-            case "session.idle": return SessionStatusObservation(.ready)
+            case "session.idle": return SessionStatusObservation(.readyForReview)
             case "permission.asked":
                 return SessionStatusObservation(.waitingForInput, waitingReason: .permission)
             case "question.asked":

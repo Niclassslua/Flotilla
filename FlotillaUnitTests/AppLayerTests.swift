@@ -395,7 +395,7 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertEqual(store.sessions.first?.waitingReason, .question)
         XCTAssertEqual(try repository.loadAll().sessions.first?.waitingReason, .question)
 
-        store.applyObservedStatus(.ready, toSessionID: sessionID)
+        store.applyObservedStatus(.readyForReview, toSessionID: sessionID)
         XCTAssertNil(store.sessions.first?.waitingReason)
     }
 
@@ -607,7 +607,7 @@ final class AppStoreLifecycleTests: XCTestCase {
         factory.processes[0].simulateCrash(code: 0)
         try await Task.sleep(for: .milliseconds(100))
 
-        XCTAssertEqual(store.sessions.first?.status, .finished)
+        XCTAssertEqual(store.sessions.first?.status, .readyForReview)
         XCTAssertEqual(finishedSessions.map(\.id), [session.id])
     }
 
@@ -651,7 +651,7 @@ final class AppStoreLifecycleTests: XCTestCase {
             agent: .codexCLI,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .finished
+            status: .readyForReview
         )
         try repository.save(session)
         let store = AppStore(
@@ -695,7 +695,7 @@ final class AppStoreLifecycleTests: XCTestCase {
             agent: .codexCLI,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .finished
+            status: .readyForReview
         )
         try repository.save(session)
         let store = AppStore(
@@ -742,7 +742,7 @@ final class AppStoreLifecycleTests: XCTestCase {
             agent: .codexCLI,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .finished
+            status: .readyForReview
         )
         try repository.save(session)
         let store = AppStore(

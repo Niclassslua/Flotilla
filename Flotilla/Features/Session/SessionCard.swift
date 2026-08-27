@@ -377,14 +377,7 @@ struct SessionCard<Terminal: View>: View {
     }
 
     private var statusColor: Color {
-        switch session.status {
-        case .working: return FlotillaColors.statusWorking
-        case .idle: return FlotillaColors.statusIdle
-        case .waitingForInput: return FlotillaColors.statusWaitingForInput
-        case .ready: return FlotillaColors.statusReady
-        case .finished: return FlotillaColors.statusFinished
-        case .crashed: return FlotillaColors.statusCrashed
-        }
+        StatusPresentation.color(for: session.status)
     }
 
     private var metadataLine: some View {

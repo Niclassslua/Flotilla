@@ -29,7 +29,11 @@ struct HomeFleetStats {
 
     init(sessions: [Session]) {
         total = sessions.count
-        counts = sessions.reduce(into: [:]) { $0[$1.status, default: 0] += 1 }
+        // A session with no status yet contributes to no bucket — nothing to
+        // show in the fleet legend until it is observed.
+        counts = sessions.reduce(into: [:]) { partial, session in
+            if let status = session.status { partial[status, default: 0] += 1 }
+        }
     }
 
     func count(_ status: SessionStatus) -> Int {

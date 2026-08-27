@@ -89,7 +89,7 @@ final class RealPipelineReproTests: XCTestCase {
             agent: .claudeCode,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .idle
+            status: nil
         )
         let process = try manager.start(session: session, deliverGoal: false)
         XCTAssertTrue(process.isRunning, "process must be running right after start")
@@ -106,7 +106,7 @@ final class RealPipelineReproTests: XCTestCase {
             agent: .claudeCode,
             projectID: nil,
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .idle
+            status: nil
         )
         let process = try manager.start(session: session, deliverGoal: false)
         XCTAssertTrue(process.isRunning, "process must be running right after start")
@@ -140,7 +140,7 @@ final class RealPipelineReproTests: XCTestCase {
 
         XCTAssertNil(store.lastCreationError, "creation error: \(store.lastCreationError ?? "")")
         let created = try XCTUnwrap(store.sessions.first { $0.title == "Store repro" })
-        XCTAssertEqual(created.status, .working, "session must be .working, got \(created.status.rawValue)")
+        XCTAssertEqual(created.status, .working, "session must be .working, got \(created.status?.rawValue ?? "nil")")
         let process = try XCTUnwrap(store.process(for: created.id), "process must exist for created session")
         XCTAssertTrue(process.isRunning, "process must be running right after creation")
         try await Task.sleep(for: .seconds(1.5))

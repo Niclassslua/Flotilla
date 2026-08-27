@@ -231,7 +231,7 @@ enum HomePreviewData {
                 "Port the settings pane to Liquid Glass",
                 project: atlas,
                 agent: .codexCLI,
-                status: .ready,
+                status: .readyForReview,
                 branch: "atlas/glass-settings",
                 minutesAgo: 26
             ),
@@ -247,7 +247,7 @@ enum HomePreviewData {
                 "Draft the migration guide",
                 project: orbit,
                 agent: .openCode,
-                status: .finished,
+                status: .readyForReview,
                 branch: "orbit/migration-docs",
                 minutesAgo: 240
             ),
@@ -255,7 +255,7 @@ enum HomePreviewData {
                 "Audit dependency licences",
                 project: nil,
                 agent: .claudeCode,
-                status: .idle,
+                status: nil,
                 branch: nil,
                 minutesAgo: 1_500
             ),
@@ -266,7 +266,7 @@ enum HomePreviewData {
         _ title: String,
         project: Project?,
         agent: AgentKind,
-        status: SessionStatus,
+        status: SessionStatus?,
         branch: String?,
         minutesAgo: Int
     ) -> Session {
