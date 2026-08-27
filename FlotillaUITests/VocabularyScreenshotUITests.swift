@@ -110,6 +110,28 @@ final class VocabularyScreenshotUITests: XCTestCase {
         save(window.screenshot(), named: name, note: note)
     }
 
+    /// Screen capture only succeeds for windows on the primary display here:
+    /// a window opening at x=2560 (the secondary) fails every `screenshot()`
+    /// with "Image creation failed", and that error aborts the test method
+    /// outright — `continueAfterFailure` does not soften it. Where the window
+    /// lands is not ours to choose, so drag it home by the title bar first.
+    ///
+    /// The grab point is deliberately off-centre: the middle of the title bar
+    /// holds the presentation picker in fleet scope.
+    private func moveWindowToPrimaryDisplay(_ app: XCUIApplication) {
+        let window = app.windows.firstMatch
+        guard fastWait(window, timeout: 5) else { return }
+        let frame = window.frame
+        guard frame.minX > 1, frame.width > 1 else { return }
+
+        let shift = -frame.minX / frame.width
+        let grab = window.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.008))
+        let drop = window.coordinate(withNormalizedOffset: CGVector(dx: 0.35 + shift, dy: 0.008))
+        grab.press(forDuration: 0.3, thenDragTo: drop)
+        settle(1.0)
+        Self.note("MOVED     window from x=\(Int(frame.minX)) to x=\(Int(app.windows.firstMatch.frame.minX)) for capture")
+    }
+
     private func shootElement(_ app: XCUIApplication, id: String, _ name: String, _ note: String) {
         guard let target = largestMatch(app, id, timeout: 3) else {
             Self.note("MISSING   \(name) — no element '\(id)' (\(note))")
@@ -172,6 +194,7 @@ final class VocabularyScreenshotUITests: XCTestCase {
     func testCaptureShellAndFleetSurfaces() {
         let app = launchedApp()
         XCTAssertTrue(fastWait(element(app, "HomeDashboard"), timeout: 12), "app never reached the home dashboard")
+        moveWindowToPrimaryDisplay(app)
 
         // §1 Window shell + §2 Home / Overview
         shootWindow(app, "01-home-dashboard", "Shell: rail + detail column showing the Home dashboard")
@@ -194,7 +217,11 @@ final class VocabularyScreenshotUITests: XCTestCase {
         settle(1.0)
         shootWindow(app, "10-presentation-grid", "Grid presentation with the grid toolbar controls")
         shootElement(app, id: "GridView", "11-grid-view", "Mission control grid")
-        shootElement(app, id: "GridTile-Fix login bug", "12-session-tile", "Session tile / session card, tile variant")
+        // The tile container has no identifier of its own — only
+        // `GridTile-<title>-Status` and `-FocusButton` are applied
+        // (SessionTileChrome.swift:39,121). `AXID.gridTile(_:)` is dead code.
+        // Crop a tile out of `11-grid-view.png` instead of shooting it here.
+        shootElement(app, id: "GridTile-Fix login bug-FocusButton", "12-tile-focus-button", "Tile focus button")
 
         // §3 Board
         choosePresentation(app, "Board")
@@ -203,7 +230,6 @@ final class VocabularyScreenshotUITests: XCTestCase {
 
         // §3 Focus — a single session's terminal filling the detail column
         goToSessions(app)
-        choosePresentation(app, "Focus")
         click(app, "SessionRow-Fix login bug")
         shootWindow(app, "15-presentation-focus", "Focus presentation: one terminal host filling the detail column")
     }
@@ -213,6 +239,7 @@ final class VocabularyScreenshotUITests: XCTestCase {
     func testCaptureLaunchersAndModals() {
         let app = launchedApp()
         XCTAssertTrue(fastWait(element(app, "HomeDashboard"), timeout: 12))
+        moveWindowToPrimaryDisplay(app)
 
         // §7 New Session window — the command bar design
         app.typeKey("n", modifierFlags: .command)
@@ -258,6 +285,7 @@ final class VocabularyScreenshotUITests: XCTestCase {
     func testCaptureProjectWorkspace() {
         let app = launchedApp()
         XCTAssertTrue(fastWait(element(app, "HomeDashboard"), timeout: 12))
+        moveWindowToPrimaryDisplay(app)
 
         // The project card drills in via `.onTapGesture` on its container, so
         // the click has to land on the container rather than a StaticText child.
