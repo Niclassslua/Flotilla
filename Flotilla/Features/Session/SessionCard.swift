@@ -75,6 +75,9 @@ struct SessionCard<Terminal: View>: View {
         // macOS, a tap gesture on plain row content loses the hit-test race
         // to the table view's own click handling and silently never fires —
         // a `Button`'s action is what AppKit reliably routes the click to.
+        // Deletion lives on the row's `.swipeActions` (see the call site in
+        // `SessionSidebarRow`) and the context menu, exactly like Mail and
+        // Reminders — the row itself carries no inline delete control.
         Button(action: onTap) {
             HStack(alignment: .top, spacing: 10) {
                 providerTile
@@ -87,7 +90,6 @@ struct SessionCard<Terminal: View>: View {
                         Text(compactTimestamp(for: session.lastActiveAt))
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.tertiary)
-                        deleteButton
                     }
                     metadataLine
                 }
@@ -100,9 +102,9 @@ struct SessionCard<Terminal: View>: View {
         .buttonStyle(.plain)
         .contextMenu { contextMenu }
         // `.contain` keeps the row addressable by the identifier the call
-        // site assigns while still exposing children (status word, delete
-        // button) individually — without it SwiftUI collapses the row into
-        // a single element and drops them from the accessibility tree.
+        // site assigns while still exposing children (status word, etc.)
+        // individually — without it SwiftUI collapses the row into a single
+        // element and drops them from the accessibility tree.
         .accessibilityElement(children: .contain)
     }
 
@@ -383,18 +385,6 @@ struct SessionCard<Terminal: View>: View {
         case .finished: return FlotillaColors.statusFinished
         case .crashed: return FlotillaColors.statusCrashed
         }
-    }
-
-    private var deleteButton: some View {
-        Button(action: onDelete) {
-            Image(systemName: "trash")
-                .font(.caption2)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(isSelected ? .secondary : .tertiary)
-        .help("Delete Session…")
-        .accessibilityLabel("Delete Session")
-        .accessibilityIdentifier("SessionRow-\(session.title)-DeleteButton")
     }
 
     private var metadataLine: some View {

@@ -314,6 +314,21 @@ struct SessionSidebarRow: View {
         .animation(.easeOut(duration: 0.1), value: isHovering)
         .onHover { isHovering = $0 }
         .listRowInsets(EdgeInsets())
+        // Native Mail/Reminders-style swipe-to-delete: a two-finger drag
+        // left slides the red button out from under the trailing edge,
+        // tracking the finger, and a full swipe fires it.
+        //
+        // A *full* swipe is a deliberate, committed gesture — that's the
+        // confirmation, so it deletes straight away and keeps any worktree
+        // and branch (the non-destructive default; full git cleanup stays
+        // available through the sheet). A *partial* swipe that just parks
+        // the button open, then a tap on it, still routes through the
+        // confirmation sheet — same as the context menu.
+        .modifier(SwipeToDeleteSession(
+            accessibilityID: "SessionRow-\(session.title)-SwipeDelete",
+            onCommit: { Task { await store.deleteSession(sessionID: session.id, deleteWorktree: false) } },
+            onConfirm: { onRequestDelete(session.id) }
+        ))
         .tag(SidebarItem.session(session.id))
         .accessibilityIdentifier(AXID.sessionRow(session.title))
         .accessibilityAddTraits(isGridMember ? .isSelected : [])
@@ -351,6 +366,58 @@ struct SessionSidebarRow: View {
             }
             .accessibilityIdentifier("SessionRow-\(session.title)-DeleteMenuItem")
         }
+    }
+}
+
+/// Trailing swipe-to-delete for a session row.
+///
+/// A full swipe is treated as its own confirmation and calls `onCommit`
+/// straight away. A partial swipe that parks the button open, then a tap,
+/// calls `onConfirm` instead — the shared confirmation-sheet path, which is
+/// also where the row's context menu leads.
+///
+/// Telling the two apart needs `swipeActions`' `onPresentationChanged`
+/// (macOS 27+). Below that it can't be done, so every swipe falls back to
+/// `onConfirm` rather than risk a stray full swipe deleting without asking.
+///
+/// Even with `onPresentationChanged`, "actions are visible" isn't quite
+/// "button was tapped from rest" — a full swipe can flash that signal on
+/// its way past. So the button treats it as a parked tap only once the
+/// actions have been open a beat; anything faster is the tail of a full
+/// swipe and commits.
+private struct SwipeToDeleteSession: ViewModifier {
+    /// How long the actions must sit open before a press counts as a
+    /// deliberate parked tap rather than the end of a full swipe.
+    private static let parkedThreshold: TimeInterval = 0.3
+
+    let accessibilityID: String
+    let onCommit: () -> Void
+    let onConfirm: () -> Void
+
+    @State private var openedAt: Date?
+
+    func body(content: Content) -> some View {
+        if #available(macOS 27, *) {
+            content.swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                deleteButton {
+                    let parked = openedAt.map { Date().timeIntervalSince($0) >= Self.parkedThreshold } ?? false
+                    if parked { onConfirm() } else { onCommit() }
+                }
+            } onPresentationChanged: { visible in
+                openedAt = visible ? Date() : nil
+            }
+        } else {
+            content.swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                deleteButton(action: onConfirm)
+            }
+        }
+    }
+
+    private func deleteButton(action: @escaping () -> Void) -> some View {
+        Button(role: .destructive, action: action) {
+            Label("Delete", systemImage: "trash")
+        }
+        .accessibilityIdentifier(accessibilityID)
     }
 }
 
