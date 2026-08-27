@@ -87,6 +87,47 @@ hook definitions for review. Because Flotilla's
 definition is stable rather than session-specific, a user reviews one hook
 shape instead of a new machine-path entry for every session.
 
+## Reaching each status
+
+Two independent sources move a session between states: the provider hook
+stream (`HookEventReceiver`) and the rendered terminal
+(`SessionScreenMonitor` / `TerminalScreenHeuristic`). Either can reach any
+state below. `SessionStatusObservationArbiter` lets a structured hook
+Ready/waiting observation suppress a contradictory screen Idle/Ready
+fallback, and every accepted observation must still be a legal
+`SessionStatusMachine` transition.
+
+Each cell lists the hook event(s) that map to that status for that provider.
+The bottom row is the shared terminal-screen fallback, which applies to
+every provider and stays active even when hooks are wired; it inspects only
+the bottom `inspectedTailLines` (8) non-empty lines, case-insensitively.
+A dash means no hook event of that provider produces the status — it is
+reachable only through the screen fallback (or, for `idle`, as the initial
+status). In the **Waiting** column, `→ reason` is the `SessionWaitingReason`
+persisted with the status: `permission` → **Needs Permission**, `question` →
+**Needs Answer**, `planApproval` → **Plan Ready**.
+
+| Source | Working | Waiting (`waitingForInput`) | Ready | Idle | Finished |
+| --- | --- | --- | --- | --- | --- |
+| **Claude Code** | `PostToolUse`; `PreToolUse` for any tool other than `AskUserQuestion` / `ExitPlanMode` | `PreToolUse` or `PermissionRequest` for `AskUserQuestion` → `question`, for `ExitPlanMode` → `planApproval`; any other `PermissionRequest` → `permission`; `Notification`/`permission_prompt` → `permission` (`planApproval` if the message mentions a plan); `Notification`/`elicitation_dialog` → `question` | `Stop`; `Notification`/`idle_prompt` | — | — |
+| **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — | — |
+| **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — | — |
+| **Antigravity** | `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval` | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation) | — | — |
+| **Terminal-screen fallback** (every provider) | an interrupt hint — `esc to interrupt`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; or shows a numbered choice list with a selection caret; or the prompt heuristic reads the prompt as waiting | a composer prompt (`❯`, `> `, `› `) with non-empty transcript text somewhere above it | the inspected tail has no interrupt hint, no plan / permission / question marker, no finished marker, and no composer-with-transcript — an empty composer with nothing above it. Also the status a session is persisted with before its process emits anything | the inspected tail contains `agent exited`, `pane is dead`, or `process finished`. Also set directly when the agent process exits with status code 0 (a non-zero exit code produces `crashed`) |
+
+Two `SessionStatusMachine` constraints shape which of these are reachable
+when:
+
+- There is no `idle → ready` edge, so a session reaches **Ready** only from
+  Working or Waiting — never straight from a freshly created Idle.
+- **Finished** is terminal apart from an explicit restart
+  (`finished → working`).
+
+A screen `idle` or `ready` is also dropped by
+`SessionStatusObservationArbiter` while the most recent hook observation was
+`ready` or `waitingForInput`, so a recognised structured event is not undone
+by an unrecognised prompt style.
+
 ## Components
 
 ### `HookConfiguring`
