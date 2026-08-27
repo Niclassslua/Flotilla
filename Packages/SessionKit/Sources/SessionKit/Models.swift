@@ -80,6 +80,17 @@ public enum SessionStatus: String, Codable, Sendable, CaseIterable, Identifiable
     public var id: String { rawValue }
 }
 
+/// The action a blocked agent needs from the user. Kept separate from
+/// `SessionStatus` so status-based boards can continue grouping every
+/// blocked session under `waitingForInput` while the UI says what is needed.
+public enum SessionWaitingReason: String, Codable, Sendable, CaseIterable, Identifiable {
+    case permission
+    case question
+    case planApproval
+
+    public var id: String { rawValue }
+}
+
 public enum CheckoutMode: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case mainCheckout
     case newWorktree
@@ -246,6 +257,9 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public var workingDirectory: URL
     public var worktree: WorktreeInfo?
     public var status: SessionStatus
+    /// More specific meaning for `waitingForInput`; always `nil` in every
+    /// other status.
+    public var waitingReason: SessionWaitingReason?
     /// Kanban board column assignment (for custom column mode)
     public var kanbanColumnID: UUID?
     /// Workflow stage (for workflow column mode)
@@ -269,6 +283,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         workingDirectory: URL,
         worktree: WorktreeInfo? = nil,
         status: SessionStatus = .idle,
+        waitingReason: SessionWaitingReason? = nil,
         kanbanColumnID: UUID? = nil,
         workflowStage: WorkflowStage? = nil,
         agentSessionID: String? = nil,
@@ -286,6 +301,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         self.workingDirectory = workingDirectory
         self.worktree = worktree
         self.status = status
+        self.waitingReason = status == .waitingForInput ? waitingReason : nil
         self.kanbanColumnID = kanbanColumnID
         self.workflowStage = workflowStage
         self.agentSessionID = agentSessionID

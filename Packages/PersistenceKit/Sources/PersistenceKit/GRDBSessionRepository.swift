@@ -116,6 +116,11 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 table.add(column: "agentSessionID", .text)
             }
         }
+        migrator.registerMigration("v6_addSessionWaitingReason") { db in
+            try db.alter(table: "session") { table in
+                table.add(column: "waitingReason", .text)
+            }
+        }
         return migrator
     }
 

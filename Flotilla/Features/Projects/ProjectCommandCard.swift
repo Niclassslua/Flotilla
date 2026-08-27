@@ -138,7 +138,7 @@ struct ProjectCommandCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(activeSessions.prefix(2)) { session in
                     HStack(spacing: FlotillaSpacing.small) {
-                        StatusBadge(session.status, size: .micro, showLabel: false)
+                        StatusBadge(session.status, waitingReason: session.waitingReason, size: .micro, showLabel: false)
 
                         Text(session.agent.displayName)
                             .font(FlotillaTypography.caption.weight(.semibold))

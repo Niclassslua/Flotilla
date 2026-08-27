@@ -365,10 +365,10 @@ final class AppStore {
     }
     // ... rest of the file
 
-    /// Drives the real output-observation pipeline in UI automation without
-    /// turning typed user input into fake agent output. This is unavailable
-    /// outside an explicit UI-testing launch and never touches production
-    /// processes.
+    /// Seeds the same permission-prompt state the observation pipeline would
+    /// produce, then echoes the prompt into the mock terminal for UI
+    /// automation. This is unavailable outside an explicit UI-testing launch
+    /// and never touches production processes.
     func simulateWaitingPromptForUITesting(sessionTitle: String) {
         #if DEBUG
         let isUITesting = ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
@@ -378,6 +378,7 @@ final class AppStore {
         guard isUITesting,
               let session = sessions.first(where: { $0.title == sessionTitle }),
               let process = processManager.process(for: session.id) as? MockPTYProcess else { return }
+        applyObservedStatus(.waitingForInput, waitingReason: .permission, toSessionID: session.id)
         process.simulateOutput("Do you want to continue? (y/n) ")
     }
 
@@ -428,15 +429,32 @@ final class AppStore {
         return session
     }
 
-    func applyObservedStatus(_ status: SessionStatus, toSessionID sessionID: UUID) {
+    func applyObservedStatus(
+        _ status: SessionStatus,
+        waitingReason: SessionWaitingReason? = nil,
+        toSessionID sessionID: UUID
+    ) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let current = sessions[index]
+        let resolvedWaitingReason = status == .waitingForInput
+            ? (waitingReason ?? current.waitingReason)
+            : nil
         // Observed status is a level, not an edge: the observer re-reports
         // `.working` for every chunk a streaming agent produces. Filtering
         // no-ops here keeps them out of the machine, which treats a
         // self-transition as illegal and logs each one.
-        guard sessions[index].status != status else { return }
-        let updated = statusMachine.transition(sessions[index], to: status)
-        guard updated.status != sessions[index].status else { return }
+        guard current.status != status || current.waitingReason != resolvedWaitingReason else { return }
+
+        var updated: Session
+        if current.status == status {
+            updated = current
+            updated.waitingReason = resolvedWaitingReason
+            updated.lastActiveAt = Date()
+        } else {
+            updated = statusMachine.transition(current, to: status)
+            guard updated.status != current.status else { return }
+            updated.waitingReason = resolvedWaitingReason
+        }
         sessions[index] = updated
         do {
             try repository.save(mergingLiveScrollback(updated))

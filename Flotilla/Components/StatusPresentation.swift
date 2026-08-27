@@ -16,22 +16,40 @@ enum StatusPresentation {
         }
     }
 
-    static func label(for status: SessionStatus) -> String {
+    static func label(
+        for status: SessionStatus,
+        waitingReason: SessionWaitingReason? = nil
+    ) -> String {
         switch status {
         case .working: return "Working"
         case .idle: return "Idle"
-        case .waitingForInput: return "Waiting for Input"
+        case .waitingForInput:
+            switch waitingReason {
+            case .permission: return "Needs Permission"
+            case .question: return "Needs Answer"
+            case .planApproval: return "Plan Ready"
+            case nil: return "Waiting for Input"
+            }
         case .ready: return "Ready"
         case .finished: return "Finished"
         case .crashed: return "Crashed"
         }
     }
 
-    static func glyph(for status: SessionStatus) -> String {
+    static func glyph(
+        for status: SessionStatus,
+        waitingReason: SessionWaitingReason? = nil
+    ) -> String {
         switch status {
         case .working: return "gearshape.2"
         case .idle: return "circle"
-        case .waitingForInput: return "exclamationmark.circle"
+        case .waitingForInput:
+            switch waitingReason {
+            case .permission: return "lock.open"
+            case .question: return "questionmark.bubble"
+            case .planApproval: return "list.clipboard"
+            case nil: return "exclamationmark.circle"
+            }
         case .ready: return "hand.raised"
         case .finished: return "checkmark.circle"
         case .crashed: return "xmark.octagon"

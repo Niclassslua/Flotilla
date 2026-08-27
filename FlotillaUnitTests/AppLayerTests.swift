@@ -23,6 +23,21 @@ private struct FixedExecutableLocator: ExecutableLocating {
     }
 }
 
+final class StatusPresentationTests: XCTestCase {
+    func testWaitingReasonsHaveActionableLabelsAndGlyphs() {
+        XCTAssertEqual(StatusPresentation.label(for: .waitingForInput, waitingReason: .permission), "Needs Permission")
+        XCTAssertEqual(StatusPresentation.label(for: .waitingForInput, waitingReason: .question), "Needs Answer")
+        XCTAssertEqual(StatusPresentation.label(for: .waitingForInput, waitingReason: .planApproval), "Plan Ready")
+        XCTAssertEqual(StatusPresentation.glyph(for: .waitingForInput, waitingReason: .permission), "lock.open")
+        XCTAssertEqual(StatusPresentation.glyph(for: .waitingForInput, waitingReason: .question), "questionmark.bubble")
+        XCTAssertEqual(StatusPresentation.glyph(for: .waitingForInput, waitingReason: .planApproval), "list.clipboard")
+    }
+
+    func testUnknownWaitingReasonKeepsLegacyLabel() {
+        XCTAssertEqual(StatusPresentation.label(for: .waitingForInput), "Waiting for Input")
+    }
+}
+
 /// Deterministic server-health verdicts: the real probe shells out to the
 /// machine's actual tmux server, whose state must never decide a test.
 private final class StubTmuxServerProbe: TmuxServerProbing, @unchecked Sendable {
@@ -353,6 +368,35 @@ final class AppStoreLifecycleTests: XCTestCase {
             ).path
         )
         XCTAssertTrue(factory.processes.first?.sentInput.isEmpty == true)
+    }
+
+    func testObservedWaitingReasonUpdatesAndPersistsWithoutAStatusChange() async throws {
+        let repository = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: factory),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+        await store.createSession(
+            title: "Reason detail",
+            goal: "Exercise status detail",
+            agent: .codexCLI,
+            projectFolder: nil,
+            checkoutMode: .mainCheckout
+        )
+        let sessionID = try XCTUnwrap(store.sessions.first?.id)
+
+        store.applyObservedStatus(.waitingForInput, waitingReason: .permission, toSessionID: sessionID)
+        XCTAssertEqual(store.sessions.first?.waitingReason, .permission)
+
+        store.applyObservedStatus(.waitingForInput, waitingReason: .question, toSessionID: sessionID)
+        XCTAssertEqual(store.sessions.first?.waitingReason, .question)
+        XCTAssertEqual(try repository.loadAll().sessions.first?.waitingReason, .question)
+
+        store.applyObservedStatus(.ready, toSessionID: sessionID)
+        XCTAssertNil(store.sessions.first?.waitingReason)
     }
 
     func testRestoreKeepsAntigravityConversationWhenAnotherCLIAlreadyOwnsIt() throws {

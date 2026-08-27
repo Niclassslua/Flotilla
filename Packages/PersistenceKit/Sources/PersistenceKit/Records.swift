@@ -58,6 +58,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var worktreePath: String?
     var worktreeBaseCheckoutPath: String?
     var status: String
+    var waitingReason: String?
     var kanbanColumnID: String?
     var workflowStage: String?
     var agentSessionID: String?
@@ -78,6 +79,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         worktreePath = session.worktree?.worktreePath.path
         worktreeBaseCheckoutPath = session.worktree?.baseCheckoutPath.path
         status = session.status.rawValue
+        waitingReason = session.waitingReason?.rawValue
         kanbanColumnID = session.kanbanColumnID?.uuidString
         workflowStage = session.workflowStage?.rawValue
         agentSessionID = session.agentSessionID
@@ -95,6 +97,15 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         }
         guard let sessionStatus = SessionStatus(rawValue: status) else {
             throw RecordDecodingError.invalidSession(id: id, field: "status", value: status)
+        }
+        let sessionWaitingReason: SessionWaitingReason?
+        if let waitingReason {
+            guard let parsedWaitingReason = SessionWaitingReason(rawValue: waitingReason) else {
+                throw RecordDecodingError.invalidSession(id: id, field: "waiting reason", value: waitingReason)
+            }
+            sessionWaitingReason = parsedWaitingReason
+        } else {
+            sessionWaitingReason = nil
         }
         let sessionEffort: AgentEffort?
         if let effort {
@@ -149,6 +160,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             workingDirectory: URL(fileURLWithPath: workingDirectory),
             worktree: worktree,
             status: sessionStatus,
+            waitingReason: sessionWaitingReason,
             kanbanColumnID: kanbanColumnUUID,
             workflowStage: workflowStageValue,
             agentSessionID: agentSessionID,

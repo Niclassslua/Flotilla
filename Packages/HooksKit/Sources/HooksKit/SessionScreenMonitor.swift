@@ -16,8 +16,8 @@ public final class SessionScreenMonitor: @unchecked Sendable {
     private let reader: SessionScreenReading
     private let heuristic: TerminalScreenHeuristic
     private let pollInterval: Duration
-    private let continuation: AsyncStream<SessionStatus>.Continuation
-    public let statusStream: AsyncStream<SessionStatus>
+    private let continuation: AsyncStream<SessionStatusObservation>.Continuation
+    public let observationStream: AsyncStream<SessionStatusObservation>
     private let taskLock = NSLock()
     private var task: Task<Void, Never>?
 
@@ -31,8 +31,8 @@ public final class SessionScreenMonitor: @unchecked Sendable {
         self.reader = reader
         self.heuristic = heuristic
         self.pollInterval = pollInterval
-        var continuation: AsyncStream<SessionStatus>.Continuation!
-        self.statusStream = AsyncStream { continuation = $0 }
+        var continuation: AsyncStream<SessionStatusObservation>.Continuation!
+        self.observationStream = AsyncStream { continuation = $0 }
         self.continuation = continuation
     }
 
@@ -48,7 +48,7 @@ public final class SessionScreenMonitor: @unchecked Sendable {
 
         task = Task {
             var previousScreen: String?
-            var previousStatus: SessionStatus?
+            var previousObservation: SessionStatusObservation?
 
             while !Task.isCancelled {
                 if let screen = await reader.readScreen(for: sessionID) {
@@ -57,10 +57,10 @@ public final class SessionScreenMonitor: @unchecked Sendable {
                     // nothing about what the agent is doing.
                     if screen != previousScreen {
                         previousScreen = screen
-                        let status = heuristic.status(forScreen: screen)
-                        if status != previousStatus {
-                            previousStatus = status
-                            continuation.yield(status)
+                        let observation = heuristic.observation(forScreen: screen)
+                        if observation != previousObservation {
+                            previousObservation = observation
+                            continuation.yield(observation)
                         }
                     }
                 }

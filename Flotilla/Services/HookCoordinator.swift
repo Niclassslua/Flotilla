@@ -26,6 +26,7 @@ final class HookCoordinator {
     private var monitors: [UUID: SessionScreenMonitor] = [:]
     private var hookReceivers: [UUID: HookEventReceiver] = [:]
     private var gates: [UUID: WaitingNotificationGate] = [:]
+    private var arbiters: [UUID: SessionStatusObservationArbiter] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
     /// Surfaced in the UI (behind an always-mounted, near-invisible label)
@@ -73,6 +74,7 @@ final class HookCoordinator {
             hookReceivers[sessionID] = nil
             tasks[sessionID] = nil
             gates[sessionID] = nil
+            arbiters[sessionID] = nil
         }
         for session in store.sessions where store.process(for: session.id) != nil {
             observe(sessionID: session.id)
@@ -97,6 +99,7 @@ final class HookCoordinator {
         let gate = WaitingNotificationGate()
         monitors[sessionID] = monitor
         gates[sessionID] = gate
+        arbiters[sessionID] = SessionStatusObservationArbiter()
 
         var hookReceiver: HookEventReceiver?
         if HookConfigurationWriter.supportsHooks(for: session.agent) {
@@ -113,14 +116,24 @@ final class HookCoordinator {
             hookReceiver?.start()
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    for await status in monitor.statusStream {
-                        await self?.handle(status: status, sessionID: sessionID, gate: gate)
+                    for await observation in monitor.observationStream {
+                        await self?.handle(
+                            observation: observation,
+                            source: .screen,
+                            sessionID: sessionID,
+                            gate: gate
+                        )
                     }
                 }
                 if let hookReceiver {
                     group.addTask {
-                        for await status in hookReceiver.statusStream {
-                            await self?.handle(status: status, sessionID: sessionID, gate: gate)
+                        for await observation in hookReceiver.observationStream {
+                            await self?.handle(
+                                observation: observation,
+                                source: .hook,
+                                sessionID: sessionID,
+                                gate: gate
+                            )
                         }
                     }
                 }
@@ -128,9 +141,23 @@ final class HookCoordinator {
         }
     }
 
-    private func handle(status: SessionStatus, sessionID: UUID, gate: WaitingNotificationGate) async {
-        let shouldNotify = gate.shouldNotify(for: status)
-        store.applyObservedStatus(status, toSessionID: sessionID)
+    private func handle(
+        observation: SessionStatusObservation,
+        source: SessionStatusObservationArbiter.Source,
+        sessionID: UUID,
+        gate: WaitingNotificationGate
+    ) async {
+        var arbiter = arbiters[sessionID] ?? SessionStatusObservationArbiter()
+        let accepted = arbiter.accept(observation, from: source)
+        arbiters[sessionID] = arbiter
+        guard let accepted else { return }
+
+        let shouldNotify = gate.shouldNotify(for: accepted.status)
+        store.applyObservedStatus(
+            accepted.status,
+            waitingReason: accepted.waitingReason,
+            toSessionID: sessionID
+        )
         await store.syncAgentTitle(forSessionID: sessionID)
         if shouldNotify,
            notificationsEnabled(),

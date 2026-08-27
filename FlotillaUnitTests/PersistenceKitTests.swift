@@ -27,7 +27,8 @@ final class PersistenceKitTests: XCTestCase {
                 worktreePath: URL(fileURLWithPath: "/Users/dev/.flotilla/worktrees/fix-login"),
                 baseCheckoutPath: URL(fileURLWithPath: "/Users/dev/Flotilla")
             ),
-            status: .working,
+            status: .waitingForInput,
+            waitingReason: .planApproval,
             terminalScrollback: Data("restored terminal output\n".utf8),
             createdAt: Self.fixedDate,
             lastActiveAt: Self.fixedDate

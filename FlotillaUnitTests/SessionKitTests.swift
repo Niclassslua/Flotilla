@@ -20,6 +20,7 @@ final class SessionStatusMachineTests: XCTestCase {
         let legalPairs: [(SessionStatus, SessionStatus)] = [
             (.idle, .working),
             (.idle, .waitingForInput),
+            (.idle, .ready),
             (.idle, .finished),
             (.idle, .crashed),
             (.working, .idle),
@@ -81,5 +82,15 @@ final class SessionStatusMachineTests: XCTestCase {
         let result = machine.transition(session, to: .working, now: later)
         XCTAssertEqual(result.status, .working)
         XCTAssertEqual(result.lastActiveAt, later)
+    }
+
+    func testLeavingWaitingClearsItsReason() {
+        var session = makeSession(status: .waitingForInput)
+        session.waitingReason = .permission
+
+        let result = machine.transition(session, to: .working)
+
+        XCTAssertEqual(result.status, .working)
+        XCTAssertNil(result.waitingReason)
     }
 }

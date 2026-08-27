@@ -11,7 +11,7 @@ public struct SessionStatusMachine: Sendable {
         // An idle session can absolutely need input: an agent that has been
         // quiet long enough to look idle then asks for permission. Blocking
         // this edge left those sessions reading "Idle" forever.
-        case (.idle, .working), (.idle, .waitingForInput), (.idle, .finished), (.idle, .crashed):
+        case (.idle, .working), (.idle, .waitingForInput), (.idle, .ready), (.idle, .finished), (.idle, .crashed):
             return true
         case (.working, .idle), (.working, .waitingForInput), (.working, .ready), (.working, .finished), (.working, .crashed):
             return true
@@ -42,6 +42,9 @@ public struct SessionStatusMachine: Sendable {
         }
         var updated = session
         updated.status = newStatus
+        if newStatus != .waitingForInput {
+            updated.waitingReason = nil
+        }
         updated.lastActiveAt = now
         return updated
     }
