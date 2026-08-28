@@ -28,6 +28,7 @@ final class SessionProcessManager {
     private let processFactory: any PTYProcessCreating
     private let providers: AgentProviderRegistry
     private let settingsProvider: () -> AppSettings
+    private let environmentProvider: () -> [String: String]
     private let tmuxTerminator: any TmuxSessionTerminating
     private let tmuxGoalDeliverer: any TmuxGoalDelivering
     private let tmuxServerProbe: any TmuxServerProbing
@@ -73,6 +74,7 @@ final class SessionProcessManager {
         processFactory: any PTYProcessCreating = SystemPTYProcessFactory(),
         providers: AgentProviderRegistry = AgentProviderRegistry(),
         settingsProvider: @escaping () -> AppSettings = { AppSettings() },
+        environmentProvider: @escaping () -> [String: String] = { ProcessInfo.processInfo.environment },
         tmuxTerminator: any TmuxSessionTerminating = ProcessTmuxSessionTerminator(),
         tmuxGoalDeliverer: any TmuxGoalDelivering = ProcessTmuxGoalDeliverer(),
         tmuxServerProbe: any TmuxServerProbing = ProcessTmuxServerProbe(),
@@ -87,6 +89,7 @@ final class SessionProcessManager {
         self.processFactory = processFactory
         self.providers = providers
         self.settingsProvider = settingsProvider
+        self.environmentProvider = environmentProvider
         self.tmuxTerminator = tmuxTerminator
         self.tmuxGoalDeliverer = tmuxGoalDeliverer
         self.tmuxServerProbe = tmuxServerProbe
@@ -202,7 +205,9 @@ final class SessionProcessManager {
         // Scoped to the agent's own process tree, which is what makes the
         // attribution hook safe to leave installed: without these variables it
         // no-ops, so the user's own commits are never stamped.
-        var baseEnvironment = ProcessInfo.processInfo.environment
+        let inheritedEnvironment = environmentProvider()
+        let environmentKeysToUnset = ChildProcessEnvironment.blockedVariableNames(in: inheritedEnvironment)
+        var baseEnvironment = ChildProcessEnvironment.sanitized(inheritedEnvironment)
         if hooksConfigured {
             baseEnvironment[HookConfigurationWriter.eventFileEnvironmentKey] =
                 HookConfigurationWriter.eventFilePath(
@@ -267,7 +272,7 @@ final class SessionProcessManager {
                 hasConfiguredGlobalOptions = true
                 Task.detached(priority: .utility) {
                     for option in TmuxSessionWrapping.globalOptions {
-                        let setOptionProcess = Process()
+                        let setOptionProcess = ChildProcessEnvironment.makeProcess()
                         setOptionProcess.executableURL = tmuxExecutable
                         setOptionProcess.arguments = TmuxSessionWrapping.socketArguments()
                             + ["set-option", "-g"] + option
@@ -288,7 +293,8 @@ final class SessionProcessManager {
             workingDirectory: session.workingDirectory,
             sessionID: session.id,
             tmuxExecutable: tmuxExecutable,
-            configurationFile: tmuxConfigurationFile
+            configurationFile: tmuxConfigurationFile,
+            environmentKeysToUnset: environmentKeysToUnset
         )
 
         let process = processFactory.makeProcess()

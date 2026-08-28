@@ -13,8 +13,9 @@ import Darwin
 /// fork-time hook and no session-leader control) can't produce that.
 ///
 /// All argv/envp/path C strings are built *before* `forkpty`, so the
-/// child's code between fork and exec touches only raw libc calls
-/// (`chdir`, `execve`, `_exit`) — no Swift/ObjC runtime allocation, which is
+/// child's code between fork and exec touches only scalar control flow and
+/// raw libc calls (`sigprocmask`, `signal`, `chdir`, `execve`, `_exit`) — no
+/// Swift/ObjC runtime allocation, which is
 /// what makes calling `fork` here safe. This mirrors the pattern SwiftTerm
 /// itself uses (`PseudoTerminalHelpers.fork`, already vendored in this repo
 /// via TerminalKit) for the same reason.
@@ -152,8 +153,13 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
             sigemptyset(&emptyMask)
             sigprocmask(SIG_SETMASK, &emptyMask, nil)
 
-            for sig in 1..<NSIG {
-                signal(sig, SIG_DFL)
+            // Deliberately use a scalar while loop here. Iterating a Swift
+            // Range may instantiate generic metadata after fork, which can
+            // deadlock or trap on a runtime lock held by another parent thread.
+            var signalNumber: Int32 = 1
+            while signalNumber < NSIG {
+                _ = signal(signalNumber, SIG_DFL)
+                signalNumber += 1
             }
 
             if let cWorkingDirectory {

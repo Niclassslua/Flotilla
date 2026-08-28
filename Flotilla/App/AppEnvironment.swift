@@ -91,7 +91,7 @@ final class AppEnvironment {
     }
 
     private static func runGit(_ arguments: [String], at path: URL) {
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + arguments
         process.currentDirectoryURL = path

@@ -18,7 +18,7 @@ struct ProcessAgentConversationOwnershipChecker: AgentConversationOwnershipCheck
             return false
         }
 
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
         process.arguments = ["-axo", "command="]
         let output = Pipe()

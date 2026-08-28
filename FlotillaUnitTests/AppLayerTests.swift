@@ -195,6 +195,45 @@ final class SessionProcessManagerTests: XCTestCase {
         XCTAssertTrue(mock.sentInput.isEmpty)
     }
 
+    func testStartDoesNotForwardXcodeInstrumentationToAgentProcess() throws {
+        let factory = RecordingProcessFactory()
+        let manager = SessionProcessManager(
+            locator: FixedExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/local/bin/tmux")
+            ),
+            processFactory: factory,
+            environmentProvider: {
+                [
+                    "PATH": "/usr/bin:/bin",
+                    "SAFE_VALUE": "kept",
+                    "DYLD_INSERT_LIBRARIES": "/Applications/Xcode.app/libViewDebuggerSupport.dylib",
+                    "SWIFTUI_VIEW_DEBUG": "1",
+                    "GPUTOOLS_CAPTURE_ENABLED": "1",
+                    "__XPC_DYLD_LIBRARY_PATH": "/Applications/Xcode.app/Frameworks",
+                ]
+            },
+            tmuxServerProbe: StubTmuxServerProbe(usable: true)
+        )
+
+        let process = try manager.start(session: session())
+        let mock = try XCTUnwrap(process as? MockPTYProcess)
+
+        XCTAssertEqual(mock.startedEnvironment["SAFE_VALUE"], "kept")
+        XCTAssertNil(mock.startedEnvironment["DYLD_INSERT_LIBRARIES"])
+        XCTAssertNil(mock.startedEnvironment["SWIFTUI_VIEW_DEBUG"])
+        XCTAssertNil(mock.startedEnvironment["GPUTOOLS_CAPTURE_ENABLED"])
+        XCTAssertNil(mock.startedEnvironment["__XPC_DYLD_LIBRARY_PATH"])
+        XCTAssertTrue(
+            zip(mock.startedArguments, mock.startedArguments.dropFirst()).contains { pair in
+                pair.0 == "-u" && pair.1 == "DYLD_INSERT_LIBRARIES"
+            }
+        )
+        XCTAssertFalse(
+            mock.startedArguments.contains(where: { $0.hasPrefix("DYLD_INSERT_LIBRARIES=") })
+        )
+    }
+
     func testMissingAgentFailsTruthfullyWithoutCreatingFallbackProcess() {
         let factory = RecordingProcessFactory()
         let manager = SessionProcessManager(

@@ -55,7 +55,7 @@ struct ProcessTmuxPaneCapture: TmuxPaneCapturing {
         guard FileManager.default.fileExists(atPath: ProcessTmuxServerProbe.defaultSocketPath()) else {
             return nil
         }
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments()
             + ["capture-pane", "-p", "-t", name]

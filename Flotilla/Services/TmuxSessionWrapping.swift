@@ -109,10 +109,14 @@ enum TmuxSessionWrapping {
         workingDirectory: URL,
         sessionID: UUID,
         tmuxExecutable: URL?,
-        configurationFile: URL? = nil
+        configurationFile: URL? = nil,
+        environmentKeysToUnset: Set<String> = []
     ) -> (executable: URL, arguments: [String], environment: [String: String]) {
+        let detectedKeysToUnset = ChildProcessEnvironment.blockedVariableNames(in: environment)
+        let keysToUnset = environmentKeysToUnset.union(detectedKeysToUnset).sorted()
+        let sanitizedEnvironment = ChildProcessEnvironment.sanitized(environment)
         guard let tmuxExecutable else {
-            return (agentExecutable, arguments, environment)
+            return (agentExecutable, arguments, sanitizedEnvironment)
         }
         // The `default-terminal` option is set via a separate synchronous
         // `tmux set-option -g default-terminal tmux-256color` call in
@@ -125,7 +129,7 @@ enum TmuxSessionWrapping {
         // smaller size no matter how large the real terminal is.
         let configurationArguments = configurationFile.map { ["-f", $0.path] } ?? []
         var envFlags: [String] = []
-        for (key, value) in environment.sorted(by: { $0.key < $1.key }) {
+        for (key, value) in sanitizedEnvironment.sorted(by: { $0.key < $1.key }) {
             guard key != "TMUX", key != "TMUX_PANE" else { continue }
             envFlags.append("-e")
             envFlags.append("\(key)=\(value)")
@@ -134,13 +138,33 @@ enum TmuxSessionWrapping {
             "new-session", "-A", "-D", "-s", sessionName(for: sessionID),
             "-c", workingDirectory.path
         ] + envFlags + [
-            "--", agentExecutable.path
-        ] + arguments
-        var wrappedEnvironment = environment
+            "--"
+        ] + sanitizedAgentCommand(
+            executable: agentExecutable,
+            arguments: arguments,
+            keysToUnset: keysToUnset
+        )
+        var wrappedEnvironment = sanitizedEnvironment
         wrappedEnvironment.removeValue(forKey: "TMUX")
         wrappedEnvironment.removeValue(forKey: "TMUX_PANE")
         wrappedEnvironment["TERM"] = outerClientTERM
         return (tmuxExecutable, wrapped, wrappedEnvironment)
+    }
+
+    /// A tmux server keeps the environment from the client that created it.
+    /// Even after Flotilla starts sending a clean client environment, an old
+    /// server may still hold Xcode's injected values. `/usr/bin/env -u` makes
+    /// their removal explicit in the pane immediately before the agent execs.
+    private static func sanitizedAgentCommand(
+        executable: URL,
+        arguments: [String],
+        keysToUnset: [String]
+    ) -> [String] {
+        guard !keysToUnset.isEmpty else {
+            return [executable.path] + arguments
+        }
+        let unsetArguments = keysToUnset.flatMap { ["-u", $0] }
+        return ["/usr/bin/env"] + unsetArguments + [executable.path] + arguments
     }
 }
 
@@ -156,7 +180,7 @@ protocol TmuxClientProbing: Sendable {
 
 struct ProcessTmuxClientProbe: TmuxClientProbing {
     func clientSize(sessionNamed name: String, tmuxExecutable: URL) -> PTYSize? {
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments() + [
             "list-clients", "-t", name, "-F", "#{client_width}x#{client_height}"
@@ -186,7 +210,7 @@ struct ProcessTmuxClientProbe: TmuxClientProbing {
     }
 
     func refreshClient(sessionNamed name: String, tmuxExecutable: URL) {
-        let listProcess = Process()
+        let listProcess = ChildProcessEnvironment.makeProcess()
         listProcess.executableURL = tmuxExecutable
         listProcess.arguments = TmuxSessionWrapping.socketArguments() + [
             "list-clients", "-t", name, "-F", "#{client_name}"
@@ -204,7 +228,7 @@ struct ProcessTmuxClientProbe: TmuxClientProbing {
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
             for clientName in clientNames {
-                let refreshProc = Process()
+                let refreshProc = ChildProcessEnvironment.makeProcess()
                 refreshProc.executableURL = tmuxExecutable
                 refreshProc.arguments = TmuxSessionWrapping.socketArguments() + [
                     "refresh-client", "-t", clientName
@@ -247,7 +271,7 @@ struct ProcessTmuxServerProbe: TmuxServerProbing {
         // spawn a throwaway server just to answer `ls`.)
         guard FileManager.default.fileExists(atPath: Self.defaultSocketPath()) else { return true }
 
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments() + ["ls"]
         let errorPipe = Pipe()
@@ -297,7 +321,7 @@ struct ProcessTmuxServerProbe: TmuxServerProbing {
 
 struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
     func killSession(named name: String, tmuxExecutable: URL) {
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments() + ["kill-session", "-t", name]
         process.standardOutput = FileHandle.nullDevice
@@ -318,7 +342,7 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         guard FileManager.default.fileExists(atPath: ProcessTmuxServerProbe.defaultSocketPath()) else {
             return []
         }
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments() + ["list-sessions", "-F", "#{session_name}"]
         let outputPipe = Pipe()
@@ -381,7 +405,7 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
 
     private func pasteGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) {
         let bufferName = "flotilla-paste-\(UUID().uuidString)"
-        let loadProcess = Process()
+        let loadProcess = ChildProcessEnvironment.makeProcess()
         loadProcess.executableURL = tmuxExecutable
         loadProcess.arguments = TmuxSessionWrapping.socketArguments() + ["load-buffer", "-b", bufferName, "-"]
         let inPipe = Pipe()
@@ -398,7 +422,7 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
             return
         }
 
-        let pasteProcess = Process()
+        let pasteProcess = ChildProcessEnvironment.makeProcess()
         pasteProcess.executableURL = tmuxExecutable
         pasteProcess.arguments = TmuxSessionWrapping.socketArguments()
             + ["paste-buffer", "-p", "-d", "-b", bufferName, "-t", name]
@@ -437,7 +461,7 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         guard FileManager.default.fileExists(atPath: ProcessTmuxServerProbe.defaultSocketPath()) else {
             return nil
         }
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments()
             + ["capture-pane", "-p", "-t", sessionName]
@@ -466,7 +490,7 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
     }
 
     private func runSendKeys(_ arguments: [String], tmuxExecutable: URL) {
-        let process = Process()
+        let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments() + ["send-keys"] + arguments
         process.standardOutput = FileHandle.nullDevice

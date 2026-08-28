@@ -181,6 +181,7 @@
 		98A2E8E182BC535DDFCC5577 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3802ED76F644B170E26A3B8C /* ModelPickerView.swift */; };
 		9969F2DD9ACA3ECB77E6DEF2 /* sass.svg in Resources */ = {isa = PBXBuildFile; fileRef = 740FDD2C6D955AC6EBFAE5C2 /* sass.svg */; };
 		999C3EE6A91C0AC74D3AEA6C /* folder-test-open.svg in Resources */ = {isa = PBXBuildFile; fileRef = 27E23A83A490E53614716B56 /* folder-test-open.svg */; };
+		99FD92EC6C777940FF6D3100 /* ChildProcessEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761DC27E7FA9F1BBA78CB09A /* ChildProcessEnvironmentTests.swift */; };
 		9E2CB349DC6DC2E3F62C72BE /* claude.svg in Resources */ = {isa = PBXBuildFile; fileRef = EC7571A04951B71A2187C320 /* claude.svg */; };
 		9EAE123B0B483377DAD2844A /* ProjectMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = A860A901CDAFC0E375DDC9BD /* ProjectMark.swift */; };
 		9FF6263BE339EEA516E02B96 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43F6E270E43A5CE706FF597B /* AppStore.swift */; };
@@ -224,6 +225,7 @@
 		CAD6247D89A5A6290BCDB406 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 796835DB2BE8824C2165999C /* Assets.xcassets */; };
 		CBDDE8E2BD1EDA4A5925077E /* git.svg in Resources */ = {isa = PBXBuildFile; fileRef = ACF1BC73FD352D9CADCA8CC9 /* git.svg */; };
 		CC07722A4B828F1F4C7907AD /* css.svg in Resources */ = {isa = PBXBuildFile; fileRef = E493E2028BBE35E962D2F085 /* css.svg */; };
+		CCF690FF4035F8CBA5C77280 /* ChildProcessEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */; };
 		CD66216E741FBEBC47E4244B /* FlotillaShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3624D090F6EF105D88197D68 /* FlotillaShell.swift */; };
 		CDBA0785C146C899913441EE /* folder-git.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5F17AA690B0887B8577A6E5D /* folder-git.svg */; };
 		CF19D65AAD333F78AE02354D /* cursor.svg in Resources */ = {isa = PBXBuildFile; fileRef = BB467BE02FE06069A33C2FA4 /* cursor.svg */; };
@@ -360,6 +362,7 @@
 		446F1EB2161B52565A40137C /* folder-node.svg */ = {isa = PBXFileReference; path = "folder-node.svg"; sourceTree = "<group>"; };
 		44C721ECC732427A1B4EE485 /* PerfUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfUtils.swift; sourceTree = "<group>"; };
 		46F6F4F4BEABA3ED096AB412 /* typescript-def.svg */ = {isa = PBXFileReference; path = "typescript-def.svg"; sourceTree = "<group>"; };
+		473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChildProcessEnvironment.swift; sourceTree = "<group>"; };
 		47A8019491687751346DAF32 /* DiffPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffPanelView.swift; sourceTree = "<group>"; };
 		4954120557E8948C55FC57F3 /* visualstudio.svg */ = {isa = PBXFileReference; path = visualstudio.svg; sourceTree = "<group>"; };
 		49AA426B52688D2B81854409 /* AgentBrandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBrandTests.swift; sourceTree = "<group>"; };
@@ -401,6 +404,7 @@
 		740FDD2C6D955AC6EBFAE5C2 /* sass.svg */ = {isa = PBXFileReference; path = sass.svg; sourceTree = "<group>"; };
 		748E930383D36285416CD109 /* folder-components.svg */ = {isa = PBXFileReference; path = "folder-components.svg"; sourceTree = "<group>"; };
 		749D2FC6B87D43FD5AA8B80C /* HooksUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HooksUITests.swift; sourceTree = "<group>"; };
+		761DC27E7FA9F1BBA78CB09A /* ChildProcessEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChildProcessEnvironmentTests.swift; sourceTree = "<group>"; };
 		76F9F1111444810A711C843D /* proto.svg */ = {isa = PBXFileReference; path = proto.svg; sourceTree = "<group>"; };
 		774460E09372B50991B8E9AB /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		796835DB2BE8824C2165999C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -729,6 +733,7 @@
 			children = (
 				EC9E53144F55E554FC3CD0B5 /* AgentConversationOwnership.swift */,
 				12C3E4FA609560CB29D08025 /* AgentSelfReportCoordinator.swift */,
+				473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */,
 				E560D5E9A15E6BEFD4593C51 /* HookCoordinator.swift */,
 				A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */,
 				726F2E966A42B093C4E60D6D /* SessionProcessManager.swift */,
@@ -928,6 +933,7 @@
 				0E32DCA022EAEDFF38BA2A93 /* AgentSelfReportCoordinatorTests.swift */,
 				581A82A986DD9B62C69E6136 /* AgentSessionProviderTests.swift */,
 				A9636EB3D64BE7F5FB20A38D /* AppLayerTests.swift */,
+				761DC27E7FA9F1BBA78CB09A /* ChildProcessEnvironmentTests.swift */,
 				A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */,
 				935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */,
 				51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */,
@@ -1271,6 +1277,7 @@
 				111C1B53AC72AD0AE39970BA /* AgentSelfReportCoordinatorTests.swift in Sources */,
 				BCB8240F67061DDC366CED1C /* AgentSessionProviderTests.swift in Sources */,
 				B956FF162F7F3D50931A966A /* AppLayerTests.swift in Sources */,
+				99FD92EC6C777940FF6D3100 /* ChildProcessEnvironmentTests.swift in Sources */,
 				5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */,
 				7666CEF06B123CCB5B58E56A /* FlotillaNotificationDelegateTests.swift in Sources */,
 				723875E0AA69C129B1AA034F /* FlotillaUnitTests.swift in Sources */,
@@ -1312,6 +1319,7 @@
 				BAD5764BDC04B7966AA58375 /* AgentSelfReportCoordinator.swift in Sources */,
 				81E957F5ED399AFD4BD9EDD5 /* AppEnvironment.swift in Sources */,
 				9FF6263BE339EEA516E02B96 /* AppStore.swift in Sources */,
+				CCF690FF4035F8CBA5C77280 /* ChildProcessEnvironment.swift in Sources */,
 				10816D50FD5E62E3BB6295D2 /* CommandBarDesign.swift in Sources */,
 				55AAD1951B5411C0C63CF6FE /* CommandPalettePanel.swift in Sources */,
 				8FB2743FFCFD5F9B3C6F8449 /* CommandPaletteView.swift in Sources */,
