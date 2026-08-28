@@ -32,7 +32,12 @@ struct SidebarRail: View {
         .padding(.top, 10)
         .frame(width: railWidth)
         .frame(maxHeight: .infinity)
-        .background(FlotillaColors.surface)
+        // The rail sits outside NavigationSplitView, so it doesn't
+        // inherit the automatic title-bar safe-area inset that the
+        // split-view columns get. The background fills edge-to-edge
+        // (including behind the traffic lights), while the VStack
+        // content starts below the safe area naturally.
+        .background(FlotillaColors.surface.ignoresSafeArea())
     }
 
     private func railButton(_ item: SidebarFacet) -> some View {
