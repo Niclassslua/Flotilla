@@ -1,8 +1,10 @@
-.PHONY: build build-release test clean run xcodegen
+.PHONY: build build-release build-ephemeral test clean run run-ephemeral xcodegen
 
 SCHEME := Flotilla
+EPHEMERAL_SCHEME := Flotilla Ephemeral
 PROJECT := Flotilla.xcodeproj
 DERIVED_DATA := build/DerivedData
+EPHEMERAL_APP := $(DERIVED_DATA)/Build/Products/Ephemeral/Flotilla Ephemeral.app
 
 xcodegen:
 	xcodegen generate
@@ -21,6 +23,15 @@ build-release: xcodegen
 		-project $(PROJECT) \
 		-scheme $(SCHEME) \
 		-configuration Release \
+		-destination 'platform=macOS' \
+		-derivedDataPath $(DERIVED_DATA) \
+		build
+
+build-ephemeral: xcodegen
+	xcodebuild \
+		-project $(PROJECT) \
+		-scheme "$(EPHEMERAL_SCHEME)" \
+		-configuration Ephemeral \
 		-destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) \
 		build
@@ -59,6 +70,9 @@ archive: xcodegen
 
 run: build
 	open $(DERIVED_DATA)/Build/Products/Debug/Flotilla.app
+
+run-ephemeral: build-ephemeral
+	open "$(EPHEMERAL_APP)"
 
 clean:
 	xcodebuild \

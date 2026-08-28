@@ -17,13 +17,27 @@ struct FlotillaApp: App {
     @State private var notificationDelegate: FlotillaNotificationDelegate
 
     init() {
+#if FLOTILLA_EPHEMERAL
+        // AppKit creates its split-view and window autosave keys before the
+        // SwiftUI content is interactive. Clear this build's isolated domain
+        // first so no stale geometry can influence the initial layout; the
+        // EphemeralWindowStateDisabler then prevents those keys being saved
+        // again once the native views exist.
+        UserDefaults.standard.removePersistentDomain(forName: "com.niclassslua.flotilla.ephemeral")
+#endif
+
         // Flotilla is a single-window workspace app with its own navigation
         // model; suppress AppKit's automatic window tabbing so the View menu
         // never shows "Show Tab Bar" / "Show All Tabs".
         NSWindow.allowsAutomaticWindowTabbing = false
 
         let environment = AppEnvironment()
-        let settingsStore: UserDefaultsSettingsStore
+        let settingsStore: any SettingsStoring
+#if FLOTILLA_EPHEMERAL
+        settingsStore = EphemeralSettingsStore(
+            defaultWorktreeBaseDirectory: environment.worktreeBaseDirectory.path
+        )
+#else
         if environment.isUITesting {
             // A unique suite prevents one UI-test launch from leaking layout,
             // paths, or appearance into another launch or the user's app.
@@ -37,6 +51,7 @@ struct FlotillaApp: App {
                 defaultWorktreeBaseDirectory: environment.worktreeBaseDirectory.path
             )
         }
+#endif
         let settingsViewModel = SettingsViewModel(store: settingsStore)
         _settingsViewModel = State(initialValue: settingsViewModel)
         let locator: any ExecutableLocating = environment.isUITesting
@@ -129,6 +144,9 @@ struct FlotillaApp: App {
             .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
         }
         .windowToolbarStyle(.unified)
+#if FLOTILLA_EPHEMERAL
+        .restorationBehavior(.disabled)
+#endif
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Session…") {
@@ -236,6 +254,9 @@ struct FlotillaApp: App {
                 .tint(FlotillaColors.accent)
         }
         .defaultSize(width: 800, height: 620)
+#if FLOTILLA_EPHEMERAL
+        .restorationBehavior(.disabled)
+#endif
     }
 }
 

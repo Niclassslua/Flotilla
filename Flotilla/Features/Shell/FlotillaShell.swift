@@ -46,6 +46,7 @@ struct FlotillaShell: View {
         ZStack {
             splitView
                 .background { uiTestWindowPlacer }
+                .background { ephemeralWindowStateDisabler }
                 .sheet(item: modalSheetBinding) { sheet in
                     sheetContent(sheet)
                 }
@@ -83,6 +84,19 @@ struct FlotillaShell: View {
             UITestWindowPlacer(placement: .fillPrimaryDisplay)
         }
         #endif
+    }
+
+    /// Inert outside the Ephemeral build. The native bridge disables the
+    /// AppKit autosave names that `NavigationSplitView` and `WindowGroup`
+    /// otherwise install behind SwiftUI's back.
+    @ViewBuilder
+    private var ephemeralWindowStateDisabler: some View {
+#if FLOTILLA_EPHEMERAL
+        EphemeralWindowStateDisabler(
+            initialSidebarWidth: FlotillaLayoutWidth.sidebarIdeal,
+            shouldShowSidebar: facet == .sessions
+        )
+#endif
     }
 
     private var facet: SidebarFacet { SidebarFacet(navigator.selection) }

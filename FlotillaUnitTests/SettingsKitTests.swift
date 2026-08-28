@@ -41,6 +41,16 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(reloaded.appearance, .dark)
     }
 
+    func testEphemeralStoreIgnoresSaves() {
+        let store = EphemeralSettingsStore(defaultWorktreeBaseDirectory: "/tmp/ephemeral-worktrees")
+
+        store.save(AppSettings(worktreeBaseDirectory: "/somewhere-else", appearance: .dark))
+
+        let reloaded = store.load()
+        XCTAssertEqual(reloaded.worktreeBaseDirectory, "/tmp/ephemeral-worktrees")
+        XCTAssertEqual(reloaded.appearance, .system)
+    }
+
     func testOlderSettingsPayloadDecodesWithNewWorkspaceAndArgumentDefaults() throws {
         let oldJSON = Data(#"{"agentPaths":{"claudeCodePath":"/usr/local/bin/claude","codexCLIPath":""},"worktreeBaseDirectory":"/tmp/worktrees","appearance":"dark"}"#.utf8)
 

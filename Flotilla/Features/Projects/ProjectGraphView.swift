@@ -1316,7 +1316,11 @@ final class ProjectGraphViewModel {
     private func captureSeenMarkerIfNeeded() {
         guard highlightUnseenCommits, !hasCapturedSeenMarker else { return }
         hasCapturedSeenMarker = true
+#if FLOTILLA_EPHEMERAL
+        previouslySeenSHA = nil
+#else
         previouslySeenSHA = UserDefaults.standard.string(forKey: lastSeenDefaultsKey)
+#endif
     }
 
     private func recomputeNewCommits() {
@@ -1333,7 +1337,9 @@ final class ProjectGraphViewModel {
 
     func markAllAsSeen() {
         guard highlightUnseenCommits, let tip = commits.first?.sha else { return }
+#if !FLOTILLA_EPHEMERAL
         UserDefaults.standard.set(tip, forKey: lastSeenDefaultsKey)
+#endif
         previouslySeenSHA = tip
         newCommitSHAs = []
     }

@@ -184,6 +184,7 @@
 		99FD92EC6C777940FF6D3100 /* ChildProcessEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761DC27E7FA9F1BBA78CB09A /* ChildProcessEnvironmentTests.swift */; };
 		9E2CB349DC6DC2E3F62C72BE /* claude.svg in Resources */ = {isa = PBXBuildFile; fileRef = EC7571A04951B71A2187C320 /* claude.svg */; };
 		9EAE123B0B483377DAD2844A /* ProjectMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = A860A901CDAFC0E375DDC9BD /* ProjectMark.swift */; };
+		9EF1F90551B678BAE0ECF065 /* EphemeralWindowStateDisabler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF9FCFE487E7C501795C38FF /* EphemeralWindowStateDisabler.swift */; };
 		9FF6263BE339EEA516E02B96 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43F6E270E43A5CE706FF597B /* AppStore.swift */; };
 		A0E3F72416EEFECD3A87AEA3 /* SettingsKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317375274369CC35C23D6991 /* SettingsKitTests.swift */; };
 		A5966C2EDA4E3BC66B8A6F28 /* StartupWarningBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E29DC0B24BFF3171B4F40C4 /* StartupWarningBanner.swift */; };
@@ -460,6 +461,7 @@
 		AB7540AC89ADA72855220C41 /* ProjectGraphViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectGraphViewModelTests.swift; sourceTree = "<group>"; };
 		ACF1BC73FD352D9CADCA8CC9 /* git.svg */ = {isa = PBXFileReference; path = git.svg; sourceTree = "<group>"; };
 		AF246F230B63A3A6A954F515 /* ProjectOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectOverviewView.swift; sourceTree = "<group>"; };
+		AF9FCFE487E7C501795C38FF /* EphemeralWindowStateDisabler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EphemeralWindowStateDisabler.swift; sourceTree = "<group>"; };
 		AFA78B3B753464372AF1F635 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AFCB8938BFF70D0F65BFA50B /* SessionDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDraft.swift; sourceTree = "<group>"; };
 		AFDFDBAF9EE9A98FC212D11A /* MissionControlGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionControlGrid.swift; sourceTree = "<group>"; };
@@ -972,6 +974,7 @@
 				F9F0079146D1AF9E1A0A6F9F /* AppEnvironment.swift */,
 				43F6E270E43A5CE706FF597B /* AppStore.swift */,
 				1505FDEBF32FDDA8F3148254 /* AXID.swift */,
+				AF9FCFE487E7C501795C38FF /* EphemeralWindowStateDisabler.swift */,
 				179ED2D6FC5AA9AEAF3BE74D /* FlotillaApp.swift */,
 				21B8F05E680043FBA0A1BDE3 /* FlotillaNotificationDelegate.swift */,
 				1BD0E51ECF35F3C9E7E50FB0 /* PerfLog.swift */,
@@ -1331,6 +1334,7 @@
 				F9716C6B9EE443BDA0D361EB /* DiffStatBadge.swift in Sources */,
 				2E7F3FDB8FDE7991924FEABC /* DiffStatStore.swift in Sources */,
 				76F2C75FA09583861226B553 /* EffortLevelPicker.swift in Sources */,
+				9EF1F90551B678BAE0ECF065 /* EphemeralWindowStateDisabler.swift in Sources */,
 				DC3D056327FEA75A50E1AFB6 /* FileBrowserView.swift in Sources */,
 				E03FD7DF30CBB7A9DD49AF3A /* FileIconHelper.swift in Sources */,
 				74394149F4CEEEAE7AEE61C0 /* FileNode.swift in Sources */,
@@ -1581,6 +1585,23 @@
 			};
 			name = Debug;
 		};
+		8D2F4E95612CFD0D9DAB3C46 /* Ephemeral */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.FlotillaUnitTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Flotilla.app/Contents/MacOS/Flotilla";
+			};
+			name = Ephemeral;
+		};
 		B3B6D5CED55D4977FA8A4AC4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1659,6 +1680,111 @@
 			};
 			name = Release;
 		};
+		C7B39C7DB364FF1A8AD4207E /* Ephemeral */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.FlotillaUITests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = Flotilla;
+			};
+			name = Ephemeral;
+		};
+		D04C8F07FF3539F895268098 /* Ephemeral */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FLOTILLA_EPHEMERAL";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Ephemeral;
+		};
+		E17BC4FB9503E6BDE9F4CEAD /* Ephemeral */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = Flotilla;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Flotilla Ephemeral";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.flotilla.ephemeral;
+				PRODUCT_NAME = "Flotilla Ephemeral";
+				SDKROOT = macosx;
+			};
+			name = Ephemeral;
+		};
 		FB9C52C9CFEEE238DFF18936 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1683,6 +1809,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				FB9C52C9CFEEE238DFF18936 /* Debug */,
+				8D2F4E95612CFD0D9DAB3C46 /* Ephemeral */,
 				B3B6D5CED55D4977FA8A4AC4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -1692,6 +1819,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				14C8F0C25D328F995DE2E95F /* Debug */,
+				C7B39C7DB364FF1A8AD4207E /* Ephemeral */,
 				35895C24F1978DED47B8A6A8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -1701,6 +1829,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				4D4BED2D31893A1B3E63C75A /* Debug */,
+				E17BC4FB9503E6BDE9F4CEAD /* Ephemeral */,
 				3E55AD37A957E5C0771F90C6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -1710,6 +1839,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				514A8CB7D4927D00DB789357 /* Debug */,
+				D04C8F07FF3539F895268098 /* Ephemeral */,
 				B8AF00F5E526B5215B8C33C7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;

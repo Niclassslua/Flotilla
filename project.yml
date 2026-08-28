@@ -5,6 +5,11 @@ options:
     macOS: "26.0"
   createIntermediateGroups: true
 
+configs:
+  Debug: debug
+  Ephemeral: debug
+  Release: release
+
 packages:
   DesignSystem:
     path: Packages/DesignSystem
@@ -37,6 +42,9 @@ settings:
     GENERATE_INFOPLIST_FILE: YES
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+  configs:
+    Ephemeral:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) FLOTILLA_EPHEMERAL"
 
 targets:
   Flotilla:
@@ -47,12 +55,18 @@ targets:
       - path: Flotilla.icon
         buildPhase: resources
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla
-      INFOPLIST_KEY_NSHumanReadableCopyright: ""
-      INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
-      ENABLE_PREVIEWS: YES
-      ENABLE_HARDENED_RUNTIME: YES
-      ASSETCATALOG_COMPILER_APPICON_NAME: Flotilla
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        ENABLE_PREVIEWS: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: Flotilla
+      configs:
+        Ephemeral:
+          PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.ephemeral
+          PRODUCT_NAME: Flotilla Ephemeral
+          INFOPLIST_KEY_CFBundleDisplayName: Flotilla Ephemeral
     dependencies:
       - package: DesignSystem
       - package: SessionKit
@@ -108,6 +122,19 @@ schemes:
           environmentVariables:
             UI_TESTING: "1"
         - FlotillaUITests
+
+  Flotilla Ephemeral:
+    build:
+      targets:
+        Flotilla: all
+    run:
+      config: Ephemeral
+    profile:
+      config: Ephemeral
+    analyze:
+      config: Ephemeral
+    archive:
+      config: Ephemeral
 
   UI Vocabulary Screenshots:
     build:

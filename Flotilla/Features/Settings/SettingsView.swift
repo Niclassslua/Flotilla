@@ -88,7 +88,11 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @Bindable var viewModel: SettingsViewModel
+#if FLOTILLA_EPHEMERAL
+    @State private var selectedTabID = SettingsTab.general.rawValue
+#else
     @AppStorage("settings.selected-section") private var selectedTabID = SettingsTab.general.rawValue
+#endif
     @State private var searchText = ""
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 

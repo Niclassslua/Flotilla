@@ -5,6 +5,27 @@ public protocol SettingsStoring: Sendable {
     func save(_ settings: AppSettings)
 }
 
+/// A launch-scoped store that starts from known settings and deliberately
+/// ignores saves. The owning view model still holds changes for the lifetime
+/// of the process, but a subsequent launch starts cleanly again.
+public struct EphemeralSettingsStore: SettingsStoring {
+    private let initialSettings: AppSettings
+
+    public init(defaultWorktreeBaseDirectory: String) {
+        initialSettings = AppSettings(worktreeBaseDirectory: defaultWorktreeBaseDirectory)
+    }
+
+    public init(initialSettings: AppSettings) {
+        self.initialSettings = initialSettings
+    }
+
+    public func load() -> AppSettings {
+        initialSettings
+    }
+
+    public func save(_: AppSettings) {}
+}
+
 private extension AppSettings {
     static let schemaVersion: UInt = 1
 }

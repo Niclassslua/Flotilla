@@ -29,8 +29,13 @@ enum PerfLog {
     static let slowThresholdMilliseconds = 2.0
 
     static let isEnabled: Bool = {
-        ProcessInfo.processInfo.environment["FLOTILLA_PERF"] == "1"
-            || UserDefaults.standard.bool(forKey: "FlotillaPerf")
+        if ProcessInfo.processInfo.environment["FLOTILLA_PERF"] == "1" {
+            return true
+        }
+        guard Bundle.main.bundleIdentifier != "com.niclassslua.flotilla.ephemeral" else {
+            return false
+        }
+        return UserDefaults.standard.bool(forKey: "FlotillaPerf")
     }()
 
     private static let state = OSAllocatedUnfairLock(initialState: TraceState())

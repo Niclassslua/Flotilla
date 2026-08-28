@@ -39,11 +39,21 @@ jobs:
       - name: Build (Release)
         run: make build-release
 
+      - name: Build (Ephemeral)
+        run: make build-ephemeral
+
       - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
           name: Flotilla-Debug
           path: build/DerivedData/Build/Products/Debug/Flotilla.app
+          retention-days: 7
+
+      - name: Upload ephemeral app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flotilla-Ephemeral
+          path: build/DerivedData/Build/Products/Ephemeral/Flotilla Ephemeral.app
           retention-days: 7
 
   archive:

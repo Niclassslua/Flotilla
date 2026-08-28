@@ -19,10 +19,12 @@ Flotilla is a **macOS-only** SwiftUI application that serves as a local command 
 |---------|---------|
 | `make build` | Debug build via xcodebuild |
 | `make build-release` | Release build |
+| `make build-ephemeral` | Full app build with launch-scoped preferences |
 | `make test` | Run unit tests |
 | `make test-ui` | Run UI tests |
 | `make archive` | Create xcarchive |
 | `make run` | Build and launch the app |
+| `make run-ephemeral` | Build and launch the full app without saving preferences |
 | `make clean` | Remove build artifacts |
 | `xcodegen generate` | Regenerate `.xcodeproj` from `project.yml` |
 
@@ -356,6 +358,24 @@ xcodegen generate
 | `GENERATE_INFOPLIST_FILE` | YES |
 | `MARKETING_VERSION` | 0.1.0 |
 | `CURRENT_PROJECT_VERSION` | 1 |
+
+### Ephemeral Test App
+
+The **Flotilla Ephemeral** scheme builds a complete app with real agents,
+terminals, git operations, and session storage. It does not enable
+`UI_TESTING` mocks. The `Ephemeral` build configuration defines
+`FLOTILLA_EPHEMERAL`, starts from default launch-scoped settings, and bypasses
+the app's preference reads and writes. Its scenes use
+`.restorationBehavior(.disabled)` so SwiftUI/AppKit does not restore or save
+scene state. Because `NavigationSplitView` separately installs an AppKit
+autosave name, `EphemeralWindowStateDisabler` clears the Ephemeral preferences
+domain before scene creation, disables native window and split-view autosave,
+and reapplies the design-system sidebar width once per launch. It also uses the
+separate bundle identifier `com.niclassslua.flotilla.ephemeral` so macOS-managed
+state cannot affect the normal app.
+
+Use `make run-ephemeral` locally. CI uploads the same build as the
+`Flotilla-Ephemeral` artifact for pull requests and `main` pushes.
 
 ### xcodebuild Commands
 

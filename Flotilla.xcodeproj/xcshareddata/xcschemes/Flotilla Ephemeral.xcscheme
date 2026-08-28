@@ -21,20 +21,6 @@
                ReferencedContainer = "container:Flotilla.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "2ECBAC6EDDEE2902574D8285"
-               BuildableName = "FlotillaUITests.xctest"
-               BlueprintName = "FlotillaUITests"
-               ReferencedContainer = "container:Flotilla.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -43,24 +29,6 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       onlyGenerateCoverageForSpecifiedTargets = "NO">
-      <PostActions>
-         <ExecutionAction
-            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
-            <ActionContent
-               title = "Publish UI vocabulary screenshots"
-               scriptText = "/bin/bash &quot;$SRCROOT/Scripts/update-ui-vocabulary-screenshots.sh&quot;&#10;">
-               <EnvironmentBuildable>
-                  <BuildableReference
-                     BuildableIdentifier = "primary"
-                     BlueprintIdentifier = "F79566462D627D03B88452BF"
-                     BuildableName = "Flotilla.app"
-                     BlueprintName = "Flotilla"
-                     ReferencedContainer = "container:Flotilla.xcodeproj">
-                  </BuildableReference>
-               </EnvironmentBuildable>
-            </ActionContent>
-         </ExecutionAction>
-      </PostActions>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
@@ -71,29 +39,10 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO"
-            useTestSelectionWhitelist = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "2ECBAC6EDDEE2902574D8285"
-               BuildableName = "FlotillaUITests.xctest"
-               BlueprintName = "FlotillaUITests"
-               ReferencedContainer = "container:Flotilla.xcodeproj">
-            </BuildableReference>
-            <SelectedTests>
-               <Test
-                  Identifier = "VocabularyScreenshotUITests">
-               </Test>
-            </SelectedTests>
-         </TestableReference>
       </Testables>
-      <CommandLineArguments>
-      </CommandLineArguments>
    </TestAction>
    <LaunchAction
-      buildConfiguration = "Debug"
+      buildConfiguration = "Ephemeral"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "0"
@@ -112,9 +61,11 @@
             ReferencedContainer = "container:Flotilla.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
-      buildConfiguration = "Release"
+      buildConfiguration = "Ephemeral"
       shouldUseLaunchSchemeArgsEnv = "YES"
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
@@ -129,12 +80,14 @@
             ReferencedContainer = "container:Flotilla.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </ProfileAction>
    <AnalyzeAction
-      buildConfiguration = "Debug">
+      buildConfiguration = "Ephemeral">
    </AnalyzeAction>
    <ArchiveAction
-      buildConfiguration = "Release"
+      buildConfiguration = "Ephemeral"
       revealArchiveInOrganizer = "YES">
    </ArchiveAction>
 </Scheme>

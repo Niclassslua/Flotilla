@@ -12,8 +12,13 @@ enum TerminalPerfLog {
     static let signposter = OSSignposter(subsystem: "com.niclassslua.flotilla", category: "TerminalPerf")
 
     static let isEnabled: Bool = {
-        ProcessInfo.processInfo.environment["FLOTILLA_PERF"] == "1"
-            || UserDefaults.standard.bool(forKey: "FlotillaPerf")
+        if ProcessInfo.processInfo.environment["FLOTILLA_PERF"] == "1" {
+            return true
+        }
+        guard Bundle.main.bundleIdentifier != "com.niclassslua.flotilla.ephemeral" else {
+            return false
+        }
+        return UserDefaults.standard.bool(forKey: "FlotillaPerf")
     }()
 
     static func event(_ message: @autoclosure () -> String) {
