@@ -15,8 +15,17 @@ final class WorkspaceNavigator {
             case .allSessions, .session:
                 break
             }
+            sidebarSelection = [selection]
         }
     }
+    /// Mirrors `selection` for the sidebar `List`'s native multi-select.
+    /// A plain click narrows this to one tag and `FlotillaShell` folds that
+    /// back into `selection`; ⌘/Shift-click grow it to more than one so rows
+    /// can be batch-selected (e.g. for Delete) without changing what's open
+    /// in the detail column. Kept in sync whenever `selection` changes
+    /// through any other path (keyboard shortcuts, the command palette,
+    /// restoring state) via `selection`'s `didSet` above.
+    var sidebarSelection: Set<SidebarItem> = [.overview]
     var presentation: WorkspacePresentation = ProcessInfo.processInfo.environment["UI_TESTING"] == "1" ? .focus : .grid
     var presentedSheet: WorkspaceSheet?
     var columnVisibility: NavigationSplitViewVisibility = .all

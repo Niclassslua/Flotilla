@@ -130,7 +130,6 @@ struct FlotillaApp: App {
         }
         .windowToolbarStyle(.unified)
         .commands {
-            SidebarCommands()
             CommandGroup(replacing: .newItem) {
                 Button("New Session…") {
                     navigator.presentedSheet = .createSession

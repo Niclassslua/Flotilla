@@ -92,7 +92,14 @@ struct SidebarRail: View {
 /// see `FlotillaShell.syncSidebarColumn`.
 struct FleetSessionList: View {
     @Bindable var store: AppStore
-    @Binding var selection: SidebarItem
+    /// Native multi-select: a plain click, arrow key, or Shift/⌘-click
+    /// range-selects through AppKit's own table-view handling, which is why
+    /// rows no longer need a click-consuming `Button` (see
+    /// `SessionSidebarRow`). `FlotillaShell.handleSidebarSelectionChange`
+    /// folds a single-tag result back into `navigator.selection`; a
+    /// multi-tag result is a batch selection that leaves the detail column
+    /// alone.
+    @Binding var selection: Set<SidebarItem>
     let searchText: String
     let onOpenSession: (UUID) -> Void
     /// Asks the host to put up the delete confirmation. The list does not
@@ -117,7 +124,7 @@ struct FleetSessionList: View {
                 if !projectSessions.isEmpty {
                     Section(project.name) {
                         ForEach(projectSessions) { session in
-                            SessionSidebarRow(session: session, selection: selection, store: store, onOpenSession: onOpenSession, onRequestDelete: onRequestDelete, gridSelection: gridSelection)
+                            SessionSidebarRow(session: session, isSelected: selection.contains(.session(session.id)), store: store, onOpenSession: onOpenSession, onRequestDelete: onRequestDelete, gridSelection: gridSelection)
                         }
                     }
                 }
@@ -125,7 +132,7 @@ struct FleetSessionList: View {
             if !filtered.generalSessions.isEmpty {
                 Section("Unassigned") {
                     ForEach(filtered.generalSessions) { session in
-                        SessionSidebarRow(session: session, selection: selection, store: store, onOpenSession: onOpenSession, onRequestDelete: onRequestDelete, gridSelection: gridSelection)
+                        SessionSidebarRow(session: session, isSelected: selection.contains(.session(session.id)), store: store, onOpenSession: onOpenSession, onRequestDelete: onRequestDelete, gridSelection: gridSelection)
                     }
                 }
             }
@@ -134,6 +141,13 @@ struct FleetSessionList: View {
         .scrollContentBackground(.hidden)
         .background(FlotillaColors.sidebar)
         .accessibilityIdentifier(AXID.sidebarList.rawValue)
+        // Finder/Mail-standard: Delete/Backspace acts on whatever's
+        // selected. Only wired for a single selected session for now — a
+        // multi-row selection has no batch-delete confirmation sheet yet.
+        .onDeleteCommand {
+            guard selection.count == 1, case .session(let id)? = selection.first else { return }
+            onRequestDelete(id)
+        }
     }
 }
 
@@ -233,7 +247,9 @@ extension AppStore {
 
 struct SessionSidebarRow: View {
     let session: Session
-    let selection: SidebarItem
+    /// Whether this row is the item `navigator.selection` currently has
+    /// open, from `FleetSessionList`'s `Set` membership check.
+    let isSelected: Bool
     let store: AppStore
     let onOpenSession: (UUID) -> Void
     let onRequestDelete: (UUID) -> Void
@@ -245,26 +261,26 @@ struct SessionSidebarRow: View {
         gridSelection?.memberIDs.contains(session.id) ?? false
     }
 
-    private var isSelected: Bool {
-        selection == .session(session.id)
-    }
-
     /// Green says "this session is in the grid"; red on hover previews that
-    /// clicking removes it. Outside grid mode this stays nil and the card's
-    /// own selection styling is untouched.
+    /// clicking removes it. Outside grid mode this stays nil.
     private var gridTint: Color? {
         guard gridSelection != nil, isGridMember else { return nil }
         return isHovering ? FlotillaColors.danger : FlotillaColors.success
     }
 
-    /// Drawn at the row's full padded bounds (see the `.padding` note below)
-    /// rather than inside `SessionCard`, so selection/attention tints reach
-    /// the same rounded rect the grid tint does instead of stopping at the
-    /// card's own inner content frame.
+    /// Exactly one state wins — layering translucent tints on top of each
+    /// other (or on top of whatever AppKit's own `.sidebar`-style selection
+    /// paints on the row underneath, which no `.background` can occlude
+    /// since it's drawn by a separate `NSTableRowView` layer) is what
+    /// produced a doubled-up look. Painting our own opaque backdrop first
+    /// (below) hides that native layer entirely, so this is the only thing
+    /// that's ever visible: grid membership beats "this is open", which
+    /// beats needs-attention, which beats a plain hover, which beats idle.
     private var rowFill: Color {
         if let gridTint { return gridTint.opacity(0.22) }
         if isSelected { return FlotillaColors.surfaceElevated }
-        if session.status == .waitingForInput { return FlotillaColors.statusWaitingForInput.opacity(0.08) }
+        if session.status == .waitingForInput { return FlotillaColors.statusWaitingForInput.opacity(0.14) }
+        if isHovering { return FlotillaColors.surfaceElevated.opacity(0.6) }
         return .clear
     }
 
@@ -274,19 +290,15 @@ struct SessionSidebarRow: View {
             variant: .row,
             diffStatStore: store.diffStatStore,
             activityStore: nil,
-            isSelected: selection == .session(session.id),
-            // The row's own `Button` (see `SessionCard.rowView`) consumes
-            // the click before it ever reaches `List`'s native row-selection
-            // handling, so `FlotillaShell.sidebarSelectionBinding` never
-            // sees it — this has to be the one place that actually toggles
-            // membership.
-            onTap: {
-                if let gridSelection {
-                    gridSelection.onToggle(session.id)
-                } else {
-                    onOpenSession(session.id)
-                }
-            },
+            // Rows no longer wrap themselves in a click-consuming `Button`
+            // (see `SessionCard.rowView`), so `onTap` only fires from the
+            // context menu's "Open Session" item now — the row's own click
+            // goes through `List`'s native selection instead, which is what
+            // `FlotillaShell.handleSidebarSelectionChange` reacts to. Grid
+            // membership toggling moved there too, since that handler sees
+            // every selection change (click, arrow key, or programmatic)
+            // the same way `List` does.
+            onTap: { onOpenSession(session.id) },
             onDelete: { onRequestDelete(session.id) },
             onRestart: { store.restartSession(sessionID: session.id) },
             onRevealInFinder: { },
@@ -303,12 +315,14 @@ struct SessionSidebarRow: View {
         .padding(.vertical, 3)
         .background {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(rowFill)
+                // Opaque backdrop first, matching the list's own background —
+                // this fully hides AppKit's native selection/hover painting
+                // underneath, so `rowFill` above is the single, deterministic
+                // source of truth for this row's appearance.
+                .fill(FlotillaColors.sidebar)
                 .overlay {
-                    if isSelected && gridTint == nil {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(FlotillaColors.separator, lineWidth: 0.5)
-                    }
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(rowFill)
                 }
         }
         .animation(.easeOut(duration: 0.1), value: isHovering)
@@ -420,4 +434,3 @@ private struct SwipeToDeleteSession: ViewModifier {
         .accessibilityIdentifier(accessibilityID)
     }
 }
-

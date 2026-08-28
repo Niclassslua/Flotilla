@@ -107,25 +107,30 @@ struct FlotillaShell: View {
         )
     }
 
-    /// `List(selection:)` is the one thing in the sidebar guaranteed to see
-    /// every click — it's an AppKit table view driving the binding directly,
-    /// not a SwiftUI gesture racing the table for the event. While the grid
-    /// is on screen this reroutes that click into a grid-membership toggle
-    /// instead of letting it flip `navigator.selection` to `.session(id)`,
-    /// which would both fail to toggle anything (`List` set the binding
-    /// itself, bypassing `FleetSessionList.onOpenSession`) and navigate away
-    /// from the grid to a full-screen session.
-    private var sidebarSelectionBinding: Binding<SidebarItem> {
-        Binding(
-            get: { navigator.selection },
-            set: { newValue in
-                if case .session(let id) = newValue, let gridSidebarSelection {
-                    gridSidebarSelection.onToggle(id)
-                    return
-                }
-                navigator.selection = newValue
-            }
-        )
+    /// `FleetSessionList`'s `List` binds `Set<SidebarItem>` natively, so
+    /// AppKit's table view handles ⌘/Shift-click range selection itself —
+    /// this only has to react to the *result*. A click, arrow key, or
+    /// programmatic change that narrows the set to one tag is treated as
+    /// "open it" (or, while the grid is on screen, "toggle its grid
+    /// membership" instead — never navigating away from the grid). A set
+    /// with more than one tag is a batch selection: it changes nothing in
+    /// the detail column, leaving `Delete`/`Backspace` (see
+    /// `FleetSessionList.onDeleteCommand`) as the only thing that acts on it
+    /// for now.
+    private func handleSidebarSelectionChange(_ newSelection: Set<SidebarItem>) {
+        guard newSelection.count == 1, let only = newSelection.first else { return }
+        if let gridSidebarSelection, case .session(let id) = only {
+            gridSidebarSelection.onToggle(id)
+            return
+        }
+        guard only != navigator.selection else { return }
+        switch only {
+        case .session(let id):
+            navigator.selection = .session(id)
+            store.selectedSessionID = id
+        case .overview, .allSessions, .project:
+            navigator.selection = only
+        }
     }
 
     /// The rail is a sibling of the split view, not its first column — a
@@ -151,7 +156,7 @@ struct FlotillaShell: View {
             NavigationSplitView(columnVisibility: $navigator.columnVisibility) {
                 FleetSessionList(
                     store: store,
-                    selection: sidebarSelectionBinding,
+                    selection: $navigator.sidebarSelection,
                     searchText: navigator.searchText,
                     onOpenSession: { id in
                         navigator.selection = .session(id)
@@ -160,11 +165,15 @@ struct FlotillaShell: View {
                     onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
                     gridSelection: gridSidebarSelection
                 )
-                // AppKit remembers the divider position it was last dragged to
-                // (see `SidebarRail`'s doc comment) and restores it on the next
-                // launch, so `ideal` only matters for a first run — pick a value
-                // that reads well before the user has ever touched the divider.
-                .navigationSplitViewColumnWidth(min: 220, ideal: 314, max: 340)
+                // Normal builds let AppKit restore the last divider position,
+                // so `ideal` matters only on a fresh launch. The Ephemeral
+                // scene disables restoration and therefore always starts from
+                // this design-system value.
+                .navigationSplitViewColumnWidth(
+                    min: FlotillaLayoutWidth.sidebarMin,
+                    ideal: FlotillaLayoutWidth.sidebarIdeal,
+                    max: FlotillaLayoutWidth.sidebarMax
+                )
                 .searchable(text: $navigator.searchText, placement: .sidebar, prompt: "Projects and sessions")
             } detail: {
                 DetailColumn(
@@ -190,6 +199,9 @@ struct FlotillaShell: View {
         .environment(\.workspaceNavigator, navigator)
         .frame(minWidth: 1000, minHeight: 640)
         .onChange(of: facet) { _, newFacet in syncSidebarColumn(for: newFacet) }
+        .onChange(of: navigator.sidebarSelection) { _, newSelection in
+            handleSidebarSelectionChange(newSelection)
+        }
         .animation(.snappy(duration: 0.22), value: navigator.selection)
         .animation(.snappy(duration: 0.18), value: navigator.presentation)
     }

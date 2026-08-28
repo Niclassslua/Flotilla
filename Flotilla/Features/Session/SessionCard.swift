@@ -71,35 +71,35 @@ struct SessionCard<Terminal: View>: View {
     // MARK: - Row Variant (Sidebar)
 
     private var rowView: some View {
-        // A real `Button` rather than `.onTapGesture`: inside a `List` on
-        // macOS, a tap gesture on plain row content loses the hit-test race
-        // to the table view's own click handling and silently never fires —
-        // a `Button`'s action is what AppKit reliably routes the click to.
+        // Plain content, not a `Button`: inside a `List` on macOS, wrapping
+        // row content in a `Button` wins the hit-test race and swallows the
+        // click before AppKit's own table-view selection ever sees it —
+        // which also swallows modifier keys, breaking ⌘/Shift-click
+        // multi-select. Letting the table view own the click is what makes
+        // `List`'s native selection (and its `Set`-based multi-select) work;
+        // `onTap` still fires from the context menu's "Open Session" item.
         // Deletion lives on the row's `.swipeActions` (see the call site in
         // `SessionSidebarRow`) and the context menu, exactly like Mail and
         // Reminders — the row itself carries no inline delete control.
-        Button(action: onTap) {
-            HStack(alignment: .top, spacing: 10) {
-                providerTile
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(session.title)
-                            .font(.callout.weight(.medium))
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        Text(compactTimestamp(for: session.lastActiveAt))
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.tertiary)
-                    }
-                    metadataLine
+        HStack(alignment: .top, spacing: 10) {
+            providerTile
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(session.title)
+                        .font(.callout.weight(.medium))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(compactTimestamp(for: session.lastActiveAt))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.tertiary)
                 }
-                .padding(.top, 1)
+                metadataLine
             }
-            .padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            .padding(.top, 1)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .contextMenu { contextMenu }
         // `.contain` keeps the row addressable by the identifier the call
         // site assigns while still exposing children (status word, etc.)
