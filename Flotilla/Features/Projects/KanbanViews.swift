@@ -3,7 +3,6 @@ import SessionKit
 import DesignSystem
 import TerminalKit
 import GitKit
-import UniformTypeIdentifiers
 
 struct KanbanTabView: View {
     @Bindable var store: AppStore
@@ -12,7 +11,6 @@ struct KanbanTabView: View {
     let openSession: (UUID) -> Void
     var projectFilter: UUID? = nil
 
-    @State private var dragOverColumnID: UUID?
     @State private var showingNewBoardSheet = false
     @State private var newBoardName = ""
 
@@ -37,7 +35,6 @@ struct KanbanTabView: View {
                     terminalManager: terminalManager,
                     activityStore: activityStore,
                     openSession: openSession,
-                    dragOverColumnID: $dragOverColumnID,
                     projectFilter: projectFilter
                 )
             } else {
@@ -216,13 +213,17 @@ struct KanbanBoardView: View {
     let terminalManager: TerminalManager
     let activityStore: SessionActivityStore?
     let openSession: (UUID) -> Void
-    @Binding var dragOverColumnID: UUID?
     var projectFilter: UUID? = nil
 
     /// One namespace shared by every column so a card keeps its identity when
     /// its status changes and it moves from one column to another — SwiftUI
     /// then slides it across the gap instead of cross-fading two cards.
     @Namespace private var cardMotion
+
+    /// The card being dragged for hand-sorting, board-wide so any column's
+    /// drop clears it (a card dragged out of column A and dropped on B must
+    /// un-dim in A). Reordering itself stays within the origin column.
+    @State private var draggingID: UUID?
 
     /// The board presents session status and nothing else. The agent and
     /// workflow groupings were removed: grouping by agent answered a
@@ -280,17 +281,10 @@ struct KanbanBoardView: View {
                             activityStore: activityStore,
                             openSession: openSession,
                             width: width,
-                            isDragTarget: dragOverColumnID == column.id,
-                            onDragTargetChange: { isTargeted in
-                                if isTargeted {
-                                    dragOverColumnID = column.id
-                                } else if dragOverColumnID == column.id {
-                                    dragOverColumnID = nil
-                                }
-                            },
                             projectFilter: projectFilter,
                             showProjectName: showsProjectName,
-                            cardMotion: cardMotion
+                            cardMotion: cardMotion,
+                            draggingID: $draggingID
                         )
                     }
                 }
@@ -301,6 +295,12 @@ struct KanbanBoardView: View {
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         }
         .background(FlotillaColors.canvas)
+        // Backstop: any drop that reaches the board but misses a card ends the
+        // drag cleanly so no card is left dimmed.
+        .dropDestination(for: String.self) { _, _ in
+            draggingID = nil
+            return false
+        }
         .accessibilityIdentifier("KanbanBoard")
     }
 }
@@ -313,11 +313,13 @@ struct KanbanColumnView: View {
     let activityStore: SessionActivityStore?
     let openSession: (UUID) -> Void
     let width: CGFloat
-    let isDragTarget: Bool
-    let onDragTargetChange: (Bool) -> Void
     var projectFilter: UUID? = nil
     var showProjectName: Bool = false
     var cardMotion: Namespace.ID
+    /// The card being dragged for hand-sorting (board-wide). Identifies the
+    /// drag payload during hover so the stack can reflow live; reordering is
+    /// always within the origin column and never changes a session's status.
+    @Binding var draggingID: UUID?
 
     private var columnSessions: [Session] {
         PerfLog.measure("KanbanColumnView.columnSessions", "\(column.title) of \(store.sessions.count) sessions") {
@@ -363,16 +365,39 @@ struct KanbanColumnView: View {
                                 onDelete: {},
                                 onRestart: { store.restartSession(sessionID: session.id) }
                             )
+                            .opacity(draggingID == session.id ? 0.35 : 1)
                             .matchedGeometryEffect(id: session.id, in: cardMotion)
                             .transition(.scale(scale: 0.92).combined(with: .opacity))
-                            .draggable(session.id.uuidString) {
+                            .onDrag {
+                                draggingID = session.id
+                                return NSItemProvider(object: session.id.uuidString as NSString)
+                            } preview: {
                                 KanbanDragPreview(
                                     session: session,
                                     projectName: projectNames[session.id],
                                     width: width
                                 )
                             }
+                            .dropDestination(for: String.self) { items, _ in
+                                defer { draggingID = nil }
+                                return droppedInThisColumn(items)
+                            } isTargeted: { over in
+                                if over { reorder(dragged: draggingID, toLandBefore: session.id) }
+                            }
                         }
+
+                        // Landing zone past the last card, so a card can be
+                        // dragged to the bottom of its column.
+                        Color.clear
+                            .frame(height: 28)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
+                            .dropDestination(for: String.self) { items, _ in
+                                defer { draggingID = nil }
+                                return droppedInThisColumn(items)
+                            } isTargeted: { over in
+                                if over { reorder(dragged: draggingID, toEnd: true) }
+                            }
                     }
                     .padding(.bottom, 8)
                 }
@@ -390,22 +415,48 @@ struct KanbanColumnView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)
-                .strokeBorder(
-                    isDragTarget ? accentColor : FlotillaColors.separator.opacity(0.8),
-                    lineWidth: isDragTarget ? 2 : 1
-                )
+                .strokeBorder(FlotillaColors.separator.opacity(0.8), lineWidth: 1)
         )
-        .background(
-            RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)
-                .fill(accentColor.opacity(isDragTarget ? 0.1 : 0))
-        )
-        .animation(FlotillaMotion.fast.curve, value: isDragTarget)
-        // The whole column is the drop target, not a strip at the bottom of
-        // the card stack — dropping onto an empty column has to work, and
-        // that is exactly the case with no cards to aim at.
-        .onDrop(of: [.text], isTargeted: Binding(get: { isDragTarget }, set: onDragTargetChange)) { providers in
-            handleDrop(providers: providers)
+    }
+
+    /// Moves the dragged card to sit just before `targetID` (or at the end
+    /// when `toEnd`), then persists the new hand-sorted order. A no-op unless
+    /// the drag started in this column, so dragging a card onto a different
+    /// status column leaves everything untouched — status is the session's to
+    /// change, not the user's.
+    private func reorder(dragged draggedID: UUID?, toLandBefore targetID: UUID? = nil, toEnd: Bool = false) {
+        guard let draggedID else { return }
+        var ids = filteredSessions.map(\.id)
+        guard ids.contains(draggedID) else { return }
+        if let targetID {
+            guard draggedID != targetID, ids.contains(targetID) else { return }
         }
+        ids.removeAll { $0 == draggedID }
+        let insertAt: Int
+        if toEnd {
+            insertAt = ids.count
+        } else if let targetID, let idx = ids.firstIndex(of: targetID) {
+            insertAt = idx
+        } else {
+            return
+        }
+        ids.insert(draggedID, at: insertAt)
+
+        var order = board.cardOrder
+        for (index, id) in ids.enumerated() {
+            order[id.uuidString] = index
+        }
+        withAnimation(FlotillaMotion.spring.curve) {
+            store.updateKanbanCardOrder(order)
+        }
+    }
+
+    /// A drop is only "accepted" when the card came from this column — the
+    /// live hover reflow has already placed it. A card dragged in from
+    /// another status column is rejected so it snaps back untouched.
+    private func droppedInThisColumn(_ items: [String]) -> Bool {
+        guard let first = items.first, let id = UUID(uuidString: first) else { return false }
+        return filteredSessions.contains { $0.id == id }
     }
 
     private var columnHeader: some View {
@@ -452,21 +503,6 @@ struct KanbanColumnView: View {
                         style: StrokeStyle(lineWidth: 1, dash: [5, 4])
                     )
             )
-    }
-
-    private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
-        // A status column's filter *is* the status the drop should apply.
-        // `nil` is the "Unstarted" column, which is not a status a session
-        // can be moved back into, so that drop is refused.
-        guard let targetStatus = column.statusFilter else { return false }
-        _ = provider.loadObject(ofClass: String.self) { sessionIDString, _ in
-            guard let sessionIDString, let sessionID = UUID(uuidString: sessionIDString) else { return }
-            Task { @MainActor in
-                store.moveSessionToStatus(sessionID: sessionID, status: targetStatus)
-            }
-        }
-        return true
     }
 }
 
