@@ -11,9 +11,14 @@ final class GridViewUITests: XCTestCase {
     }
 
     private func switchToGrid(_ app: XCUIApplication) {
-        let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
-        if fastWait(sessionsButton, timeout: 3) {
-            sessionsButton.click()
+        let sessionsRadio = app.radioButtons["Sessions"].firstMatch
+        if fastWait(sessionsRadio, timeout: 2) {
+            sessionsRadio.click()
+        } else {
+            let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
+            if fastWait(sessionsButton, timeout: 2) {
+                sessionsButton.click()
+            }
         }
         let gridButton = app.descendants(matching: .any)["Toolbar.PresentationPicker"].buttons["Grid"].firstMatch
         if fastWait(gridButton, timeout: 3) {

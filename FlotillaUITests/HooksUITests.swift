@@ -9,9 +9,14 @@ final class HooksUITests: XCTestCase {
         app.launchEnvironment["UI_TESTING_SIMULATE_WAITING_SESSION"] = "General chat"
         app.launch()
 
-        let allSessions = app.buttons["Sidebar.AllSessions"]
-        XCTAssertTrue(allSessions.waitForExistence(timeout: 8))
-        allSessions.click()
+        let sessionsRadio = app.radioButtons["Sessions"].firstMatch
+        if sessionsRadio.waitForExistence(timeout: 4) {
+            sessionsRadio.click()
+        } else {
+            let allSessions = app.buttons["Sidebar.AllSessions"]
+            XCTAssertTrue(allSessions.waitForExistence(timeout: 4))
+            allSessions.click()
+        }
 
         let sessionRow = app.descendants(matching: .any)["SessionRow-General chat"].firstMatch
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 8))

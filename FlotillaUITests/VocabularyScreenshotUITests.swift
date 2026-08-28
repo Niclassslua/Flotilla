@@ -234,10 +234,22 @@ final class VocabularyScreenshotUITests: XCTestCase {
     }
 
     private func goToOverview(_ app: XCUIApplication) {
+        let radio = app.radioButtons["Projects"].firstMatch
+        if fastWait(radio, timeout: 2) {
+            radio.click()
+            settle(0.5)
+            return
+        }
         click(app, "Sidebar.Overview")
     }
 
     private func goToSessions(_ app: XCUIApplication) {
+        let radio = app.radioButtons["Sessions"].firstMatch
+        if fastWait(radio, timeout: 2) {
+            radio.click()
+            settle(0.5)
+            return
+        }
         click(app, "Sidebar.AllSessions")
     }
 

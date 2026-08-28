@@ -13,9 +13,14 @@ final class KanbanUITests: XCTestCase {
     func testKanbanBoardColumnsContextMenuAndOpenSession() {
         let app = launchedApp()
 
-        let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
-        if sessionsButton.waitForExistence(timeout: 3) {
-            sessionsButton.click()
+        let sessionsRadio = app.radioButtons["Sessions"].firstMatch
+        if sessionsRadio.waitForExistence(timeout: 2) {
+            sessionsRadio.click()
+        } else {
+            let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
+            if sessionsButton.waitForExistence(timeout: 2) {
+                sessionsButton.click()
+            }
         }
 
         let boardButton = app.descendants(matching: .any)["Toolbar.PresentationPicker"].buttons["Board"].firstMatch

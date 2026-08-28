@@ -51,6 +51,14 @@ struct FlotillaShell: View {
                 }
             overlayPresentation
         }
+        .toolbar {
+            WorkspaceToolbar(
+                navigator: navigator,
+                store: store,
+                settingsViewModel: settingsViewModel,
+                onCommandPalette: { navigator.presentedSheet = .commandPalette }
+            )
+        }
         .task {
             await restoreWorkspaceSelection()
             applyTerminalPreferences()

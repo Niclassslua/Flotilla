@@ -12,9 +12,14 @@ final class DiffAndFilesUITests: XCTestCase {
 
     func testDiffPanelAndFileBrowser() {
         let app = launchedApp()
-        let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
-        if sessionsButton.waitForExistence(timeout: 3) {
-            sessionsButton.click()
+        let sessionsRadio = app.radioButtons["Sessions"].firstMatch
+        if sessionsRadio.waitForExistence(timeout: 2) {
+            sessionsRadio.click()
+        } else {
+            let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
+            if sessionsButton.waitForExistence(timeout: 2) {
+                sessionsButton.click()
+            }
         }
         let sessionRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 8))
@@ -46,8 +51,8 @@ final class DiffAndFilesUITests: XCTestCase {
         // 2. Test Files panel via the sidebar session row, then the toolbar's "File Browser" jump.
         // Reviewing changes above navigated away to the project's Git tab, so
         // get back to the session the same way a user would: through the sidebar.
-        if sessionsButton.waitForExistence(timeout: 3) {
-            sessionsButton.click()
+        if sessionsRadio.waitForExistence(timeout: 2) {
+            sessionsRadio.click()
         }
         let secondSessionRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
         XCTAssertTrue(secondSessionRow.waitForExistence(timeout: 3))

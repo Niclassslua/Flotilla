@@ -40,6 +40,20 @@ struct WorkspaceToolbar: ToolbarContent {
         )
     }
 
+    private var facetBinding: Binding<SidebarFacet> {
+        Binding(
+            get: { facet },
+            set: { newFacet in
+                switch newFacet {
+                case .overview:
+                    navigator.restoreOverviewSelection()
+                case .sessions:
+                    navigator.selection = .allSessions
+                }
+            }
+        )
+    }
+
     private var presentation: Binding<WorkspacePresentation> {
         Binding(
             get: { navigator.presentation },
@@ -56,37 +70,43 @@ struct WorkspaceToolbar: ToolbarContent {
     }
 
     var body: some ToolbarContent {
-        // Leading Brand & Navigation
-        ToolbarItemGroup(placement: .navigation) {
-            HStack(spacing: 12) {
-                // Flotilla Logo & Name
-                HStack(spacing: 6) {
-                    Image(systemName: "sailboat.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(FlotillaColors.accent)
-                    Text("Flotilla")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(FlotillaColors.textPrimary)
-                }
-                .padding(.trailing, 4)
+        // Leading Flotilla brand mark. `.navigation` pins it to the true
+        // leading edge so it never reflows when principal/trailing items
+        // appear, and `sharedBackgroundVisibility(.hidden)` drops it out of
+        // the toolbar's shared Liquid Glass grouping so it renders as a bare
+        // wordmark with no capsule — see
+        // https://developer.apple.com/documentation/swiftui/customizabletoolbarcontent/sharedbackgroundvisibility(_:)
+        ToolbarItem(placement: .navigation) {
+            HStack(spacing: 10) {
+                Image(systemName: "sailboat.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(FlotillaColors.accent)
+                Text("Flotilla")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(FlotillaColors.textPrimary)
+            }
+            .accessibilityIdentifier("TopBar.Logo")
+        }
+        .sharedBackgroundVisibility(.hidden)
 
-                // Left-aligned Text + Icon Navigation Buttons
-                HStack(spacing: 3) {
-                    TopBarNavButton(
-                        title: "Projects",
-                        systemImage: "folder.fill",
-                        isActive: facet == .overview,
-                        action: { navigator.restoreOverviewSelection() }
-                    )
+        // Fixed gap that also breaks the shared-glass grouping, so the wordmark
+        // and the scope picker sit in separate containers.
+        ToolbarSpacer(.fixed, placement: .navigation)
 
-                    TopBarNavButton(
-                        title: "Sessions",
-                        systemImage: "terminal.fill",
-                        isActive: facet == .sessions,
-                        action: { navigator.selection = .allSessions }
-                    )
+        // Scope Picker: Projects / Sessions (segmented, matched to the
+        // Grid / Board presentation picker). Also `.navigation` so the leading
+        // cluster stays put across every scope.
+        ToolbarItem(placement: .navigation) {
+            Picker("Scope", selection: facetBinding) {
+                ForEach(SidebarFacet.allCases) { facet in
+                    Text(facet.title).tag(facet)
                 }
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 144)
+            .help("Switch workspace scope")
+            .accessibilityIdentifier(AXID.toolbarScopePicker.rawValue)
         }
 
         ToolbarItemGroup(placement: .principal) {
@@ -101,9 +121,11 @@ struct WorkspaceToolbar: ToolbarContent {
                 .labelsHidden()
                 .frame(width: 116)
                 .help("Switch presentation")
-                .accessibilityIdentifier("Toolbar.PresentationPicker")
+                .accessibilityIdentifier(AXID.toolbarPresentationPicker.rawValue)
             }
         }
+
+        ToolbarSpacer()
 
         if case .session(let sessionID) = navigator.selection,
            let session = store.sessions.first(where: { $0.id == sessionID }) {
@@ -114,7 +136,7 @@ struct WorkspaceToolbar: ToolbarContent {
                     Image(systemName: "arrow.triangle.branch")
                 }
                 .help("Review this session's changes")
-                .accessibilityIdentifier("Toolbar.OpenProjectGit")
+                .accessibilityIdentifier(AXID.toolbarOpenProjectGit.rawValue)
 
                 Button {
                     navigator.openProjectPanel(.files, scopedTo: session)
@@ -122,7 +144,7 @@ struct WorkspaceToolbar: ToolbarContent {
                     Image(systemName: "folder")
                 }
                 .help("Browse project files")
-                .accessibilityIdentifier("Toolbar.OpenProjectFiles")
+                .accessibilityIdentifier(AXID.toolbarOpenProjectFiles.rawValue)
             }
 
             ToolbarSpacer(.fixed, placement: .primaryAction)
@@ -145,7 +167,7 @@ struct WorkspaceToolbar: ToolbarContent {
                 Image(systemName: "command")
             }
             .help("Command palette (⌘K)")
-            .accessibilityIdentifier("Toolbar.CommandPalette")
+            .accessibilityIdentifier(AXID.toolbarCommandPalette.rawValue)
 
             Button(action: { openSettings() }) {
                 Image(systemName: "gearshape")
@@ -153,43 +175,5 @@ struct WorkspaceToolbar: ToolbarContent {
             .help("Settings (⌘,)")
             .accessibilityIdentifier("Toolbar.Settings")
         }
-    }
-}
-
-// MARK: - TopBarNavButton
-
-private struct TopBarNavButton: View {
-    let title: String
-    let systemImage: String
-    let isActive: Bool
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: isActive ? .semibold : .regular))
-                Text(title)
-                    .font(.system(size: 12, weight: isActive ? .semibold : .medium))
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background {
-                if isActive {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(FlotillaColors.accent.opacity(0.18))
-                } else if isHovering {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(FlotillaColors.surfaceElevated.opacity(0.7))
-                }
-            }
-            .foregroundStyle(isActive ? FlotillaColors.accent : FlotillaColors.textSecondary)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .help(title)
-        .accessibilityIdentifier("TopBar.\(title)")
     }
 }

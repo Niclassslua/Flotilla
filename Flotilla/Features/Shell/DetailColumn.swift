@@ -33,14 +33,6 @@ struct DetailColumn: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) { banners }
-        .toolbar {
-            WorkspaceToolbar(
-                navigator: navigator,
-                store: store,
-                settingsViewModel: settingsViewModel,
-                onCommandPalette: onCommandPalette
-            )
-        }
         .navigationTitle(scopeTitle)
         .navigationSubtitle(scopeSubtitle)
         .background(FlotillaColors.canvas)
