@@ -2,7 +2,7 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 import TerminalKit
-import GitKit
+import UniformTypeIdentifiers
 
 struct KanbanTabView: View {
     @Bindable var store: AppStore
@@ -13,15 +13,6 @@ struct KanbanTabView: View {
 
     @State private var showingNewBoardSheet = false
     @State private var newBoardName = ""
-
-    /// `FLOTILLA_DEMO_DATA=1` only: reveals the "Cycle demo card" button that
-    /// drives one card through every status and a fresh diff stat, so the
-    /// board's state-transition and churn animations can be exercised on
-    /// demand instead of waiting for a real agent to change state.
-    private let isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
-    /// `.crashed` may only transition back to `.working` (see
-    /// `SessionStatusMachine.canTransition`), so the cycle ends there.
-    private let demoStatusCycle: [SessionStatus] = [.working, .waitingForInput, .readyForReview, .crashed]
 
     var body: some View {
         let _ = PerfLog.bump("KanbanTabView.body")
@@ -95,40 +86,10 @@ struct KanbanTabView: View {
             }
 
             Spacer()
-
-            if isBoardDemo {
-                Button {
-                    cycleDemoCard()
-                } label: {
-                    Label("Cycle demo card", systemImage: "arrow.triangle.2.circlepath")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityIdentifier("BoardDemoCycleButton")
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(FlotillaColors.surface)
-    }
-
-    /// Advances demo session 0 to the next status in the cycle and hands the
-    /// diff-stat store a fresh `+/−` count, both inside one animation
-    /// transaction so the card slides between columns while its churn digits
-    /// roll to the new value.
-    private func cycleDemoCard() {
-        let sessionID = BoardDemoFixtures.sessionID(at: 0)
-        let current = store.sessions.first { $0.id == sessionID }?.status
-        let nextIndex = current
-            .flatMap { demoStatusCycle.firstIndex(of: $0) }
-            .map { ($0 + 1) % demoStatusCycle.count } ?? 0
-        withAnimation(FlotillaMotion.spring.curve) {
-            store.moveSessionToStatus(sessionID: sessionID, status: demoStatusCycle[nextIndex])
-            store.diffStatStore.setDemoStat(
-                GitDiffStat(additions: Int.random(in: 20...480), deletions: Int.random(in: 0...220)),
-                for: sessionID
-            )
-        }
     }
 }
 
@@ -295,12 +256,6 @@ struct KanbanBoardView: View {
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         }
         .background(FlotillaColors.canvas)
-        // Backstop: any drop that reaches the board but misses a card ends the
-        // drag cleanly so no card is left dimmed.
-        .dropDestination(for: String.self) { _, _ in
-            draggingID = nil
-            return false
-        }
         .accessibilityIdentifier("KanbanBoard")
     }
 }
@@ -317,8 +272,9 @@ struct KanbanColumnView: View {
     var showProjectName: Bool = false
     var cardMotion: Namespace.ID
     /// The card being dragged for hand-sorting (board-wide). Identifies the
-    /// drag payload during hover so the stack can reflow live; reordering is
-    /// always within the origin column and never changes a session's status.
+    /// drag payload once the drop delegate reports which card it is over;
+    /// reordering is always within the origin column and never changes a
+    /// session's status.
     @Binding var draggingID: UUID?
 
     private var columnSessions: [Session] {
@@ -354,7 +310,7 @@ struct KanbanColumnView: View {
                 emptyState
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 10) {
+                    VStack(spacing: 10) {
                         ForEach(filteredSessions) { session in
                             KanbanCard(
                                 session: session,
@@ -365,7 +321,26 @@ struct KanbanColumnView: View {
                                 onDelete: {},
                                 onRestart: { store.restartSession(sessionID: session.id) }
                             )
-                            .opacity(draggingID == session.id ? 0.35 : 1)
+                            // While this card is the one in flight, hide its
+                            // body and leave a drop-slot outline the same size
+                            // in its place — the floating drag preview is the
+                            // only "card" on screen, and the outline slides to
+                            // wherever the release will land.
+                            .opacity(draggingID == session.id ? 0 : 1)
+                            .overlay {
+                                if draggingID == session.id {
+                                    RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)
+                                        .fill(FlotillaColors.accent.opacity(0.05))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)
+                                                .strokeBorder(
+                                                    FlotillaColors.accent.opacity(0.35),
+                                                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                                                )
+                                        )
+                                        .transition(.opacity)
+                                }
+                            }
                             .matchedGeometryEffect(id: session.id, in: cardMotion)
                             .transition(.scale(scale: 0.92).combined(with: .opacity))
                             .onDrag {
@@ -378,12 +353,10 @@ struct KanbanColumnView: View {
                                     width: width
                                 )
                             }
-                            .dropDestination(for: String.self) { items, _ in
-                                defer { draggingID = nil }
-                                return droppedInThisColumn(items)
-                            } isTargeted: { over in
-                                if over { reorder(dragged: draggingID, toLandBefore: session.id) }
-                            }
+                            .onDrop(of: [.text], delegate: KanbanReorderDropDelegate(
+                                onEnter: { reorder(dragged: draggingID, over: session.id) },
+                                onPerform: endDrag
+                            ))
                         }
 
                         // Landing zone past the last card, so a card can be
@@ -392,12 +365,10 @@ struct KanbanColumnView: View {
                             .frame(height: 28)
                             .frame(maxWidth: .infinity)
                             .contentShape(Rectangle())
-                            .dropDestination(for: String.self) { items, _ in
-                                defer { draggingID = nil }
-                                return droppedInThisColumn(items)
-                            } isTargeted: { over in
-                                if over { reorder(dragged: draggingID, toEnd: true) }
-                            }
+                            .onDrop(of: [.text], delegate: KanbanReorderDropDelegate(
+                                onEnter: { reorder(dragged: draggingID, toEnd: true) },
+                                onPerform: endDrag
+                            ))
                     }
                     .padding(.bottom, 8)
                 }
@@ -419,28 +390,33 @@ struct KanbanColumnView: View {
         )
     }
 
-    /// Moves the dragged card to sit just before `targetID` (or at the end
-    /// when `toEnd`), then persists the new hand-sorted order. A no-op unless
-    /// the drag started in this column, so dragging a card onto a different
-    /// status column leaves everything untouched — status is the session's to
-    /// change, not the user's.
-    private func reorder(dragged draggedID: UUID?, toLandBefore targetID: UUID? = nil, toEnd: Bool = false) {
-        guard let draggedID else { return }
-        var ids = filteredSessions.map(\.id)
-        guard ids.contains(draggedID) else { return }
-        if let targetID {
-            guard draggedID != targetID, ids.contains(targetID) else { return }
-        }
-        ids.removeAll { $0 == draggedID }
+    /// Live hand-sort: as the drag hovers a card, move the dragged card past
+    /// it and persist immediately, so the stack reflows under the cursor.
+    /// The dragged card lands *after* the target when travelling down and
+    /// *before* it when travelling up, so it swaps with a neighbour the
+    /// moment it's hovered rather than needing to overshoot. A no-op unless
+    /// the drag started in this column — dragging onto a different status
+    /// column changes nothing, because status is the session's to change,
+    /// not the user's.
+    private func reorder(dragged draggedID: UUID?, over targetID: UUID? = nil, toEnd: Bool = false) {
+        let original = filteredSessions.map(\.id)
+        guard let draggedID, let from = original.firstIndex(of: draggedID) else { return }
+
+        var ids = original
+        ids.remove(at: from)
+
         let insertAt: Int
         if toEnd {
             insertAt = ids.count
-        } else if let targetID, let idx = ids.firstIndex(of: targetID) {
-            insertAt = idx
+        } else if let targetID, targetID != draggedID,
+                  let targetInOriginal = original.firstIndex(of: targetID),
+                  let targetInRemaining = ids.firstIndex(of: targetID) {
+            insertAt = from < targetInOriginal ? targetInRemaining + 1 : targetInRemaining
         } else {
             return
         }
-        ids.insert(draggedID, at: insertAt)
+        ids.insert(draggedID, at: min(insertAt, ids.count))
+        guard ids != original else { return }
 
         var order = board.cardOrder
         for (index, id) in ids.enumerated() {
@@ -451,12 +427,15 @@ struct KanbanColumnView: View {
         }
     }
 
-    /// A drop is only "accepted" when the card came from this column — the
-    /// live hover reflow has already placed it. A card dragged in from
-    /// another status column is rejected so it snaps back untouched.
-    private func droppedInThisColumn(_ items: [String]) -> Bool {
-        guard let first = items.first, let id = UUID(uuidString: first) else { return false }
-        return filteredSessions.contains { $0.id == id }
+    /// Ends a drag: accepts it only when the card came from this column (so a
+    /// cross-column drop snaps back). The drop-slot outline cross-fades to the
+    /// real card rather than hard-swapping, so it blends with the system's
+    /// drag-image dismissal instead of briefly showing two crisp cards.
+    private func endDrag() -> Bool {
+        guard let dropped = draggingID else { return false }
+        let accepted = filteredSessions.contains { $0.id == dropped }
+        withAnimation(.easeOut(duration: 0.18)) { draggingID = nil }
+        return accepted
     }
 
     private var columnHeader: some View {
@@ -503,6 +482,30 @@ struct KanbanColumnView: View {
                         style: StrokeStyle(lineWidth: 1, dash: [5, 4])
                     )
             )
+    }
+}
+
+/// Per-card reorder target. `dropEntered` drives the live hover shuffle;
+/// `performDrop` commits it. `.move` keeps the cursor showing a reorder,
+/// not a copy.
+private struct KanbanReorderDropDelegate: DropDelegate {
+    let onEnter: () -> Void
+    let onPerform: () -> Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.text])
+    }
+
+    func dropEntered(info: DropInfo) {
+        onEnter()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        onPerform()
     }
 }
 
