@@ -9,6 +9,10 @@ struct WorkspaceToolbar: ToolbarContent {
     @Bindable var settingsViewModel: SettingsViewModel
     let onCommandPalette: () -> Void
 
+    private var facet: SidebarFacet {
+        SidebarFacet(navigator.selection)
+    }
+
     /// True for the scopes that render a multi-session workspace, which are
     /// the only ones where the grid's own options mean anything.
     private var isFleetScope: Bool {
@@ -52,6 +56,39 @@ struct WorkspaceToolbar: ToolbarContent {
     }
 
     var body: some ToolbarContent {
+        // Leading Brand & Navigation
+        ToolbarItemGroup(placement: .navigation) {
+            HStack(spacing: 12) {
+                // Flotilla Logo & Name
+                HStack(spacing: 6) {
+                    Image(systemName: "sailboat.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(FlotillaColors.accent)
+                    Text("Flotilla")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(FlotillaColors.textPrimary)
+                }
+                .padding(.trailing, 4)
+
+                // Left-aligned Text + Icon Navigation Buttons
+                HStack(spacing: 3) {
+                    TopBarNavButton(
+                        title: "Projects",
+                        systemImage: "folder.fill",
+                        isActive: facet == .overview,
+                        action: { navigator.restoreOverviewSelection() }
+                    )
+
+                    TopBarNavButton(
+                        title: "Sessions",
+                        systemImage: "terminal.fill",
+                        isActive: facet == .sessions,
+                        action: { navigator.selection = .allSessions }
+                    )
+                }
+            }
+        }
+
         ToolbarItemGroup(placement: .principal) {
             // Presentation picker - only show when in fleet scope
             if showsPresentationPicker {
@@ -91,9 +128,7 @@ struct WorkspaceToolbar: ToolbarContent {
             ToolbarSpacer(.fixed, placement: .primaryAction)
         }
 
-        // Its own glass container next to the other icon-button groups,
-        // rather than living beside the presentation picker — an unrelated
-        // control shouldn't share a background with it.
+        // Grid controls when grid is active
         if isFleetScope, navigator.presentation == .grid {
             ToolbarItemGroup(placement: .primaryAction) {
                 GridDimensionsPicker(settingsViewModel: settingsViewModel)
@@ -109,7 +144,7 @@ struct WorkspaceToolbar: ToolbarContent {
             Button(action: onCommandPalette) {
                 Image(systemName: "command")
             }
-            .help("Command palette")
+            .help("Command palette (⌘K)")
             .accessibilityIdentifier("Toolbar.CommandPalette")
 
             Button(action: { openSettings() }) {
@@ -118,5 +153,43 @@ struct WorkspaceToolbar: ToolbarContent {
             .help("Settings (⌘,)")
             .accessibilityIdentifier("Toolbar.Settings")
         }
+    }
+}
+
+// MARK: - TopBarNavButton
+
+private struct TopBarNavButton: View {
+    let title: String
+    let systemImage: String
+    let isActive: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: isActive ? .semibold : .regular))
+                Text(title)
+                    .font(.system(size: 12, weight: isActive ? .semibold : .medium))
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(FlotillaColors.accent.opacity(0.18))
+                } else if isHovering {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(FlotillaColors.surfaceElevated.opacity(0.7))
+                }
+            }
+            .foregroundStyle(isActive ? FlotillaColors.accent : FlotillaColors.textSecondary)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(title)
+        .accessibilityIdentifier("TopBar.\(title)")
     }
 }

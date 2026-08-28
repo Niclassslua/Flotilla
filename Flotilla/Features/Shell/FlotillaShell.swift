@@ -15,7 +15,7 @@ struct FlotillaShell: View {
     var hookCoordinator: HookCoordinator?
     @Bindable var startupCheck: StartupCheckViewModel
     @Bindable var settingsViewModel: SettingsViewModel
-    @State private var activityStore: SessionActivityStore
+    @State var activityStore: SessionActivityStore
 
     init(
         store: AppStore,
@@ -37,14 +37,13 @@ struct FlotillaShell: View {
 
     var body: some View {
         let _ = navigator.presentedSheet
-        // A plain `.overlay {}` on a `NavigationSplitView`-backed view (like
-        // `splitView`) doesn't reliably composite as the true top AppKit
-        // layer for hit-testing — clicks can fall straight through to the
-        // split view's panes even though the overlay renders visually on
-        // top. An explicit `ZStack` avoids that: it's SwiftUI's own stacking
+        // A plain `.overlay {}` on a view doesn't reliably composite as the
+        // true top AppKit layer for hit-testing — clicks can fall straight
+        // through to panes even though the overlay renders visually on top.
+        // An explicit `ZStack` avoids that: it's SwiftUI's own stacking
         // container, so every child gets genuine, predictable z-order.
         ZStack {
-            splitView
+            workspaceContent
                 .background { uiTestWindowPlacer }
                 .background { ephemeralWindowStateDisabler }
                 .sheet(item: modalSheetBinding) { sheet in
@@ -52,28 +51,27 @@ struct FlotillaShell: View {
                 }
             overlayPresentation
         }
-            .task {
-                await restoreWorkspaceSelection()
-                syncSidebarColumn(for: facet)
-                applyTerminalPreferences()
-            }
-            .modifier(ShellLifecycleModifier(
-                navigator: navigator,
-                store: store,
-                terminalManager: terminalManager,
-                hookCoordinator: hookCoordinator,
-                settingsViewModel: settingsViewModel,
-                applyTerminalPreferences: applyTerminalPreferences
-            ))
-            #if DEBUG
-            .overlay(alignment: .topLeading) {
-                Text(hookCoordinator?.lastNotifiedSessionTitle ?? "none")
-                    .accessibilityIdentifier("LastNotifiedSession")
-                    .frame(width: 1, height: 1)
-                    .opacity(0.001)
-                    .allowsHitTesting(false)
-            }
-            #endif
+        .task {
+            await restoreWorkspaceSelection()
+            applyTerminalPreferences()
+        }
+        .modifier(ShellLifecycleModifier(
+            navigator: navigator,
+            store: store,
+            terminalManager: terminalManager,
+            hookCoordinator: hookCoordinator,
+            settingsViewModel: settingsViewModel,
+            applyTerminalPreferences: applyTerminalPreferences
+        ))
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            Text(hookCoordinator?.lastNotifiedSessionTitle ?? "none")
+                .accessibilityIdentifier("LastNotifiedSession")
+                .frame(width: 1, height: 1)
+                .opacity(0.001)
+                .allowsHitTesting(false)
+        }
+        #endif
     }
 
     /// Inert outside UI testing.
@@ -86,9 +84,7 @@ struct FlotillaShell: View {
         #endif
     }
 
-    /// Inert outside the Ephemeral build. The native bridge disables the
-    /// AppKit autosave names that `NavigationSplitView` and `WindowGroup`
-    /// otherwise install behind SwiftUI's back.
+    /// Inert outside the Ephemeral build.
     @ViewBuilder
     private var ephemeralWindowStateDisabler: some View {
 #if FLOTILLA_EPHEMERAL
@@ -99,12 +95,12 @@ struct FlotillaShell: View {
 #endif
     }
 
-    private var facet: SidebarFacet { SidebarFacet(navigator.selection) }
+    var facet: SidebarFacet { SidebarFacet(navigator.selection) }
 
     /// Non-nil only while the fleet grid is what's on screen — the only
     /// context where clicking a sidebar row should assign it to the grid
     /// rather than open it. See `FleetSessionList.gridSelection`.
-    private var gridSidebarSelection: GridSidebarSelection? {
+    var gridSidebarSelection: GridSidebarSelection? {
         guard navigator.selection == .allSessions, navigator.presentation == .grid else { return nil }
         let dimensions = GridDimensions(
             columns: settingsViewModel.settings.workspace.gridColumnCount,
@@ -131,7 +127,7 @@ struct FlotillaShell: View {
     /// the detail column, leaving `Delete`/`Backspace` (see
     /// `FleetSessionList.onDeleteCommand`) as the only thing that acts on it
     /// for now.
-    private func handleSidebarSelectionChange(_ newSelection: Set<SidebarItem>) {
+    func handleSidebarSelectionChange(_ newSelection: Set<SidebarItem>) {
         guard newSelection.count == 1, let only = newSelection.first else { return }
         if let gridSidebarSelection, case .session(let id) = only {
             gridSidebarSelection.onToggle(id)
@@ -147,84 +143,52 @@ struct FlotillaShell: View {
         }
     }
 
-    /// The rail is a sibling of the split view, not its first column — a
-    /// fixed-width column is something `NavigationSplitView` does not keep
-    /// (see `SidebarRail`). The split view then owns only the session list,
-    /// which it may collapse without taking the navigation away with it.
-    private var splitView: some View {
+    /// The primary workspace layout:
+    /// In Sessions scope: shows a fixed-width SessionsSidebar on the left and DetailColumn on the right.
+    /// In Projects/Overview scope: DetailColumn spans the full window width.
+    private var workspaceContent: some View {
         HStack(spacing: 0) {
-            SidebarRail(
-                facet: facet,
-                showLabels: settingsViewModel.settings.workspace.sidebarRailLabels,
-                onSelect: { selectedFacet in
-                    switch selectedFacet {
-                    case .overview:
-                        navigator.restoreOverviewSelection()
-                    case .sessions:
-                        navigator.selection = .allSessions
-                    }
-                },
-                onCreateSession: { navigator.presentedSheet = .createSession }
-            )
-            Divider()
-            NavigationSplitView(columnVisibility: $navigator.columnVisibility) {
-                FleetSessionList(
+            if facet == .sessions {
+                SessionsSidebar(
                     store: store,
                     selection: $navigator.sidebarSelection,
-                    searchText: navigator.searchText,
+                    searchText: $navigator.searchText,
                     onOpenSession: { id in
                         navigator.selection = .session(id)
                         store.selectedSessionID = id
                     },
                     onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
+                    onCreateSession: { navigator.presentedSheet = .createSession },
                     gridSelection: gridSidebarSelection
                 )
-                // Normal builds let AppKit restore the last divider position,
-                // so `ideal` matters only on a fresh launch. The Ephemeral
-                // scene disables restoration and therefore always starts from
-                // this design-system value.
-                .navigationSplitViewColumnWidth(
-                    min: FlotillaLayoutWidth.sidebarMin,
-                    ideal: FlotillaLayoutWidth.sidebarIdeal,
-                    max: FlotillaLayoutWidth.sidebarMax
-                )
-                .searchable(text: $navigator.searchText, placement: .sidebar, prompt: "Projects and sessions")
-            } detail: {
-                DetailColumn(
-                    store: store,
-                    navigator: navigator,
-                    settingsViewModel: settingsViewModel,
-                    startupCheck: startupCheck,
-                    terminalManager: terminalManager,
-                    activityStore: activityStore,
-                    onOpenSession: { id in
-                        navigator.selection = .session(id)
-                        store.selectedSessionID = id
-                    },
-                    onOpenProject: { id in
-                        navigator.selection = .project(id)
-                        store.selectedProjectID = id
-                    },
-                    onCreateSession: { navigator.presentedSheet = .createSession },
-                    onCommandPalette: { navigator.presentedSheet = .commandPalette }
-                )
+                Divider()
             }
+
+            DetailColumn(
+                store: store,
+                navigator: navigator,
+                settingsViewModel: settingsViewModel,
+                startupCheck: startupCheck,
+                terminalManager: terminalManager,
+                activityStore: activityStore,
+                onOpenSession: { id in
+                    navigator.selection = .session(id)
+                    store.selectedSessionID = id
+                },
+                onOpenProject: { id in
+                    navigator.selection = .project(id)
+                    store.selectedProjectID = id
+                },
+                onCreateSession: { navigator.presentedSheet = .createSession },
+                onCommandPalette: { navigator.presentedSheet = .commandPalette }
+            )
         }
         .environment(\.workspaceNavigator, navigator)
         .frame(minWidth: 1000, minHeight: 640)
-        .onChange(of: facet) { _, newFacet in syncSidebarColumn(for: newFacet) }
         .onChange(of: navigator.sidebarSelection) { _, newSelection in
             handleSidebarSelectionChange(newSelection)
         }
-        .animation(.snappy(duration: 0.22), value: navigator.selection)
-        .animation(.snappy(duration: 0.18), value: navigator.presentation)
-    }
-
-    /// Only Sessions has a list to put in the sidebar column; the other
-    /// facets collapse it so the detail column starts right at the rail
-    /// instead of behind an empty strip.
-    private func syncSidebarColumn(for facet: SidebarFacet) {
-        navigator.columnVisibility = facet == .sessions ? .all : .detailOnly
+        .animation(.snappy(duration: 0.20), value: facet)
     }
 
     // MARK: - Overlay presentations (New Session, command palette)
@@ -464,13 +428,6 @@ private struct ShellLifecycleModifier: ViewModifier {
 
 /// Installs an AppKit local event monitor for the Escape key while mounted,
 /// and removes it on teardown.
-///
-/// SwiftUI's own Escape handling (`.onExitCommand`, `.keyboardShortcut(.cancelAction)`)
-/// only fires if nothing focused inside the view consumes the key first — and
-/// a focused `NSTextField`/`NSTextView` routinely does exactly that via its
-/// own `cancelOperation:` before either handler ever sees it. A local monitor
-/// intercepts at the AppKit dispatch level, ahead of any responder's own
-/// handling, so focus inside the overlay can no longer swallow it.
 private struct EscapeKeyCatcher: NSViewRepresentable {
     let onEscape: () -> Void
 

@@ -2,90 +2,82 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 
-/// The fleet rail: a fixed-width icon column for Overview / Sessions /
-/// Projects, pinned to the leading edge of the window.
-///
-/// It deliberately lives *outside* the `NavigationSplitView` (see
-/// `FlotillaShell`). As a split-view column it could not hold its width:
-/// AppKit keeps the divider wherever it was last left and ignores later
-/// `navigationSplitViewColumnWidth` updates, so switching to Overview or
-/// Projects — where the session list is hidden — left a 46pt rail floating
-/// in the middle of a ~300pt column. Outside the split view the rail is
-/// exactly as wide as it declares, and the split view's sidebar column is
-/// simply collapsed for the facets that have no list to show.
-struct SidebarRail: View {
-    let facet: SidebarFacet
-    let showLabels: Bool
-    let onSelect: (SidebarFacet) -> Void
+/// The sessions sidebar: displays search at the top, a scrollable list of sessions
+/// grouped by project, and a pinned "New Session" button at the bottom left.
+/// Only shown when in the Sessions workspace.
+struct SessionsSidebar: View {
+    @Bindable var store: AppStore
+    @Binding var selection: Set<SidebarItem>
+    @Binding var searchText: String
+    let onOpenSession: (UUID) -> Void
+    let onRequestDelete: (UUID) -> Void
     let onCreateSession: () -> Void
-
-    private var railWidth: CGFloat { showLabels ? 78 : 46 }
+    var gridSelection: GridSidebarSelection? = nil
 
     var body: some View {
-        VStack(spacing: showLabels ? 2 : 4) {
-            ForEach(SidebarFacet.allCases) { item in
-                railButton(item)
+        VStack(spacing: 0) {
+            // Search field at top of sidebar
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                TextField("Search sessions…", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(FlotillaTypography.caption)
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(FlotillaColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            Spacer(minLength: 0)
-            newSessionButton
-        }
-        .padding(.top, 10)
-        .frame(width: railWidth)
-        .frame(maxHeight: .infinity)
-        // The rail sits outside NavigationSplitView, so it doesn't
-        // inherit the automatic title-bar safe-area inset that the
-        // split-view columns get. The background fills edge-to-edge
-        // (including behind the traffic lights), while the VStack
-        // content starts below the safe area naturally.
-        .background(FlotillaColors.surface.ignoresSafeArea())
-    }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(FlotillaColors.surfaceElevated.opacity(0.5), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
 
-    private func railButton(_ item: SidebarFacet) -> some View {
-        let isActive = facet == item
-        return Button {
-            onSelect(item)
-        } label: {
-            railLabel(systemImage: item.systemImage, title: item.title, isActive: isActive)
-        }
-        .buttonStyle(.plain)
-        .background(isActive ? FlotillaColors.accent.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .foregroundStyle(isActive ? FlotillaColors.accent : FlotillaColors.textSecondary)
-        .padding(.horizontal, showLabels ? 6 : 0)
-        .help(item.title)
-        .accessibilityIdentifier(item.axID)
-    }
+            // Scrollable List of Sessions
+            FleetSessionList(
+                store: store,
+                selection: $selection,
+                searchText: searchText,
+                onOpenSession: onOpenSession,
+                onRequestDelete: onRequestDelete,
+                gridSelection: gridSelection
+            )
 
-    private var newSessionButton: some View {
-        Button(action: onCreateSession) {
-            railLabel(systemImage: "plus", title: "New", isActive: false)
-        }
-        .buttonStyle(.plain)
-        .background(FlotillaColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .foregroundStyle(FlotillaColors.accent)
-        .padding(.horizontal, showLabels ? 6 : 0)
-        .padding(.bottom, 10)
-        .help("New session")
-        .accessibilityIdentifier("NewSessionButton")
-    }
+            Divider()
 
-    @ViewBuilder
-    private func railLabel(systemImage: String, title: String, isActive: Bool) -> some View {
-        if showLabels {
-            VStack(spacing: 3) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: isActive ? .semibold : .regular))
-                Text(title)
-                    .font(.caption2.weight(isActive ? .semibold : .regular))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+            // Bottom Left "New Session" button
+            HStack {
+                Button(action: onCreateSession) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("New Session")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(FlotillaColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .foregroundStyle(FlotillaColors.accent)
+                }
+                .buttonStyle(.plain)
+                .help("Create new session (⌘N)")
+                .accessibilityIdentifier("NewSessionButton")
+
+                Spacer()
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-        } else {
-            Image(systemName: systemImage)
-                .font(.system(size: 15, weight: isActive ? .semibold : .regular))
-                .frame(width: 30, height: 30)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(FlotillaColors.surface)
         }
+        .frame(minWidth: 240, idealWidth: 270, maxWidth: 340)
+        .background(FlotillaColors.sidebar)
     }
 }
 
@@ -191,15 +183,15 @@ enum SidebarFacet: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .overview: return "Overview"
+        case .overview: return "Projects"
         case .sessions: return "Sessions"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .overview: return "house"
-        case .sessions: return "terminal"
+        case .overview: return "folder.fill"
+        case .sessions: return "terminal.fill"
         }
     }
 
@@ -226,29 +218,43 @@ extension AppStore {
     func sidebarFilter(matching rawQuery: String) -> SidebarFilterResult {
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
-            let byProject = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, sessions(for: $0)) })
-            return SidebarFilterResult(projects: projects, sessionsByProject: byProject, generalSessions: generalSessions)
+            return SidebarFilterResult(
+                projects: projects,
+                sessionsByProject: Dictionary(grouping: sessions.filter { $0.projectID != nil }) { $0.projectID! },
+                generalSessions: sessions.filter { $0.projectID == nil }
+            )
+        }
+        let matchingProjects = projects.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        let matchingProjectIDs = Set(matchingProjects.map(\.id))
+
+        let matchingSessions = sessions.filter {
+            $0.title.localizedCaseInsensitiveContains(query) ||
+            $0.goal.localizedCaseInsensitiveContains(query) ||
+            ($0.worktree?.branchName.localizedCaseInsensitiveContains(query) ?? false)
         }
 
-        var visibleProjects: [Project] = []
-        var byProject: [UUID: [Session]] = [:]
-        for project in projects {
-            let projectMatches = project.name.localizedCaseInsensitiveContains(query)
-            let projectSessions = sessions(for: project)
-            let matchingSessions = projectMatches
-                ? projectSessions
-                : projectSessions.filter { $0.title.localizedCaseInsensitiveContains(query) }
-            if projectMatches || !matchingSessions.isEmpty {
-                visibleProjects.append(project)
-                byProject[project.id] = matchingSessions
+        var sessionsByProject: [UUID: [Session]] = [:]
+        for session in matchingSessions {
+            if let pid = session.projectID {
+                sessionsByProject[pid, default: []].append(session)
             }
         }
-        let matchingGeneral = generalSessions.filter { $0.title.localizedCaseInsensitiveContains(query) }
-        return SidebarFilterResult(projects: visibleProjects, sessionsByProject: byProject, generalSessions: matchingGeneral)
+        for project in projects where matchingProjectIDs.contains(project.id) && sessionsByProject[project.id] == nil {
+            sessionsByProject[project.id] = sessions(for: project)
+        }
+
+        let resultProjects = projects.filter { sessionsByProject.keys.contains($0.id) }
+        let generalSessions = matchingSessions.filter { $0.projectID == nil }
+
+        return SidebarFilterResult(
+            projects: resultProjects,
+            sessionsByProject: sessionsByProject,
+            generalSessions: generalSessions
+        )
     }
 }
 
-// MARK: - Shared session row
+// MARK: - Session row component
 
 struct SessionSidebarRow: View {
     let session: Session
@@ -295,14 +301,6 @@ struct SessionSidebarRow: View {
             variant: .row,
             diffStatStore: store.diffStatStore,
             activityStore: nil,
-            // Rows no longer wrap themselves in a click-consuming `Button`
-            // (see `SessionCard.rowView`), so `onTap` only fires from the
-            // context menu's "Open Session" item now — the row's own click
-            // goes through `List`'s native selection instead, which is what
-            // `FlotillaShell.handleSidebarSelectionChange` reacts to. Grid
-            // membership toggling moved there too, since that handler sees
-            // every selection change (click, arrow key, or programmatic)
-            // the same way `List` does.
             onTap: { onOpenSession(session.id) },
             onDelete: { onRequestDelete(session.id) },
             onRestart: { store.restartSession(sessionID: session.id) },
@@ -311,19 +309,10 @@ struct SessionSidebarRow: View {
             onCopyBranch: { },
             terminal: { EmptyView() }
         )
-        // `List` reserves its own horizontal/vertical inset around every row
-        // before this view ever sees the space; zeroing that out and
-        // re-adding the same amount here (before the tint) lets the tint
-        // reach the row's true full bounds instead of stopping at the inner
-        // content SessionCard itself draws.
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                // Opaque backdrop first, matching the list's own background —
-                // this fully hides AppKit's native selection/hover painting
-                // underneath, so `rowFill` above is the single, deterministic
-                // source of truth for this row's appearance.
                 .fill(FlotillaColors.sidebar)
                 .overlay {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -333,16 +322,6 @@ struct SessionSidebarRow: View {
         .animation(.easeOut(duration: 0.1), value: isHovering)
         .onHover { isHovering = $0 }
         .listRowInsets(EdgeInsets())
-        // Native Mail/Reminders-style swipe-to-delete: a two-finger drag
-        // left slides the red button out from under the trailing edge,
-        // tracking the finger, and a full swipe fires it.
-        //
-        // A *full* swipe is a deliberate, committed gesture — that's the
-        // confirmation, so it deletes straight away and keeps any worktree
-        // and branch (the non-destructive default; full git cleanup stays
-        // available through the sheet). A *partial* swipe that just parks
-        // the button open, then a tap on it, still routes through the
-        // confirmation sheet — same as the context menu.
         .modifier(SwipeToDeleteSession(
             accessibilityID: "SessionRow-\(session.title)-SwipeDelete",
             onCommit: { Task { await store.deleteSession(sessionID: session.id, deleteWorktree: false) } },
@@ -388,25 +367,7 @@ struct SessionSidebarRow: View {
     }
 }
 
-/// Trailing swipe-to-delete for a session row.
-///
-/// A full swipe is treated as its own confirmation and calls `onCommit`
-/// straight away. A partial swipe that parks the button open, then a tap,
-/// calls `onConfirm` instead — the shared confirmation-sheet path, which is
-/// also where the row's context menu leads.
-///
-/// Telling the two apart needs `swipeActions`' `onPresentationChanged`
-/// (macOS 27+). Below that it can't be done, so every swipe falls back to
-/// `onConfirm` rather than risk a stray full swipe deleting without asking.
-///
-/// Even with `onPresentationChanged`, "actions are visible" isn't quite
-/// "button was tapped from rest" — a full swipe can flash that signal on
-/// its way past. So the button treats it as a parked tap only once the
-/// actions have been open a beat; anything faster is the tail of a full
-/// swipe and commits.
 private struct SwipeToDeleteSession: ViewModifier {
-    /// How long the actions must sit open before a press counts as a
-    /// deliberate parked tap rather than the end of a full swipe.
     private static let parkedThreshold: TimeInterval = 0.3
 
     let accessibilityID: String

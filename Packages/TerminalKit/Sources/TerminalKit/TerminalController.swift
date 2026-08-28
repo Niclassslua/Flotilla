@@ -145,6 +145,13 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         }
     }
 
+    /// Returns the text content currently buffered in the renderer for `presentation`.
+    @MainActor
+    public func bufferText(for presentation: TerminalPresentation) -> String {
+        guard let view = terminalViews[presentation] else { return "" }
+        return String(decoding: view.getTerminal().getBufferAsData(), as: UTF8.self)
+    }
+
     /// Marks a renderer as the one the user is looking at, so it — and only it
     /// — drives the PTY size from here on.
     ///

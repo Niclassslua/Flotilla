@@ -89,8 +89,8 @@ final class TerminalPresentationTests: XCTestCase {
         process.simulateOutput("shared-renderer-output")
         await fulfillment(of: [receivedOutput], timeout: 2)
 
-        let sessionText = String(decoding: sessionView.getTerminal().getBufferAsData(), as: UTF8.self)
-        let gridText = String(decoding: gridView.getTerminal().getBufferAsData(), as: UTF8.self)
+        let sessionText = controller.bufferText(for: .session)
+        let gridText = controller.bufferText(for: .grid)
         XCTAssertTrue(sessionText.contains("shared-renderer-output"))
         XCTAssertTrue(gridText.contains("shared-renderer-output"))
 

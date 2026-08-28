@@ -143,7 +143,7 @@ struct FlotillaApp: App {
             )
             .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
         }
-        .windowToolbarStyle(.unified)
+        .windowToolbarStyle(.unified(showsTitle: false))
 #if FLOTILLA_EPHEMERAL
         .restorationBehavior(.disabled)
 #endif

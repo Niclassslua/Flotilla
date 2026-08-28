@@ -134,12 +134,36 @@ final class AppEnvironment {
             workingDirectory: project.rootPath
         ))
         try? repository.save(Session(
+            title: "Autonomous workflow loop",
+            goal: "Implement multi-agent task delegation and verification",
+            agent: .antigravity,
+            projectID: project.id,
+            workingDirectory: project.rootPath,
+            status: .working
+        ))
+        try? repository.save(Session(
+            title: "Build pipeline error",
+            goal: "Investigate CI runner crash on macOS 15",
+            agent: .claudeCode,
+            projectID: project.id,
+            workingDirectory: project.rootPath,
+            status: .crashed
+        ))
+        try? repository.save(Session(
             title: "General chat",
             goal: "Ask about SwiftUI animation timing",
             agent: .openCode,
             projectID: nil,
             workingDirectory: FileManager.default.temporaryDirectory,
             status: .waitingForInput
+        ))
+        try? repository.save(Session(
+            title: "Code review assistant",
+            goal: "Analyze git diff for performance bottlenecks",
+            agent: .antigravity,
+            projectID: nil,
+            workingDirectory: FileManager.default.temporaryDirectory,
+            status: .readyForReview
         ))
     }
 }
