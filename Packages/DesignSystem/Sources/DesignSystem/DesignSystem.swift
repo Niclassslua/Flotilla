@@ -65,9 +65,19 @@ public enum FlotillaControlHeight: Sendable {
 
 // MARK: - Layout Widths
 public enum FlotillaLayoutWidth: Sendable {
-    public static let sidebarMin: CGFloat = 220
-    public static let sidebarIdeal: CGFloat = 260
-    public static let sidebarMax: CGFloat = 340
+    // Measured, not guessed: a session row spends 54pt on the provider icon,
+    // its spacing, and the row's own padding before any text starts. Past
+    // that, the worst realistic case — status word "Needs Permission" (91pt)
+    // + separator + a full branch name like "flotilla/worktree-cleanup"
+    // (155pt) on the metadata line, or a long title like "Investigate flaky
+    // terminal snapshot test" (229pt) + its timestamp (19pt) on the title
+    // line — needs ~260-320pt of actual content width. `ideal` is
+    // deliberately generous so a fresh launch makes the session sidebar
+    // unmistakable; `min` still supports a compact user-resized layout, and
+    // `max` leaves a useful detail column at the 1,280pt default window width.
+    public static let sidebarMin: CGFloat = 260
+    public static let sidebarIdeal: CGFloat = 600
+    public static let sidebarMax: CGFloat = 720
     public static let inspectorMin: CGFloat = 280
     public static let inspectorIdeal: CGFloat = 360
     public static let inspectorMax: CGFloat = 520
