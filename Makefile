@@ -1,4 +1,4 @@
-.PHONY: build build-release build-ephemeral test clean run run-ephemeral xcodegen
+.PHONY: build build-release build-ephemeral test clean run run-ephemeral run-board-demo xcodegen
 
 SCHEME := Flotilla
 EPHEMERAL_SCHEME := Flotilla Ephemeral
@@ -73,6 +73,13 @@ run: build
 
 run-ephemeral: build-ephemeral
 	open "$(EPHEMERAL_APP)"
+
+# Ephemeral app on a throwaway in-memory database seeded with a fleet that
+# covers every session status, waiting reason, and agent. Launched through
+# the binary rather than `open` because `open` does not forward environment
+# variables. Never touches the real session store.
+run-board-demo: build-ephemeral
+	FLOTILLA_DEMO_DATA=1 "$(EPHEMERAL_APP)/Contents/MacOS/Flotilla Ephemeral" &
 
 clean:
 	xcodebuild \

@@ -78,6 +78,7 @@ case .grid:
             KanbanTabView(
                 store: store,
                 terminalManager: terminalManager,
+                activityStore: activityStore,
                 openSession: onOpenSession
             )
         }

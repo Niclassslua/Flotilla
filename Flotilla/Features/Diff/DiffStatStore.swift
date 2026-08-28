@@ -23,6 +23,14 @@ final class DiffStatStore {
         stats[sessionID]
     }
 
+    /// Board-demo seam (`FLOTILLA_DEMO_DATA=1`): push a stat straight into the
+    /// cache, bypassing the git poll, so the demo's "Cycle demo card" button
+    /// can drive the card's churn animation on demand. The next 8s poll
+    /// overwrites it with what git actually reports for the checkout.
+    func setDemoStat(_ stat: GitDiffStat, for sessionID: UUID) {
+        stats[sessionID] = stat
+    }
+
     func watch(sessionID: UUID, repoPath: URL) {
         let count = watchers[sessionID] ?? 0
         watchers[sessionID] = count + 1

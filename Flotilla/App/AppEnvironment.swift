@@ -30,10 +30,15 @@ final class AppEnvironment {
     let ghService: GhServiceProtocol?
     let worktreeBaseDirectory: URL
     let isUITesting: Bool
+    /// `FLOTILLA_DEMO_DATA=1`: run on a throwaway in-memory database seeded
+    /// with a fleet covering every status, waiting reason, and agent. Used to
+    /// review board/card designs without touching the real session store.
+    let isBoardDemo: Bool
     let startupWarning: String?
 
     init() {
         isUITesting = ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
+        isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
         let supportDirectory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Flotilla", isDirectory: true)
@@ -44,7 +49,14 @@ final class AppEnvironment {
         gitService = GitService(gitExecutable: PATHExecutableLocator().locate("git"))
         ghService = PATHExecutableLocator().locate("gh").map { GhService(ghExecutable: $0) }
 
-        if isUITesting {
+        if isBoardDemo {
+            // In-memory on purpose: the demo fleet must never reach the
+            // user's `flotilla.sqlite`.
+            let repository = Self.makeInMemoryRepositoryOrCrash()
+            BoardDemoFixtures.seed(into: repository)
+            sessionRepository = repository
+            startupWarning = nil
+        } else if isUITesting {
             let repository = (try? GRDBSessionRepository()) ?? Self.makeInMemoryRepositoryOrCrash()
             Self.seedFixtures(into: repository)
             sessionRepository = repository
