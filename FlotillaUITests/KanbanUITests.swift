@@ -35,7 +35,10 @@ final class KanbanUITests: XCTestCase {
         XCTAssertTrue(kanbanView.waitForExistence(timeout: 8))
 
         // All kanban columns are rendered
-        for title in ["Working", "Waiting", "Idle", "Finished"] {
+        // Matches `KanbanColumn.defaultStatusColumns()`. "Idle" and
+        // "Finished" were folded into Unstarted/Ready for Review when
+        // SessionStatus collapsed to four cases in a5482d3.
+        for title in ["Unstarted", "Working", "Waiting", "Ready for Review", "Crashed"] {
             let columnHeader = app.descendants(matching: .any)["KanbanColumn-\(title)-Header"].firstMatch
             XCTAssertTrue(columnHeader.waitForExistence(timeout: 3), "missing header for \(title)")
         }
@@ -43,7 +46,10 @@ final class KanbanUITests: XCTestCase {
         // Context menu & open action
         let card = app.descendants(matching: .any)["KanbanCard-Fix login bug"].firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 3))
-        card.rightClick()
+        // The card is an accessibility container, so a plain `rightClick()` can
+        // land on a child that consumes it. Aiming at the card's own centre
+        // opens the menu reliably.
+        card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
 
         let openItem = app.descendants(matching: .any)["Open Session"].firstMatch
         XCTAssertTrue(openItem.waitForExistence(timeout: 3))

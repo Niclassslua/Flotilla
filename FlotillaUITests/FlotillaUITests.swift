@@ -34,29 +34,41 @@ final class FlotillaUITests: XCTestCase {
         XCTAssertTrue(fastWait(firstRow, timeout: 8))
         firstRow.click()
 
-        // Session identity now lives in the window title bar, set via
-        // DetailColumn's navigationTitle/navigationSubtitle.
+        // Session identity lives in the window title bar, set via
+        // DetailColumn's navigationTitle/navigationSubtitle. Both halves are
+        // asserted: the subtitle carries the branch and agent, which appear
+        // nowhere else while a session is focused.
         let window = app.windows.firstMatch
         XCTAssertTrue(fastWait(window, timeout: 3))
-        XCTAssertEqual(window.title, "Fix login bug")
+        XCTAssertTrue(window.title.hasPrefix("Fix login bug"), "unexpected title: \(window.title)")
+        XCTAssertTrue(window.title.contains("flotilla/fix-login-bug"), "branch missing from title: \(window.title)")
 
         let secondRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
         XCTAssertTrue(fastWait(secondRow, timeout: 3))
         secondRow.click()
         XCTAssertTrue(fastWait(window, timeout: 3))
-        XCTAssertEqual(window.title, "Refactor sidebar")
+        XCTAssertTrue(window.title.hasPrefix("Refactor sidebar"), "unexpected title: \(window.title)")
 
-        // 2. Global Overview and Project drilldown navigation
+        // 2. Home is reachable from the navigator in every scope.
         let homeButton = app.descendants(matching: .any)["Sidebar.Overview"].firstMatch
         XCTAssertTrue(fastWait(homeButton, timeout: 3))
         homeButton.click()
         XCTAssertTrue(fastWait(app.descendants(matching: .any)["HomeDashboard"].firstMatch, timeout: 3))
 
-        let projectCard = app.descendants(matching: .any)["ProjectRow-Flotilla"].firstMatch
-        XCTAssertTrue(fastWait(projectCard, timeout: 3))
-        projectCard.click()
+        // 3. So is a project's workspace — directly, with no mode switch and
+        // without scrolling to the foot of Home to find a tile. Projects are
+        // selectable navigator rows rather than inert section headers.
+        let projectRow = app.descendants(matching: .any)["Sidebar.ProjectRow-Flotilla"].firstMatch
+        XCTAssertTrue(fastWait(projectRow, timeout: 3), "projects should be selectable in the navigator")
+        projectRow.click()
 
         let backButton = app.descendants(matching: .any)["ProjectDetail.BackButton"].firstMatch
         XCTAssertTrue(fastWait(backButton, timeout: 3))
+
+        // 4. Back returns to Home, the place we came from.
+        let back = app.descendants(matching: .any)["Toolbar.Back"].firstMatch
+        XCTAssertTrue(fastWait(back, timeout: 3))
+        back.click()
+        XCTAssertTrue(fastWait(app.descendants(matching: .any)["HomeDashboard"].firstMatch, timeout: 3))
     }
 }

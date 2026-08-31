@@ -33,8 +33,23 @@ final class DiffAndFilesUITests: XCTestCase {
         // Longer timeout than the other checks: navigating here now goes
         // through the project's worktree resolution first, which is slower
         // than the old in-place lens swap was.
+        //
+        // Either resting state counts. `simulateEditForAutomation` below
+        // writes to the fixture checkout's README and nothing reverts it, so
+        // whether this run starts on a clean tree depends on whether a
+        // previous run finished. Asserting specifically on "No Changes" made
+        // the test pass or fail on leftover state rather than on the panel.
         let emptyState = app.descendants(matching: .any)["DiffPanel.Empty"].firstMatch
-        XCTAssertTrue(emptyState.waitForExistence(timeout: 6))
+        let populatedState = app.descendants(matching: .any)["DiffPanel.List"].firstMatch
+        let panelOpened = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in emptyState.exists || populatedState.exists },
+            object: nil
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [panelOpened], timeout: 8),
+            .completed,
+            "the diff panel should open in one of its resting states"
+        )
 
         let simulateEditButton = app.descendants(matching: .any)["DiffPanel.SimulateEditButton"].firstMatch
         XCTAssertTrue(simulateEditButton.waitForExistence(timeout: 3))
