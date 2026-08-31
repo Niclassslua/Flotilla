@@ -13,7 +13,10 @@ struct GridView: View {
     let terminalManager: TerminalManager
     @Binding var activeSessionID: UUID?
     let openSession: (UUID) -> Void
-    var projectFilter: UUID? = nil
+    /// What subset of the fleet this grid draws from. Shared with Board and
+    /// Focus, so switching presentation changes how the fleet is shown and
+    /// never which sessions are in it — see `SessionScope`.
+    var scope: SessionScope = .everything
     @Bindable var settingsViewModel: SettingsViewModel
 
     @State private var pendingDeletion: Session?
@@ -29,9 +32,7 @@ struct GridView: View {
     }
 
     private var scopedSessions: [Session] {
-        projectFilter.map { filter in
-            store.sessions.filter { $0.projectID == filter }
-        } ?? store.sessions
+        scope.apply(to: store.sessions)
     }
 
     /// The sessions assigned to the grid, capped at what the picker's
@@ -47,12 +48,13 @@ struct GridView: View {
     var body: some View {
         Group {
             if scopedSessions.isEmpty {
+                // Names the narrowing that produced the emptiness — "no
+                // sessions" is unhelpful when the answer is that this smart
+                // list happens to be empty right now.
                 ContentUnavailableView(
-                    store.sessions.isEmpty ? "No Live Sessions" : "No Sessions in This Project",
+                    scope.isEverything ? "No Live Sessions" : "Nothing in This View",
                     systemImage: "square.grid.2x2",
-                    description: Text(store.sessions.isEmpty
-                        ? "Launch sessions to assemble a live grid."
-                        : "Choose another project or return to all sessions.")
+                    description: Text(scope.emptyDescription)
                 )
                 .accessibilityIdentifier("GridEmptyState")
             } else if visibleSessions.isEmpty {

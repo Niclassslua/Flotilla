@@ -11,6 +11,8 @@ column's toolbar area"), the name below is the canonical one — prefer it over 
 a new one.
 
 > Names marked **(region)** describe a *place* in the window rather than one type.
+>
+> Destinations, state and layout policy live in [`ui-model.md`](ui-model.md); this file names components.
 > Names marked **(variant)** are a mode of a shared type, not a separate view.
 
 ---
@@ -21,9 +23,11 @@ The outermost layout. Everything else lives inside one of these three regions.
 
 | Say | What it is | Code |
 | --- | --- | --- |
-| **Shell** | The whole window's root view: rail + split view + overlays + sheets. | `FlotillaShell` — `Features/Shell/FlotillaShell.swift` |
-| **Sidebar rail** *(or just "the rail")* | The narrow fixed-width icon column pinned to the leading edge: Overview, Sessions, and the New button at its foot. Sits **outside** the split view. | `SidebarRail` — `Features/Shell/FleetSidebar.swift` |
-| **Session list** *(or "the sidebar column")* | The split view's sidebar column: projects as sections, sessions as rows, with the search field on top. Only shown in the Sessions facet. | `FleetSessionList` — same file |
+| **Shell** | The whole window's root view: `NavigationSplitView` + overlays + sheets. | `FlotillaShell` — `Features/Shell/FlotillaShell.swift` |
+| **Navigator** *(region)* | The split view's sidebar column, present in every scope: search on top, then the fleet smart lists, then each project as a selectable row with its sessions beneath it, then unassigned sessions, over a pinned **New Session** button. | `SessionsSidebar` — `Features/Shell/FleetSidebar.swift` |
+| **Navigator list** | The `List` inside the navigator that holds all three tiers. | `FleetSessionList` — same file |
+| **Navigator row** | A destination line in the navigator that is not a session: Home, a smart list, All Sessions, or a project. | `NavigatorRow` — same file |
+| **Smart list** | One of the standing fleet questions: **Needs You · Working · Ready**. | `FleetSmartList` — `Features/Shell/FleetSmartList.swift` |
 | **Session sidebar row** | One session line in the session list (status dot, title, meta, swipe-to-delete, context menu). | `SessionSidebarRow`, `SwipeToDeleteSession` — same file |
 | **Detail column** *(region)* | The large right-hand area. Switches content by sidebar selection: Home dashboard, session terminal, project workspace, or a fleet presentation. | `DetailColumn` — `Features/Shell/DetailColumn.swift` |
 | **Workspace toolbar** | The window toolbar: presentation picker (principal), session Git/Files jump buttons, grid controls, command palette, settings. | `WorkspaceToolbar` — `Features/Shell/WorkspaceToolbar.swift` |
@@ -38,9 +42,9 @@ These are the terms for *state*, not views — use them to say **where** you wan
 
 | Say | Meaning | Code |
 | --- | --- | --- |
-| **Facet** | Which rail item is active: Overview or Sessions. | `SidebarFacet` |
+| **Scope** | Which subset of the fleet a collection surface renders — a project, a smart list, or everything. Shared by Grid, Board and Focus. | `SessionScope` — `Features/Shell/FleetSmartList.swift` |
 | **Selection** | What the detail column is showing: `.overview`, `.allSessions`, `.project(id)`, `.session(id)`. | `SidebarItem` |
-| **Presentation** | How the fleet is rendered in the Sessions facet: **Grid**, **Board**, or **Focus**. | `WorkspacePresentation` |
+| **Presentation** | How the fleet is rendered: **Grid**, **Board**, or **Focus**. Changes *how*, never *what* — that is the scope's job. | `WorkspacePresentation` |
 | **Scope** | Shorthand for a selection kind — "fleet scope", "session scope", "project scope". | — |
 | **Sheet** | A modal presentation: New Session, command palette, shortcuts, restore, delete. Note the first two render as in-window **overlays** with a dismissible scrim, the rest as real AppKit sheets. | `WorkspaceSheet` |
 
@@ -48,7 +52,7 @@ These are the terms for *state*, not views — use them to say **where** you wan
 
 ## 2. Home / Overview
 
-Shown when the rail is on **Overview** and no project is drilled into.
+Shown when the navigator's **Home** row is selected.
 
 | Say | What it is | Code |
 | --- | --- | --- |
@@ -65,7 +69,7 @@ Shown when the rail is on **Overview** and no project is drilled into.
 
 ---
 
-## 3. Fleet presentations (Sessions facet)
+## 3. Fleet presentations
 
 Three ways to render many sessions; picked in the toolbar's presentation picker.
 
@@ -121,7 +125,7 @@ Type: `SessionCard<Terminal>` — `Features/Session/SessionCard.swift`.
 
 ## 5. Project workspace
 
-Reached by selecting a project (rail → Overview → a project tile, or the sidebar).
+Reached by selecting a project's row in the navigator, or a project tile on Home.
 
 | Say | What it is | Code |
 | --- | --- | --- |
@@ -179,7 +183,7 @@ Reached by selecting a project (rail → Overview → a project tile, or the sid
 
 | Say | What it is | Code |
 | --- | --- | --- |
-| **New Session window** | The modal launcher (⌘N, rail's New button, palette, "fix this commit"). Renders the command bar. | `CreateSessionView` — `Features/CreateSession/` |
+| **New Session window** | The modal launcher (⌘N, the navigator's New Session button, palette, "fix this commit"). Renders the command bar. | `CreateSessionView` — `Features/CreateSession/` |
 | **Command bar** | The Spotlight-style single-field design inside the New Session window: `@` = project search, `/` = agent switch, everything else is the goal. | `CommandBarDesign` |
 | **Chip strip** | The row of already-decided values (project, agent, isolation) under the command bar's query row. | `CommandBarDesign.chipStrip` |
 | **Summary line** | The dim monospace line stating exactly what will happen on launch (branch name, destination). Both the command bar and the composer render it. | `CommandBarDesign.summaryLine`, backed by the `SessionLaunchPreview` model |

@@ -9,7 +9,7 @@ struct KanbanTabView: View {
     let terminalManager: TerminalManager
     var activityStore: SessionActivityStore? = nil
     let openSession: (UUID) -> Void
-    var projectFilter: UUID? = nil
+    var scope: SessionScope = .everything
 
     @State private var showingNewBoardSheet = false
     @State private var newBoardName = ""
@@ -26,7 +26,7 @@ struct KanbanTabView: View {
                     terminalManager: terminalManager,
                     activityStore: activityStore,
                     openSession: openSession,
-                    projectFilter: projectFilter
+                    scope: scope
                 )
             } else {
                 ContentUnavailableView(
@@ -174,7 +174,7 @@ struct KanbanBoardView: View {
     let terminalManager: TerminalManager
     let activityStore: SessionActivityStore?
     let openSession: (UUID) -> Void
-    var projectFilter: UUID? = nil
+    var scope: SessionScope = .everything
 
     /// One namespace shared by every column so a card keeps its identity when
     /// its status changes and it moves from one column to another — SwiftUI
@@ -205,7 +205,7 @@ struct KanbanBoardView: View {
     /// A project-scoped board, or a sidebar project filter, makes every
     /// card's project identical, so the label would be pure noise.
     private var showsProjectName: Bool {
-        guard board.projectID == nil, projectFilter == nil else { return false }
+        guard board.projectID == nil, scope.projectID == nil else { return false }
         return Set(renderedSessions.map(\.projectID)).count > 1
     }
 
@@ -242,7 +242,7 @@ struct KanbanBoardView: View {
                             activityStore: activityStore,
                             openSession: openSession,
                             width: width,
-                            projectFilter: projectFilter,
+                            scope: scope,
                             showProjectName: showsProjectName,
                             cardMotion: cardMotion,
                             draggingID: $draggingID
@@ -268,7 +268,7 @@ struct KanbanColumnView: View {
     let activityStore: SessionActivityStore?
     let openSession: (UUID) -> Void
     let width: CGFloat
-    var projectFilter: UUID? = nil
+    var scope: SessionScope = .everything
     var showProjectName: Bool = false
     var cardMotion: Namespace.ID
     /// The card being dragged for hand-sorting (board-wide). Identifies the
@@ -284,8 +284,7 @@ struct KanbanColumnView: View {
     }
 
     private var filteredSessions: [Session] {
-        guard let projectFilter else { return columnSessions }
-        return columnSessions.filter { $0.projectID == projectFilter }
+        scope.apply(to: columnSessions)
     }
 
     /// Resolved once per render rather than per card. Empty unless the board

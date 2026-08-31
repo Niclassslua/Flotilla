@@ -96,25 +96,26 @@ struct FlotillaShell: View {
     @ViewBuilder
     private var ephemeralWindowStateDisabler: some View {
 #if FLOTILLA_EPHEMERAL
+        // The navigator is present in every scope now, so there is no longer a
+        // case where the sidebar should start hidden.
         EphemeralWindowStateDisabler(
             initialSidebarWidth: FlotillaLayoutWidth.sidebarIdeal,
-            shouldShowSidebar: facet == .sessions
+            shouldShowSidebar: true
         )
 #endif
     }
 
-    var facet: SidebarFacet { SidebarFacet(navigator.selection) }
-
-    /// Non-nil only while the fleet grid is what's on screen — the only
-    /// context where clicking a sidebar row should assign it to the grid
-    /// rather than open it. See `FleetSessionList.gridSelection`.
-    var gridSidebarSelection: GridSidebarSelection? {
-        guard navigator.selection == .allSessions, navigator.presentation == .grid else { return nil }
+    /// Non-nil while the grid is the presentation on screen, which is the only
+    /// context where a row's membership control means anything. It no longer
+    /// changes what clicking a row does — that hijack made one gesture mean
+    /// two opposite things, switched by unlabelled state.
+    var gridMembership: GridMembership? {
+        guard navigator.selection.isCollection, navigator.presentation == .grid else { return nil }
         let dimensions = GridDimensions(
             columns: settingsViewModel.settings.workspace.gridColumnCount,
             rows: settingsViewModel.settings.workspace.gridRowCount
         )
-        return GridSidebarSelection(
+        return GridMembership(
             memberIDs: GridSelection.memberIDs(
                 selectedIDs: settingsViewModel.settings.workspace.gridSelectedSessionIDs,
                 in: store.sessions
@@ -128,50 +129,56 @@ struct FlotillaShell: View {
     /// `FleetSessionList`'s `List` binds `Set<SidebarItem>` natively, so
     /// AppKit's table view handles ⌘/Shift-click range selection itself —
     /// this only has to react to the *result*. A click, arrow key, or
-    /// programmatic change that narrows the set to one tag is treated as
-    /// "open it" (or, while the grid is on screen, "toggle its grid
-    /// membership" instead — never navigating away from the grid). A set
+    /// programmatic change that narrows the set to one tag opens it. A set
     /// with more than one tag is a batch selection: it changes nothing in
     /// the detail column, leaving `Delete`/`Backspace` (see
     /// `FleetSessionList.onDeleteCommand`) as the only thing that acts on it
     /// for now.
+    ///
+    /// One gesture, one meaning, in every presentation. Grid membership used
+    /// to hijack this while the grid was on screen.
     func handleSidebarSelectionChange(_ newSelection: Set<SidebarItem>) {
         guard newSelection.count == 1, let only = newSelection.first else { return }
-        if let gridSidebarSelection, case .session(let id) = only {
-            gridSidebarSelection.onToggle(id)
-            return
-        }
         guard only != navigator.selection else { return }
         switch only {
         case .session(let id):
             navigator.selection = .session(id)
             store.selectedSessionID = id
-        case .overview, .allSessions, .project:
+        case .overview, .allSessions, .smartList, .project:
             navigator.selection = only
         }
     }
 
-    /// The primary workspace layout:
-    /// In Sessions scope: shows a fixed-width SessionsSidebar on the left and DetailColumn on the right.
-    /// In Projects/Overview scope: DetailColumn spans the full window width.
+    /// The primary workspace layout: one navigator, always present, beside the
+    /// detail column.
+    ///
+    /// A real `NavigationSplitView` rather than the hand-rolled `HStack` this
+    /// replaces. That `HStack` mounted the sidebar only in the Sessions facet,
+    /// so the window's left edge reflowed on every scope switch, and it gave
+    /// up everything the platform provides for free: ⌃⌘S collapse, the toolbar
+    /// sidebar toggle, native column resize, and width autosave. It also meant
+    /// `EphemeralWindowStateDisabler` searched by autosave name for a split
+    /// view the window never created.
     private var workspaceContent: some View {
-        HStack(spacing: 0) {
-            if facet == .sessions {
-                SessionsSidebar(
-                    store: store,
-                    selection: $navigator.sidebarSelection,
-                    searchText: $navigator.searchText,
-                    onOpenSession: { id in
-                        navigator.selection = .session(id)
-                        store.selectedSessionID = id
-                    },
-                    onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
-                    onCreateSession: { navigator.presentedSheet = .createSession },
-                    gridSelection: gridSidebarSelection
-                )
-                Divider()
-            }
-
+        NavigationSplitView(columnVisibility: $navigator.columnVisibility) {
+            SessionsSidebar(
+                store: store,
+                selection: $navigator.sidebarSelection,
+                searchText: $navigator.searchText,
+                onOpenSession: { id in
+                    navigator.selection = .session(id)
+                    store.selectedSessionID = id
+                },
+                onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
+                onCreateSession: { navigator.presentedSheet = .createSession },
+                gridMembership: gridMembership
+            )
+            .navigationSplitViewColumnWidth(
+                min: FlotillaLayoutWidth.sidebarMin,
+                ideal: FlotillaLayoutWidth.sidebarIdeal,
+                max: FlotillaLayoutWidth.sidebarMax
+            )
+        } detail: {
             DetailColumn(
                 store: store,
                 navigator: navigator,
@@ -191,12 +198,12 @@ struct FlotillaShell: View {
                 onCommandPalette: { navigator.presentedSheet = .commandPalette }
             )
         }
+        .navigationSplitViewStyle(.balanced)
         .environment(\.workspaceNavigator, navigator)
-        .frame(minWidth: 1000, minHeight: 640)
+        .frame(minWidth: FlotillaLayoutWidth.windowMin, minHeight: FlotillaLayoutWidth.windowHeightMin)
         .onChange(of: navigator.sidebarSelection) { _, newSelection in
             handleSidebarSelectionChange(newSelection)
         }
-        .animation(.snappy(duration: 0.20), value: facet)
     }
 
     // MARK: - Overlay presentations (New Session, command palette)

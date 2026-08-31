@@ -162,7 +162,14 @@ struct FlotillaApp: App {
                 .keyboardShortcut("n", modifiers: .command)
             }
             CommandMenu("Workspace") {
-                Button("Overview") {
+                Button("Back") { navigator.goBack() }
+                    .keyboardShortcut("[", modifiers: .command)
+                    .disabled(!navigator.canGoBack)
+                Button("Forward") { navigator.goForward() }
+                    .keyboardShortcut("]", modifiers: .command)
+                    .disabled(!navigator.canGoForward)
+                Divider()
+                Button("Home") {
                     navigator.restoreHomeSelection()
                 }
                 .keyboardShortcut("1", modifiers: .command)
@@ -171,6 +178,12 @@ struct FlotillaApp: App {
                     navigator.presentation = .focus
                 }
                 .keyboardShortcut("2", modifiers: .command)
+                Divider()
+                ForEach(FleetSmartList.allCases) { list in
+                    Button(list.title) {
+                        navigator.selection = .smartList(list)
+                    }
+                }
                 Divider()
                 Button("Focus Layout") {
                     navigator.selection = .allSessions

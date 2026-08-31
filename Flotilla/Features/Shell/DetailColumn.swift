@@ -24,7 +24,7 @@ struct DetailColumn: View {
             switch navigator.selection {
             case .overview:
                 overviewContent
-            case .allSessions:
+            case .allSessions, .smartList:
                 sessionsContent
             case .project(let projectID):
                 projectContent(projectID: projectID)
@@ -53,17 +53,20 @@ struct DetailColumn: View {
         )
     }
 
+    /// Every presentation reads one scope, so switching between them changes
+    /// how the fleet is shown and never which sessions are in it.
     @ViewBuilder
     private var sessionsContent: some View {
         switch navigator.presentation {
         case .focus:
             focusedSessionContent
-case .grid:
+        case .grid:
             GridView(
                 store: store,
                 terminalManager: terminalManager,
                 activeSessionID: $activeGridSessionID,
                 openSession: onOpenSession,
+                scope: navigator.sessionScope,
                 settingsViewModel: settingsViewModel
             )
         case .board:
@@ -71,7 +74,8 @@ case .grid:
                 store: store,
                 terminalManager: terminalManager,
                 activityStore: activityStore,
-                openSession: onOpenSession
+                openSession: onOpenSession,
+                scope: navigator.sessionScope
             )
         }
     }
@@ -175,6 +179,7 @@ case .grid:
         switch navigator.selection {
         case .overview: return "Home"
         case .allSessions: return "Sessions"
+        case .smartList(let list): return list.title
         case .project(let id):
             return store.projects.first(where: { $0.id == id })?.name ?? "Project"
         case .session(let id):
@@ -191,6 +196,9 @@ case .grid:
             let needsInput = store.sessions.filter { $0.status == .waitingForInput }.count
             let ready = store.sessions.filter { $0.status == .readyForReview }.count
             return "\(working) working · \(needsInput) need input · \(ready) ready"
+        case .smartList(let list):
+            let matching = list.filter(store.sessions).count
+            return "\(matching) of \(store.sessions.count) session\(store.sessions.count == 1 ? "" : "s")"
         case .project(let id):
             let sessions = store.sessions.filter { $0.projectID == id }
             let working = sessions.filter { $0.status == .working }.count

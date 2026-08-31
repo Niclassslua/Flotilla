@@ -9,13 +9,15 @@ import SwiftUI
 final class WorkspaceNavigator {
     var selection: SidebarItem = .overview {
         didSet {
+            guard selection != oldValue else { return }
             switch selection {
             case .overview, .project:
                 lastOverviewSelection = selection
-            case .allSessions, .session:
+            case .allSessions, .smartList, .session:
                 break
             }
             sidebarSelection = [selection]
+            recordHistory(from: oldValue)
         }
     }
     /// Mirrors `selection` for the sidebar `List`'s native multi-select.
@@ -59,7 +61,62 @@ final class WorkspaceNavigator {
         }
     }
 
-    /// Returns to the place the user last occupied in the Overview facet.
+    // MARK: - History
+
+    /// Where the user has been, so Back returns them there. The app shipped
+    /// with no way to get back to a previous location at all.
+    ///
+    /// `isNavigatingHistory` suppresses recording while Back/Forward are
+    /// themselves moving `selection`, which would otherwise push the move onto
+    /// the very stack it is popping.
+    private(set) var backStack: [SidebarItem] = []
+    private(set) var forwardStack: [SidebarItem] = []
+    private var isNavigatingHistory = false
+
+    private static let historyLimit = 50
+
+    var canGoBack: Bool { !backStack.isEmpty }
+    var canGoForward: Bool { !forwardStack.isEmpty }
+
+    private func recordHistory(from previous: SidebarItem) {
+        guard !isNavigatingHistory else { return }
+        backStack.append(previous)
+        if backStack.count > Self.historyLimit { backStack.removeFirst() }
+        // A fresh navigation abandons any forward branch, the same way a
+        // browser does.
+        forwardStack.removeAll()
+    }
+
+    func goBack() {
+        guard let destination = backStack.popLast() else { return }
+        isNavigatingHistory = true
+        forwardStack.append(selection)
+        selection = destination
+        isNavigatingHistory = false
+    }
+
+    func goForward() {
+        guard let destination = forwardStack.popLast() else { return }
+        isNavigatingHistory = true
+        backStack.append(selection)
+        selection = destination
+        isNavigatingHistory = false
+    }
+
+    // MARK: - Scope
+
+    /// What the collection surfaces should render. Grid, Board and Focus all
+    /// read this one value, so switching presentation changes how the fleet is
+    /// shown and never what is in it.
+    var sessionScope: SessionScope {
+        switch selection {
+        case .smartList(let list): SessionScope(projectID: nil, smartList: list)
+        case .project(let id): SessionScope(projectID: id, smartList: nil)
+        case .overview, .allSessions, .session: .everything
+        }
+    }
+
+    /// Returns to the place the user last occupied on the Home side.
     /// Sessions are a sibling workspace, so visiting them must not flatten a
     /// project's internal navigation back to its dashboard.
     func restoreHomeSelection() {
@@ -178,6 +235,10 @@ extension EnvironmentValues {
 enum SidebarItem: Hashable, Codable, Sendable {
     case overview
     case allSessions
+    /// A standing question about the fleet — see `FleetSmartList`. Added after
+    /// the other cases shipped; synthesized `Codable` keeps decoding persisted
+    /// values of those unchanged.
+    case smartList(FleetSmartList)
     case project(UUID)
     case session(UUID)
 
@@ -185,6 +246,7 @@ enum SidebarItem: Hashable, Codable, Sendable {
         switch self {
         case .overview: return "Home"
         case .allSessions: return "All Sessions"
+        case .smartList(let list): return list.title
         case .project: return "Project"
         case .session: return "Session"
         }
@@ -193,9 +255,19 @@ enum SidebarItem: Hashable, Codable, Sendable {
     var systemImage: String {
         switch self {
         case .overview: return "house"
-        case .allSessions: return "terminal"
+        case .allSessions: return "square.stack.3d.up"
+        case .smartList(let list): return list.systemImage
         case .project: return "folder.fill"
         case .session: return "terminal.fill"
+        }
+    }
+
+    /// True for the destinations that render the session collection — the only
+    /// ones where a presentation (Grid / Board / Focus) means anything.
+    var isCollection: Bool {
+        switch self {
+        case .allSessions, .smartList: return true
+        case .overview, .project, .session: return false
         }
     }
 }

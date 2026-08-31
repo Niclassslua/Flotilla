@@ -46,6 +46,7 @@
 		1E472126681A86E7702A93E5 /* jest.svg in Resources */ = {isa = PBXBuildFile; fileRef = 935848EC63B4A85AD4942215 /* jest.svg */; };
 		1EE083B23BC3D3935B8148E9 /* WorkspaceNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EAAAB3E707A7482A2AAE988 /* WorkspaceNavigator.swift */; };
 		1FC54907C9F76FF970ED8B6F /* gemfile.svg in Resources */ = {isa = PBXBuildFile; fileRef = A3348D6A0B9FA97635592129 /* gemfile.svg */; };
+		207D186B9F3E96CC368450FC /* FleetSmartList.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26E19A813CF60C404557C40 /* FleetSmartList.swift */; };
 		222CBE71880A1BC48CA71CB7 /* zig.svg in Resources */ = {isa = PBXBuildFile; fileRef = CE4999D5E0106AF58800F11A /* zig.svg */; };
 		2300252E82CA383375D3427B /* SessionKit in Frameworks */ = {isa = PBXBuildFile; productRef = B5259CCE5A5E0280938816DA /* SessionKit */; };
 		2369CEBC1E16F813EE5641DC /* folder-views.svg in Resources */ = {isa = PBXBuildFile; fileRef = BAD5FF28EA1E1FDA4F858DDA /* folder-views.svg */; };
@@ -84,6 +85,7 @@
 		46649353CC0C5493BDCDFDC3 /* typescript-def.svg in Resources */ = {isa = PBXBuildFile; fileRef = 46F6F4F4BEABA3ED096AB412 /* typescript-def.svg */; };
 		4691198A8C6D5C9AA79A10D2 /* HooksKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81A7626DA67303D0C7CD01F /* HooksKitTests.swift */; };
 		474B5C07B3CCE7D6C30B1832 /* svelte.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2C1F33D3E90DA5C30B822A17 /* svelte.svg */; };
+		4912F008AC39261AFABFFD3C /* WorkspaceNavigatorHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C069EEC8AEB8B37781F03A3 /* WorkspaceNavigatorHistoryTests.swift */; };
 		49210330121C85C1E8C64E30 /* ProjectOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF246F230B63A3A6A954F515 /* ProjectOverviewView.swift */; };
 		499108D006B7C472C73F895F /* TerminalKit in Frameworks */ = {isa = PBXBuildFile; productRef = 933B0EE8CF6298C21D71CCCC /* TerminalKit */; };
 		4A0E8A2AF589766D9B95FB64 /* tailwindcss.svg in Resources */ = {isa = PBXBuildFile; fileRef = EB717523525E6357E9B0BC2A /* tailwindcss.svg */; };
@@ -342,6 +344,7 @@
 		27E23A83A490E53614716B56 /* folder-test-open.svg */ = {isa = PBXFileReference; path = "folder-test-open.svg"; sourceTree = "<group>"; };
 		27E9587FC9A7651467ABE1DE /* CreateSessionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSessionUITests.swift; sourceTree = "<group>"; };
 		2A38350D2AF1E3B8EC3BCB0E /* xml.svg */ = {isa = PBXFileReference; path = xml.svg; sourceTree = "<group>"; };
+		2C069EEC8AEB8B37781F03A3 /* WorkspaceNavigatorHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceNavigatorHistoryTests.swift; sourceTree = "<group>"; };
 		2C1F33D3E90DA5C30B822A17 /* svelte.svg */ = {isa = PBXFileReference; path = svelte.svg; sourceTree = "<group>"; };
 		2C8732311FE109FF0B042F94 /* editorconfig.svg */ = {isa = PBXFileReference; path = editorconfig.svg; sourceTree = "<group>"; };
 		2CFB40CA8CE1DD12C190C2FA /* FlotillaUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaUITests.swift; sourceTree = "<group>"; };
@@ -514,6 +517,7 @@
 		DEFE44DA481970CBCB874EFE /* HomeComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeComponents.swift; sourceTree = "<group>"; };
 		E030FA9058EADAD4C052103C /* DiffStatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffStatStore.swift; sourceTree = "<group>"; };
 		E17EDDAD1F3E86B5AB3960D7 /* FileIconHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileIconHelper.swift; sourceTree = "<group>"; };
+		E26E19A813CF60C404557C40 /* FleetSmartList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FleetSmartList.swift; sourceTree = "<group>"; };
 		E4129D9B51A69DC7D9B98130 /* typescript.svg */ = {isa = PBXFileReference; path = typescript.svg; sourceTree = "<group>"; };
 		E493E2028BBE35E962D2F085 /* css.svg */ = {isa = PBXFileReference; path = css.svg; sourceTree = "<group>"; };
 		E4A98AEF98A101073B3ECE81 /* SettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsUITests.swift; sourceTree = "<group>"; };
@@ -864,6 +868,7 @@
 			children = (
 				4D35127C7CA13C7F14A7A21D /* DetailColumn.swift */,
 				8D17E25AD62D144EB77DF189 /* FleetSidebar.swift */,
+				E26E19A813CF60C404557C40 /* FleetSmartList.swift */,
 				3624D090F6EF105D88197D68 /* FlotillaShell.swift */,
 				0295C0B53AEFADD6762C616A /* WorkspaceNavigation.swift */,
 				4EAAAB3E707A7482A2AAE988 /* WorkspaceNavigator.swift */,
@@ -971,6 +976,7 @@
 				BECCD7A6308B107F37525D5D /* TerminalPipelineTests.swift */,
 				BDE265177398E961FA34A01E /* WorkspaceCommandTests.swift */,
 				E9DCBD80E1B4F78415924591 /* WorkspaceFileServiceTests.swift */,
+				2C069EEC8AEB8B37781F03A3 /* WorkspaceNavigatorHistoryTests.swift */,
 			);
 			path = FlotillaUnitTests;
 			sourceTree = "<group>";
@@ -1319,6 +1325,7 @@
 				1C1642696393DBA72C1AF11F /* TerminalPipelineTests.swift in Sources */,
 				83F56354A117C03458E0CEBE /* WorkspaceCommandTests.swift in Sources */,
 				C33C5A5725D92F74245FB8CC /* WorkspaceFileServiceTests.swift in Sources */,
+				4912F008AC39261AFABFFD3C /* WorkspaceNavigatorHistoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1350,6 +1357,7 @@
 				E03FD7DF30CBB7A9DD49AF3A /* FileIconHelper.swift in Sources */,
 				74394149F4CEEEAE7AEE61C0 /* FileNode.swift in Sources */,
 				D13E9805C0BEC6E01EAB756B /* FleetSidebar.swift in Sources */,
+				207D186B9F3E96CC368450FC /* FleetSmartList.swift in Sources */,
 				2A2F0C61C62E472853C9E99A /* FlotillaApp.swift in Sources */,
 				79D00EBF60B5B164014FB12A /* FlotillaHeroTitleView.swift in Sources */,
 				449E6C54E371C899FC6DA7CA /* FlotillaNotificationDelegate.swift in Sources */,

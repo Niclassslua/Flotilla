@@ -96,9 +96,9 @@ struct CommandBarDesign: View {
             .buttonStyle(.plain)
             .disabled(!draft.canLaunch)
             .opacity(draft.canLaunch ? 1 : FlotillaStateOpacity.disabled)
-            .help("Launch session (↩)")
+            .help("Launch & open (↩)")
             .accessibilityIdentifier("CreateSession.CreateButton")
-            .accessibilityLabel("Launch Session")
+            .accessibilityLabel("Launch & Open")
         }
         .padding(.horizontal, FlotillaSpacing.large)
         .padding(.vertical, FlotillaSpacing.medium)
@@ -449,10 +449,14 @@ struct CommandBarDesign: View {
 
             Spacer(minLength: 0)
 
-            Button("Background") { actions.launch(false) }
+            // Names the outcome rather than the mechanism, matching
+            // `LaunchpadDesign`. Kept in the bar's own recessive register —
+            // this is a Spotlight-style strip, not a dialog — but no longer
+            // dimmer than the primary action it sits beside.
+            Button("Launch & Stay Here") { actions.launch(false) }
                 .buttonStyle(.plain)
                 .font(FlotillaTypography.caption3.weight(.medium))
-                .foregroundStyle(FlotillaColors.textSecondary)
+                .foregroundStyle(FlotillaColors.textPrimary)
                 .disabled(!draft.canLaunch)
                 .accessibilityIdentifier("CreateSession.BackgroundButton")
 

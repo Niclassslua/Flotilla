@@ -15,7 +15,6 @@ public enum AXID: String, Sendable {
     // MARK: - Toolbar
     case toolbarNewSession = "Toolbar.NewSession"
     case toolbarCommandPalette = "Toolbar.CommandPalette"
-    case toolbarScopePicker = "Toolbar.ScopePicker"
     case toolbarInspectorToggle = "Toolbar.InspectorToggle"
     case toolbarOverflow = "Toolbar.Overflow"
     case toolbarPresentationPicker = "Toolbar.PresentationPicker"

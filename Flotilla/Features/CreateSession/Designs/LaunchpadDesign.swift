@@ -485,7 +485,14 @@ struct LaunchpadDesign: View {
                     .accessibilityIdentifier("Home.ProgressIndicator")
             }
 
-            Button("Background") { launch(opensSession: false) }
+            // Both outcomes name what you are looking at afterwards.
+            // "Background" described the process rather than the result, and
+            // its recessive styling nudged toward the single-session habit the
+            // product exists to move past — so the two now carry the same
+            // weight and differ only in tint.
+            Button("Launch & Stay Here") { launch(opensSession: false) }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
                 .disabled(!draft.canLaunch)
                 .keyboardShortcut(.return, modifiers: [.command, .shift])
                 .accessibilityIdentifier("Home.BackgroundButton")
@@ -493,11 +500,10 @@ struct LaunchpadDesign: View {
             Button {
                 launch(opensSession: true)
             } label: {
-                Label("Launch Session", systemImage: "play.fill")
+                Label("Launch & Open", systemImage: "play.fill")
                     .font(FlotillaTypography.callout.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
-            .tint(FlotillaColors.accent)
             .controlSize(.large)
             .tint(FlotillaColors.accent)
             .disabled(!draft.canLaunch)

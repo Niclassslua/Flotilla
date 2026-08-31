@@ -48,7 +48,6 @@ final class WorkspaceCommandTests: XCTestCase {
     /// workspace. The app's landing surface is Home everywhere.
     func testLandingSurfaceIsNamedHome() {
         XCTAssertEqual(SidebarItem.overview.title, "Home")
-        XCTAssertEqual(SidebarFacet.overview.title, "Home")
         XCTAssertEqual(WorkspaceCommand.showHome.title, "Go to Home")
 
         for command in WorkspaceCommand.allCases {

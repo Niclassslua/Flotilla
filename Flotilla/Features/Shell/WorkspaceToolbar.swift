@@ -9,26 +9,17 @@ struct WorkspaceToolbar: ToolbarContent {
     @Bindable var settingsViewModel: SettingsViewModel
     let onCommandPalette: () -> Void
 
-    private var facet: SidebarFacet {
-        SidebarFacet(navigator.selection)
-    }
-
     /// True for the scopes that render a multi-session workspace, which are
     /// the only ones where the grid's own options mean anything.
-    private var isFleetScope: Bool {
-        switch navigator.selection {
-        case .allSessions: true
-        case .overview, .session, .project: false
-        }
-    }
+    private var isFleetScope: Bool { navigator.selection.isCollection }
 
     /// The picker also shows while a single session is focused — that is the
-    /// only way back to the fleet without going through the sidebar.
+    /// only way back to the fleet without going through the navigator.
     /// Hidden for project scope: the five-tab strip already fills the
     /// principal area, and two competing tab bars confuse the hierarchy.
     private var showsPresentationPicker: Bool {
         switch navigator.selection {
-        case .allSessions, .session: true
+        case .allSessions, .smartList, .session: true
         case .overview, .project: false
         }
     }
@@ -37,20 +28,6 @@ struct WorkspaceToolbar: ToolbarContent {
         GridDimensions(
             columns: settingsViewModel.settings.workspace.gridColumnCount,
             rows: settingsViewModel.settings.workspace.gridRowCount
-        )
-    }
-
-    private var facetBinding: Binding<SidebarFacet> {
-        Binding(
-            get: { facet },
-            set: { newFacet in
-                switch newFacet {
-                case .overview:
-                    navigator.restoreHomeSelection()
-                case .sessions:
-                    navigator.selection = .allSessions
-                }
-            }
         )
     }
 
@@ -90,23 +67,32 @@ struct WorkspaceToolbar: ToolbarContent {
         .sharedBackgroundVisibility(.hidden)
 
         // Fixed gap that also breaks the shared-glass grouping, so the wordmark
-        // and the scope picker sit in separate containers.
+        // and the history controls sit in separate containers.
         ToolbarSpacer(.fixed, placement: .navigation)
 
-        // Scope Picker: Projects / Sessions (segmented, matched to the
-        // Grid / Board presentation picker). Also `.navigation` so the leading
-        // cluster stays put across every scope.
-        ToolbarItem(placement: .navigation) {
-            Picker("Scope", selection: facetBinding) {
-                ForEach(SidebarFacet.allCases) { facet in
-                    Text(facet.title).tag(facet)
-                }
+        // Back / forward. The scope picker that used to sit here is gone with
+        // the facet split — every destination is in the navigator now, so a
+        // control for switching between two halves of the app has nothing left
+        // to switch. History is what the space is actually worth: there was
+        // previously no way to return to where you had been.
+        ToolbarItemGroup(placement: .navigation) {
+            Button {
+                navigator.goBack()
+            } label: {
+                Image(systemName: "chevron.left")
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 144)
-            .help("Switch workspace scope")
-            .accessibilityIdentifier(AXID.toolbarScopePicker.rawValue)
+            .disabled(!navigator.canGoBack)
+            .help("Back (⌘[)")
+            .accessibilityIdentifier("Toolbar.Back")
+
+            Button {
+                navigator.goForward()
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(!navigator.canGoForward)
+            .help("Forward (⌘])")
+            .accessibilityIdentifier("Toolbar.Forward")
         }
 
         ToolbarItemGroup(placement: .principal) {
@@ -129,13 +115,23 @@ struct WorkspaceToolbar: ToolbarContent {
 
         if case .session(let sessionID) = navigator.selection,
            let session = store.sessions.first(where: { $0.id == sessionID }) {
+            // Both panels are project-owned containers that a session's data
+            // gets injected into, so a session with no `projectID` — which is
+            // an ordinary case, since the "Unassigned" group ships — has
+            // nowhere for them to open. They used to render enabled, accept
+            // the click and silently do nothing. Saying why beats pretending.
+            let hasProject = session.projectID != nil
+
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     navigator.openProjectPanel(.git, scopedTo: session)
                 } label: {
                     Image(systemName: "arrow.triangle.branch")
                 }
-                .help("Review this session's changes")
+                .disabled(!hasProject)
+                .help(hasProject
+                      ? "Review this session's changes"
+                      : "This session is not assigned to a project, so there is no repository workspace to open.")
                 .accessibilityIdentifier(AXID.toolbarOpenProjectGit.rawValue)
 
                 Button {
@@ -143,7 +139,10 @@ struct WorkspaceToolbar: ToolbarContent {
                 } label: {
                     Image(systemName: "folder")
                 }
-                .help("Browse project files")
+                .disabled(!hasProject)
+                .help(hasProject
+                      ? "Browse project files"
+                      : "This session is not assigned to a project, so there is no file tree to browse.")
                 .accessibilityIdentifier(AXID.toolbarOpenProjectFiles.rawValue)
             }
 
