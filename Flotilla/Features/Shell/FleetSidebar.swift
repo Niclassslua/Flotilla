@@ -368,8 +368,9 @@ struct SessionSidebarRow: View {
             onCopyBranch: { },
             terminal: { EmptyView() }
         )
+        // Inner padding: breathing room *inside* the border.
         .padding(.horizontal, 8)
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
         .background {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(FlotillaColors.sidebar)
@@ -394,16 +395,40 @@ struct SessionSidebarRow: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(FlotillaColors.accent)
                     // A ring in the sidebar colour so the glyph reads as
-                    // sitting *on* the border rather than clipped by it.
+                    // sitting *on* the border rather than beside it. Held
+                    // inside the frame rather than offset out of it — with no
+                    // horizontal padding left, anything outside gets clipped.
                     .background(FlotillaColors.sidebar, in: Circle())
-                    .offset(x: 3, y: -3)
+                    .padding(.top, -5)
+                    .padding(.trailing, 4)
                     .accessibilityHidden(true)
             }
         }
+        // The gap between rows. Applied after the background and overlays —
+        // before them it just grows the bordered box instead of separating one
+        // box from the next.
+        .padding(.vertical, 4)
         .accessibilityLabel(isGridMember ? "\(session.title), in grid" : session.title)
         .animation(.easeOut(duration: 0.1), value: isHovering)
         .onHover { isHovering = $0 }
+        // While the grid is up a single click toggles membership (see
+        // `FlotillaShell.handleSidebarSelectionChange`), so double-click is
+        // what still opens the session — otherwise building a grid would cost
+        // you the ability to open anything from the sidebar.
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded {
+                guard gridMembership != nil else { return }
+                onOpenSession(session.id)
+            }
+        )
         .listRowInsets(EdgeInsets())
+        // The row's own background, spanning the whole cell rect rather than
+        // just this view. `.sidebar` list style insets row *content* but paints
+        // its selection across the full cell, so an opaque colour applied
+        // inside the row could never reach the strip at either edge — which is
+        // where the system blue kept showing. Selection is drawn by `rowFill`
+        // instead, which is the lighter fill the rest of the app uses.
+        .listRowBackground(FlotillaColors.sidebar)
         .modifier(SwipeToDeleteSession(
             accessibilityID: "SessionRow-\(session.title)-SwipeDelete",
             onCommit: { Task { await store.deleteSession(sessionID: session.id, deleteWorktree: false) } },

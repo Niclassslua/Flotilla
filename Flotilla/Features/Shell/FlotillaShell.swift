@@ -135,10 +135,23 @@ struct FlotillaShell: View {
     /// `FleetSessionList.onDeleteCommand`) as the only thing that acts on it
     /// for now.
     ///
-    /// One gesture, one meaning, in every presentation. Grid membership used
-    /// to hijack this while the grid was on screen.
+    /// While the grid is the presentation, clicking a session row assigns or
+    /// unassigns it instead of opening it — there is no reason to leave the
+    /// grid just to build it.
+    ///
+    /// This is the gesture the audit filed as a P0, and it is deliberately
+    /// back. What made it a defect was not the shortcut itself but that
+    /// nothing said which mode you were in or what a click had just done: the
+    /// only cue was a green tint matching the `Working` status text two lines
+    /// below it. Membership is drawn on the row now — a border with a corner
+    /// checkmark — so the gesture has a visible result, and double-click (see
+    /// `SessionSidebarRow`) still opens the session.
     func handleSidebarSelectionChange(_ newSelection: Set<SidebarItem>) {
         guard newSelection.count == 1, let only = newSelection.first else { return }
+        if let gridMembership, case .session(let id) = only {
+            gridMembership.onToggle(id)
+            return
+        }
         guard only != navigator.selection else { return }
         switch only {
         case .session(let id):
