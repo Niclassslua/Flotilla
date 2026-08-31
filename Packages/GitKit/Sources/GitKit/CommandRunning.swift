@@ -126,35 +126,53 @@ private final class ResumeGuard: @unchecked Sendable {
 /// final chunk to the race, making that poll observe a truncated/empty diff
 /// even though real changes existed — the Git Changes panel would flash
 /// "No Changes" and then recover on the next poll. `finish()` now just waits
-/// for the handler thread to observe EOF instead of reading itself.
+/// for the reader to observe EOF instead of reading itself.
+///
+/// The draining runs on our own user-interactive queue rather than on
+/// `FileHandle.readabilityHandler`. `finish()` is called from the process
+/// termination handler, which inherits the QoS of whoever launched the
+/// command — user-interactive for anything driven by the UI — and it blocks
+/// on `eofSemaphore`. Foundation's readability handler runs at default QoS,
+/// so that wait was a textbook priority inversion, and Thread Performance
+/// Checker logged a backtrace for every single git command the app ran.
+/// Draining at the same QoS as the thread that waits on it removes the
+/// inversion (and the log spam) instead of hiding it.
 private final class PipeCollector: @unchecked Sendable {
     private let handle: FileHandle
     private let lock = NSLock()
     private var data = Data()
     private var isEOF = false
     private let eofSemaphore = DispatchSemaphore(value: 0)
+    private let queue = DispatchQueue(
+        label: "com.niclassslua.flotilla.gitkit.pipe-collector",
+        qos: .userInteractive
+    )
 
     init(handle: FileHandle) {
         self.handle = handle
     }
 
     func start() {
-        handle.readabilityHandler = { [weak self] handle in
-            let chunk = handle.availableData
-            if chunk.isEmpty {
-                self?.markEOF()
-            } else {
-                self?.append(chunk)
+        queue.async { [self] in
+            // `availableData` blocks until the child writes or closes its end,
+            // so this loop drains continuously — the pipe buffer never fills,
+            // which is the deadlock the old readability handler also avoided.
+            while true {
+                let chunk = handle.availableData
+                guard !chunk.isEmpty else {
+                    markEOF()
+                    return
+                }
+                append(chunk)
             }
         }
     }
 
     func finish() -> Data {
         // The child has already exited by the time this is called, so its
-        // end of the pipe is closed and the handler thread should observe
-        // EOF almost immediately; the timeout is just a safety net.
+        // end of the pipe is closed and the reader should observe EOF almost
+        // immediately; the timeout is just a safety net.
         _ = eofSemaphore.wait(timeout: .now() + 5)
-        handle.readabilityHandler = nil
         lock.lock()
         let snapshot = data
         lock.unlock()

@@ -210,6 +210,41 @@ from immediately undoing an exact event. A
 `WaitingNotificationGate` sends one notification per waiting episode rather
 than one per poll or hook event.
 
+## Debugging a status change
+
+Every status a session takes is traced to the unified log under subsystem
+`com.niclassslua.flotilla`, category `SessionStatus` (`SessionStatusTrace` in
+`Flotilla/Services/`). Watch it live:
+
+```
+log stream --style compact \
+  --predicate 'subsystem == "com.niclassslua.flotilla" AND category == "SessionStatus"'
+```
+
+Add `--level debug` for the full picture, or read the recent past with
+`log show --last 30m` and the same predicate.
+
+Four line shapes, in increasing granularity:
+
+| Level | Line | Means |
+|-------|------|-------|
+| `notice` | `1f3c9a20 Fix parser working → readyForReview — hook: Stop` | the change landed, and what caused it |
+| `info` | `1f3c9a20 Fix parser stayed crashed, asked for readyForReview — SessionStatusMachine refused the transition (screen: …)` | something asked for a status and did not get it |
+| `debug` | `1f3c9a20 suppressed screen readyForReview — screen readyForReview outranked by pending hook waitingForInput/permission` | the arbiter dropped an observation before `AppStore` saw it |
+| `debug` | `1f3c9a20 observed hook readyForReview ← hook: Stop` | every raw observation, before arbitration |
+
+The text after `—` on an applied line is the origin (`SessionStatusOrigin`),
+which distinguishes the mechanisms that are indistinguishable in the UI: a
+provider hook event by name, the exact screen marker `TerminalScreenHeuristic`
+matched, a process exit and its code, a user dragging a card on the board, and
+the launch/restart/restore paths. So "why is this Ready for Review?" is
+answered by one line — `hook: Stop`, `screen: composer prompt above a
+non-empty transcript`, `screen: no marker matched — default`, or
+`process exit code 0`.
+
+Session IDs are abbreviated to their first eight characters; grep for that
+prefix to follow one session end to end.
+
 ## Failure behavior
 
 - Event-file creation failure: provider configuration is skipped; the session

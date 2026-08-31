@@ -147,7 +147,7 @@ final class AppStore {
                 try processManager.start(session: sessions[index], deliverGoal: false)
             } catch {
                 if case .conversationAlreadyActive = error as? SessionProcessManager.LaunchError {
-                    sessions[index] = statusMachine.transition(sessions[index], to: .crashed)
+                    sessions[index] = transition(sessions[index], to: .crashed, origin: .restoreFailed)
                     try? repository.save(mergingLiveScrollback(sessions[index]))
                     lastOperationError = error.localizedDescription
                     continue
@@ -164,7 +164,7 @@ final class AppStore {
                         // proceed to crash transition
                     }
                 }
-                sessions[index] = statusMachine.transition(sessions[index], to: .crashed)
+                sessions[index] = transition(sessions[index], to: .crashed, origin: .restoreFailed)
                 do {
                     try repository.save(mergingLiveScrollback(sessions[index]))
                 } catch {
@@ -287,7 +287,7 @@ final class AppStore {
     func moveSessionToStatus(sessionID: UUID, status: SessionStatus) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         var session = sessions[sessionIndex]
-        session = statusMachine.transition(session, to: status)
+        session = transition(session, to: status, origin: .boardMove)
         sessions[sessionIndex] = session
         do {
             try repository.save(mergingLiveScrollback(session))
@@ -380,7 +380,12 @@ final class AppStore {
         guard isUITesting,
               let session = sessions.first(where: { $0.title == sessionTitle }),
               let process = processManager.process(for: session.id) as? MockPTYProcess else { return }
-        applyObservedStatus(.waitingForInput, waitingReason: .permission, toSessionID: session.id)
+        applyObservedStatus(
+            .waitingForInput,
+            waitingReason: .permission,
+            origin: .uiTestFixture,
+            toSessionID: session.id
+        )
         process.simulateOutput("Do you want to continue? (y/n) ")
     }
 
@@ -396,7 +401,7 @@ final class AppStore {
         guard isUITesting,
               let index = sessions.firstIndex(where: { $0.title == sessionTitle }) else { return }
         // Mark as crashed so the UI shows the restart affordance
-        sessions[index] = statusMachine.transition(sessions[index], to: .crashed)
+        sessions[index] = transition(sessions[index], to: .crashed, origin: .uiTestFixture)
         // Replace the mock process with one that simulates a crash on start
         if let process = processManager.process(for: sessions[index].id) as? MockPTYProcess {
             process.simulateCrash()
@@ -431,9 +436,46 @@ final class AppStore {
         return session
     }
 
+    /// `SessionStatusMachine.transition` with a trace line attached, so every
+    /// status a session takes — and every one it was asked to take and
+    /// refused — is explained in the log by whatever caused it. Direct calls
+    /// to the machine bypass the trace and should not exist in this type.
+    private func transition(
+        _ session: Session,
+        to status: SessionStatus,
+        origin: SessionStatusOrigin
+    ) -> Session {
+        let updated = statusMachine.transition(session, to: status)
+        if updated.status == session.status {
+            SessionStatusTrace.ignored(
+                sessionID: session.id,
+                title: session.title,
+                current: session.status,
+                currentReason: session.waitingReason,
+                requested: status,
+                origin: origin,
+                detail: session.status == status
+                    ? "already in that status"
+                    : "SessionStatusMachine refused the transition"
+            )
+        } else {
+            SessionStatusTrace.applied(
+                sessionID: session.id,
+                title: session.title,
+                from: session.status,
+                fromReason: session.waitingReason,
+                to: status,
+                toReason: updated.waitingReason,
+                origin: origin
+            )
+        }
+        return updated
+    }
+
     func applyObservedStatus(
         _ status: SessionStatus,
         waitingReason: SessionWaitingReason? = nil,
+        origin: SessionStatusOrigin = .unattributed,
         toSessionID sessionID: UUID
     ) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
@@ -454,9 +496,29 @@ final class AppStore {
             updated.lastActiveAt = Date()
         } else {
             updated = statusMachine.transition(current, to: status)
-            guard updated.status != current.status else { return }
+            guard updated.status != current.status else {
+                SessionStatusTrace.ignored(
+                    sessionID: current.id,
+                    title: current.title,
+                    current: current.status,
+                    currentReason: current.waitingReason,
+                    requested: status,
+                    origin: origin,
+                    detail: "SessionStatusMachine refused the transition"
+                )
+                return
+            }
             updated.waitingReason = resolvedWaitingReason
         }
+        SessionStatusTrace.applied(
+            sessionID: current.id,
+            title: current.title,
+            from: current.status,
+            fromReason: current.waitingReason,
+            to: updated.status ?? status,
+            toReason: updated.waitingReason,
+            origin: origin
+        )
         sessions[index] = updated
         do {
             try repository.save(mergingLiveScrollback(updated))
@@ -793,7 +855,7 @@ final class AppStore {
         }
         do {
             try processManager.start(session: sessions[index], deliverGoal: false)
-            let updated = statusMachine.transition(sessions[index], to: .working)
+            let updated = transition(sessions[index], to: .working, origin: .restart)
             sessions[index] = updated
             try repository.save(mergingLiveScrollback(updated))
             scheduleTitleSync(forSessionID: sessionID)
@@ -1096,7 +1158,7 @@ final class AppStore {
             if case .assignable = agentDescriptor.resume {
                 session.agentSessionID = session.id.uuidString
             }
-            session = statusMachine.transition(session, to: .working)
+            session = transition(session, to: .working, origin: .launch)
             do {
                 try repository.save(session)
             } catch {
@@ -1159,7 +1221,7 @@ final class AppStore {
                 processManager.killServerSideSession(sessionID: sessionID)
                 do {
                     try processManager.start(session: sessions[index], deliverGoal: false)
-                    sessions[index] = statusMachine.transition(sessions[index], to: .working)
+                    sessions[index] = transition(sessions[index], to: .working, origin: .resumeRetry)
                     try repository.save(mergingLiveScrollback(sessions[index]))
                     scheduleTitleSync(forSessionID: sessionID)
                     lastOperationError = "Previous conversation could not be restored — starting a fresh context."
@@ -1169,7 +1231,11 @@ final class AppStore {
                 }
             }
             sessionResumeStarts.removeValue(forKey: sessionID)
-            applyObservedStatus(exitCode == 0 ? .readyForReview : .crashed, toSessionID: sessionID)
+            applyObservedStatus(
+                exitCode == 0 ? .readyForReview : .crashed,
+                origin: .processExit(code: exitCode),
+                toSessionID: sessionID
+            )
             if exitCode == 0, let session = sessions.first(where: { $0.id == sessionID }) {
                 // A clean exit is still a "session finished" event for the
                 // notification layer, even though the status now lands on

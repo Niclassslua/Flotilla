@@ -100,20 +100,39 @@ public struct TerminalScreenHeuristic: Sendable {
         let tail = Self.tail(of: screen)
         let lowered = tail.lowercased()
 
-        if Self.planApprovalMarkers.contains(where: lowered.contains) {
-            return SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
+        if let marker = Self.planApprovalMarkers.first(where: lowered.contains) {
+            return SessionStatusObservation(
+                .waitingForInput,
+                waitingReason: .planApproval,
+                cause: "screen: plan-approval marker \(Self.quoted(marker))"
+            )
         }
-        if Self.permissionMarkers.contains(where: lowered.contains) {
-            return SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+        if let marker = Self.permissionMarkers.first(where: lowered.contains) {
+            return SessionStatusObservation(
+                .waitingForInput,
+                waitingReason: .permission,
+                cause: "screen: permission marker \(Self.quoted(marker))"
+            )
         }
-        if Self.questionMarkers.contains(where: lowered.contains) {
-            return SessionStatusObservation(.waitingForInput, waitingReason: .question)
+        if let marker = Self.questionMarkers.first(where: lowered.contains) {
+            return SessionStatusObservation(
+                .waitingForInput,
+                waitingReason: .question,
+                cause: "screen: question marker \(Self.quoted(marker))"
+            )
         }
         if Self.showsChoiceList(in: tail) {
-            return SessionStatusObservation(.waitingForInput, waitingReason: .question)
+            return SessionStatusObservation(
+                .waitingForInput,
+                waitingReason: .question,
+                cause: "screen: numbered choice list with a selection caret"
+            )
         }
         if promptHeuristic.detectStatus(in: tail) == .waitingForInput {
-            return SessionStatusObservation(.waitingForInput)
+            return SessionStatusObservation(
+                .waitingForInput,
+                cause: "screen: SessionStatusHeuristic prompt match"
+            )
         }
         // A dead pane, a bare composer with transcript, and an unremarkable
         // screen all mean the same thing now: the turn is over and the work
@@ -122,16 +141,32 @@ public struct TerminalScreenHeuristic: Sendable {
         // are kept distinct because their ordering relative to the working
         // marker still matters — a stale "esc to interrupt" left on a dead
         // pane must not read as `working`.
-        if Self.finishedMarkers.contains(where: lowered.contains) {
-            return SessionStatusObservation(.readyForReview)
+        if let marker = Self.finishedMarkers.first(where: lowered.contains) {
+            return SessionStatusObservation(
+                .readyForReview,
+                cause: "screen: finished marker \(Self.quoted(marker))"
+            )
         }
-        if Self.workingMarkers.contains(where: lowered.contains) {
-            return SessionStatusObservation(.working)
+        if let marker = Self.workingMarkers.first(where: lowered.contains) {
+            return SessionStatusObservation(
+                .working,
+                cause: "screen: working marker \(Self.quoted(marker))"
+            )
         }
         if Self.hasComposerWithTranscript(tail) {
-            return SessionStatusObservation(.readyForReview)
+            return SessionStatusObservation(
+                .readyForReview,
+                cause: "screen: composer prompt above a non-empty transcript"
+            )
         }
-        return SessionStatusObservation(.readyForReview)
+        return SessionStatusObservation(
+            .readyForReview,
+            cause: "screen: no marker matched — default"
+        )
+    }
+
+    private static func quoted(_ marker: String) -> String {
+        "\u{22}\(marker)\u{22}"
     }
 
     /// Compatibility convenience for callers interested only in the broad

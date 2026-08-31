@@ -235,14 +235,22 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
 ### SessionStatus — Legal Transitions
 
 ```
-idle          → working, waitingForInput, finished, crashed
-working       → idle, waitingForInput, finished, crashed
-waitingForInput → working, idle, finished, crashed
-finished      → working (restart only)
-crashed       → working (restart only)
+none (never observed) → any status
+working               → waitingForInput, readyForReview, crashed
+waitingForInput       → working, readyForReview, crashed
+readyForReview        → working, waitingForInput, crashed
+crashed               → working (restart only)
 ```
 
-Illegal transitions are silently ignored by `SessionStatusMachine`. Always use `SessionStatusMachine.transition()` — never set `.status` directly.
+Illegal transitions leave the session unchanged. Always use `SessionStatusMachine.transition()` — never set `.status` directly; inside `AppStore`, go through its private `transition(_:to:origin:)` wrapper so the change is traced.
+
+Every applied, refused, and suppressed status change is logged to the unified log under category `SessionStatus` (`Flotilla/Services/SessionStatusTrace.swift`), with the cause that produced it — the hook event, the screen marker, the process exit code, or the user's board drag:
+
+```
+log stream --style compact --predicate 'subsystem == "com.niclassslua.flotilla" AND category == "SessionStatus"'
+```
+
+See `docs/provider-hooks.md` → "Debugging a status change" for the line formats.
 
 ### AgentKind & AgentDescriptor
 

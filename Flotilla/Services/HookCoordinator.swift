@@ -149,13 +149,28 @@ final class HookCoordinator {
     ) async {
         var arbiter = arbiters[sessionID] ?? SessionStatusObservationArbiter()
         let accepted = arbiter.accept(observation, from: source)
+        let sourceLabel = source == .hook ? "hook" : "screen"
+        SessionStatusTrace.observed(
+            sessionID: sessionID,
+            source: sourceLabel,
+            observation: observation.debugDescription
+        )
         arbiters[sessionID] = arbiter
-        guard let accepted else { return }
+        guard let accepted else {
+            SessionStatusTrace.suppressed(
+                sessionID: sessionID,
+                source: sourceLabel,
+                observation: observation.debugDescription,
+                reason: arbiter.lastRejectionCause ?? "arbiter declined it"
+            )
+            return
+        }
 
         let shouldNotify = gate.shouldNotify(for: accepted.status)
         store.applyObservedStatus(
             accepted.status,
             waitingReason: accepted.waitingReason,
+            origin: .observation(source: sourceLabel, cause: accepted.cause),
             toSessionID: sessionID
         )
         await store.syncAgentTitle(forSessionID: sessionID)

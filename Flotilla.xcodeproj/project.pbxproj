@@ -28,6 +28,7 @@
 		10D65E7D1ABDBA7423577988 /* KanbanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18295747B6538E5931B709FE /* KanbanUITests.swift */; };
 		111C1B53AC72AD0AE39970BA /* AgentSelfReportCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E32DCA022EAEDFF38BA2A93 /* AgentSelfReportCoordinatorTests.swift */; };
 		116BF380DC13FE82F215868A /* FlotillaUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFB40CA8CE1DD12C190C2FA /* FlotillaUITests.swift */; };
+		11B1B69B8A64FDBBEB5D47CE /* SessionStatusTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843F419F380054574BA3445D /* SessionStatusTrace.swift */; };
 		11F6EE8A69449A9CAB97DF21 /* folder-node.svg in Resources */ = {isa = PBXBuildFile; fileRef = 446F1EB2161B52565A40137C /* folder-node.svg */; };
 		1356BD5D0E963E1495B72DA9 /* ProjectKnowledgeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A72CBB4D67EA18E82CFAA32 /* ProjectKnowledgeViewModel.swift */; };
 		13AD6C3EBF870E22C4317313 /* graphql.svg in Resources */ = {isa = PBXBuildFile; fileRef = ECBC98B1E339659FBE0A518F /* graphql.svg */; };
@@ -433,6 +434,7 @@
 		7D1C6AA6CFB7D0EDA39FC2C8 /* javascript.svg */ = {isa = PBXFileReference; path = javascript.svg; sourceTree = "<group>"; };
 		7F15D545EF64036535A2F93F /* TerminalKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TerminalKit; path = Packages/TerminalKit; sourceTree = SOURCE_ROOT; };
 		8007B7DFF42E35CB2C584727 /* KanbanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanTests.swift; sourceTree = "<group>"; };
+		843F419F380054574BA3445D /* SessionStatusTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStatusTrace.swift; sourceTree = "<group>"; };
 		84DD652B12686F035C91FDD8 /* folder-robot.svg */ = {isa = PBXFileReference; path = "folder-robot.svg"; sourceTree = "<group>"; };
 		855986A922FD6FCB156C0658 /* python.svg */ = {isa = PBXFileReference; path = python.svg; sourceTree = "<group>"; };
 		874C07585626CF8D03699AB0 /* GitKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitKitTests.swift; sourceTree = "<group>"; };
@@ -761,6 +763,7 @@
 				E560D5E9A15E6BEFD4593C51 /* HookCoordinator.swift */,
 				A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */,
 				726F2E966A42B093C4E60D6D /* SessionProcessManager.swift */,
+				843F419F380054574BA3445D /* SessionStatusTrace.swift */,
 				C038C5B8AB4AE5F31A21ECD0 /* TmuxSessionWrapping.swift */,
 			);
 			path = Services;
@@ -1428,6 +1431,7 @@
 				37C6F711861A1F82A0EF6A57 /* SessionProcessManager.swift in Sources */,
 				7A12A2072075BB0ECD30B256 /* SessionRow.swift in Sources */,
 				F086E4FE605D679C303753C4 /* SessionScreenReader.swift in Sources */,
+				11B1B69B8A64FDBBEB5D47CE /* SessionStatusTrace.swift in Sources */,
 				086753F1FC0C729EB93423C4 /* SessionTileChrome.swift in Sources */,
 				2FFAFBA7EEDA9EE12049052F /* SettingsView.swift in Sources */,
 				804943542EEC842EA348197E /* SettingsViewModel.swift in Sources */,
