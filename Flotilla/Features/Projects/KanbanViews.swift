@@ -11,14 +11,9 @@ struct KanbanTabView: View {
     let openSession: (UUID) -> Void
     var scope: SessionScope = .everything
 
-    @State private var showingNewBoardSheet = false
-    @State private var newBoardName = ""
-
     var body: some View {
         let _ = PerfLog.bump("KanbanTabView.body")
-        VStack(spacing: 0) {
-            headerBar
-            Divider()
+        Group {
             if let board = store.selectedKanbanBoard {
                 KanbanBoardView(
                     store: store,
@@ -32,141 +27,13 @@ struct KanbanTabView: View {
                 ContentUnavailableView(
                     "No Board",
                     systemImage: "square.grid.2x2",
-                    description: Text("Select or create a Kanban board")
+                    description: Text("No Kanban board is available")
                 )
             }
         }
         .background(FlotillaColors.canvas)
-        .sheet(isPresented: $showingNewBoardSheet) {
-            NewBoardSheet(
-                name: $newBoardName,
-                projectID: nil,
-                store: store,
-                onCancel: {
-                    showingNewBoardSheet = false
-                    newBoardName = ""
-                }
-            )
-        }
-    }
-
-    private var headerBar: some View {
-        HStack(spacing: 12) {
-            if let selected = store.selectedKanbanBoard {
-                Menu {
-                    ForEach(store.kanbanBoards) { board in
-                        Button {
-                            store.selectKanbanBoard(board.id)
-                        } label: {
-                            HStack {
-                                Text(board.name)
-                                if board.id == selected.id {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                    Divider()
-                    Button("New Board…") {
-                        showingNewBoardSheet = true
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "square.grid.2x2")
-                            .foregroundStyle(FlotillaColors.accent)
-                        Text(selected.name)
-                            .font(.system(size: 13, weight: .semibold))
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("BoardPicker")
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(FlotillaColors.surface)
     }
 }
-
-struct NewBoardSheet: View {
-    @Binding var name: String
-    let projectID: UUID?
-    let store: AppStore
-    let onCancel: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("New Kanban Board")
-                        .font(.title3.weight(.semibold))
-                    Text("Enter a name for the new board")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(20)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Board Name")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                TextField("Board name", text: $name)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        if !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            let board = KanbanBoard(projectID: nil, name: name.trimmingCharacters(in: .whitespacesAndNewlines))
-                            do {
-                                try store.createKanbanBoard(board)
-                                store.loadKanbanBoards()
-                                store.selectKanbanBoard(board.id)
-                            } catch {
-                                store.lastOperationError = "Failed to create board: \(error.localizedDescription)"
-                            }
-                            onCancel()
-                        }
-                    }
-            }
-            .padding(20)
-
-            Divider()
-
-            HStack {
-                Spacer()
-                Button("Cancel", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                Button("Create") {
-                    if !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        let board = KanbanBoard(projectID: nil, name: name.trimmingCharacters(in: .whitespacesAndNewlines))
-                        do {
-                            try store.createKanbanBoard(board)
-                            store.loadKanbanBoards()
-                            store.selectKanbanBoard(board.id)
-                        } catch {
-                            store.lastOperationError = "Failed to create board: \(error.localizedDescription)"
-                        }
-                        onCancel()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(20)
-        }
-        .frame(width: 400)
-        .background(FlotillaColors.canvas)
-    }
-}
-
 
 struct KanbanBoardView: View {
     @Bindable var store: AppStore

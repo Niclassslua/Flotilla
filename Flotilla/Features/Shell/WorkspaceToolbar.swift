@@ -116,7 +116,9 @@ struct WorkspaceToolbar: ToolbarContent {
             show(mode)
         } label: {
             Image(systemName: mode.systemImage)
+                .font(.system(size: 15, weight: .medium))
         }
+        .controlSize(.large)
         .foregroundStyle(isActive ? FlotillaColors.accent : FlotillaColors.textPrimary)
         .help(help)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])

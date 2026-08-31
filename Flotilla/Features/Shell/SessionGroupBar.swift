@@ -9,7 +9,7 @@ import DesignSystem
 /// The grid controls used to live in the toolbar with a comment in `GridView`
 /// defending the choice on vertical-space grounds; what that cost instead was
 /// a toolbar row that gained and lost four controls as the selection changed,
-/// reflowing under the pointer. Thirty-two points buys a bar whose contents
+/// reflowing under the pointer. Forty points buys a bar whose contents
 /// are stable for as long as you are in Sessions.
 ///
 /// Shown for both Grid and Board, so the group survives switching between
@@ -38,7 +38,7 @@ struct SessionGroupBar: View {
             }
         }
         .padding(.horizontal, FlotillaSpacing.medium)
-        .frame(height: 32)
+        .frame(height: 40)
         .background(FlotillaColors.surface)
         .accessibilityIdentifier(AXID.sessionsGroupBar.rawValue)
     }
@@ -98,20 +98,20 @@ struct SessionGroupBar: View {
                 navigator.sessionGroup = chip.group
             }
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 if chip.group != .all {
-                    ProjectMark(title: chip.title, tint: chip.tint, systemImage: chip.systemImage, size: 13)
+                    ProjectMark(title: chip.title, tint: chip.tint, systemImage: chip.systemImage, size: 15)
                 }
                 Text(chip.title)
-                    .font(FlotillaTypography.caption.weight(isActive ? .semibold : .regular))
+                    .font(FlotillaTypography.callout.weight(isActive ? .semibold : .regular))
                     .lineLimit(1)
                 Text("\(chip.count)")
-                    .font(FlotillaTypography.caption3.monospacedDigit())
+                    .font(FlotillaTypography.caption.monospacedDigit())
                     .foregroundStyle(FlotillaColors.textTertiary)
             }
             .foregroundStyle(isActive ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
-            .padding(.horizontal, FlotillaSpacing.small)
-            .padding(.vertical, 3)
+            .padding(.horizontal, FlotillaSpacing.medium)
+            .padding(.vertical, 5)
             .background {
                 Capsule(style: .continuous)
                     .fill(isActive ? FlotillaColors.accent.opacity(0.16) : .clear)
@@ -130,9 +130,8 @@ struct SessionGroupBar: View {
 
     // MARK: - Grid controls
 
-    /// The same four views the window toolbar used to host, unchanged — they
-    /// read and write `settings.workspace` directly, so moving them needed a
-    /// new parent and nothing else.
+    /// The same four views the window toolbar used to host. They read and write
+    /// `settings.workspace` directly; their shared size belongs to this bar.
     private var gridControls: some View {
         HStack(spacing: FlotillaSpacing.xSmall) {
             GridDimensionsPicker(settingsViewModel: settingsViewModel)
@@ -146,6 +145,8 @@ struct SessionGroupBar: View {
             GridEmptyButton(store: store, settingsViewModel: settingsViewModel)
         }
         .buttonStyle(.borderless)
+        .controlSize(.regular)
+        .font(.system(size: 14, weight: .medium))
     }
 }
 

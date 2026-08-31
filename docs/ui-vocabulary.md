@@ -75,7 +75,7 @@ Shown when the navigator's **Home** row is selected.
 
 ## 3. Fleet presentations
 
-Three ways to render many sessions; picked in the toolbar's presentation picker.
+Three ways to render many sessions; Grid and Board are opened from the global bar.
 
 ### Grid
 
@@ -95,10 +95,9 @@ Three ways to render many sessions; picked in the toolbar's presentation picker.
 
 | Say | What it is | Code |
 | --- | --- | --- |
-| **Board** *(or "Kanban board")* | The Kanban presentation with its own header bar and board picker. | `KanbanTabView` → `KanbanBoardView` — `Features/Projects/KanbanViews.swift` |
+| **Board** *(or "Kanban board")* | The Kanban presentation. The session group bar is its only session-scope control. | `KanbanTabView` → `KanbanBoardView` — `Features/Projects/KanbanViews.swift` |
 | **Kanban column** | One column of the board. | `KanbanColumnView`, `AddColumnButton` |
 | **Kanban card** | A session rendered as a board card. | `SessionCard` in the `.board` variant |
-| **New board sheet** / **New column sheet** | The two creation dialogs. | `NewBoardSheet`, `NewColumnSheet` |
 
 ### Focus
 
