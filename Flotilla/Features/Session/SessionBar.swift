@@ -46,6 +46,15 @@ struct SessionBar: View {
             case .tile: .caption.weight(.medium)
             }
         }
+
+        /// Trailing padding, measured to the chip's edge rather than to the
+        /// glyph — see `body`.
+        var trailingInset: CGFloat {
+            switch self {
+            case .focus: FlotillaSpacing.small
+            case .tile: FlotillaSpacing.xSmall
+            }
+        }
     }
 
     let session: Session
@@ -83,12 +92,21 @@ struct SessionBar: View {
     private var hasProject: Bool { session.projectID != nil }
 
     var body: some View {
-        HStack(spacing: FlotillaSpacing.small) {
+        // Spacing 0 on purpose: the `Spacer` is the only gap between the
+        // identity and the actions. With the stack also spacing its children
+        // the two combined to a 24pt minimum, a quarter of a four-column
+        // tile's bar spent on nothing while the branch and worktree beside it
+        // truncated to stubs.
+        HStack(spacing: 0) {
             identityLockup
-            Spacer(minLength: FlotillaSpacing.small)
+            Spacer(minLength: FlotillaSpacing.medium)
             trailingActions
         }
-        .padding(.horizontal, variant == .focus ? FlotillaSpacing.medium : FlotillaSpacing.small)
+        .padding(.leading, variant == .focus ? FlotillaSpacing.medium : FlotillaSpacing.small)
+        // The action chips carry their own padding around the glyph, so the
+        // trailing inset is smaller than the leading one to land the icons
+        // the same optical distance from the edge as the status badge.
+        .padding(.trailing, variant.trailingInset)
         .frame(height: variant.height)
         .background(FlotillaColors.surface)
         .accessibilityIdentifier(AXID.sessionBar(session.title))
@@ -221,35 +239,46 @@ struct SessionBar: View {
                 .accessibilityLabel("Session age")
                 .accessibilityIdentifier(AXID.sessionBarAge(session.title))
 
-            // Renders disabled on purpose: there is no git sidebar to show
-            // yet. A button that accepted the click and did nothing would be
-            // indistinguishable from one that is broken.
-            barButton("sidebar.right", help: "Git sidebar (not available yet)", action: actions.onToggleGitSidebar)
-                .disabled(true)
-                .accessibilityIdentifier(AXID.sessionBarGitSidebarToggle.rawValue)
+            // The three icons are one cluster, at the same 2pt as the tile's
+            // pair: 8pt between chips that already carry their own margin
+            // read as three separate controls that happened to land together.
+            HStack(spacing: 2) {
+                // Renders disabled on purpose: there is no git sidebar to
+                // show yet. A button that accepted the click and did nothing
+                // would be indistinguishable from one that is broken.
+                barButton("sidebar.right", help: "Git sidebar (not available yet)", action: actions.onToggleGitSidebar)
+                    .disabled(true)
+                    .accessibilityLabel("Git sidebar")
+                    .accessibilityIdentifier(AXID.sessionBarGitSidebarToggle.rawValue)
 
-            barButton(
-                "folder",
-                help: hasProject
-                    ? "Browse and edit files"
-                    : "This session is not assigned to a project, so there is no file tree to browse.",
-                action: actions.onBrowseFiles
-            )
-            .disabled(!hasProject)
-            .accessibilityIdentifier(AXID.toolbarOpenProjectFiles.rawValue)
+                barButton(
+                    "folder",
+                    help: hasProject
+                        ? "Browse and edit files"
+                        : "This session is not assigned to a project, so there is no file tree to browse.",
+                    action: actions.onBrowseFiles
+                )
+                .disabled(!hasProject)
+                .accessibilityLabel("Browse files")
+                .accessibilityIdentifier(AXID.toolbarOpenProjectFiles.rawValue)
 
-            barButton(
-                "arrow.triangle.branch",
-                help: hasProject
-                    ? "Review this session's changes"
-                    : "This session is not assigned to a project, so there is no repository workspace to open.",
-                action: actions.onReviewChanges
-            )
-            .disabled(!hasProject)
-            .accessibilityIdentifier(AXID.toolbarOpenProjectGit.rawValue)
+                barButton(
+                    "arrow.triangle.branch",
+                    help: hasProject
+                        ? "Review this session's changes"
+                        : "This session is not assigned to a project, so there is no repository workspace to open.",
+                    action: actions.onReviewChanges
+                )
+                .disabled(!hasProject)
+                .accessibilityLabel("Review changes")
+                .accessibilityIdentifier(AXID.toolbarOpenProjectGit.rawValue)
+            }
         }
     }
 
+    /// Spacing 2 rather than 0: the chips already reserve their own margin
+    /// around each glyph, so a wider gap here would read as two unrelated
+    /// buttons instead of one cluster.
     private var tileActions: some View {
         HStack(spacing: 2) {
             barButton(
@@ -257,22 +286,17 @@ struct SessionBar: View {
                 help: "Focus on this session",
                 action: actions.onFocus
             )
+            .accessibilityLabel("Focus on this session")
             .accessibilityIdentifier(AXID.gridTileFocusButton(session.title))
 
             barButton("minus.circle", help: "Remove from grid", action: actions.onRemoveFromGrid)
+                .accessibilityLabel("Remove from grid")
                 .accessibilityIdentifier(AXID.gridTileRemoveButton(session.title))
         }
     }
 
     private func barButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: variant == .focus ? 11 : 10, weight: .medium))
-                .frame(width: 20, height: 20)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
+        SessionBarIconButton(systemImage: systemImage, help: help, action: action)
     }
 
     // MARK: - Rename
@@ -290,5 +314,57 @@ struct SessionBar: View {
         isEditingTitle = false
         guard draftTitle != session.title else { return }
         actions.onRename(draftTitle)
+    }
+}
+
+// MARK: - Bar action chip
+
+/// A bar action rendered as a hover-lit chip rather than a bare glyph.
+///
+/// The tile bar packs a status badge, `project / name`, a diff stat, a branch
+/// and a worktree into 28pt, all of it small and grey. Two unadorned 10pt
+/// icons at the trailing edge joined that texture instead of standing apart
+/// from it, which is what made the corner read as clutter rather than as
+/// controls. The chip gives the pair an edge of its own and gives the pointer
+/// a 22pt square to land on, without costing the bar any height.
+private struct SessionBarIconButton: View {
+    let systemImage: String
+    let help: String
+    let action: () -> Void
+
+    /// Read from the environment rather than passed in, so a caller's
+    /// `.disabled(true)` — the focus bar's git-sidebar toggle — reaches the
+    /// chip's own colours instead of only greying the label.
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    private static let side: CGFloat = 22
+
+    private var foreground: Color {
+        guard isEnabled else { return FlotillaColors.textTertiary }
+        return isHovering ? FlotillaColors.textPrimary : FlotillaColors.textSecondary
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(foreground)
+                .frame(width: Self.side, height: Self.side)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(
+                            FlotillaColors.textPrimary
+                                .opacity(isHovering ? FlotillaStateOpacity.hover : 0)
+                        )
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        // Guarded on `isEnabled` so a disabled control never lights up; the
+        // pointer still gets the tooltip explaining why it is disabled.
+        .onHover { isHovering = isEnabled && $0 }
+        .withFlotillaMotion(.fast, value: isHovering)
     }
 }

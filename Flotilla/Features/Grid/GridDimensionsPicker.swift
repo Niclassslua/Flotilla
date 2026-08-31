@@ -26,12 +26,22 @@ struct GridDimensionsPicker: View {
     }
 
     var body: some View {
-        Button {
+        // The count is on the chip, not only in the tooltip. This control has
+        // said "a chip showing the current column×row count" since it replaced
+        // the stepper, but it drew a fixed `square.grid.2x2` and nothing else,
+        // so the one control in the bar with a value worth reading was the one
+        // you had to hover to read. It is also what gives the cluster a wider
+        // anchor at its leading end instead of four identical icon squares.
+        GridBarControl(help: "Grid layout: \(dimensions.label)") {
             isPresented.toggle()
         } label: {
-            Image(systemName: "square.grid.2x2")
+            HStack(spacing: 4) {
+                Image(systemName: "square.grid.2x2").gridBarIcon()
+                Text(dimensions.label)
+                    .font(.system(size: 11, weight: .semibold))
+                    .monospacedDigit()
+            }
         }
-        .help("Grid layout: \(dimensions.label)")
         .accessibilityLabel("Grid layout")
         .accessibilityValue(dimensions.label)
         .accessibilityIdentifier(AXID.gridLayoutPicker.rawValue)

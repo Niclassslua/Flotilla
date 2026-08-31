@@ -131,22 +131,36 @@ struct SessionGroupBar: View {
     // MARK: - Grid controls
 
     /// The same four views the window toolbar used to host. They read and write
-    /// `settings.workspace` directly; their shared size belongs to this bar.
+    /// `settings.workspace` directly; their shared chrome is `GridBarControl`.
+    ///
+    /// Two pairs, not a run of four. Layout and dimming set how the grid draws
+    /// what is in it and stay put once set; Add all and Empty are one-shot
+    /// commands that change what is in it. Running all four together at one
+    /// spacing invited reaching for Empty when you wanted the size picker —
+    /// the divider is the cheapest way to say the two halves are different
+    /// kinds of thing.
+    ///
+    /// Spacing 2 within a pair: the chips already carry their own padding, so
+    /// a wider gap would break each pair back into loose single controls.
     private var gridControls: some View {
-        HStack(spacing: FlotillaSpacing.xSmall) {
-            GridDimensionsPicker(settingsViewModel: settingsViewModel)
-            GridDimControl(settingsViewModel: settingsViewModel)
-            GridAddAllButton(
-                store: store,
-                settingsViewModel: settingsViewModel,
-                dimensions: dimensions,
-                scope: navigator.sessionScope
-            )
-            GridEmptyButton(store: store, settingsViewModel: settingsViewModel)
+        HStack(spacing: FlotillaSpacing.small) {
+            HStack(spacing: 2) {
+                GridDimensionsPicker(settingsViewModel: settingsViewModel)
+                GridDimControl(settingsViewModel: settingsViewModel)
+            }
+
+            Divider().frame(height: 16)
+
+            HStack(spacing: 2) {
+                GridAddAllButton(
+                    store: store,
+                    settingsViewModel: settingsViewModel,
+                    dimensions: dimensions,
+                    scope: navigator.sessionScope
+                )
+                GridEmptyButton(store: store, settingsViewModel: settingsViewModel)
+            }
         }
-        .buttonStyle(.borderless)
-        .controlSize(.regular)
-        .font(.system(size: 14, weight: .medium))
     }
 }
 
