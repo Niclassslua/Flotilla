@@ -176,6 +176,17 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
         }
     }
 
+    /// One transaction, one fsync, regardless of how many sessions are being
+    /// flushed — see the protocol's declaration.
+    public func save(_ sessions: [Session]) throws {
+        guard !sessions.isEmpty else { return }
+        try dbQueue.write { db in
+            for session in sessions {
+                try SessionRecord(session: session).save(db)
+            }
+        }
+    }
+
     public func delete(sessionID: UUID) throws {
         _ = try dbQueue.write { db in
             try SessionRecord.deleteOne(db, key: sessionID.uuidString)

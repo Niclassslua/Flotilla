@@ -32,12 +32,16 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     public var terminalView: TerminalView { sessionTerminalView }
 
     private var process: PTYProcessProtocol
-    private let outputHandler: @MainActor @Sendable (Data) -> Void
-    private let inputHandler: @MainActor @Sendable () -> Void
+    /// `var`, not `let`: `TerminalManager` caches one controller per session for
+    /// the life of the app and hands it back to whichever view asks next, so the
+    /// handlers a later caller passes have to be able to replace the ones the
+    /// first mount installed — see `updateHandlers`.
+    private var outputHandler: @MainActor @Sendable (Data) -> Void
+    private var inputHandler: @MainActor @Sendable () -> Void
     private let multilineNewlineSequence: Data
-    private let accessibilityIdentifier: String
-    private let customReflowHandler: (@MainActor @Sendable (TerminalPresentation) -> Void)?
-    private let onPTYResize: (@MainActor @Sendable (PTYSize) -> Void)?
+    private var accessibilityIdentifier: String
+    private var customReflowHandler: (@MainActor @Sendable (TerminalPresentation) -> Void)?
+    private var onPTYResize: (@MainActor @Sendable (PTYSize) -> Void)?
     private let sessionTerminalView: TerminalView
     private var terminalViews: [TerminalPresentation: TerminalView]
     private var replayBuffer: Data
@@ -47,14 +51,28 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     private var gpuRendering = false
     private var outputTask: Task<Void, Never>?
     private var accessibilityTask: Task<Void, Never>?
-    private var resizeTask: Task<Void, Never>?
-    private var reflowTask: Task<Void, Never>?
+    /// Keyed by presentation rather than single-valued: a grid tile scrolling
+    /// into view would otherwise cancel the reflow the focused session's resize
+    /// had just scheduled, leaving its transcript wrapped at the old width.
+    private var resizeTasks: [TerminalPresentation: Task<Void, Never>] = [:]
+    private var reflowTasks: [TerminalPresentation: Task<Void, Never>] = [:]
     private var hasSentInitialResize = false
+
+    /// The column count each renderer's current contents were laid out at.
+    /// `reflowOnDisplay` is a no-op when this still matches the renderer's
+    /// width — re-wrapping only matters when the width actually changed, and
+    /// the replay it would otherwise run costs a full emulator parse of
+    /// `replayBuffer` on the main actor.
+    private var reflowedColumns: [TerminalPresentation: Int] = [:]
 
     private var isReplaying = false
     private var authoritativePresentation: TerminalPresentation = .session
     private let pendingOutput = CoalescingOutputBuffer()
     private var lastPublishedAccessibleText: [ObjectIdentifier: String] = [:]
+
+    /// Memoized `visibleScreenText()` — see there.
+    private var cachedScreenText: String?
+    private var cachedScreenPresentation: TerminalPresentation?
 
     /// Number of times `flushPendingOutput` has actually fed the renderers,
     /// as opposed to the number of PTY reads received. Exposed so tests can
@@ -137,6 +155,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
                 isReplaying = true
                 view.feed(byteArray: bytes[...])
                 isReplaying = false
+                reflowedColumns[presentation] = view.getTerminal().getDims().cols
                 Task { @MainActor in
                     await publishAccessibleContent(for: view)
                 }
@@ -158,23 +177,121 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// `.peek` is never authoritative: a Kanban card is a thumbnail, and
     /// letting one resize the agent to card dimensions would wreck the session
     /// for every other view of it.
+    ///
+    /// This only records the intent. Pushing the size to the PTY is
+    /// `syncPTYSize(for:)`'s job, because at the moment a view is mounted it is
+    /// not yet in a window and has no real frame to measure — see there.
     @MainActor
     public func makeAuthoritative(_ presentation: TerminalPresentation) {
         guard presentation != .peek, authoritativePresentation != presentation else { return }
         authoritativePresentation = presentation
+        invalidateScreenText()
         TerminalPerfLog.event("authoritative \(accessibilityIdentifier) → \(presentation)")
-        // The renderer taking over may already be at its final size, in which
-        // case no further `sizeChanged` is coming and the PTY would keep the
-        // size the previous renderer left behind. Only sync if the view is attached
-        // to a window and laid out with real dimensions.
-        if let view = terminalViews[presentation], view.window != nil, view.frame.width > 0, view.frame.height > 0 {
-            let terminal = view.getTerminal()
-            let size = terminal.getDims()
-            guard size.cols >= Self.minimumUsableCols, size.rows >= Self.minimumUsableRows else { return }
-            let ptySize = PTYSize(cols: size.cols, rows: size.rows)
-            process.resize(ptySize)
+    }
+
+    /// Pushes the renderer's measured size to the PTY, whether or not anything
+    /// changed on the renderer's side.
+    ///
+    /// SwiftTerm only calls `sizeChanged` when its own column/row count
+    /// changes, so a renderer restored to a size it already had reports
+    /// nothing — and the PTY silently keeps whatever size the *other*
+    /// presentation last set. Going full-screen → grid tile → full-screen used
+    /// to leave the agent believing it still had the tile's dimensions, with
+    /// the renderer drawing at the full size on top of it.
+    ///
+    /// The host view calls this once it is genuinely in a window and laid out,
+    /// which is strictly after `makeNSView` returns: at mount time the view has
+    /// no window and a zero frame, so measuring it there could only ever be
+    /// skipped.
+    @MainActor
+    public func syncPTYSize(for presentation: TerminalPresentation) {
+        guard presentation == authoritativePresentation else { return }
+        guard let view = terminalViews[presentation],
+              view.window != nil,
+              view.frame.width > 0,
+              view.frame.height > 0
+        else { return }
+
+        let dims = view.getTerminal().getDims()
+        guard dims.cols >= Self.minimumUsableCols, dims.rows >= Self.minimumUsableRows else { return }
+
+        // `applyResize` returns immediately when the PTY already has these
+        // dimensions, which is the overwhelmingly common case: this runs from
+        // `layout()`, so it is called on every pass of a live window drag.
+        applyResize(PTYSize(cols: dims.cols, rows: dims.rows), for: presentation)
+    }
+
+    /// The single place a size reaches the PTY, whether it came from SwiftTerm
+    /// noticing its own dimensions changed or from a renderer being mounted at
+    /// a size it already had.
+    ///
+    /// Debounced after the first one. The first is sent immediately so the
+    /// agent redraws its startup screen at the true size before it can print
+    /// much at the guessed one; later ones wait for layout to settle, so
+    /// dragging a window sends one resize rather than one per frame — each of
+    /// which would otherwise cost a `SIGWINCH`, a full-screen TUI repaint, and
+    /// for tmux-wrapped sessions a verification subprocess.
+    @MainActor
+    private func applyResize(_ size: PTYSize, for presentation: TerminalPresentation) {
+        // Cancel before the equality check, not after. Resizing away and back
+        // inside the debounce window arrives here as `size == lastAppliedSize`
+        // while a task carrying the intermediate size is still pending — an
+        // early return that left it queued would apply that stale size 150 ms
+        // later, to a renderer that had already gone back.
+        resizeTasks[presentation]?.cancel()
+        resizeTasks[presentation] = nil
+        guard size != lastAppliedSize else { return }
+
+        guard hasSentInitialResize else {
+            hasSentInitialResize = true
+            lastAppliedSize = size
+            TerminalPerfLog.event("PTY resize (initial) \(accessibilityIdentifier) → \(size.cols)x\(size.rows)")
+            process.resize(size)
             reflowOnDisplay(presentation)
-            onPTYResize?(ptySize)
+            // Hopped rather than called inline: this can run from inside
+            // SwiftTerm's `setFrameSize`, and the handler reaches back into the
+            // app's session state.
+            Task { @MainActor [weak self] in self?.onPTYResize?(size) }
+            return
+        }
+
+        resizeTasks[presentation] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled, let self else { return }
+            self.resizeTasks[presentation] = nil
+            guard size != self.lastAppliedSize else { return }
+            self.lastAppliedSize = size
+            TerminalPerfLog.event("PTY resize \(self.accessibilityIdentifier) → \(size.cols)x\(size.rows)")
+            self.process.resize(size)
+            self.reflowOnDisplay(presentation)
+            self.onPTYResize?(size)
+        }
+    }
+
+    /// Replaces the host-supplied callbacks on a controller that outlives the
+    /// view that created it. `TerminalManager` hands one cached controller to
+    /// both the focused session view and the grid tile; without this the
+    /// closures belonging to whichever mounted first stayed installed forever.
+    @MainActor
+    public func updateHandlers(
+        accessibilityIdentifier: String? = nil,
+        customReflowHandler: (@MainActor @Sendable (TerminalPresentation) -> Void)? = nil,
+        onPTYResize: (@MainActor @Sendable (PTYSize) -> Void)? = nil,
+        outputHandler: (@MainActor @Sendable (Data) -> Void)? = nil,
+        inputHandler: (@MainActor @Sendable () -> Void)? = nil
+    ) {
+        self.customReflowHandler = customReflowHandler
+        self.onPTYResize = onPTYResize
+        if let outputHandler { self.outputHandler = outputHandler }
+        if let inputHandler { self.inputHandler = inputHandler }
+        // Renaming a session changes the identifier UI tests look the terminal
+        // up by, so it has to follow the rename rather than stay pinned to the
+        // title the session had when its controller was first created.
+        if let accessibilityIdentifier, accessibilityIdentifier != self.accessibilityIdentifier {
+            self.accessibilityIdentifier = accessibilityIdentifier
+            for view in terminalViews.values {
+                view.setAccessibilityIdentifier(accessibilityIdentifier)
+            }
         }
     }
 
@@ -196,24 +313,52 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// Debounced, because the mount that triggers this is immediately followed
     /// by the layout pass that gives the renderer its real size — replaying
     /// before that lands would just re-wrap at the stale width again.
+    ///
+    /// The replay is the single most expensive thing this class does: a full
+    /// emulator parse of up to `maximumReplayBytes` on the main actor. It is
+    /// therefore skipped whenever it provably cannot change anything — the
+    /// renderer's width is what its contents were already laid out at, and it
+    /// has not missed any output. Without that check, every tile scrolling back
+    /// into a `LazyVGrid` paid a 2 MB parse for a re-wrap to the width it
+    /// already had.
     @MainActor
     public func reflowOnDisplay(_ presentation: TerminalPresentation) {
         guard let view = terminalViews[presentation] else { return }
-        reflowTask?.cancel()
-        reflowTask = Task { @MainActor [weak self] in
+        reflowTasks[presentation]?.cancel()
+        reflowTasks[presentation] = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled, let self else { return }
+            self.reflowTasks[presentation] = nil
+
+            // Measured after the debounce, not before: the layout pass that
+            // gives the renderer its real width lands during that window.
+            let columns = view.getTerminal().getDims().cols
+            guard self.reflowedColumns[presentation] != columns else {
+                TerminalPerfLog.event("reflow skipped (unchanged \(columns) cols) \(self.accessibilityIdentifier) presentation=\(presentation)")
+                return
+            }
+
             if let customReflow = self.customReflowHandler {
                 TerminalPerfLog.event("customReflow \(self.accessibilityIdentifier) presentation=\(presentation)")
+                self.reflowedColumns[presentation] = columns
                 customReflow(presentation)
             } else {
-                guard !self.replayBuffer.isEmpty else { return }
-                TerminalPerfLog.event("reflow \(self.accessibilityIdentifier) presentation=\(presentation)")
-                view.getTerminal().resetToInitialState()
-                let bytes = [UInt8](self.replayBuffer)
-                self.isReplaying = true
-                view.feed(byteArray: bytes[...])
-                self.isReplaying = false
+                guard !self.replayBuffer.isEmpty else {
+                    self.reflowedColumns[presentation] = columns
+                    return
+                }
+                TerminalPerfLog.measure(
+                    "TerminalController.reflow",
+                    "\(self.accessibilityIdentifier) presentation=\(presentation) \(self.replayBuffer.count)B → \(columns) cols"
+                ) {
+                    view.getTerminal().resetToInitialState()
+                    let bytes = [UInt8](self.replayBuffer)
+                    self.isReplaying = true
+                    view.feed(byteArray: bytes[...])
+                    self.isReplaying = false
+                }
+                self.reflowedColumns[presentation] = columns
+                self.invalidateScreenText()
                 self.publishAccessibleContent(for: view)
             }
         }
@@ -224,12 +369,38 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// Reads from the authoritative mounted view (or falls back to session view),
     /// exposed so status inference looks at what the agent is actively drawing
     /// without disturbances.
+    ///
+    /// Memoized, because this is polled: `SessionScreenMonitor` asks every
+    /// 900 ms and `SessionActivityStore` every 2 s, per running session, and
+    /// both hop to the main actor to do it. `getBufferAsData` walks every cell
+    /// of the emulator and allocates a fresh string, so an idle fleet was
+    /// paying a full serialization per session per second to discover nothing
+    /// had changed. The cache is dropped by `invalidateScreenText` wherever
+    /// bytes are fed or the buffer is reset, which are the only ways its
+    /// contents can move.
     @MainActor
     public func visibleScreenText() -> String? {
+        if let cachedScreenText, cachedScreenPresentation == authoritativePresentation {
+            return cachedScreenText
+        }
         let activeView = terminalViews[authoritativePresentation] ?? sessionTerminalView
         guard let terminal = activeView.terminal ?? sessionTerminalView.terminal else { return nil }
-        return String(decoding: terminal.getBufferAsData(), as: UTF8.self)
+        let text = String(decoding: terminal.getBufferAsData(), as: UTF8.self)
+        cachedScreenText = text
+        cachedScreenPresentation = authoritativePresentation
+        return text
     }
+
+    @MainActor
+    private func invalidateScreenText() {
+        cachedScreenText = nil
+        cachedScreenPresentation = nil
+    }
+
+    /// The last size this controller successfully pushed to a PTY. Survives a
+    /// `rebind`, so a replacement process can be told the real dimensions even
+    /// when no renderer happens to be mounted at that instant.
+    public private(set) var lastAppliedSize: PTYSize?
 
     /// Rebinds the controller to a replacement PTY process (e.g. after a non-destructive
     /// tmux reattach) while keeping existing TerminalViews, fonts, and scrollback warm.
@@ -240,14 +411,31 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         self.outputTask?.cancel()
         self.hasSentInitialResize = false
         consumeOutput()
-        if let currentView = terminalViews[authoritativePresentation], currentView.window != nil, currentView.frame.width > 0, currentView.frame.height > 0 {
+
+        // Re-send the size unconditionally. The replacement process was
+        // launched at whatever default the manager guessed, and the renderer
+        // it is now attached to will not report its size again unless the
+        // *renderer's* dimensions change — which a reattach never does. Prefer
+        // a live measurement, but fall back to the last size we applied so a
+        // reattach that happens while nothing is mounted (the common case for
+        // a background session) still lands.
+        let measured: PTYSize? = {
+            guard let currentView = terminalViews[authoritativePresentation],
+                  currentView.window != nil,
+                  currentView.frame.width > 0,
+                  currentView.frame.height > 0
+            else { return nil }
             let dims = currentView.getTerminal().getDims()
-            if dims.cols >= Self.minimumUsableCols, dims.rows >= Self.minimumUsableRows {
-                let size = PTYSize(cols: dims.cols, rows: dims.rows)
-                process.resize(size)
-                onPTYResize?(size)
-            }
-        }
+            guard dims.cols >= Self.minimumUsableCols, dims.rows >= Self.minimumUsableRows else { return nil }
+            return PTYSize(cols: dims.cols, rows: dims.rows)
+        }()
+
+        guard let size = measured ?? lastAppliedSize else { return }
+        TerminalPerfLog.event("rebind resize \(accessibilityIdentifier) → \(size.cols)x\(size.rows)")
+        lastAppliedSize = size
+        hasSentInitialResize = true
+        process.resize(size)
+        onPTYResize?(size)
     }
 
     /// Applies host-app presentation preferences without recreating the
@@ -382,8 +570,8 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     deinit {
         outputTask?.cancel()
         accessibilityTask?.cancel()
-        reflowTask?.cancel()
-        resizeTask?.cancel()
+        for task in reflowTasks.values { task.cancel() }
+        for task in resizeTasks.values { task.cancel() }
     }
 
     private func consumeOutput() {
@@ -417,6 +605,18 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         outputFlushCount += 1
         appendToReplayBuffer(data)
         let bytes = [UInt8](data)
+
+        // Every renderer is fed, including ones that are not currently mounted.
+        //
+        // Skipping the unmounted ones looks like an easy win — a session shown
+        // both full-screen and in the grid keeps two emulators alive forever,
+        // so this parses every byte twice — but it is the wrong trade. A
+        // renderer that misses output has to be rebuilt by replaying the whole
+        // transcript before it can be shown, and that replay is O(replay
+        // buffer) on the main actor, where feeding is O(bytes that just
+        // arrived). Since a grid tile is unmounted and remounted every time it
+        // scrolls through a `LazyVGrid`, skipping would trade a small
+        // continuous cost for a 2 MB stall on every scroll.
         TerminalPerfLog.measure(
             "TerminalController.feed",
             "\(accessibilityIdentifier) \(bytes.count)B → \(terminalViews.count) renderer(s)"
@@ -425,6 +625,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
                 view.feed(byteArray: bytes[...])
             }
         }
+        invalidateScreenText()
         outputHandler(data)
         scheduleAccessibleContentPublication()
     }
@@ -513,27 +714,18 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         // print much at the wrong one. Later calls, from a live grid reflow,
         // still wait for pane layout to settle so we don't send a stream of
         // transient dimensions mid-drag.
-        resizeTask?.cancel()
         TerminalPerfLog.event("sizeChanged \(accessibilityIdentifier) → \(newCols)x\(newRows) initial=\(!hasSentInitialResize)")
-        let size = PTYSize(cols: newCols, rows: newRows)
-        guard hasSentInitialResize else {
-            hasSentInitialResize = true
-            process.resize(size)
-            Task { @MainActor [weak self] in
-                self?.reflowOnDisplay(presentation)
-                self?.onPTYResize?(size)
-            }
-            return
-        }
-        resizeTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(150))
-            guard !Task.isCancelled, let self else { return }
-            TerminalPerfLog.event("PTY resize \(self.accessibilityIdentifier) → \(newCols)x\(newRows)")
-            self.process.resize(size)
-            await MainActor.run {
-                self.reflowOnDisplay(presentation)
-                self.onPTYResize?(size)
-            }
+        // SwiftTerm calls this on the main thread, from inside `setFrameSize`.
+        // `applyResize` is `@MainActor` and everything it touches — including
+        // the `process` reference that `rebind` replaces — is only ever read
+        // there, which is what keeps this off the unsynchronized path a bare
+        // `Task` used to take.
+        MainActor.assumeIsolated {
+            // The emulator has already re-laid out its buffer for the new
+            // dimensions by the time it tells us, so the memoized screen text
+            // is stale even if no new bytes have arrived.
+            invalidateScreenText()
+            applyResize(PTYSize(cols: newCols, rows: newRows), for: presentation)
         }
     }
 

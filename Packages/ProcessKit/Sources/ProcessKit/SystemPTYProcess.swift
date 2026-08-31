@@ -79,6 +79,12 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
     private var masterFD: Int32 = -1
     private var masterReadSource: DispatchSourceRead?
 
+    /// Ceiling on the post-exit drain in `handleChildExit`, so a pty that keeps
+    /// producing (a surviving descendant still holds the slave) cannot stop the
+    /// teardown that follows it.
+    private static let maximumDrainBytes = 4 * 1_024 * 1_024
+    private static let maximumDrainReads = 4_096
+
     public init() {}
 
     deinit {
@@ -223,15 +229,34 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
         // before the read source's event handler has ever fired. Cancelling
         // the source then permanently discards the pending read — the child's
         // final output is lost and its stream ends empty. Drain whatever the
-        // child wrote before tearing the source down; once the child is gone,
-        // reads on the pty master return EIO immediately, so this never
-        // blocks. (An in-flight read event consumes distinct bytes, so
-        // concurrent reads cannot duplicate delivery.)
+        // child wrote before tearing the source down. (An in-flight read event
+        // consumes distinct bytes, so concurrent reads cannot duplicate
+        // delivery.)
+        //
+        // `forkpty` hands back a *blocking* master, and reads on it only
+        // return EIO once nothing holds the slave open. The exited child's own
+        // surviving descendants still do, so a blocking drain here could park
+        // this thread forever — and with it `broadcaster.finish()` and the
+        // termination callback below, leaving the session displayed as running
+        // for the rest of the app's life. Switch to non-blocking first so the
+        // loop ends at EAGAIN, and bound it regardless.
         if fd >= 0 {
+            let previousFlags = fcntl(fd, F_GETFL, 0)
+            if previousFlags >= 0 {
+                _ = fcntl(fd, F_SETFL, previousFlags | O_NONBLOCK)
+            }
             var buffer = [UInt8](repeating: 0, count: 65536)
-            while true {
+            var drained = 0
+            // Bounded on reads as well as bytes: `drained` does not advance on
+            // an `EINTR` retry, so a byte budget alone would not terminate the
+            // loop if the signal kept arriving.
+            var reads = 0
+            while drained < Self.maximumDrainBytes, reads < Self.maximumDrainReads {
+                reads += 1
                 let n = Darwin.read(fd, &buffer, buffer.count)
+                if n < 0 && errno == EINTR { continue }
                 guard n > 0 else { break }
+                drained += n
                 broadcaster.broadcast(Data(buffer[..<n]))
             }
         }
@@ -267,35 +292,72 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
         array.deallocate()
     }
 
+    /// Runs `body` on a private duplicate of the pty master, or returns `nil`
+    /// when the process is no longer running.
+    ///
+    /// Reading `masterFD` under the lock and then using it after unlocking is
+    /// a use-after-close waiting to happen: `handleChildExit` can close the
+    /// descriptor in that window, and the number is then immediately available
+    /// for reuse by any `open` anywhere in the process. A `write` that lands
+    /// after such a reuse delivers the user's keystrokes into an unrelated
+    /// file — plausibly the session database, which this app writes to
+    /// constantly.
+    ///
+    /// `dup` under the lock removes the window without holding the lock across
+    /// the syscall, which matters because a write to a pty whose reader has
+    /// stopped can block indefinitely and must not stall `resize` or child
+    /// teardown behind it.
+    private func withDuplicatedMaster<T>(_ body: (Int32) -> T) -> T? {
+        stateLock.lock()
+        let fd = masterFD
+        guard fd >= 0 else {
+            stateLock.unlock()
+            return nil
+        }
+        let duplicate = dup(fd)
+        stateLock.unlock()
+        guard duplicate >= 0 else { return nil }
+        defer { close(duplicate) }
+        return body(duplicate)
+    }
+
     public func send(input: Data) {
+        stateLock.lock()
+        storedLastInputAt = Date()
+        stateLock.unlock()
+
         // Write on a background queue so the main thread never blocks.
         DispatchQueue.global(qos: .utility).async {
-            let fd: Int32
-            self.stateLock.lock()
-            fd = self.masterFD
-            self.stateLock.unlock()
-            guard fd >= 0 else { return }
-            input.withUnsafeBytes { raw in
-                // Retry until all bytes are written (or EINTR/EAGAIN).
-                let count = raw.count
-                var wrote = 0
-                while wrote < count {
-                    let n = write(fd, raw.baseAddress! + wrote, count - wrote)
-                    if n < 0 {
-                        if errno == EINTR { continue }
-                        if errno == EAGAIN { usleep(1000); continue }
-                        break
+            _ = self.withDuplicatedMaster { fd in
+                input.withUnsafeBytes { raw in
+                    // Retry until all bytes are written (or EINTR/EAGAIN).
+                    let count = raw.count
+                    var wrote = 0
+                    var stalls = 0
+                    while wrote < count {
+                        let n = write(fd, raw.baseAddress! + wrote, count - wrote)
+                        if n < 0 {
+                            if errno == EINTR { continue }
+                            if errno == EAGAIN {
+                                // Only reachable if the descriptor is in
+                                // non-blocking mode; bounded at ~1s so a pty
+                                // nobody is draining abandons the write instead
+                                // of retrying forever.
+                                stalls += 1
+                                guard stalls < 1_000 else { break }
+                                usleep(1000)
+                                continue
+                            }
+                            break
+                        }
+                        wrote += n
                     }
-                    wrote += n
                 }
             }
         }
     }
 
     public func resize(_ size: PTYSize) {
-        stateLock.lock()
-        let fd = masterFD
-        guard fd >= 0 else { stateLock.unlock(); return }
         // Validate rows/cols to avoid UInt16 trap on out-of-range values.
         let rows = min(max(Int(size.rows), 0), 65535)
         let cols = min(max(Int(size.cols), 0), 65535)
@@ -305,8 +367,13 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
             ws_xpixel: 0,
             ws_ypixel: 0
         )
+        let applied = withDuplicatedMaster { fd in
+            ioctl(fd, TIOCSWINSZ, &ws) == 0
+        }
+        guard applied == true else { return }
+        stateLock.lock()
+        storedLastResizeAt = Date()
         stateLock.unlock()
-        _ = ioctl(fd, TIOCSWINSZ, &ws)
     }
 
     public func terminate() {

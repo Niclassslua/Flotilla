@@ -16,6 +16,7 @@ public final class SessionScreenMonitor: @unchecked Sendable {
     private let reader: SessionScreenReading
     private let heuristic: TerminalScreenHeuristic
     private let pollInterval: Duration
+    private let maximumPollInterval: Duration
     private let continuation: AsyncStream<SessionStatusObservation>.Continuation
     public let observationStream: AsyncStream<SessionStatusObservation>
     private let taskLock = NSLock()
@@ -25,12 +26,14 @@ public final class SessionScreenMonitor: @unchecked Sendable {
         sessionID: UUID,
         reader: SessionScreenReading,
         heuristic: TerminalScreenHeuristic = TerminalScreenHeuristic(),
-        pollInterval: Duration = .milliseconds(900)
+        pollInterval: Duration = .milliseconds(900),
+        maximumPollInterval: Duration = .milliseconds(3600)
     ) {
         self.sessionID = sessionID
         self.reader = reader
         self.heuristic = heuristic
         self.pollInterval = pollInterval
+        self.maximumPollInterval = maximumPollInterval
         var continuation: AsyncStream<SessionStatusObservation>.Continuation!
         self.observationStream = AsyncStream { continuation = $0 }
         self.continuation = continuation
@@ -44,11 +47,24 @@ public final class SessionScreenMonitor: @unchecked Sendable {
         let reader = self.reader
         let heuristic = self.heuristic
         let pollInterval = self.pollInterval
+        let maximumPollInterval = self.maximumPollInterval
         let continuation = self.continuation
 
         task = Task {
             var previousScreen: String?
             var previousObservation: SessionStatusObservation?
+            // Backs off while nothing on screen is moving, and snaps straight
+            // back to the base interval the moment something does.
+            //
+            // Reading a screen is not free: for a session whose terminal is
+            // mounted it serializes the emulator buffer on the main actor, and
+            // for one that has never been opened it spawns a `tmux
+            // capture-pane` subprocess. At a fixed 900 ms that is a permanent
+            // per-session cost paid mostly to observe that an idle agent is
+            // still idle. An agent that is working redraws constantly, so the
+            // case this slows down is exactly the case where there is nothing
+            // to report.
+            var interval = pollInterval
 
             while !Task.isCancelled {
                 if let screen = await reader.readScreen(for: sessionID) {
@@ -57,14 +73,17 @@ public final class SessionScreenMonitor: @unchecked Sendable {
                     // nothing about what the agent is doing.
                     if screen != previousScreen {
                         previousScreen = screen
+                        interval = pollInterval
                         let observation = heuristic.observation(forScreen: screen)
                         if observation != previousObservation {
                             previousObservation = observation
                             continuation.yield(observation)
                         }
+                    } else {
+                        interval = min(interval * 2, maximumPollInterval)
                     }
                 }
-                try? await Task.sleep(for: pollInterval)
+                try? await Task.sleep(for: interval)
             }
         }
     }

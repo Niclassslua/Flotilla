@@ -37,6 +37,7 @@ final class SessionProcessManager {
     private let hookConfigurationWriter: any HookConfiguring
     private let hookSupportDirectory: URL
     private var intentionallyTerminating = Set<UUID>()
+    private let resizeVerification: ResizeVerificationPolicy
     private var tmuxProbeCache: (usable: Bool, probedAt: Date)?
     private static let tmuxProbeCacheLifetime: TimeInterval = 5
     var eventHandler: ((SessionProcessEvent) -> Void)?
@@ -82,7 +83,8 @@ final class SessionProcessManager {
         conversationOwnershipChecker: any AgentConversationOwnershipChecking = ProcessAgentConversationOwnershipChecker(),
         hookConfigurationWriter: any HookConfiguring = HookConfigurationWriter(),
         hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
-        gitService: any GitServiceProtocol = GitService()
+        gitService: any GitServiceProtocol = GitService(),
+        resizeVerification: ResizeVerificationPolicy = .default
     ) {
         self.locator = locator
         self.gitService = gitService
@@ -97,6 +99,19 @@ final class SessionProcessManager {
         self.conversationOwnershipChecker = conversationOwnershipChecker
         self.hookConfigurationWriter = hookConfigurationWriter
         self.hookSupportDirectory = hookSupportDirectory
+        self.resizeVerification = resizeVerification
+    }
+
+    /// How patiently a resize is verified against tmux before the client is
+    /// reattached. Injectable so tests can exercise the recovery path without
+    /// waiting out the production backoff.
+    struct ResizeVerificationPolicy: Sendable {
+        /// Number of probes before a disagreement is treated as real.
+        var attempts: Int
+        /// Delay before the first probe; doubled for each subsequent one.
+        var baseDelay: Duration
+
+        static let `default` = ResizeVerificationPolicy(attempts: 4, baseDelay: .milliseconds(250))
     }
 
     func process(for sessionID: UUID) -> PTYProcessProtocol? {
@@ -298,9 +313,14 @@ final class SessionProcessManager {
         )
 
         let process = processFactory.makeProcess()
-        // Standard initial terminal dimensions for background / unmounted launches.
-        // `TerminalController.sizeChanged` updates this to measured geometry upon mount.
-        let size = PTYSize(cols: 100, rows: 30)
+        // Prefer the size this session was last actually displayed at. Falling
+        // back to the constant on every launch is what made resize recovery
+        // self-defeating: a reattach triggered by a size mismatch relaunched at
+        // 100 × 30, so the *next* verification mismatched too, and the second
+        // one exhausted the rate limit and stranded the session at that size.
+        // Reattaching at the size we already know keeps the recovery
+        // non-destructive, which is the whole point of it.
+        let size = latestExpectedSizes[session.id] ?? PTYSize(cols: 100, rows: 30)
         process.terminationHandler = { [weak self, weak process] exitCode in
             Task { @MainActor [weak self] in
                 guard let self, let process else { return }
@@ -385,8 +405,9 @@ final class SessionProcessManager {
     private var latestExpectedSizes: [UUID: PTYSize] = [:]
 
     /// Verifies whether tmux registered the resize that was sent to the outer PTY.
-    /// If tmux's client size does not match after debounce, non-destructively
-    /// reattaches the client up to a rate limit of 2 attempts per minute per session.
+    /// If tmux's client size still does not match after several probes, the
+    /// client is non-destructively reattached, up to a rate limit of 2
+    /// attempts per minute per session.
     func verifyAndRecoverResize(
         sessionID: UUID,
         expectedSize: PTYSize,
@@ -395,35 +416,53 @@ final class SessionProcessManager {
         guard let tmuxExecutable = tmuxWrappedSessions[sessionID] else { return }
         let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)
         let probe = tmuxClientProbe
+        let policy = resizeVerification
         latestExpectedSizes[sessionID] = expectedSize
 
         verifyResizeTasks[sessionID]?.cancel()
         verifyResizeTasks[sessionID] = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled, let self, self.latestExpectedSizes[sessionID] == expectedSize else { return }
+            let log = Logger(subsystem: "com.niclassslua.flotilla", category: "TerminalResize")
+            var lastReported: PTYSize?
 
-            let reportedSize = await Task.detached(priority: .utility) {
-                probe.clientSize(sessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
-            }.value
+            for attempt in 0..<policy.attempts {
+                // Doubling backoff — 250, 500, 1000, 2000 ms by default —
+                // generous enough that a busy machine is not mistaken for a
+                // wedged tmux client.
+                try? await Task.sleep(for: policy.baseDelay * (1 << attempt))
+                guard !Task.isCancelled,
+                      let self,
+                      self.latestExpectedSizes[sessionID] == expectedSize
+                else { return }
 
-            guard !Task.isCancelled, self.latestExpectedSizes[sessionID] == expectedSize else { return }
+                let reportedSize = await Task.detached(priority: .utility) {
+                    probe.clientSize(sessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
+                }.value
 
-            if let reportedSize {
-                Logger(subsystem: "com.niclassslua.flotilla", category: "TerminalResize").notice(
-                    "Resize check for \(sessionID): expected \(expectedSize.cols)x\(expectedSize.rows), tmux reported \(reportedSize.cols)x\(reportedSize.rows)"
-                )
-                if reportedSize.cols != expectedSize.cols || reportedSize.rows != expectedSize.rows {
-                    Logger(subsystem: "com.niclassslua.flotilla", category: "TerminalResize").error(
-                        "Resize mismatch for \(sessionID): expected \(expectedSize.cols)x\(expectedSize.rows), tmux reported \(reportedSize.cols)x\(reportedSize.rows) — triggering reattach recovery"
+                guard !Task.isCancelled, self.latestExpectedSizes[sessionID] == expectedSize else { return }
+
+                // No client attached, or the probe failed — that is not
+                // evidence of a mismatch, so it is not grounds for a reattach.
+                guard let reportedSize else { return }
+                lastReported = reportedSize
+
+                if reportedSize == expectedSize {
+                    log.notice(
+                        "Resize check for \(sessionID): settled at \(reportedSize.cols)x\(reportedSize.rows) after \(attempt + 1) probe(s)"
                     )
-                    await MainActor.run {
-                        self.handleResizeMismatch(
-                            sessionID: sessionID,
-                            expectedSize: expectedSize,
-                            onRecoveryFailure: onRecoveryFailure
-                        )
-                    }
+                    return
                 }
+            }
+
+            guard let lastReported, let self else { return }
+            log.error(
+                "Resize mismatch for \(sessionID): expected \(expectedSize.cols)x\(expectedSize.rows), tmux still reports \(lastReported.cols)x\(lastReported.rows) after \(policy.attempts) probes — triggering reattach recovery"
+            )
+            await MainActor.run {
+                self.handleResizeMismatch(
+                    sessionID: sessionID,
+                    expectedSize: expectedSize,
+                    onRecoveryFailure: onRecoveryFailure
+                )
             }
         }
     }

@@ -821,9 +821,20 @@ private final class MockTmuxClientProbe: TmuxClientProbing, @unchecked Sendable 
         return _refreshClientCalls
     }
 
+    /// Sizes returned for the first N probes of a session, before
+    /// `stubbedSizes` takes over — models tmux catching up asynchronously
+    /// after a `SIGWINCH` rather than answering correctly on the first ask.
+    var settlingSizes: [String: [PTYSize]] = [:]
+
     func clientSize(sessionNamed name: String, tmuxExecutable: URL) -> PTYSize? {
         lock.lock()
         _clientSizeCalls.append((name, tmuxExecutable))
+        if var queued = settlingSizes[name], !queued.isEmpty {
+            let next = queued.removeFirst()
+            settlingSizes[name] = queued
+            lock.unlock()
+            return next
+        }
         lock.unlock()
         return stubbedSizes[name]
     }
@@ -837,9 +848,14 @@ private final class MockTmuxClientProbe: TmuxClientProbing, @unchecked Sendable 
 
 @MainActor
 final class SessionProcessManagerResizeRecoveryTests: XCTestCase {
+    /// Production re-probes with a doubling backoff before believing tmux
+    /// disagrees, because a false mismatch costs a PTY relaunch. These tests
+    /// are about *what* recovery does, not how patiently it waits, so they run
+    /// the same logic with the delays collapsed.
     private func makeManager(
         factory: RecordingProcessFactory,
-        probe: MockTmuxClientProbe
+        probe: MockTmuxClientProbe,
+        attempts: Int = 2
     ) -> SessionProcessManager {
         SessionProcessManager(
             locator: FixedExecutableLocator(
@@ -848,7 +864,8 @@ final class SessionProcessManagerResizeRecoveryTests: XCTestCase {
             ),
             processFactory: factory,
             tmuxServerProbe: StubTmuxServerProbe(usable: true),
-            tmuxClientProbe: probe
+            tmuxClientProbe: probe,
+            resizeVerification: .init(attempts: attempts, baseDelay: .milliseconds(20))
         )
     }
 
@@ -959,6 +976,81 @@ final class SessionProcessManagerResizeRecoveryTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(350))
         XCTAssertEqual(factory.processes.count, 3, "Third attempt within 60s must be capped")
         XCTAssertNotNil(failureMessage, "Failure message must be surfaced when recovery limit is reached")
+    }
+
+    /// The bug this guards: a single probe 250 ms after the resize often
+    /// caught tmux mid-update, and the "recovery" for that was to tear down
+    /// and relaunch the PTY — which came back at the hardcoded launch size, so
+    /// the next probe mismatched too and the rate limit stranded the session.
+    /// A size that settles must never cost a reattach.
+    func testTransientMismatchThatSettlesDoesNotReattach() async throws {
+        let factory = RecordingProcessFactory()
+        let probe = MockTmuxClientProbe()
+        let manager = makeManager(factory: factory, probe: probe, attempts: 4)
+
+        let session = Session(
+            title: "Settles",
+            goal: "Test",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        let sessionName = TmuxSessionWrapping.sessionName(for: session.id)
+        let expected = PTYSize(cols: 199, rows: 47)
+        // tmux reports the old size once, then catches up.
+        probe.settlingSizes[sessionName] = [PTYSize(cols: 80, rows: 25)]
+        probe.stubbedSizes[sessionName] = expected
+
+        let initialProcess = try manager.start(session: session, deliverGoal: false)
+
+        var failureMessage: String?
+        manager.verifyAndRecoverResize(sessionID: session.id, expectedSize: expected) { msg in
+            failureMessage = msg
+        }
+        try await Task.sleep(for: .milliseconds(500))
+
+        XCTAssertGreaterThanOrEqual(probe.clientSizeCalls.count, 2, "A disagreeing probe must be retried, not believed")
+        XCTAssertEqual(factory.processes.count, 1, "A size that settles must not trigger a reattach")
+        XCTAssertTrue(manager.process(for: session.id) === initialProcess)
+        XCTAssertNil(failureMessage)
+    }
+
+    /// A reattach that relaunches at the hardcoded default guarantees the next
+    /// verification mismatches, which is what turned one bad probe into a
+    /// permanently mis-sized session.
+    func testReattachRelaunchesAtTheLastVerifiedSizeNotTheDefault() async throws {
+        let factory = RecordingProcessFactory()
+        let probe = MockTmuxClientProbe()
+        let manager = makeManager(factory: factory, probe: probe)
+
+        let session = Session(
+            title: "ReattachSize",
+            goal: "Test",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        let sessionName = TmuxSessionWrapping.sessionName(for: session.id)
+        probe.stubbedSizes[sessionName] = PTYSize(cols: 80, rows: 25)
+        let expected = PTYSize(cols: 199, rows: 47)
+
+        _ = try manager.start(session: session, deliverGoal: false)
+        XCTAssertEqual(factory.processes.first?.lastSize, PTYSize(cols: 100, rows: 30))
+
+        manager.verifyAndRecoverResize(sessionID: session.id, expectedSize: expected)
+        for _ in 0..<40 {
+            if factory.processes.count > 1 { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(factory.processes.count, 2)
+        XCTAssertEqual(
+            factory.processes.last?.lastSize,
+            expected,
+            "The replacement PTY must start at the size we are trying to reach, not the launch default"
+        )
     }
 
     func testRefreshTmuxClientCallsProbe() async throws {

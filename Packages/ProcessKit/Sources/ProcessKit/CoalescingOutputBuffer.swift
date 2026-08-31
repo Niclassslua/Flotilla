@@ -13,8 +13,35 @@ import Foundation
 public final class CoalescingOutputBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var pending = Data()
+    private let capacity: Int
+    private var droppedBytes = 0
 
-    public init() {}
+    /// Ceiling on how much unflushed output is held.
+    ///
+    /// Without one this buffer is an amplifier for main-thread stalls: the PTY
+    /// reader runs on a background queue and the drain runs on the main actor,
+    /// so anything that blocks the main actor lets `pending` grow without
+    /// bound, and the flush that eventually runs then feeds one enormous byte
+    /// array to the emulator — blocking the main actor for longer still.
+    ///
+    /// Dropping the oldest bytes is the right trade. The emulator can only
+    /// display a screenful, everything here is on its way to being overdrawn
+    /// within milliseconds, and durable history is `TerminalController`'s
+    /// replay buffer and the persisted scrollback, neither of which goes
+    /// through this path.
+    public static let defaultCapacity = 4 * 1_024 * 1_024
+
+    public init(capacity: Int = CoalescingOutputBuffer.defaultCapacity) {
+        self.capacity = max(capacity, 64 * 1_024)
+    }
+
+    /// Total bytes discarded because the buffer was over capacity when they
+    /// arrived. Non-zero means the main actor could not keep up.
+    public var totalDroppedBytes: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return droppedBytes
+    }
 
     /// Appends `data` to the pending buffer. Returns `true` only when this
     /// append is the first since the last `drain()` — the caller should
@@ -27,6 +54,15 @@ public final class CoalescingOutputBuffer: @unchecked Sendable {
         defer { lock.unlock() }
         let shouldSchedule = pending.isEmpty
         pending.append(data)
+        if pending.count > capacity {
+            // Keep the newest `capacity` bytes: they are the ones that decide
+            // what ends up on screen. Trimming to a whole capacity's worth
+            // rather than back to a high-water mark keeps this amortized —
+            // a sustained overflow costs one copy per capacity of output.
+            let overflow = pending.count - capacity
+            droppedBytes += overflow
+            pending = Data(pending.suffix(capacity))
+        }
         return shouldSchedule
     }
 

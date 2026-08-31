@@ -56,6 +56,19 @@ final class TerminalManager {
         inputHandler: @escaping @MainActor @Sendable () -> Void
     ) -> TerminalController {
         if let existing = controllers[session.id] {
+            // The cached controller outlives the view that created it, and the
+            // focused session view and a grid tile ask for the same one. Adopt
+            // the caller's closures rather than silently keeping whichever
+            // mount happened to be first — and follow renames, so the
+            // accessibility identifier UI tests look terminals up by does not
+            // stay pinned to the session's original title.
+            existing.updateHandlers(
+                accessibilityIdentifier: "TerminalView-\(session.title)",
+                customReflowHandler: customReflowHandler,
+                onPTYResize: onPTYResize,
+                outputHandler: outputHandler,
+                inputHandler: inputHandler
+            )
             if existing.processID != process.id {
                 existing.rebind(process: process)
             }

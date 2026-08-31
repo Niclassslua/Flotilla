@@ -800,25 +800,42 @@ final class AppStore {
     /// the row it's about to persist) or the repository.
     func appendTerminalOutput(_ data: Data, toSessionID sessionID: UUID) {
         guard !data.isEmpty, sessions.contains(where: { $0.id == sessionID }) else { return }
-        var buffer = liveScrollback[sessionID] ?? Data()
-        buffer.append(data)
+        // Appended in place, through the dictionary's own storage. Lifting the
+        // `Data` into a local `var` first gives its buffer a second reference,
+        // so the append can never be in-place and copies the whole scrollback
+        // — up to 320 KB — on every flush, on the main actor.
+        liveScrollback[sessionID, default: Data()].append(data)
         // Trim with slack rather than back down to the cap on every chunk:
         // turns an O(chunks) sequence of front-removals into an amortized
         // O(1) one, at the cost of briefly overshooting the cap.
-        if buffer.count > Self.maximumScrollbackBytes + Self.scrollbackTrimSlack {
-            buffer = Data(buffer.suffix(Self.maximumScrollbackBytes))
+        if let buffer = liveScrollback[sessionID],
+           buffer.count > Self.maximumScrollbackBytes + Self.scrollbackTrimSlack {
+            // Binding `buffer` here is fine where binding it above was not:
+            // `suffix` allocates a new value either way, so there is no
+            // in-place append for a second reference to spoil.
+            liveScrollback[sessionID] = Data(buffer.suffix(Self.maximumScrollbackBytes))
         }
-        liveScrollback[sessionID] = buffer
         scrollbackSaveTasks[sessionID]?.cancel()
         scrollbackSaveTasks[sessionID] = Task { [weak self] in
             try? await Task.sleep(for: Self.scrollbackSaveDebounce)
             guard !Task.isCancelled, let self else { return }
             guard let index = self.sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-            do {
-                try self.repository.save(self.mergingLiveScrollback(self.sessions[index]))
-            } catch {
-                self.lastOperationError = "Terminal history could not be saved: \(error.localizedDescription)"
-            }
+            let snapshot = self.mergingLiveScrollback(self.sessions[index])
+            let repository = self.repository
+            // Off the main actor: `AppStore` is `@MainActor`, so an unstructured
+            // `Task` here inherits that isolation, and `save` is a synchronous
+            // fsyncing GRDB write. That put a 256 KB blob write on the main
+            // thread every two seconds for every session producing output.
+            let failure: String? = await Task.detached(priority: .utility) {
+                do {
+                    try repository.save(snapshot)
+                    return nil
+                } catch {
+                    return error.localizedDescription
+                }
+            }.value
+            guard !Task.isCancelled, let failure else { return }
+            self.lastOperationError = "Terminal history could not be saved: \(failure)"
         }
     }
 
@@ -830,11 +847,14 @@ final class AppStore {
             task.cancel()
         }
         scrollbackSaveTasks.removeAll()
-        for session in sessions {
-            if liveScrollback[session.id] != nil {
-                try? repository.save(mergingLiveScrollback(session))
-            }
-        }
+        // One transaction for the whole fleet. This runs on the main thread on
+        // purpose — the app is terminating and the write has to complete before
+        // it does — so the cost of doing it per session was paid directly in
+        // how long the window took to close.
+        let pending = sessions
+            .filter { liveScrollback[$0.id] != nil }
+            .map(mergingLiveScrollback)
+        try? repository.save(pending)
     }
 
     func restartSession(sessionID: UUID) {

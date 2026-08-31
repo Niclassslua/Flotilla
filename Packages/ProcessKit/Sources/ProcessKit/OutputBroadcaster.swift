@@ -66,9 +66,8 @@ final class OutputBroadcaster: @unchecked Sendable {
         lock.lock()
         history.append(data)
         historyByteSize += data.count
-        while historyByteSize > maxHistoryBytes, !history.isEmpty {
-            let removed = history.removeFirst()
-            historyByteSize = max(0, historyByteSize - removed.count)
+        if historyByteSize > maxHistoryBytes {
+            trimHistoryLocked()
         }
         let subscribers = Array(continuations.values)
         lock.unlock()
@@ -76,6 +75,33 @@ final class OutputBroadcaster: @unchecked Sendable {
             continuation.yield(data)
         }
     }
+
+    /// Drops the oldest chunks in one pass rather than one `removeFirst()` at
+    /// a time.
+    ///
+    /// `Array.removeFirst()` is O(n): it shifts every remaining element down.
+    /// A TUI produces small chunks, so at 256 KB of history this array holds
+    /// thousands of them and the old loop paid a multi-kilobyte memmove on
+    /// *every* PTY read, for a history that in this app has no reader — the
+    /// sole subscriber (`TerminalController.consumeOutput`) subscribes inside
+    /// `init`, before the process can emit anything. Slicing once, with slack,
+    /// makes the amortized cost constant.
+    private func trimHistoryLocked() {
+        var dropped = 0
+        var index = 0
+        let target = historyByteSize - maxHistoryBytes + Self.trimSlackBytes
+        while index < history.count, dropped < target {
+            dropped += history[index].count
+            index += 1
+        }
+        guard index > 0 else { return }
+        history.removeFirst(index)
+        historyByteSize = max(0, historyByteSize - dropped)
+    }
+
+    /// Trim past the cap so trimming happens once per slack's worth of output
+    /// instead of on every chunk.
+    private static let trimSlackBytes = 64 * 1_024
 
     func finish() {
         lock.lock()
