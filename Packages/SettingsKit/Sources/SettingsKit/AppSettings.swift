@@ -308,6 +308,12 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
     /// Shows a text label under each sidebar rail icon (Overview/Sessions/
     /// Projects/New) instead of icon-only with a hover tooltip.
     public var sidebarRailLabels: Bool
+    /// Which slice of the fleet the Sessions destination is showing, as
+    /// chosen in the session group bar: `"all"`, `"general"`, or a project's
+    /// UUID string. Stored as a string rather than an enum so SettingsKit
+    /// stays free of the app's navigation types — `SessionGroup` in the app
+    /// layer owns the parsing.
+    public var sessionGroup: String
 
     public init(
         selectedSessionID: String? = nil,
@@ -318,7 +324,8 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         gridSelectedSessionIDs: [String] = [],
         gridDimEnabled: Bool = false,
         gridDimIntensity: Double = 0.4,
-        sidebarRailLabels: Bool = false
+        sidebarRailLabels: Bool = false,
+        sessionGroup: String = "all"
     ) {
         self.selectedSessionID = selectedSessionID
         self.viewMode = viewMode
@@ -329,11 +336,13 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         self.gridDimEnabled = gridDimEnabled
         self.gridDimIntensity = gridDimIntensity
         self.sidebarRailLabels = sidebarRailLabels
+        self.sessionGroup = sessionGroup
     }
 
     private enum CodingKeys: String, CodingKey {
         case selectedSessionID, viewMode, detailPanel, gridColumnCount, gridRowCount
         case gridSelectedSessionIDs, gridDimEnabled, gridDimIntensity, sidebarRailLabels
+        case sessionGroup
     }
 
     public init(from decoder: Decoder) throws {
@@ -347,6 +356,7 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         gridDimEnabled = try container.decodeIfPresent(Bool.self, forKey: .gridDimEnabled) ?? false
         gridDimIntensity = try container.decodeIfPresent(Double.self, forKey: .gridDimIntensity) ?? 0.4
         sidebarRailLabels = try container.decodeIfPresent(Bool.self, forKey: .sidebarRailLabels) ?? false
+        sessionGroup = try container.decodeIfPresent(String.self, forKey: .sessionGroup) ?? "all"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -360,6 +370,7 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         try container.encodeIfPresent(gridDimEnabled, forKey: .gridDimEnabled)
         try container.encodeIfPresent(gridDimIntensity, forKey: .gridDimIntensity)
         try container.encodeIfPresent(sidebarRailLabels, forKey: .sidebarRailLabels)
+        try container.encodeIfPresent(sessionGroup, forKey: .sessionGroup)
     }
 
 }

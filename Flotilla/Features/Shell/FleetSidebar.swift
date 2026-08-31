@@ -178,7 +178,7 @@ struct FleetSessionList: View {
             }
 
             if !filtered.generalSessions.isEmpty {
-                Section("Unassigned") {
+                Section("General") {
                     ForEach(filtered.generalSessions) { session in
                         sessionRow(session)
                     }

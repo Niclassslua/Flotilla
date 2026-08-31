@@ -78,23 +78,27 @@ private struct MissionControlTile: View {
         .sessionTileSurface(session: session, isActive: isActive, actions: actions)
     }
 
+    /// The same `SessionBar` the focused session uses, in its `.tile`
+    /// variant — so a session reads the same way in a tile as it does full
+    /// screen, and the 28pt budget is unchanged. The bar handles its own
+    /// truncation order; what it cannot fit is the worktree name, then the
+    /// branch.
+    ///
+    /// Tap-to-activate stays on the bar itself, as it was on the header this
+    /// replaces: SwiftUI gives the bar's own buttons and rename field the
+    /// click first, and a tap target placed behind the bar would never see
+    /// one at all, since the bar paints an opaque surface.
     private var header: some View {
-        HStack(spacing: 8) {
-            TileTitleLockup(session: session, showsProviderName: false)
-
-            Spacer(minLength: 8)
-
-            // Meta collapses before the title does: at narrow widths the
-            // branch name is the first thing worth losing.
-            TileMetaRow(session: session, store: store, showsElapsed: false)
-                .layoutPriority(-1)
-                .frame(maxWidth: 160)
-
-            TileFocusButton(session: session, action: actions.onOpenSession)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .background(FlotillaColors.surface)
+        SessionBar(
+            session: session,
+            store: store,
+            variant: .tile,
+            actions: SessionBarActions(
+                onRename: actions.onRename,
+                onFocus: actions.onOpenSession,
+                onRemoveFromGrid: actions.onRemoveFromGrid
+            )
+        )
         .contentShape(Rectangle())
         .onTapGesture(perform: actions.onActivate)
     }

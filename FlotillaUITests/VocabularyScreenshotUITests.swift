@@ -253,21 +253,16 @@ final class VocabularyScreenshotUITests: XCTestCase {
         click(app, "Sidebar.AllSessions")
     }
 
+    /// Grid and Board are their own always-present buttons in the global bar
+    /// now, not segments of a picker that only appeared in some scopes.
     private func choosePresentation(_ app: XCUIApplication, _ title: String) {
-        let radio = app.radioButtons[title].firstMatch
-        if fastWait(radio, timeout: 2) {
-            radio.click()
+        let button = element(app, "Toolbar.Show\(title)")
+        if fastWait(button, timeout: 3) {
+            button.click()
             settle(0.6)
             return
         }
-
-        let segment = element(app, "Toolbar.PresentationPicker").buttons[title].firstMatch
-        if fastWait(segment, timeout: 2) {
-            segment.click()
-            settle(0.6)
-            return
-        }
-        Self.note("NAVFAIL   no presentation segment '\(title)'")
+        Self.note("NAVFAIL   no presentation button '\(title)'")
     }
 
     private func assertCaptured(_ names: [String]) {

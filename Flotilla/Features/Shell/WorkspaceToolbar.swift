@@ -2,6 +2,15 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 
+/// The global bar: the one bar that is present in every scope.
+///
+/// It carries only what is true everywhere — who the app is, where you have
+/// been, where you can go, and the two launchers. Everything scope-specific
+/// moved to a bar that shares that scope's lifetime: the grid's layout
+/// controls and the group chips to `SessionGroupBar`, a session's Git/Files
+/// actions to `SessionBar`. Before that split this row gained and lost four
+/// controls as the selection changed, so the buttons that *were* always there
+/// slid sideways under the pointer.
 struct WorkspaceToolbar: ToolbarContent {
     @Environment(\.openSettings) private var openSettings
     @Bindable var navigator: WorkspaceNavigator
@@ -9,41 +18,19 @@ struct WorkspaceToolbar: ToolbarContent {
     @Bindable var settingsViewModel: SettingsViewModel
     let onCommandPalette: () -> Void
 
-    /// True for the scopes that render a multi-session workspace, which are
-    /// the only ones where the grid's own options mean anything.
-    private var isFleetScope: Bool { navigator.selection.isCollection }
-
-    /// The picker also shows while a single session is focused — that is the
-    /// only way back to the fleet without going through the navigator.
-    /// Hidden for project scope: the five-tab strip already fills the
-    /// principal area, and two competing tab bars confuse the hierarchy.
-    private var showsPresentationPicker: Bool {
-        switch navigator.selection {
-        case .allSessions, .smartList, .session: true
-        case .overview, .project: false
-        }
+    /// A presentation button is lit when its presentation is the one actually
+    /// rendering the fleet — which requires a collection destination, not
+    /// merely a remembered `presentation` value.
+    private func isPresenting(_ mode: WorkspacePresentation) -> Bool {
+        navigator.selection.isCollection && navigator.presentation == mode
     }
 
-    private var gridDimensions: GridDimensions {
-        GridDimensions(
-            columns: settingsViewModel.settings.workspace.gridColumnCount,
-            rows: settingsViewModel.settings.workspace.gridRowCount
-        )
-    }
-
-    private var presentation: Binding<WorkspacePresentation> {
-        Binding(
-            get: { navigator.presentation },
-            set: { newValue in
-                navigator.presentation = newValue
-                // Picking a fleet presentation from a focused session has to
-                // leave that session, or the choice would change nothing on
-                // screen: `.session` scope renders one terminal regardless.
-                if case .session = navigator.selection {
-                    navigator.selection = .allSessions
-                }
-            }
-        )
+    /// Both buttons are destinations, not a mode switch: pressing one from
+    /// Home, a project, or a focused session lands in Sessions with that
+    /// presentation live. Same move as `WorkspaceCommand.showGrid`/`.showBoard`.
+    private func show(_ mode: WorkspacePresentation) {
+        navigator.selection = .allSessions
+        navigator.presentation = mode
     }
 
     var body: some ToolbarContent {
@@ -62,7 +49,7 @@ struct WorkspaceToolbar: ToolbarContent {
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .foregroundStyle(FlotillaColors.textPrimary)
             }
-            .accessibilityIdentifier("TopBar.Logo")
+            .accessibilityIdentifier(AXID.topBarLogo.rawValue)
         }
         .sharedBackgroundVisibility(.hidden)
 
@@ -83,7 +70,7 @@ struct WorkspaceToolbar: ToolbarContent {
             }
             .disabled(!navigator.canGoBack)
             .help("Back (⌘[)")
-            .accessibilityIdentifier("Toolbar.Back")
+            .accessibilityIdentifier(AXID.toolbarBack.rawValue)
 
             Button {
                 navigator.goForward()
@@ -92,76 +79,19 @@ struct WorkspaceToolbar: ToolbarContent {
             }
             .disabled(!navigator.canGoForward)
             .help("Forward (⌘])")
-            .accessibilityIdentifier("Toolbar.Forward")
+            .accessibilityIdentifier(AXID.toolbarForward.rawValue)
         }
 
-        ToolbarItemGroup(placement: .principal) {
-            // Presentation picker - only show when in fleet scope
-            if showsPresentationPicker {
-                Picker("Presentation", selection: presentation) {
-                    ForEach([WorkspacePresentation.grid, .board]) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 116)
-                .help("Switch presentation")
-                .accessibilityIdentifier(AXID.toolbarPresentationPicker.rawValue)
-            }
-        }
-
-        ToolbarSpacer()
-
-        if case .session(let sessionID) = navigator.selection,
-           let session = store.sessions.first(where: { $0.id == sessionID }) {
-            // Both panels are project-owned containers that a session's data
-            // gets injected into, so a session with no `projectID` — which is
-            // an ordinary case, since the "Unassigned" group ships — has
-            // nowhere for them to open. They used to render enabled, accept
-            // the click and silently do nothing. Saying why beats pretending.
-            let hasProject = session.projectID != nil
-
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    navigator.openProjectPanel(.git, scopedTo: session)
-                } label: {
-                    Image(systemName: "arrow.triangle.branch")
-                }
-                .disabled(!hasProject)
-                .help(hasProject
-                      ? "Review this session's changes"
-                      : "This session is not assigned to a project, so there is no repository workspace to open.")
-                .accessibilityIdentifier(AXID.toolbarOpenProjectGit.rawValue)
-
-                Button {
-                    navigator.openProjectPanel(.files, scopedTo: session)
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .disabled(!hasProject)
-                .help(hasProject
-                      ? "Browse project files"
-                      : "This session is not assigned to a project, so there is no file tree to browse.")
-                .accessibilityIdentifier(AXID.toolbarOpenProjectFiles.rawValue)
-            }
-
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-        }
-
-        // Grid controls when grid is active
-        if isFleetScope, navigator.presentation == .grid {
-            ToolbarItemGroup(placement: .primaryAction) {
-                GridDimensionsPicker(settingsViewModel: settingsViewModel)
-                GridAddAllButton(store: store, settingsViewModel: settingsViewModel, dimensions: gridDimensions)
-                GridDimControl(settingsViewModel: settingsViewModel)
-                GridEmptyButton(store: store, settingsViewModel: settingsViewModel)
-            }
-
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-        }
-
+        // Grid and Board, always present and always enabled. The segmented
+        // picker they replace was hidden in exactly the scopes you would want
+        // it from — Home and a project workspace — so reaching the grid from
+        // there meant a detour through the navigator. Keeping all four global
+        // actions in one primary-action group anchors them together at the
+        // trailing edge of the toolbar.
         ToolbarItemGroup(placement: .primaryAction) {
+            presentationButton(.grid, help: "Session grid", identifier: .toolbarShowGrid)
+            presentationButton(.board, help: "Kanban board", identifier: .toolbarShowBoard)
+
             Button(action: onCommandPalette) {
                 Image(systemName: "command")
             }
@@ -172,7 +102,24 @@ struct WorkspaceToolbar: ToolbarContent {
                 Image(systemName: "gearshape")
             }
             .help("Settings (⌘,)")
-            .accessibilityIdentifier("Toolbar.Settings")
+            .accessibilityIdentifier(AXID.toolbarSettings.rawValue)
         }
+    }
+
+    private func presentationButton(
+        _ mode: WorkspacePresentation,
+        help: String,
+        identifier: AXID
+    ) -> some View {
+        let isActive = isPresenting(mode)
+        return Button {
+            show(mode)
+        } label: {
+            Image(systemName: mode.systemImage)
+        }
+        .foregroundStyle(isActive ? FlotillaColors.accent : FlotillaColors.textPrimary)
+        .help(help)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+        .accessibilityIdentifier(identifier.rawValue)
     }
 }

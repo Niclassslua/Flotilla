@@ -13,23 +13,11 @@ final class KanbanUITests: XCTestCase {
     func testKanbanBoardColumnsContextMenuAndOpenSession() {
         let app = launchedApp()
 
-        let sessionsRadio = app.radioButtons["Sessions"].firstMatch
-        if sessionsRadio.waitForExistence(timeout: 2) {
-            sessionsRadio.click()
-        } else {
-            let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
-            if sessionsButton.waitForExistence(timeout: 2) {
-                sessionsButton.click()
-            }
-        }
-
-        let boardButton = app.descendants(matching: .any)["Toolbar.PresentationPicker"].buttons["Board"].firstMatch
-        if boardButton.waitForExistence(timeout: 3) {
-            boardButton.click()
-        } else {
-            let legacyBoard = app.radioButtons["Board"]
-            if legacyBoard.waitForExistence(timeout: 3) { legacyBoard.click() }
-        }
+        // The global bar's Board button is a destination: it selects
+        // Sessions and the board presentation in one click, from anywhere.
+        let boardButton = app.descendants(matching: .any)["Toolbar.ShowBoard"].firstMatch
+        XCTAssertTrue(boardButton.waitForExistence(timeout: 5), "the global bar should always offer Board")
+        boardButton.click()
 
         let kanbanView = app.descendants(matching: .any)["KanbanBoard"].firstMatch
         XCTAssertTrue(kanbanView.waitForExistence(timeout: 8))

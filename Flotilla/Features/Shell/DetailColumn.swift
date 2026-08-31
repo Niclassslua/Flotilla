@@ -61,22 +61,42 @@ struct DetailColumn: View {
         case .focus:
             focusedSessionContent
         case .grid:
-            GridView(
-                store: store,
-                terminalManager: terminalManager,
-                activeSessionID: $activeGridSessionID,
-                openSession: onOpenSession,
-                scope: navigator.sessionScope,
-                settingsViewModel: settingsViewModel
-            )
+            collection {
+                GridView(
+                    store: store,
+                    terminalManager: terminalManager,
+                    activeSessionID: $activeGridSessionID,
+                    openSession: onOpenSession,
+                    scope: navigator.sessionScope,
+                    settingsViewModel: settingsViewModel
+                )
+            }
         case .board:
-            KanbanTabView(
+            collection {
+                KanbanTabView(
+                    store: store,
+                    terminalManager: terminalManager,
+                    activityStore: activityStore,
+                    openSession: onOpenSession,
+                    scope: navigator.sessionScope
+                )
+            }
+        }
+    }
+
+    /// Both fleet presentations sit under the same group bar, so the group
+    /// survives switching between them: scope decides *what* is on screen,
+    /// presentation decides *how*.
+    private func collection(@ViewBuilder content: () -> some View) -> some View {
+        VStack(spacing: 0) {
+            SessionGroupBar(
                 store: store,
-                terminalManager: terminalManager,
-                activityStore: activityStore,
-                openSession: onOpenSession,
-                scope: navigator.sessionScope
+                navigator: navigator,
+                settingsViewModel: settingsViewModel,
+                showsGridControls: navigator.presentation == .grid
             )
+            Divider()
+            content()
         }
     }
 
@@ -96,9 +116,33 @@ struct DetailColumn: View {
         }
     }
 
+    /// The single place both focused paths (`.focus` presentation and a
+    /// `.session` selection) build their content, so the bar cannot appear on
+    /// one route and not the other.
     @ViewBuilder
     private func sessionSurface(for session: Session) -> some View {
-        terminal(for: session)
+        VStack(spacing: 0) {
+            SessionBar(
+                session: session,
+                store: store,
+                variant: .focus,
+                actions: sessionBarActions(for: session)
+            )
+            Divider()
+            terminal(for: session)
+        }
+    }
+
+    /// Files and Changes still land on the project workspace scoped to this
+    /// session's own worktree — the same jump the window toolbar used to
+    /// offer, moved to the bar that names the session it acts on. The Git
+    /// sidebar has nothing to toggle yet and renders disabled.
+    private func sessionBarActions(for session: Session) -> SessionBarActions {
+        SessionBarActions(
+            onRename: { store.renameSession(sessionID: session.id, newTitle: $0) },
+            onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
+            onReviewChanges: { navigator.openProjectPanel(.git, scopedTo: session) }
+        )
     }
 
     @ViewBuilder
@@ -203,38 +247,12 @@ struct DetailColumn: View {
             let working = sessions.filter { $0.status == .working }.count
             let needsInput = sessions.filter { $0.status == .waitingForInput }.count
             return "\(sessions.count) sessions · \(working) working · \(needsInput) need input"
-        case .session(let id):
-            guard let session = store.sessions.first(where: { $0.id == id }) else { return "" }
-            return Self.identity(of: session, project: store.project(for: session))
+        case .session:
+            // The session bar states this now, inside the workspace and next
+            // to the terminal it describes. Repeating it in the subtitle put
+            // the same four facts two points under the window title.
+            return ""
         }
-    }
-
-    /// Where a focused session says what it *is*. Since the shell became a
-    /// split view this reaches the window's subtitle again, which is the only
-    /// place branch, agent and model appear while a terminal fills the screen.
-    ///
-    /// Two things used to go wrong here. A session with no worktree fell back
-    /// to repeating its own agent name ("Flotilla · Codex CLI · Codex CLI"),
-    /// and a session with no project produced an empty string — so identity
-    /// disappeared entirely for exactly the unassigned sessions that already
-    /// have the fewest affordances.
-    static func identity(of session: Session, project: Project?) -> String {
-        var parts: [String] = [project?.name ?? "Unassigned"]
-
-        parts.append(session.agent.displayName)
-        if let model = session.model, !model.isEmpty {
-            parts.append(model)
-        }
-
-        if let branch = session.worktree?.branchName {
-            parts.append(branch)
-        } else {
-            // No worktree means the agent is working in the checkout itself;
-            // naming the directory is more use than naming nothing.
-            parts.append(session.workingDirectory.lastPathComponent)
-        }
-
-        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder

@@ -10,25 +10,14 @@ final class GridViewUITests: XCTestCase {
         return app
     }
 
+    /// One click now: the global bar's Grid button is a destination, so it
+    /// selects Sessions and the grid presentation together. It replaced the
+    /// segmented picker, which had to be preceded by selecting Sessions
+    /// because the picker was hidden everywhere else.
     private func switchToGrid(_ app: XCUIApplication) {
-        let sessionsRadio = app.radioButtons["Sessions"].firstMatch
-        if fastWait(sessionsRadio, timeout: 2) {
-            sessionsRadio.click()
-        } else {
-            let sessionsButton = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
-            if fastWait(sessionsButton, timeout: 2) {
-                sessionsButton.click()
-            }
-        }
-        let gridButton = app.descendants(matching: .any)["Toolbar.PresentationPicker"].buttons["Grid"].firstMatch
-        if fastWait(gridButton, timeout: 3) {
-            gridButton.click()
-        } else {
-            let legacyGrid = app.radioButtons["Grid"]
-            if fastWait(legacyGrid, timeout: 3) {
-                legacyGrid.click()
-            }
-        }
+        let gridButton = app.descendants(matching: .any)["Toolbar.ShowGrid"].firstMatch
+        XCTAssertTrue(fastWait(gridButton, timeout: 5), "the global bar should always offer Grid")
+        gridButton.click()
     }
 
     func testGridInteractionAndTileFocus() {

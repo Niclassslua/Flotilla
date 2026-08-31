@@ -2,29 +2,48 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 
-/// "Add all": fills the grid up to capacity with sessions not already
-/// selected. Matches the icon-only style of the other toolbar buttons
-/// (Git/Files, Command Palette) rather than the dimensions chip's custom
-/// pill, since it carries no state of its own to label.
+/// "Add all": fills the grid up to capacity with sessions from the active
+/// group that are not already selected. Icon-only, matching the other bar
+/// buttons rather than the dimensions chip's pill, since it carries no state
+/// of its own to label.
 struct GridAddAllButton: View {
     @Bindable var store: AppStore
     @Bindable var settingsViewModel: SettingsViewModel
     let dimensions: GridDimensions
+    /// The group bar's current narrowing. Add all fills from what is on
+    /// screen, not from the whole fleet — otherwise pressing it inside a
+    /// project would silently fill the grid with other projects' sessions
+    /// that the group is filtering straight back out.
+    var scope: SessionScope = .everything
 
-    private var isFull: Bool {
+    private var candidates: [Session] { scope.apply(to: store.sessions) }
+
+    private var memberIDs: Set<UUID> {
         GridSelection.memberIDs(
             selectedIDs: settingsViewModel.settings.workspace.gridSelectedSessionIDs,
             in: store.sessions
-        ).count >= min(dimensions.capacity, store.sessions.count)
+        )
+    }
+
+    /// Nothing left to add: either the grid is at capacity, or every session
+    /// in the active group is already in it.
+    private var isFull: Bool {
+        let members = memberIDs
+        return members.count >= dimensions.capacity
+            || candidates.allSatisfy { members.contains($0.id) }
     }
 
     var body: some View {
         Button {
-            settingsViewModel.addAllToGrid(from: store.sessions, capacity: dimensions.capacity)
+            settingsViewModel.addAllToGrid(
+                candidates: candidates,
+                allSessions: store.sessions,
+                capacity: dimensions.capacity
+            )
         } label: {
             Image(systemName: "plus.square.on.square")
         }
-        .disabled(store.sessions.isEmpty || isFull)
+        .disabled(candidates.isEmpty || isFull)
         .help("Add all sessions that fit (\(dimensions.label))")
         .accessibilityIdentifier("Grid.AddAllButton")
     }

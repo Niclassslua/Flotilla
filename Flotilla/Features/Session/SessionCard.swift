@@ -222,15 +222,7 @@ struct SessionCard<Terminal: View>: View {
             )
     }
 
-    private var elapsedTime: String {
-        let elapsed = Date().timeIntervalSince(session.createdAt)
-        switch elapsed {
-        case ..<60: return "\(Int(elapsed))s"
-        case ..<3600: return "\(Int(elapsed/60))m"
-        case ..<86400: return "\(Int(elapsed/3600))h"
-        default: return "\(Int(elapsed/86400))d"
-        }
-    }
+    private var elapsedTime: String { SessionElapsed.since(session.createdAt) }
 
     // MARK: - Board Variant (Kanban)
 

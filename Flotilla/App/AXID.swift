@@ -17,9 +17,33 @@ public enum AXID: String, Sendable {
     case toolbarCommandPalette = "Toolbar.CommandPalette"
     case toolbarInspectorToggle = "Toolbar.InspectorToggle"
     case toolbarOverflow = "Toolbar.Overflow"
-    case toolbarPresentationPicker = "Toolbar.PresentationPicker"
+    /// The two destination buttons that replaced the segmented presentation
+    /// picker. Each lands in Sessions with that presentation live, from
+    /// wherever the user currently is.
+    case toolbarShowGrid = "Toolbar.ShowGrid"
+    case toolbarShowBoard = "Toolbar.ShowBoard"
+    case toolbarSettings = "Toolbar.Settings"
+    case toolbarBack = "Toolbar.Back"
+    case toolbarForward = "Toolbar.Forward"
+    case topBarLogo = "TopBar.Logo"
+    /// These two moved from the window toolbar onto the session bar and kept
+    /// their identifiers: they name the same two actions on the same session,
+    /// and six UI-test lookups already depend on the spelling.
     case toolbarOpenProjectGit = "Toolbar.OpenProjectGit"
     case toolbarOpenProjectFiles = "Toolbar.OpenProjectFiles"
+
+    // MARK: - Session group bar
+    case sessionsGroupBar = "Sessions.GroupBar"
+    case sessionsGroup = "Sessions.Group-"
+
+    // MARK: - Session bar
+    /// Session-scoped, because the grid renders one bar per tile: a flat
+    /// `"SessionBar.Title"` would match up to `columns × rows` elements at
+    /// once. The focus variant is the same bar with the same naming.
+    case sessionBar = "SessionBar-"
+    /// Focus-variant only, and there is exactly one focused session, so this
+    /// one needs no title.
+    case sessionBarGitSidebarToggle = "SessionBar.GitSidebarToggle"
 
     // MARK: - Command Palette
     case commandPaletteButton = "CommandPaletteButton"
@@ -208,6 +232,47 @@ public enum AXID: String, Sendable {
     /// Creates a grid tile focus button identifier from a title
     public static func gridTileFocusButton(_ title: String) -> String {
         "GridTile-\(title)-FocusButton"
+    }
+
+    /// Creates a grid tile "remove from grid" button identifier from a title
+    public static func gridTileRemoveButton(_ title: String) -> String {
+        "GridTile-\(title)-RemoveButton"
+    }
+
+    /// Creates a session group chip identifier. `name` is the chip's own
+    /// label — "All", "General", or a project name.
+    public static func sessionsGroup(_ name: String) -> String {
+        "Sessions.Group-\(name)"
+    }
+
+    /// The session bar's own identifiers, all keyed by the session's title so
+    /// a grid full of bars stays unambiguous.
+    public static func sessionBar(_ title: String) -> String {
+        "SessionBar-\(title)"
+    }
+
+    public static func sessionBarTitle(_ title: String) -> String {
+        "SessionBar-\(title)-Title"
+    }
+
+    public static func sessionBarTitleField(_ title: String) -> String {
+        "SessionBar-\(title)-TitleField"
+    }
+
+    public static func sessionBarBranch(_ title: String) -> String {
+        "SessionBar-\(title)-Branch"
+    }
+
+    public static func sessionBarWorktree(_ title: String) -> String {
+        "SessionBar-\(title)-Worktree"
+    }
+
+    public static func sessionBarAge(_ title: String) -> String {
+        "SessionBar-\(title)-Age"
+    }
+
+    public static func sessionBarStatus(_ title: String) -> String {
+        "SessionBar-\(title)-Status"
     }
 
     /// Creates a project row identifier from a name

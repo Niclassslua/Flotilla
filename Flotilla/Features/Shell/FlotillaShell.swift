@@ -353,6 +353,14 @@ struct FlotillaShell: View {
            store.sessions.contains(where: { $0.id == persisted }) {
             store.selectedSessionID = persisted
         }
+        // The group is what the grid and board are filtered to, so restoring
+        // it is what makes the bar's chip agree with the tiles on relaunch.
+        // `SessionGroup.init(rawValue:)` falls back to `.all` for a project
+        // that no longer exists.
+        navigator.sessionGroup = SessionGroup(
+            rawValue: settingsViewModel.settings.workspace.sessionGroup
+        )
+        navigator.pruneSessionGroup(against: Set(store.projects.map(\.id)))
     }
 
     private func openSession(_ id: UUID) {
@@ -429,6 +437,14 @@ private struct ShellLifecycleModifier: ViewModifier {
         content
             .onChange(of: navigator.presentation) { _, mode in
                 settingsViewModel.settings.workspace.viewMode = mode.rawValue
+            }
+            .onChange(of: navigator.sessionGroup) { _, group in
+                settingsViewModel.settings.workspace.sessionGroup = group.rawValue
+            }
+            // A deleted project must not leave the fleet filtered to a group
+            // whose chip is no longer in the bar to explain the emptiness.
+            .onChange(of: store.projects.map(\.id)) { _, ids in
+                navigator.pruneSessionGroup(against: Set(ids))
             }
             .onChange(of: store.selectedSessionID) { _, sessionID in
                 settingsViewModel.settings.workspace.selectedSessionID = sessionID?.uuidString

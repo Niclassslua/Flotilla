@@ -21,7 +21,8 @@ launch dashboard" in the palette) and "Overview" *also* named a tab inside every
 | The app's landing surface — attention, activity, projects, composer | **Home** | `.overview` | `Sidebar.Overview` | Matches what the code already calls it: `HomeDashboardView`, `HomeComponents`, `AXID.homeDashboard`. Frees "Overview" for the project tab. |
 | Every running agent, as a collection | **Sessions** | `.allSessions` | `Sidebar.AllSessions` | The destination. **All Sessions** is a *row* within the navigator, not a second name for the place. |
 | One project's durable workspace | **the project's name** | `.project(UUID)` | `Sidebar.ProjectRow-<name>` | Never the literal word "Project" in user-facing copy — a project is always named. |
-| One session, full screen | **the session's title** | `.session(UUID)` | `SessionRow-<title>` | The presentation is **Focus**; the destination is the session. |
+| One session, full screen | **the session's title** | `.session(UUID)` | `SessionRow-<title>` | The presentation is **Focus**; the destination is the session. Its **session bar** states `project / name`. |
+| The sessions belonging to no project | **General** | — (a group, not a destination) | `Sessions.Group-General` | Never "Unassigned". `Session.projectID == nil` is an ordinary shipping case, and `AGENTS.md` already called it general; the navigator section header and the group chip now agree. |
 
 > **Identifiers lag the canon deliberately.** `Sidebar.Overview` and `Sidebar.AllSessions` are load
 > bearing for six UI test files, and `SidebarItem` is `Codable` into persisted workspace state, so
@@ -32,6 +33,7 @@ Reserved words that mean exactly one thing:
 
 - **Overview** — a tab inside a project workspace (`ProjectDetailView.ProjectTab.overview`). Never the app landing surface.
 - **Grid**, **Board**, **Focus** — presentations of the Sessions collection (`WorkspacePresentation`). Never destinations.
+- **Group** — a slice of the fleet in the session group bar: All, one project, or General (`SessionGroup`). One axis of a *scope*; never a presentation and never a destination.
 - **Fleet** — internal vocabulary for the whole set of sessions (`FleetSidebar`, `FleetSessionList`). Correct in code and in review comments; does not appear in user-facing copy.
 
 No two palette commands may resolve to the same destination. Enforced by
@@ -50,7 +52,7 @@ grid sidebar hijack (F4). Each row gives the scenario in which it differs from e
 | 2 | **Active session** — which session's terminal has focus and receives keystrokes | `AppStore.selectedSessionID`, `DetailColumn.activeGridSessionID` | Differs from *navigation selection* in Grid: nine tiles are on screen, one is active, and the navigation selection is `.allSessions`, not a session. |
 | 3 | **Batch selection** — rows marked for a bulk action | `WorkspaceNavigator.sidebarSelection` (`Set<SidebarItem>`) | Differs from *navigation selection* by cardinality: ⌘-clicking three rows to delete them must not change what the detail column shows. Already modelled correctly. |
 | 4 | **Grid membership** — which sessions the grid renders | `settings.workspace.gridSelectedSessionIDs` | Differs from all of the above: a session can be in the grid while unselected, unfocused, and not batch-marked. Persisted across launches; the others are not. |
-| 5 | **Filter state** — what narrows a collection | `WorkspaceNavigator.searchText` today; the filter set in U4 | Differs from *navigation selection* because it survives switching presentation: the same query must yield the same sessions in Grid, Board and List. |
+| 5 | **Filter state** — what narrows a collection | `WorkspaceNavigator.searchText`; `WorkspaceNavigator.sessionGroup`, persisted as `workspace.sessionGroup` | Differs from *navigation selection* because it survives switching presentation: the same group must yield the same sessions in Grid and Board. It composes with a smart list rather than replacing it — `SessionScope` carries both axes. |
 | 6 | **Project-root scope** — the repository a surface is reading | `Project.rootURL` | Differs from *worktree scope* for every session with a worktree, which is the normal case. Owns history, root files, skills, rules, repository config. |
 | 7 | **Worktree scope** — the checkout a session is working in | `session.worktree?.worktreePath ?? session.workingDirectory` | Differs from *project-root scope* as above, and exists for sessions with **no** `projectID` at all — which is why keying a diff to a project ID leaves the "Unassigned" group with dead buttons (F7). |
 

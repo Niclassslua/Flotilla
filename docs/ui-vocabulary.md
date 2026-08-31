@@ -30,7 +30,10 @@ The outermost layout. Everything else lives inside one of these three regions.
 | **Smart list** | One of the standing fleet questions: **Needs You · Working · Ready**. | `FleetSmartList` — `Features/Shell/FleetSmartList.swift` |
 | **Session sidebar row** | One session line in the session list (status dot, title, meta, swipe-to-delete, context menu). | `SessionSidebarRow`, `SwipeToDeleteSession` — same file |
 | **Detail column** *(region)* | The large right-hand area. Switches content by sidebar selection: Home dashboard, session terminal, project workspace, or a fleet presentation. | `DetailColumn` — `Features/Shell/DetailColumn.swift` |
-| **Workspace toolbar** | The window toolbar: presentation picker (principal), session Git/Files jump buttons, grid controls, command palette, settings. | `WorkspaceToolbar` — `Features/Shell/WorkspaceToolbar.swift` |
+| **Global bar** | The window toolbar, and the only bar present in every scope: wordmark, back/forward, Grid, Board, command palette, settings. Everything scope-specific moved to a bar that shares that scope's lifetime. | `WorkspaceToolbar` — `Features/Shell/WorkspaceToolbar.swift` |
+| **Session group bar** | The in-window bar under the global bar in Sessions: the group chips (All · each project · General) on the left, and — in Grid only — the grid controls on the right. | `SessionGroupBar` — `Features/Shell/SessionGroupBar.swift` |
+| **Group chip** | One offer in that bar. Its count is the sessions in that group. | `SessionGroupChip` — same file |
+| **Session bar** | What one session *is*, and what you can do to it: `project / name` (the name renames inline), branch, worktree. Two variants, below. | `SessionBar` — `Features/Session/SessionBar.swift` |
 | **Banner stack** *(region)* | The strip inset at the top of the detail column holding the startup warning and the operation error banner. | `DetailColumn.banners` |
 | **Startup warning banner** | "Missing tools" warning shown after the startup check. | `StartupWarningBanner` — `Features/Settings/` |
 | **Operation error banner** | Red dismissible bar for the last failed store operation. | `OperationErrorBanner` — `Features/Shell/DetailColumn.swift` |
@@ -45,6 +48,7 @@ These are the terms for *state*, not views — use them to say **where** you wan
 | **Scope** | Which subset of the fleet a collection surface renders — a project, a smart list, or everything. Shared by Grid, Board and Focus. | `SessionScope` — `Features/Shell/FleetSmartList.swift` |
 | **Selection** | What the detail column is showing: `.overview`, `.allSessions`, `.project(id)`, `.session(id)`. | `SidebarItem` |
 | **Presentation** | How the fleet is rendered: **Grid**, **Board**, or **Focus**. Changes *how*, never *what* — that is the scope's job. | `WorkspacePresentation` |
+| **Group** | Which slice of the fleet the group bar has lit: **All**, one project, or **General**. One of the two axes of a scope; it survives switching presentation. | `SessionGroup` — `Features/Shell/FleetSmartList.swift` |
 | **Scope** | Shorthand for a selection kind — "fleet scope", "session scope", "project scope". | — |
 | **Sheet** | A modal presentation: New Session, command palette, shortcuts, restore, delete. Note the first two render as in-window **overlays** with a dismissible scrim, the rest as real AppKit sheets. | `WorkspaceSheet` |
 
@@ -81,12 +85,10 @@ Three ways to render many sessions; picked in the toolbar's presentation picker.
 | **Mission control grid** | The concrete grid layout: uniform tiles, one 28pt chrome bar each, terminal-dominant. | `MissionControlGrid` / `MissionControlTile` |
 | **Session tile** | One cell of the grid. | `MissionControlTile` |
 | **Tile surface** | The tile's card background, border, context menu and drag source. The border colour carries status. | `SessionTileSurface` (a `ViewModifier`) — `SessionTileChrome.swift` |
-| **Tile title lockup** | Status dot + title + provider mark, truncating in priority order. | `TileTitleLockup` |
-| **Tile meta row** | Branch · diff stat · elapsed time, on one line. | `TileMetaRow` |
-| **Tile focus button** | The button that opens a tile full-screen. | `TileFocusButton` |
+| **Tile bar** | The tile's 28pt chrome bar — the session bar in its `.tile` variant. Replaces the former `TileTitleLockup` / `TileMetaRow` / `TileFocusButton` trio. | `SessionBar` (`.tile`) |
 | **Tile terminal body** | The live terminal inside a tile (or its stopped placeholder). | `TileTerminalBody` |
-| **Grid dimensions picker** | The toolbar swatch for choosing columns × rows. | `GridDimensionsPicker` / `GridDimensionsSwatch` |
-| **Grid toolbar controls** | Add-all, empty, and dim controls next to the dimensions picker. | `GridAddAllButton`, `GridEmptyButton`, `GridDimControl` |
+| **Grid dimensions picker** | The group bar's swatch for choosing columns × rows. | `GridDimensionsPicker` / `GridDimensionsSwatch` |
+| **Grid controls** | Add-all, empty, and dim controls next to the dimensions picker, on the right of the group bar. Add-all fills from the lit group. | `GridAddAllButton`, `GridEmptyButton`, `GridDimControl` |
 | **Grid membership** | Which sessions are assigned to the grid. While the grid is on screen, clicking a sidebar row **toggles membership** rather than opening the session. | `GridSelection`, `GridSidebarSelection` |
 
 ### Board
@@ -102,7 +104,7 @@ Three ways to render many sessions; picked in the toolbar's presentation picker.
 
 | Say | What it is | Code |
 | --- | --- | --- |
-| **Focus** | Single-session presentation: one full-size terminal filling the detail column. | `DetailColumn.focusedSessionContent` |
+| **Focus** | Single-session presentation: the session bar over one full-size terminal filling the detail column. | `DetailColumn.focusedSessionContent` |
 | **Terminal host** | The SwiftUI wrapper around the real terminal renderer. | `TerminalHostView` — `Features/Session/` |
 | **Terminal presentation** | `.session` (focus) vs `.grid` (tile) rendering mode of the terminal. | `TerminalPresentation` (TerminalKit) |
 
@@ -118,6 +120,15 @@ Three ways to render many sessions; picked in the toolbar's presentation picker.
 | **Session card — tile** | Grid tiles | `.tile` |
 | **Session card — board** | Kanban cards | `.board` |
 | **Session card — compact** | Dense lists (project overview, home) | `.compact` |
+
+**The session bar has two**, on the same principle — say "the session bar, tile variant".
+
+| Say | Where it appears | Variant |
+| --- | --- | --- |
+| **Session bar — focus** | Above a full-size session terminal | `.focus` |
+| **Session bar — tile** | Each grid tile's chrome bar | `.tile` |
+
+Type: `SessionBar` — `Features/Session/SessionBar.swift`.
 
 Type: `SessionCard<Terminal>` — `Features/Session/SessionCard.swift`.
 
@@ -171,6 +182,7 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 | **Diff panel** | Staging, discard, commit, push, PR — the working-copy review surface. | `DiffPanelView` — `Features/Diff/` |
 | **Diff file row** | One changed file in the diff panel, with its discard confirmation. | `DiffFileRow` |
 | **Diff stat badge** | The `+n −n` badge. `SessionDiffStatView` is its session-bound wrapper. | `DiffStatBadge`, `SessionDiffStatView` |
+| **Elapsed** | A session's age in single-unit shorthand (`45s`, `12m`, `3h`, `2d`), shared by the session bar and the cards. | `SessionElapsed` — `Components/SessionElapsed.swift` |
 | **File browser** | Tree on the left, Monaco editor on the right, with Markdown preview toggle and image/binary handling. | `FileBrowserView` — `Features/FileBrowser/` |
 | **File tree** / **editor pane** *(regions)* | The two halves of the file browser. | `AXID.fileBrowserTree`, `.fileBrowserEditor` |
 | **Monaco host** | The web-backed code editor view. | `MonacoHostView` — `Features/Session/` |

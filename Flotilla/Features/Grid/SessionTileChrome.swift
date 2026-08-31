@@ -17,109 +17,11 @@ struct SessionTileActions {
     /// Another tile was dropped onto this one; move the dragged session to
     /// this tile's position.
     var onDropSession: (UUID) -> Void = { _ in }
-}
-
-// MARK: - Identity
-
-/// Status dot, title, and provider mark. The pieces truncate in priority
-/// order: the provider name goes first, then the title, so the status dot and
-/// title stay legible even in a narrow tile.
-struct TileTitleLockup: View {
-    let session: Session
-    var showsProviderName = true
-    var font: Font = .caption.weight(.medium)
-
-    var body: some View {
-        HStack(spacing: 6) {
-            // Collapsed into one element so the dot reports the status as its
-            // label; the UI suite asserts on exactly this.
-            StatusBadge(session.status, waitingReason: session.waitingReason, variant: .compact)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
-                .accessibilityIdentifier("GridTile-\(session.title)-Status")
-
-            Text(session.title)
-                .font(font)
-                .foregroundStyle(FlotillaColors.textPrimary)
-                .lineLimit(1)
-                .layoutPriority(1)
-
-            ProviderLogo(agent: session.agent)
-                .frame(width: 11, height: 11)
-
-            if showsProviderName {
-                Text(session.agent.displayName)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .layoutPriority(-1)
-            }
-        }
-    }
-}
-
-/// Branch, diff stat, and elapsed time on one line. Every design shows this
-/// somewhere; only the placement differs.
-struct TileMetaRow: View {
-    let session: Session
-    let store: AppStore
-    var showsElapsed = true
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if let branch = session.worktree?.branchName {
-                Label {
-                    Text(branch)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                } icon: {
-                    Image(systemName: "arrow.triangle.branch")
-                }
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 4)
-
-            SessionDiffStatView(session: session, diffStatStore: store.diffStatStore)
-
-            if showsElapsed {
-                Text(Self.elapsed(since: session.createdAt))
-                    .monospacedDigit()
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .font(.system(size: 10, design: .monospaced))
-    }
-
-    static func elapsed(since start: Date) -> String {
-        let interval = Date().timeIntervalSince(start)
-        switch interval {
-        case ..<60: return "\(Int(interval))s"
-        case ..<3600: return "\(Int(interval / 60))m"
-        case ..<86400: return "\(Int(interval / 3600))h"
-        default: return "\(Int(interval / 86400))d"
-        }
-    }
-}
-
-/// Opens the session full-screen. Split out because every design needs it and
-/// the accessibility identifier is asserted by the UI test suite.
-struct TileFocusButton: View {
-    let session: Session
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                .font(.system(size: 10, weight: .medium))
-                .frame(width: 20, height: 20)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Focus on this session")
-        .accessibilityIdentifier("GridTile-\(session.title)-FocusButton")
-    }
+    /// Takes this session out of the grid without deleting it. Same call the
+    /// navigator's membership control makes, so the two cannot diverge.
+    var onRemoveFromGrid: () -> Void = {}
+    /// Commits an inline rename from the tile's own bar.
+    var onRename: (String) -> Void = { _ in }
 }
 
 // MARK: - Terminal body
@@ -197,9 +99,9 @@ struct TileTerminalBody: View {
 /// selected" instead of "which needs me". Selection moved to an inset ring,
 /// which reads as chrome rather than as state.
 ///
-/// Crashed deliberately gets no border: `TileTitleLockup` already spells the
-/// status out in words, so the state is carried (and carried accessibly)
-/// without painting a grid of red rectangles.
+/// Crashed deliberately gets no border: the tile's `SessionBar` already
+/// spells the status out in words, so the state is carried (and carried
+/// accessibly) without painting a grid of red rectangles.
 struct SessionTileSurface: ViewModifier {
     let session: Session
     let isActive: Bool

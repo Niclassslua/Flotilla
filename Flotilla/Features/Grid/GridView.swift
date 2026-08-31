@@ -5,9 +5,13 @@ import DesignSystem
 /// Dispatches to one of the candidate grid designs and owns everything they
 /// share: which sessions are visible, their order, and the per-tile actions.
 ///
-/// The layout controls live in `WorkspaceToolbar`, not here — an inline
-/// control bar cost vertical space on every render of a view whose whole job
-/// is showing terminals.
+/// The layout controls live in `SessionGroupBar`, the bar directly above this
+/// view. They used to sit in the window toolbar to save the vertical space an
+/// inline bar costs; that trade is deliberately reversed. The toolbar could
+/// only hold them by adding and removing four controls as the selection
+/// changed, which moved the always-present buttons beside them, and it left
+/// the grid with nowhere to put the group chips at all. Thirty-two points is
+/// the price of a bar whose contents hold still.
 struct GridView: View {
     let store: AppStore
     let terminalManager: TerminalManager
@@ -148,7 +152,15 @@ struct GridView: View {
             },
             onDropSession: { draggedID in
                 move(draggedID, toPositionOf: session.id)
-            }
+            },
+            onRemoveFromGrid: {
+                settingsViewModel.toggleGridMembership(
+                    of: session.id,
+                    in: store.sessions,
+                    capacity: dimensions.capacity
+                )
+            },
+            onRename: { store.renameSession(sessionID: session.id, newTitle: $0) }
         )
     }
 

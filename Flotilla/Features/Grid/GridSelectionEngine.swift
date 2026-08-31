@@ -44,12 +44,19 @@ extension SettingsViewModel {
         settings.workspace.gridSelectedSessionIDs = ids
     }
 
-    /// "Add all": fills the grid up to capacity with sessions not already
-    /// selected, in their current order, leaving the existing selection in place.
-    func addAllToGrid(from sessions: [Session], capacity: Int) {
-        let known = Set(sessions.map(\.id.uuidString))
+    /// "Add all": fills the grid up to capacity from `candidates`, in their
+    /// current order, leaving the existing selection in place.
+    ///
+    /// `candidates` is the *scoped* fleet — the sessions in the group the bar
+    /// currently has lit — while `allSessions` is the whole fleet. The two
+    /// are separate because stale-ID pruning has to be judged against every
+    /// live session: pruning against the candidates alone would evict every
+    /// member belonging to a different group the moment you pressed Add all
+    /// inside one.
+    func addAllToGrid(candidates: [Session], allSessions: [Session], capacity: Int) {
+        let known = Set(allSessions.map(\.id.uuidString))
         var ids = settings.workspace.gridSelectedSessionIDs.filter(known.contains)
-        for session in sessions where ids.count < capacity {
+        for session in candidates where ids.count < capacity {
             let key = session.id.uuidString
             if !ids.contains(key) { ids.append(key) }
         }

@@ -202,10 +202,11 @@ struct KanbanBoardView: View {
     }
 
     /// Cards name their project only when the board actually mixes projects.
-    /// A project-scoped board, or a sidebar project filter, makes every
-    /// card's project identical, so the label would be pure noise.
+    /// A project-scoped board, or any group narrower than All, makes every
+    /// card's project identical, so the label would be pure noise. That
+    /// includes the General group, whose cards all share *no* project.
     private var showsProjectName: Bool {
-        guard board.projectID == nil, scope.projectID == nil else { return false }
+        guard board.projectID == nil, scope.group == .all else { return false }
         return Set(renderedSessions.map(\.projectID)).count > 1
     }
 

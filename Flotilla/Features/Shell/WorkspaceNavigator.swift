@@ -29,6 +29,10 @@ final class WorkspaceNavigator {
     /// restoring state) via `selection`'s `didSet` above.
     var sidebarSelection: Set<SidebarItem> = [.overview]
     var presentation: WorkspacePresentation = ProcessInfo.processInfo.environment["UI_TESTING"] == "1" ? .focus : .grid
+    /// Which group chip is lit in the session group bar. Kept here rather
+    /// than inside Grid or Board so both presentations read one value and
+    /// switching between them cannot change what is on screen.
+    var sessionGroup: SessionGroup = .all
     var presentedSheet: WorkspaceSheet?
     var columnVisibility: NavigationSplitViewVisibility = .all
     var searchText = ""
@@ -108,12 +112,24 @@ final class WorkspaceNavigator {
     /// What the collection surfaces should render. Grid, Board and Focus all
     /// read this one value, so switching presentation changes how the fleet is
     /// shown and never what is in it.
+    /// The group narrows the fleet; a smart list narrows it again. Selecting
+    /// a project in the navigator is itself a project scope, and there it
+    /// wins over the bar's group — the group bar is not on screen in project
+    /// scope, so a stale chip must not silently filter a project workspace.
     var sessionScope: SessionScope {
         switch selection {
-        case .smartList(let list): SessionScope(projectID: nil, smartList: list)
-        case .project(let id): SessionScope(projectID: id, smartList: nil)
-        case .overview, .allSessions, .session: .everything
+        case .smartList(let list): SessionScope(group: sessionGroup, smartList: list)
+        case .project(let id): SessionScope(group: .project(id), smartList: nil)
+        case .overview, .allSessions, .session: SessionScope(group: sessionGroup, smartList: nil)
         }
+    }
+
+    /// Drops a group whose project no longer exists. Without this a deleted
+    /// project leaves the grid permanently filtered to nothing, with the
+    /// chip that explains why gone from the bar as well.
+    func pruneSessionGroup(against projectIDs: Set<UUID>) {
+        guard case .project(let id) = sessionGroup, !projectIDs.contains(id) else { return }
+        sessionGroup = .all
     }
 
     /// Returns to the place the user last occupied on the Home side.
@@ -290,7 +306,7 @@ enum WorkspacePresentation: String, CaseIterable, Identifiable, Codable, Sendabl
     var systemImage: String {
         switch self {
         case .grid: return "square.grid.2x2"
-        case .board: return "square.grid.2x2.fill"
+        case .board: return "rectangle.split.3x1"
         case .focus: return "macwindow"
         }
     }
