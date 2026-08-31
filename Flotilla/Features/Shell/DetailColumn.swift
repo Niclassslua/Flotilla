@@ -204,10 +204,37 @@ struct DetailColumn: View {
             let needsInput = sessions.filter { $0.status == .waitingForInput }.count
             return "\(sessions.count) sessions · \(working) working · \(needsInput) need input"
         case .session(let id):
-            guard let session = store.sessions.first(where: { $0.id == id }),
-                  let project = store.project(for: session) else { return "" }
-            return "\(project.name) · \(session.agent.displayName) · \(session.worktree?.branchName ?? session.agent.displayName)"
+            guard let session = store.sessions.first(where: { $0.id == id }) else { return "" }
+            return Self.identity(of: session, project: store.project(for: session))
         }
+    }
+
+    /// Where a focused session says what it *is*. Since the shell became a
+    /// split view this reaches the window's subtitle again, which is the only
+    /// place branch, agent and model appear while a terminal fills the screen.
+    ///
+    /// Two things used to go wrong here. A session with no worktree fell back
+    /// to repeating its own agent name ("Flotilla · Codex CLI · Codex CLI"),
+    /// and a session with no project produced an empty string — so identity
+    /// disappeared entirely for exactly the unassigned sessions that already
+    /// have the fewest affordances.
+    static func identity(of session: Session, project: Project?) -> String {
+        var parts: [String] = [project?.name ?? "Unassigned"]
+
+        parts.append(session.agent.displayName)
+        if let model = session.model, !model.isEmpty {
+            parts.append(model)
+        }
+
+        if let branch = session.worktree?.branchName {
+            parts.append(branch)
+        } else {
+            // No worktree means the agent is working in the checkout itself;
+            // naming the directory is more use than naming nothing.
+            parts.append(session.workingDirectory.lastPathComponent)
+        }
+
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder

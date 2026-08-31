@@ -331,6 +331,19 @@ struct SessionSidebarRow: View {
         gridMembership?.memberIDs.contains(session.id) ?? false
     }
 
+    /// Branch and worktree path, abbreviated with `~` the way every other Mac
+    /// app shows a home-relative location.
+    private var locationDescription: String {
+        let path = (session.worktree?.worktreePath ?? session.workingDirectory)
+            .path
+            .replacingOccurrences(
+                of: FileManager.default.homeDirectoryForCurrentUser.path,
+                with: "~"
+            )
+        guard let branch = session.worktree?.branchName else { return path }
+        return "\(branch)\n\(path)"
+    }
+
     /// Exactly one state wins — layering translucent tints on top of each
     /// other (or on top of whatever AppKit's own `.sidebar`-style selection
     /// paints on the row underneath, which no `.background` can occlude
@@ -409,6 +422,11 @@ struct SessionSidebarRow: View {
         // box from the next.
         .padding(.vertical, 4)
         .accessibilityLabel(isGridMember ? "\(session.title), in grid" : session.title)
+        // The worktree path, which is otherwise only in the delete sheet and
+        // behind right-click → Copy Path. Costs no screen space, so it does
+        // not have to compete with the branch and agent already in the window
+        // subtitle.
+        .help(locationDescription)
         .animation(.easeOut(duration: 0.1), value: isHovering)
         .onHover { isHovering = $0 }
         // While the grid is up a single click toggles membership (see

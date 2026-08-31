@@ -159,3 +159,69 @@ final class SessionScopeTests: XCTestCase {
         XCTAssertTrue(navigator.sessionScope.isEverything)
     }
 }
+
+/// The window subtitle is the only place a focused session states its branch,
+/// agent and model — the terminal fills everything else — so its edge cases
+/// are worth pinning.
+@MainActor
+final class SessionIdentityLineTests: XCTestCase {
+
+    private func session(
+        model: String? = nil,
+        worktree: WorktreeInfo? = nil,
+        workingDirectory: String = "/tmp/checkout"
+    ) -> Session {
+        Session(
+            title: "Fix login",
+            goal: "g",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: workingDirectory),
+            worktree: worktree
+        )
+        .with(model: model)
+    }
+
+    private func project(_ name: String) -> Project {
+        Project(name: name, rootPath: URL(fileURLWithPath: "/tmp/repo"))
+    }
+
+    func testCarriesProjectAgentAndBranch() {
+        let worktree = WorktreeInfo(
+            branchName: "flotilla/fix-login",
+            worktreePath: URL(fileURLWithPath: "/tmp/wt/fix-login"),
+            baseCheckoutPath: URL(fileURLWithPath: "/tmp/repo")
+        )
+        let line = DetailColumn.identity(of: session(worktree: worktree), project: project("Flotilla"))
+        XCTAssertEqual(line, "Flotilla · Claude Code · flotilla/fix-login")
+    }
+
+    func testIncludesModelWhenSet() {
+        let line = DetailColumn.identity(of: session(model: "opus"), project: project("Flotilla"))
+        XCTAssertTrue(line.contains("opus"), line)
+    }
+
+    /// Regression: this used to fall back to repeating the agent name, giving
+    /// "Flotilla · Claude Code · Claude Code".
+    func testWithoutAWorktreeNamesTheDirectoryNotTheAgentTwice() {
+        let line = DetailColumn.identity(of: session(), project: project("Flotilla"))
+        XCTAssertEqual(line, "Flotilla · Claude Code · checkout")
+        XCTAssertFalse(line.hasSuffix("Claude Code"), "the agent should not appear twice")
+    }
+
+    /// Regression: an unassigned session produced an empty subtitle, so the
+    /// sessions with the fewest affordances also lost their identity entirely.
+    func testUnassignedSessionStillStatesItself() {
+        let line = DetailColumn.identity(of: session(), project: nil)
+        XCTAssertFalse(line.isEmpty)
+        XCTAssertTrue(line.hasPrefix("Unassigned"), line)
+    }
+}
+
+private extension Session {
+    func with(model: String?) -> Session {
+        var copy = self
+        copy.model = model
+        return copy
+    }
+}

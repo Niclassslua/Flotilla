@@ -345,13 +345,6 @@ private struct HomeSessionRow: View {
         HStack(spacing: FlotillaSpacing.medium) {
             ProviderLogo(agent: session.agent)
                 .frame(width: 22, height: 22)
-                .overlay(alignment: .bottomTrailing) {
-                    Circle()
-                        .fill(StatusPresentation.color(for: session.status))
-                        .frame(width: 7, height: 7)
-                        .overlay { Circle().strokeBorder(FlotillaColors.canvas, lineWidth: 1.5) }
-                        .offset(x: 2, y: 2)
-                }
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -359,8 +352,23 @@ private struct HomeSessionRow: View {
                     .font(FlotillaTypography.body)
                     .foregroundStyle(FlotillaColors.textPrimary)
                     .lineLimit(1)
-                if showsLiveData {
-                    HomeActivityLine(session: session, activityStore: context.activityStore)
+
+                // Status as a word, the way the sidebar already does it. It
+                // used to be a 7pt dot overlapping the provider mark, carrying
+                // meaning by hue alone and `.accessibilityHidden(true)` — so
+                // this row was the one place in the app where "which agent
+                // needs me" was unreadable both to a colourblind user and to
+                // assistive technology.
+                HStack(spacing: FlotillaSpacing.small) {
+                    StatusBadge(
+                        session.status,
+                        waitingReason: session.waitingReason,
+                        size: .micro,
+                        showLabel: true
+                    )
+                    if showsLiveData {
+                        HomeActivityLine(session: session, activityStore: context.activityStore)
+                    }
                 }
             }
 
