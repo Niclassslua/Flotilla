@@ -58,7 +58,7 @@ struct ProjectOverviewView: View {
 
     private func activeSessionRow(_ session: Session) -> some View {
         HStack(spacing: FlotillaSpacing.medium) {
-            StatusBadge(session.status, waitingReason: session.waitingReason, size: .micro, showLabel: false, showGlyph: true)
+            StatusBadge(session.status, waitingReason: session.waitingReason, size: .micro, showLabel: false)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title)

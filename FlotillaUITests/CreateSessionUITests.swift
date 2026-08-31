@@ -57,8 +57,11 @@ final class CreateSessionUITests: XCTestCase {
         XCTAssertTrue(element(app, "CreateSession.CreateButton").waitForNonExistence(timeout: 5))
 
         XCTAssertTrue(fastWait(element(app, "SessionRow-Flaky CI"), timeout: 3))
-        XCTAssertTrue(fastWait(element(app, "SessionRow-Flaky CI-Agent"), timeout: 3))
-        XCTAssertEqual(element(app, "SessionRow-Flaky CI-Agent").value as? String, "Codex CLI")
+        // The agent is asserted on the window subtitle rather than the row.
+        // Navigator rows carry status and churn only now — the agent is the
+        // provider tile beside the title, and the branch would repeat what the
+        // subtitle already says once the session is open.
+        assertWindowIdentity(app, contains: "Codex CLI")
 
         // MARK: Project session in a new worktree
 
@@ -78,9 +81,30 @@ final class CreateSessionUITests: XCTestCase {
         XCTAssertTrue(element(app, "CreateSession.CreateButton").waitForNonExistence(timeout: 5))
 
         XCTAssertTrue(fastWait(element(app, "SessionRow-Dark mode"), timeout: 3))
-        XCTAssertTrue(fastWait(element(app, "SessionRow-Dark mode-Branch"), timeout: 3))
-        let branch = element(app, "SessionRow-Dark mode-Branch").value as? String ?? ""
-        XCTAssertTrue(branch.contains("dark-mode"), branch)
+        assertWindowIdentity(app, contains: "dark-mode")
+    }
+
+    /// The focused session states itself in the window title bar — title, then
+    /// project · agent · model · branch from `DetailColumn.identity`. It is the
+    /// only place that information appears while a terminal fills the screen.
+    private func assertWindowIdentity(
+        _ app: XCUIApplication,
+        contains needle: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let window = app.windows.firstMatch
+        let matched = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in window.title.contains(needle) },
+            object: nil
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [matched], timeout: 5),
+            .completed,
+            "window title \"\(window.title)\" should contain \"\(needle)\"",
+            file: file,
+            line: line
+        )
     }
 
     /// The empty-goal case is only reachable through the modal: it allows a

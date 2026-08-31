@@ -363,40 +363,33 @@ struct SessionCard<Terminal: View>: View {
         .accessibilityHidden(true)
     }
 
+    /// One filled dot. It used to sit on a same-sized stroked circle, and the
+    /// knockout border below insets the fill just enough to leave that stroke
+    /// showing around it — so a single status read as two concentric rings.
+    /// The knockout stays: it separates the dot from the provider tile behind.
     private var statusBeacon: some View {
-        ZStack {
-            Circle()
-                .stroke(statusColor, lineWidth: 1)
-                .frame(width: 8, height: 8)
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
-                .overlay(Circle().strokeBorder(FlotillaColors.sidebar, lineWidth: 1.5))
-        }
-        .frame(width: 16, height: 16)
+        Circle()
+            .fill(statusColor)
+            .frame(width: 8, height: 8)
+            .overlay(Circle().strokeBorder(FlotillaColors.sidebar, lineWidth: 1.5))
+            .frame(width: 16, height: 16)
     }
 
     private var statusColor: Color {
         StatusPresentation.color(for: session.status)
     }
 
+    /// Status and churn, nothing else.
+    ///
+    /// The branch and the agent name used to sit here too. Both are redundant
+    /// in the navigator: the agent is already the provider tile beside the
+    /// title, and the branch repeats in the window subtitle the moment the
+    /// session is open, with the full worktree path on the row's tooltip. In a
+    /// column this narrow they cost the title its width and turned every row
+    /// into three competing strings.
     private var metadataLine: some View {
         HStack(spacing: 5) {
             statusWord
-            Text("·")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            if let branch = session.worktree?.branchName {
-                Text(branch)
-                    .font(.caption2.monospaced())
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .accessibilityIdentifier("SessionRow-\(session.title)-Branch")
-            } else {
-                Text(session.agent.displayName)
-                    .font(.caption2)
-                    .accessibilityIdentifier("SessionRow-\(session.title)-Agent")
-            }
             if let diffStatStore {
                 Spacer(minLength: 2)
                 SessionDiffStatView(session: session, diffStatStore: diffStatStore)

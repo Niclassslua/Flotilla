@@ -54,7 +54,6 @@ public struct StatusBadge: View {
     private let waitingReason: SessionWaitingReason?
     private let size: StatusBadgeSize
     private let showLabel: Bool
-    private let showGlyph: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isPulsing = false
@@ -63,14 +62,12 @@ public struct StatusBadge: View {
         _ status: SessionStatus?,
         waitingReason: SessionWaitingReason? = nil,
         size: StatusBadgeSize = .small,
-        showLabel: Bool = true,
-        showGlyph: Bool = false
+        showLabel: Bool = true
     ) {
         self.status = status
         self.waitingReason = status == .waitingForInput ? waitingReason : nil
         self.size = size
         self.showLabel = showLabel
-        self.showGlyph = showGlyph
     }
 
     private var statusColor: Color {
@@ -79,10 +76,6 @@ public struct StatusBadge: View {
 
     private var statusLabel: String {
         StatusPresentation.label(for: status, waitingReason: waitingReason)
-    }
-
-    private var statusGlyph: String {
-        StatusPresentation.glyph(for: status, waitingReason: waitingReason)
     }
 
     private var shouldPulse: Bool {
@@ -105,26 +98,14 @@ public struct StatusBadge: View {
 
     private var badgeBody: some View {
         HStack(spacing: size.spacing) {
-            ZStack {
-                Circle()
-                    .stroke(statusColor, lineWidth: size == .micro ? 1 : 1.5)
-                    .frame(width: size.dotSize, height: size.dotSize)
-                    .scaleEffect(isPulsing ? (size == .micro ? 1.8 : 2.2) : 1)
-                    .opacity(isPulsing ? 0 : (size == .micro ? 0.4 : 0.55))
-                    .opacity(shouldPulse ? 1 : 0)
-
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: size.dotSize, height: size.dotSize)
-                    .shadow(color: statusColor.opacity(0.45), radius: shouldPulse ? 3 : 0)
-            }
-            .frame(width: size.dotSize + 4, height: size.dotSize + 4)
-
-            if showGlyph {
-                Image(systemName: statusGlyph)
-                    .font(.system(size: size.dotSize * 0.7, weight: .medium))
-                    .foregroundStyle(statusColor)
-            }
+            // One filled disc, nothing behind it. There used to be a
+            // same-sized stroked circle underneath as a pulse halo, and the
+            // filled dot's own knockout border shrank it just enough to leave
+            // the stroke showing — so a single status read as two rings.
+            Circle()
+                .fill(statusColor)
+                .frame(width: size.dotSize, height: size.dotSize)
+                .frame(width: size.dotSize + 4, height: size.dotSize + 4)
 
             if showLabel {
                 Text(statusLabel)
@@ -156,13 +137,13 @@ public extension StatusBadge {
     ) {
         switch variant {
         case .default:
-            self.init(status, waitingReason: waitingReason, size: .small, showLabel: true, showGlyph: false)
+            self.init(status, waitingReason: waitingReason, size: .small, showLabel: true)
         case .compact:
-            self.init(status, waitingReason: waitingReason, size: .micro, showLabel: false, showGlyph: true)
+            self.init(status, waitingReason: waitingReason, size: .micro, showLabel: false)
         case .inline:
-            self.init(status, waitingReason: waitingReason, size: .small, showLabel: true, showGlyph: false)
+            self.init(status, waitingReason: waitingReason, size: .small, showLabel: true)
         case .prominent:
-            self.init(status, waitingReason: waitingReason, size: .medium, showLabel: true, showGlyph: true)
+            self.init(status, waitingReason: waitingReason, size: .medium, showLabel: true)
         }
     }
 
