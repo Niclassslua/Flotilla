@@ -17,6 +17,7 @@ struct DetailColumn: View {
     let onCommandPalette: () -> Void
 
     @State private var activeGridSessionID: UUID?
+    @State private var gitSidebarSessionID: UUID?
 
     var body: some View {
         let _ = navigator.presentedSheet
@@ -36,6 +37,18 @@ struct DetailColumn: View {
         .navigationTitle(scopeTitle)
         .navigationSubtitle(scopeSubtitle)
         .background(FlotillaColors.canvas)
+        .inspector(isPresented: gitSidebarPresented) {
+            gitSidebarContent
+                .inspectorColumnWidth(
+                    min: FlotillaLayoutWidth.inspectorMin,
+                    ideal: FlotillaLayoutWidth.inspectorIdeal,
+                    max: FlotillaLayoutWidth.inspectorMax
+                )
+        }
+        .onChange(of: activeGitSidebarSession?.id) { _, sessionID in
+            guard gitSidebarSessionID != nil else { return }
+            gitSidebarSessionID = sessionID
+        }
     }
 
     @ViewBuilder
@@ -133,16 +146,67 @@ struct DetailColumn: View {
         }
     }
 
-    /// Files and Changes still land on the project workspace scoped to this
-    /// session's own worktree — the same jump the window toolbar used to
-    /// offer, moved to the bar that names the session it acts on. The Git
-    /// sidebar has nothing to toggle yet and renders disabled.
+    /// Files and the full Changes workspace still land on the project scope.
+    /// The first action now opens the compact, session-scoped Git inspector
+    /// without unmounting the terminal beneath it.
     private func sessionBarActions(for session: Session) -> SessionBarActions {
         SessionBarActions(
             onRename: { store.renameSession(sessionID: session.id, newTitle: $0) },
+            onToggleGitSidebar: {
+                gitSidebarSessionID = gitSidebarSessionID == session.id ? nil : session.id
+            },
             onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
             onReviewChanges: { navigator.openProjectPanel(.git, scopedTo: session) }
         )
+    }
+
+    private var activeGitSidebarSession: Session? {
+        let session: Session? = switch navigator.selection {
+        case .session(let sessionID):
+            store.sessions.first { $0.id == sessionID }
+        case .allSessions, .smartList:
+            navigator.presentation == .focus ? store.selectedSession : nil
+        case .overview, .project:
+            nil
+        }
+        return session?.projectID == nil ? nil : session
+    }
+
+    private var gitSidebarPresented: Binding<Bool> {
+        Binding(
+            get: { gitSidebarSessionID != nil && activeGitSidebarSession != nil },
+            set: { isPresented in
+                gitSidebarSessionID = isPresented ? activeGitSidebarSession?.id : nil
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var gitSidebarContent: some View {
+        if let sessionID = gitSidebarSessionID,
+           let session = store.sessions.first(where: { $0.id == sessionID }),
+           let project = store.project(for: session) {
+            SessionGitSidebar(
+                viewModel: navigator.sessionGitSidebarViewModel(
+                    for: session,
+                    gitService: store.gitService
+                ),
+                store: store,
+                session: session,
+                project: project,
+                onClose: { gitSidebarSessionID = nil },
+                onOpenCommit: { commit, branch in
+                    navigator.openProjectCommit(
+                        commit,
+                        branch: branch,
+                        scopedTo: session,
+                        gitService: store.gitService
+                    )
+                    gitSidebarSessionID = nil
+                }
+            )
+            .id(sessionID)
+        }
     }
 
     @ViewBuilder

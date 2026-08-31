@@ -85,6 +85,19 @@ final class NumstatParsingTests: XCTestCase {
     }
 }
 
+final class BranchParsingTests: XCTestCase {
+    func testParsesLastCommitDateAndFiltersRemoteHead() throws {
+        let raw = "main\t*\tabc123\trefs/heads/main\t1700000000\norigin/HEAD\t \tabc123\trefs/remotes/origin/HEAD\t1700000001\n"
+
+        let branch = try XCTUnwrap(GitService.parseBranches(raw).first)
+
+        XCTAssertEqual(branch.name, "main")
+        XCTAssertTrue(branch.isCurrent)
+        XCTAssertEqual(branch.lastCommitDate, Date(timeIntervalSince1970: 1_700_000_000))
+        XCTAssertEqual(GitService.parseBranches(raw).count, 1)
+    }
+}
+
 final class WorktreePlannerTests: XCTestCase {
     func testMainCheckoutDecision() {
         let planner = WorktreePlanner()
@@ -163,6 +176,29 @@ final class MockGitServiceTests: XCTestCase {
         XCTAssertEqual(mock.pushCalls.first?.branch, "main")
         XCTAssertEqual(mock.fetchCalls.first, repoPath)
     }
+
+    func testRecordsComparisonAndBranchCalls() async throws {
+        let mock = MockGitService()
+        let repoPath = URL(fileURLWithPath: "/repo")
+        mock.defaultBranchToReturn = "develop"
+        mock.mergedBranchesToReturn = ["merged-feature"]
+
+        let defaultBranch = try await mock.defaultBranch(at: repoPath)
+        XCTAssertEqual(defaultBranch, "develop")
+        _ = try await mock.changesCompared(to: "develop", at: repoPath)
+        try await mock.checkout(branch: "feature", at: repoPath)
+        try await mock.createAndCheckoutBranch(named: "new-feature", at: repoPath)
+        try await mock.deleteBranch("old-feature", force: true, at: repoPath)
+        let isMerged = try await mock.isBranchMerged("merged-feature", into: "develop", at: repoPath)
+
+        XCTAssertEqual(mock.comparisonCalls.first?.base, "develop")
+        XCTAssertEqual(mock.checkoutCalls.first?.branch, "feature")
+        XCTAssertEqual(mock.createBranchCalls.first?.branch, "new-feature")
+        XCTAssertEqual(mock.deleteBranchCalls.first?.branch, "old-feature")
+        XCTAssertEqual(mock.deleteBranchCalls.first?.force, true)
+        XCTAssertEqual(mock.mergedBranchCalls.first?.base, "develop")
+        XCTAssertTrue(isMerged)
+    }
 }
 
 final class MockGhServiceTests: XCTestCase {
@@ -228,6 +264,13 @@ final class GitServiceRealRepoTests: XCTestCase {
         XCTAssertEqual(branch, "main")
     }
 
+    func testDefaultBranchPrefersMainFromFeatureBranch() async throws {
+        try await git(["switch", "-c", "feature"])
+
+        let defaultBranch = try await service.defaultBranch(at: repoPath)
+        XCTAssertEqual(defaultBranch, "main")
+    }
+
     func testStatusReportsUntrackedAndModifiedFiles() async throws {
         try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
         try "new\n".write(to: repoPath.appendingPathComponent("NEW.md"), atomically: true, encoding: .utf8)
@@ -272,6 +315,62 @@ final class GitServiceRealRepoTests: XCTestCase {
     func testDiffStatIsZeroForCleanTree() async throws {
         let stat = try await service.diffStat(at: repoPath)
         XCTAssertEqual(stat, GitDiffStat(additions: 0, deletions: 0))
+    }
+
+    func testChangesComparedIncludesCommittedWorkingTreeAndUntrackedChanges() async throws {
+        try await git(["switch", "-c", "feature"])
+        try "committed\n".write(
+            to: repoPath.appendingPathComponent("Committed.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try await git(["add", "Committed.swift"])
+        try await commit("Add committed file")
+
+        try "changed\n".write(
+            to: repoPath.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "untracked\n".write(
+            to: repoPath.appendingPathComponent("Untracked.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let changes = try await service.changesCompared(to: "main", at: repoPath)
+        let byPath = Dictionary(uniqueKeysWithValues: changes.map { ($0.path, $0) })
+
+        XCTAssertEqual(byPath["Committed.swift"]?.kind, .added)
+        XCTAssertEqual(byPath["README.md"]?.kind, .modified)
+        XCTAssertEqual(byPath["Untracked.swift"]?.kind, .added)
+        XCTAssertEqual(byPath["Committed.swift"]?.stat.additions, 1)
+        XCTAssertEqual(byPath["README.md"]?.stat.deletions, 1)
+        XCTAssertEqual(byPath["Untracked.swift"]?.stat.additions, 1)
+    }
+
+    func testCreateCheckoutMergeAssessmentAndDeleteLocalBranch() async throws {
+        try await service.createAndCheckoutBranch(named: "feature", at: repoPath)
+        let currentBranch = try await service.currentBranch(at: repoPath)
+        let initiallyMerged = try await service.isBranchMerged("feature", into: "main", at: repoPath)
+        XCTAssertEqual(currentBranch, "feature")
+        XCTAssertTrue(initiallyMerged)
+
+        try "feature\n".write(
+            to: repoPath.appendingPathComponent("Feature.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try await git(["add", "Feature.swift"])
+        try await commit("Feature work")
+        let mergedAfterCommit = try await service.isBranchMerged("feature", into: "main", at: repoPath)
+        XCTAssertFalse(mergedAfterCommit)
+
+        try await service.checkout(branch: "main", at: repoPath)
+        try await service.deleteBranch("feature", force: true, at: repoPath)
+
+        let remaining = try await service.branches(at: repoPath)
+        XCTAssertFalse(remaining.contains { $0.name == "feature" })
     }
 
     func testCreateWorktreeSucceedsAndAppearsInList() async throws {

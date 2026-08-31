@@ -43,6 +43,7 @@ final class WorkspaceNavigator {
     @ObservationIgnored private var fileBrowserViewModels: [URL: FileBrowserViewModel] = [:]
     @ObservationIgnored private var projectGraphViewModels: [URL: ProjectGraphViewModel] = [:]
     @ObservationIgnored private var diffPanelViewModels: [URL: DiffPanelViewModel] = [:]
+    @ObservationIgnored private var sessionGitSidebarViewModels: [URL: SessionGitSidebarViewModel] = [:]
 
     // Legacy compatibility - one-way flow from navigator to store
     var selectedSessionID: UUID? {
@@ -180,6 +181,28 @@ final class WorkspaceNavigator {
         projectGitSubTabs[projectID] = subTab
     }
 
+    /// Opens the existing full Git overview at one exact sidebar commit.
+    /// The sidebar is deliberately a compact navigator; commit inspection
+    /// stays in the graph/detail workspace that already owns it.
+    func openProjectCommit(
+        _ commit: GitCommit,
+        branch: String,
+        scopedTo session: Session,
+        gitService: any GitServiceProtocol
+    ) {
+        guard let projectID = session.projectID else { return }
+        let repoPath = (session.worktree?.worktreePath ?? session.workingDirectory).standardizedFileURL
+        setProjectGitScope(repoPath, for: projectID)
+        setProjectGitSubTab(.commits, for: projectID)
+
+        let graphViewModel = projectGraphViewModel(for: repoPath, gitService: gitService)
+        graphViewModel.selectedBranchFilter = branch
+        graphViewModel.selectedSHA = commit.sha
+
+        setProjectTab(.git, for: projectID)
+        selection = .project(projectID)
+    }
+
     /// File browser models outlive the conditional project/session surfaces
     /// that display them. Reusing one model per workspace preserves its loaded
     /// tree, selected file, editor contents, and save metadata across facet
@@ -229,6 +252,23 @@ final class WorkspaceNavigator {
 
         let viewModel = DiffPanelViewModel(session: session, gitService: gitService, ghService: ghService)
         diffPanelViewModels[repoPath] = viewModel
+        return viewModel
+    }
+
+    /// Like the project Git models above, sidebar state is keyed by checkout
+    /// path so hiding and reopening the inspector preserves the selected tab,
+    /// branch filter, staging state, and commit draft.
+    func sessionGitSidebarViewModel(
+        for session: Session,
+        gitService: any GitServiceProtocol
+    ) -> SessionGitSidebarViewModel {
+        let repoPath = (session.worktree?.worktreePath ?? session.workingDirectory).standardizedFileURL
+        if let existing = sessionGitSidebarViewModels[repoPath] {
+            return existing
+        }
+
+        let viewModel = SessionGitSidebarViewModel(session: session, gitService: gitService)
+        sessionGitSidebarViewModels[repoPath] = viewModel
         return viewModel
     }
 

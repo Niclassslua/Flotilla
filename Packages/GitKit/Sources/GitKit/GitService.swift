@@ -1,5 +1,11 @@
 import Foundation
 
+private func syntheticAddedLines(from text: String) -> [String] {
+    var lines = text.components(separatedBy: "\n")
+    if lines.last?.isEmpty == true { lines.removeLast() }
+    return lines.map { "+\($0)" }
+}
+
 public struct GitWorktree: Hashable, Equatable, Sendable {
     public var branch: String
     public var path: URL
@@ -17,12 +23,20 @@ public struct GitBranch: Hashable, Equatable, Sendable {
     public var isCurrent: Bool
     public var isRemote: Bool
     public var tipSHA: String
+    public var lastCommitDate: Date
 
-    public init(name: String, isCurrent: Bool, isRemote: Bool, tipSHA: String) {
+    public init(
+        name: String,
+        isCurrent: Bool,
+        isRemote: Bool,
+        tipSHA: String,
+        lastCommitDate: Date = .distantPast
+    ) {
         self.name = name
         self.isCurrent = isCurrent
         self.isRemote = isRemote
         self.tipSHA = tipSHA
+        self.lastCommitDate = lastCommitDate
     }
 }
 
@@ -94,6 +108,20 @@ public struct FileDiff: Equatable, Sendable {
         self.path = path
         self.hunks = hunks
         self.stage = stage
+    }
+
+    public var stat: GitDiffStat {
+        hunks.reduce(GitDiffStat(additions: 0, deletions: 0)) { total, hunk in
+            hunk.lines.reduce(total) { partial, line in
+                if line.hasPrefix("+") {
+                    return partial + GitDiffStat(additions: 1, deletions: 0)
+                }
+                if line.hasPrefix("-") {
+                    return partial + GitDiffStat(additions: 0, deletions: 1)
+                }
+                return partial
+            }
+        }
     }
 }
 
@@ -216,6 +244,23 @@ public protocol GitServiceProtocol: Sendable {
 
     /// Lists all local and remote branches with tip SHAs and current checkout status.
     func branches(at repoPath: URL) async throws -> [GitBranch]
+
+    /// The repository's configured default branch. Prefers `origin/HEAD`,
+    /// then conventional local branch names, then the main worktree branch.
+    func defaultBranch(at repoPath: URL) async throws -> String
+
+    /// The complete working-copy delta since `HEAD` diverged from `base`.
+    /// Includes committed, staged, unstaged, and untracked files.
+    func changesCompared(to base: String, at repoPath: URL) async throws -> [GitCommitFileChange]
+
+    /// Safe branch mutations used by the session Git sidebar. Callers are
+    /// responsible for refusing a checkout while the working tree is dirty.
+    func checkout(branch: String, at repoPath: URL) async throws
+    func createAndCheckoutBranch(named branch: String, at repoPath: URL) async throws
+    func deleteBranch(_ branch: String, force: Bool, at repoPath: URL) async throws
+
+    /// Whether every commit on `branch` is already reachable from `base`.
+    func isBranchMerged(_ branch: String, into base: String, at repoPath: URL) async throws -> Bool
 }
 
 public extension GitServiceProtocol {
@@ -239,7 +284,7 @@ public extension GitServiceProtocol {
                     )
                 }
                 let text = String(decoding: data, as: UTF8.self)
-                let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map { "+\($0)" }
+                let lines = syntheticAddedLines(from: text)
                 return FileDiff(
                     path: entry.path,
                     hunks: [FileDiffHunk(header: "@@ new untracked file @@", lines: lines)],
@@ -595,11 +640,119 @@ public struct GitService: GitServiceProtocol {
     }
 
     public func branches(at repoPath: URL) async throws -> [GitBranch] {
-        let format = "%(refname:short)%09%(HEAD)%09%(objectname)%09%(refname)"
+        let format = "%(refname:short)%09%(HEAD)%09%(objectname)%09%(refname)%09%(committerdate:unix)"
         let args = ["for-each-ref", "--format=\(format)", "refs/heads", "refs/remotes"]
         let result = try await runRaw(args, at: repoPath)
         guard result.exitCode == 0 else { return [] }
         return Self.parseBranches(result.stdout)
+    }
+
+    public func defaultBranch(at repoPath: URL) async throws -> String {
+        let remoteHead = try await runRaw(
+            ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+            at: repoPath
+        )
+        if remoteHead.exitCode == 0 {
+            let remoteName = remoteHead.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            let localName = remoteName.hasPrefix("origin/")
+                ? String(remoteName.dropFirst("origin/".count))
+                : remoteName
+            let localRef = try await runRaw(
+                ["show-ref", "--verify", "--quiet", "refs/heads/\(localName)"],
+                at: repoPath
+            )
+            return localRef.exitCode == 0 ? localName : remoteName
+        }
+
+        for candidate in ["main", "master"] {
+            let result = try await runRaw(
+                ["show-ref", "--verify", "--quiet", "refs/heads/\(candidate)"],
+                at: repoPath
+            )
+            if result.exitCode == 0 { return candidate }
+        }
+
+        if let mainWorktree = try await listWorktrees(at: repoPath).first(where: \.isMainWorktree),
+           mainWorktree.branch != "(detached)" {
+            return mainWorktree.branch
+        }
+        return try await currentBranch(at: repoPath)
+    }
+
+    public func changesCompared(to base: String, at repoPath: URL) async throws -> [GitCommitFileChange] {
+        let mergeBase = try await run(["merge-base", "HEAD", base], at: repoPath)
+            .stdout
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !mergeBase.isEmpty else { return [] }
+
+        async let patchRequest = run(
+            ["diff", "--no-color", "--find-renames", mergeBase, "--"],
+            at: repoPath
+        )
+        async let nameStatusRequest = run(
+            ["diff", "--no-color", "--name-status", "--find-renames", mergeBase, "--"],
+            at: repoPath
+        )
+        async let statusRequest = status(at: repoPath)
+        let (patch, nameStatus, workingStatus) = try await (
+            patchRequest,
+            nameStatusRequest,
+            statusRequest
+        )
+
+        let hunksByPath = Dictionary(
+            Self.parseUnifiedDiff(patch.stdout).map { ($0.path, $0.hunks) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var changes = Self.parseNameStatus(nameStatus.stdout).map { change -> GitCommitFileChange in
+            var resolved = change
+            resolved.hunks = hunksByPath[change.path] ?? []
+            return resolved
+        }
+
+        let knownPaths = Set(changes.map(\.path))
+        for entry in workingStatus.entries where entry.isUntracked && !knownPaths.contains(entry.path) {
+            let fileURL = repoPath.appendingPathComponent(entry.path)
+            let hunks: [FileDiffHunk]
+            if let data = try? Data(contentsOf: fileURL), !data.contains(0) {
+                let text = String(decoding: data, as: UTF8.self)
+                let lines = syntheticAddedLines(from: text)
+                hunks = [FileDiffHunk(header: "@@ new untracked file @@", lines: lines)]
+            } else {
+                hunks = [FileDiffHunk(header: "@@ untracked binary file @@", lines: [])]
+            }
+            changes.append(GitCommitFileChange(path: entry.path, kind: .added, hunks: hunks))
+        }
+        return changes
+    }
+
+    public func checkout(branch: String, at repoPath: URL) async throws {
+        _ = try await run(["switch", branch], at: repoPath)
+    }
+
+    public func createAndCheckoutBranch(named branch: String, at repoPath: URL) async throws {
+        do {
+            _ = try await run(["switch", "-c", branch], at: repoPath)
+        } catch let GitServiceError.commandFailed(_, stderr) {
+            if stderr.contains("already exists") {
+                throw GitServiceError.branchAlreadyExists(branch)
+            }
+            throw GitServiceError.commandFailed(exitCode: -1, stderr: stderr)
+        }
+    }
+
+    public func deleteBranch(_ branch: String, force: Bool, at repoPath: URL) async throws {
+        _ = try await run(["branch", force ? "-D" : "-d", branch], at: repoPath)
+    }
+
+    public func isBranchMerged(_ branch: String, into base: String, at repoPath: URL) async throws -> Bool {
+        let result = try await runRaw(["merge-base", "--is-ancestor", branch, base], at: repoPath)
+        switch result.exitCode {
+        case 0: return true
+        case 1: return false
+        default:
+            throw GitServiceError.commandFailed(exitCode: result.exitCode, stderr: result.stderr)
+        }
     }
 
     public static func parseBranches(_ output: String) -> [GitBranch] {
@@ -612,8 +765,17 @@ public struct GitService: GitServiceProtocol {
             let tipSHA = parts[2]
             let fullRef = parts[3]
             let isRemote = fullRef.hasPrefix("refs/remotes/")
+            let lastCommitDate = parts.count >= 5
+                ? TimeInterval(parts[4]).map(Date.init(timeIntervalSince1970:)) ?? .distantPast
+                : .distantPast
             if name.hasSuffix("/HEAD") { continue }
-            branches.append(GitBranch(name: name, isCurrent: isCurrent, isRemote: isRemote, tipSHA: tipSHA))
+            branches.append(GitBranch(
+                name: name,
+                isCurrent: isCurrent,
+                isRemote: isRemote,
+                tipSHA: tipSHA,
+                lastCommitDate: lastCommitDate
+            ))
         }
         return branches
     }

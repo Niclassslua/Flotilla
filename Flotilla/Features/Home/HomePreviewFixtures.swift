@@ -104,6 +104,17 @@ struct PreviewGitService: GitServiceProtocol {
         ]
     }
 
+    func defaultBranch(at repoPath: URL) async throws -> String { "main" }
+
+    func changesCompared(to base: String, at repoPath: URL) async throws -> [GitCommitFileChange] {
+        Self.previewFiles
+    }
+
+    func checkout(branch: String, at repoPath: URL) async throws {}
+    func createAndCheckoutBranch(named branch: String, at repoPath: URL) async throws {}
+    func deleteBranch(_ branch: String, force: Bool, at repoPath: URL) async throws {}
+    func isBranchMerged(_ branch: String, into base: String, at repoPath: URL) async throws -> Bool { true }
+
     /// Spread across day boundaries so previews exercise the date grouping,
     /// and deliberately mixed — a merge, an unpushed tip, a second author.
     private static let previewCommits: [GitCommit] = [

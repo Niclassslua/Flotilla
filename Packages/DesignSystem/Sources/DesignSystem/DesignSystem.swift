@@ -78,11 +78,12 @@ public enum FlotillaLayoutWidth: Sendable {
     public static let sidebarMin: CGFloat = 260
     public static let sidebarIdeal: CGFloat = 600
     public static let sidebarMax: CGFloat = 720
-    /// Only `inspectorMin` is live, in the skills ledger's docked detail pane.
-    /// `inspectorIdeal`/`inspectorMax` were sized for a session inspector that
-    /// was never built; they go rather than sit here describing a pane that
-    /// does not exist. Reintroduce them with it.
+    /// Shared by docked detail surfaces. The Git sidebar needs enough room
+    /// for a filename, path, and diff stat while remaining subordinate to the
+    /// live terminal it supplements.
     public static let inspectorMin: CGFloat = 280
+    public static let inspectorIdeal: CGFloat = 360
+    public static let inspectorMax: CGFloat = 480
     public static let contentMax: CGFloat = 920
     public static let windowMin: CGFloat = 1000
     public static let windowHeightMin: CGFloat = 640

@@ -629,6 +629,23 @@ final class AppStore {
         syncDiscoveredTitle(newTitle, toSessionID: sessionID)
     }
 
+    /// Keeps persisted worktree metadata aligned when the user checks out a
+    /// different branch from the session Git sidebar. Main-checkout sessions
+    /// deliberately have no `WorktreeInfo`; their current branch remains Git
+    /// state rather than being duplicated in the session record.
+    func updateSessionBranch(sessionID: UUID, branchName: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
+              var worktree = sessions[index].worktree,
+              worktree.branchName != branchName else { return }
+        worktree.branchName = branchName
+        sessions[index].worktree = worktree
+        do {
+            try repository.save(mergingLiveScrollback(sessions[index]))
+        } catch {
+            lastOperationError = "Session branch could not be saved: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Agent self-report
 
     /// Fallback-creating an app-managed worktree only kicks in once the

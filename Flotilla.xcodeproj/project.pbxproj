@@ -49,6 +49,7 @@
 		1EE083B23BC3D3935B8148E9 /* WorkspaceNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EAAAB3E707A7482A2AAE988 /* WorkspaceNavigator.swift */; };
 		1FC54907C9F76FF970ED8B6F /* gemfile.svg in Resources */ = {isa = PBXBuildFile; fileRef = A3348D6A0B9FA97635592129 /* gemfile.svg */; };
 		207D186B9F3E96CC368450FC /* FleetSmartList.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26E19A813CF60C404557C40 /* FleetSmartList.swift */; };
+		20DF16336CD35E2C123AD0CF /* GitSidebarUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7993ACB5B4FCFA5586BC7AD /* GitSidebarUITests.swift */; };
 		222CBE71880A1BC48CA71CB7 /* zig.svg in Resources */ = {isa = PBXBuildFile; fileRef = CE4999D5E0106AF58800F11A /* zig.svg */; };
 		2300252E82CA383375D3427B /* SessionKit in Frameworks */ = {isa = PBXBuildFile; productRef = B5259CCE5A5E0280938816DA /* SessionKit */; };
 		2369CEBC1E16F813EE5641DC /* folder-views.svg in Resources */ = {isa = PBXBuildFile; fileRef = BAD5FF28EA1E1FDA4F858DDA /* folder-views.svg */; };
@@ -66,6 +67,7 @@
 		2E7F3FDB8FDE7991924FEABC /* DiffStatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E030FA9058EADAD4C052103C /* DiffStatStore.swift */; };
 		2EB407743D7F726F4F54CA40 /* folder-images.svg in Resources */ = {isa = PBXBuildFile; fileRef = A222B07A171441944E120CE6 /* folder-images.svg */; };
 		2FFAFBA7EEDA9EE12049052F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFA78B3B753464372AF1F635 /* SettingsView.swift */; };
+		303A11BCC028790677CB2C3A /* SessionGitSidebarViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0CA60D0B5BAB04DE42CB06 /* SessionGitSidebarViewModelTests.swift */; };
 		3207925FB855499C27F595DE /* ProjectGraphViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7540AC89ADA72855220C41 /* ProjectGraphViewModelTests.swift */; };
 		331ECCA9ADE5387772D755EB /* KnowledgeActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 555E4B7984B36066BEE0FFE8 /* KnowledgeActions.swift */; };
 		33FD723C9B4C4FCDB87D7C5B /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 9BF6184167526D0FDF11DC27 /* DesignSystem */; };
@@ -231,6 +233,7 @@
 		C8EB697F01CA679EF2319C7A /* MonacoLanguageMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7647E6E3F8217B4210D6634 /* MonacoLanguageMappingTests.swift */; };
 		C911E3A2A43F3D1E6475B7ED /* AgentConversationOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9E53144F55E554FC3CD0B5 /* AgentConversationOwnership.swift */; };
 		C9D271C08A0E62FB3DFB2B3A /* SessionLaunchPreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC108CFFA20A3D4EE6A5C1 /* SessionLaunchPreviewTests.swift */; };
+		CA7F54952462520902C35D42 /* SessionGitSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D490CD7D27E8D5FA26A9A2 /* SessionGitSidebar.swift */; };
 		CAD6247D89A5A6290BCDB406 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 796835DB2BE8824C2165999C /* Assets.xcassets */; };
 		CBDDE8E2BD1EDA4A5925077E /* git.svg in Resources */ = {isa = PBXBuildFile; fileRef = ACF1BC73FD352D9CADCA8CC9 /* git.svg */; };
 		CC07722A4B828F1F4C7907AD /* css.svg in Resources */ = {isa = PBXBuildFile; fileRef = E493E2028BBE35E962D2F085 /* css.svg */; };
@@ -443,6 +446,7 @@
 		88F189D975DD32C573D4279F /* HooksKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HooksKit; path = Packages/HooksKit; sourceTree = SOURCE_ROOT; };
 		899F910D5D61381622451EAC /* audio.svg */ = {isa = PBXFileReference; path = audio.svg; sourceTree = "<group>"; };
 		8A5491FDE4DC8E390D1F339D /* StartupCheckUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupCheckUITests.swift; sourceTree = "<group>"; };
+		8B0CA60D0B5BAB04DE42CB06 /* SessionGitSidebarViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGitSidebarViewModelTests.swift; sourceTree = "<group>"; };
 		8B92EDEF9A089878F5FAB62C /* folder-hook.svg */ = {isa = PBXFileReference; path = "folder-hook.svg"; sourceTree = "<group>"; };
 		8BDC9600CEDB1A97835AA0DB /* HomeDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDashboardView.swift; sourceTree = "<group>"; };
 		8C5DEE977614F52F1F9245E5 /* folder-packages.svg */ = {isa = PBXFileReference; path = "folder-packages.svg"; sourceTree = "<group>"; };
@@ -484,12 +488,14 @@
 		AFCB8938BFF70D0F65BFA50B /* SessionDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDraft.swift; sourceTree = "<group>"; };
 		AFDFDBAF9EE9A98FC212D11A /* MissionControlGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionControlGrid.swift; sourceTree = "<group>"; };
 		B1B10900DD61FF5C1C8B90CA /* database.svg */ = {isa = PBXFileReference; path = database.svg; sourceTree = "<group>"; };
+		B3D490CD7D27E8D5FA26A9A2 /* SessionGitSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGitSidebar.swift; sourceTree = "<group>"; };
 		B41054091FCCC2049FDE7864 /* ProjectOverviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectOverviewTests.swift; sourceTree = "<group>"; };
 		B4D5179F1C39DC208C2CA0C4 /* folder-opencode.svg */ = {isa = PBXFileReference; path = "folder-opencode.svg"; sourceTree = "<group>"; };
 		B59D4859A8BA0601C40B809C /* folder-assets.svg */ = {isa = PBXFileReference; path = "folder-assets.svg"; sourceTree = "<group>"; };
 		B5E52F8F4F519CDFFDF773A6 /* FlotillaHeroTitleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaHeroTitleView.swift; sourceTree = "<group>"; };
 		B648E922BAE32ACA682146B5 /* cargo.svg */ = {isa = PBXFileReference; path = cargo.svg; sourceTree = "<group>"; };
 		B66BD26E89CF3B708388E6BC /* go.svg */ = {isa = PBXFileReference; path = go.svg; sourceTree = "<group>"; };
+		B7993ACB5B4FCFA5586BC7AD /* GitSidebarUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitSidebarUITests.swift; sourceTree = "<group>"; };
 		B8034B27D7FF60ED84FD5A58 /* GitLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitLogTests.swift; sourceTree = "<group>"; };
 		B954B8EC3F165103B7890A21 /* vue.svg */ = {isa = PBXFileReference; path = vue.svg; sourceTree = "<group>"; };
 		BA401BCC5498B90F5DFD32D5 /* folder-workflows.svg */ = {isa = PBXFileReference; path = "folder-workflows.svg"; sourceTree = "<group>"; };
@@ -610,6 +616,7 @@
 				1C186BA700EF1B3AEE94CE07 /* DeleteSessionUITests.swift */,
 				D9CA8721FFE982E28B49BC12 /* DiffAndFilesUITests.swift */,
 				2CFB40CA8CE1DD12C190C2FA /* FlotillaUITests.swift */,
+				B7993ACB5B4FCFA5586BC7AD /* GitSidebarUITests.swift */,
 				EB25ABE36F82A35C66B86520 /* GridViewUITests.swift */,
 				C6ACC2BF0E8EE3D8EBC67C71 /* HomeComposerUITests.swift */,
 				749D2FC6B87D43FD5AA8B80C /* HooksUITests.swift */,
@@ -636,6 +643,7 @@
 				3E782E7FF5EA05CA2F213E13 /* MonacoHostView.swift */,
 				E9E92AD2A3796DB9F45629AB /* SessionBar.swift */,
 				EE2E8E12BEEF83058926206E /* SessionCard.swift */,
+				B3D490CD7D27E8D5FA26A9A2 /* SessionGitSidebar.swift */,
 				19D56D1BE955038251814650 /* SessionRow.swift */,
 				C8908D6EE67B334DA6268785 /* SessionScreenReader.swift */,
 				22BC89FA739AB982526D7A98 /* SyntaxHighlightedTextEditor.swift */,
@@ -986,6 +994,7 @@
 				B41054091FCCC2049FDE7864 /* ProjectOverviewTests.swift */,
 				7BBC083783BD10EC9D3923E7 /* RealPipelineReproTests.swift */,
 				264B5BE4E6D4D8B548110E6E /* SessionDraftTests.swift */,
+				8B0CA60D0B5BAB04DE42CB06 /* SessionGitSidebarViewModelTests.swift */,
 				57E99A85EFCE693B30D4B589 /* SessionGroupTests.swift */,
 				BC6D93705F55A5D34EE54781 /* SessionKitTests.swift */,
 				55AC108CFFA20A3D4EE6A5C1 /* SessionLaunchPreviewTests.swift */,
@@ -1336,6 +1345,7 @@
 				1D4E8803E7662F52088203AA /* ProjectOverviewTests.swift in Sources */,
 				195CD176EEA524BA2246BA0C /* RealPipelineReproTests.swift in Sources */,
 				DA2130B8E5D8E7EA1A0577CA /* SessionDraftTests.swift in Sources */,
+				303A11BCC028790677CB2C3A /* SessionGitSidebarViewModelTests.swift in Sources */,
 				76EBB986A0337ECD9C346569 /* SessionGroupTests.swift in Sources */,
 				8BD8492768B3EC20D5A9C56A /* SessionKitTests.swift in Sources */,
 				C9D271C08A0E62FB3DFB2B3A /* SessionLaunchPreviewTests.swift in Sources */,
@@ -1426,6 +1436,7 @@
 				5F306FD048B5795A6DC38471 /* SessionCard.swift in Sources */,
 				1DA404831D242EE3F828F4D0 /* SessionDraft.swift in Sources */,
 				9E05CD5CFFF4C8F27FF74AD6 /* SessionElapsed.swift in Sources */,
+				CA7F54952462520902C35D42 /* SessionGitSidebar.swift in Sources */,
 				E1E792FAF89F7E05B8441567 /* SessionGroupBar.swift in Sources */,
 				4A20A104CAFD942AB6CEE910 /* SessionLaunchPreview.swift in Sources */,
 				37C6F711861A1F82A0EF6A57 /* SessionProcessManager.swift in Sources */,
@@ -1458,6 +1469,7 @@
 				AB0B85DD8EEA104338115116 /* DeleteSessionUITests.swift in Sources */,
 				4FE684C14DD32C29DF7AEF73 /* DiffAndFilesUITests.swift in Sources */,
 				116BF380DC13FE82F215868A /* FlotillaUITests.swift in Sources */,
+				20DF16336CD35E2C123AD0CF /* GitSidebarUITests.swift in Sources */,
 				08E5F188AD8414E021FF65DD /* GridViewUITests.swift in Sources */,
 				B2235264263ADB9B1C11DA00 /* HomeComposerUITests.swift in Sources */,
 				573296CCC427A2BC1E51BC33 /* HooksUITests.swift in Sources */,

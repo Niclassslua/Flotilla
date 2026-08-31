@@ -243,11 +243,14 @@ struct SessionBar: View {
             // pair: 8pt between chips that already carry their own margin
             // read as three separate controls that happened to land together.
             HStack(spacing: 2) {
-                // Renders disabled on purpose: there is no git sidebar to
-                // show yet. A button that accepted the click and did nothing
-                // would be indistinguishable from one that is broken.
-                barButton("sidebar.right", help: "Git sidebar (not available yet)", action: actions.onToggleGitSidebar)
-                    .disabled(true)
+                barButton(
+                    "sidebar.right",
+                    help: hasProject
+                        ? "Toggle Git sidebar"
+                        : "This session is not assigned to a project, so there is no repository sidebar to show.",
+                    action: actions.onToggleGitSidebar
+                )
+                    .disabled(!hasProject)
                     .accessibilityLabel("Git sidebar")
                     .accessibilityIdentifier(AXID.sessionBarGitSidebarToggle.rawValue)
 

@@ -4,9 +4,13 @@ import Foundation
 /// model tests and `UI_TESTING=1` runs so they never touch a real repo.
 public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public var branchToReturn = "main"
+    public var defaultBranchToReturn = "main"
     public var statusToReturn = GitStatus(entries: [])
     public var diffToReturn: [FileDiff] = []
+    public var stagedDiffToReturn: [FileDiff]?
+    public var unstagedDiffToReturn: [FileDiff]?
     public var diffStatToReturn = GitDiffStat(additions: 0, deletions: 0)
+    public var comparisonChangesToReturn: [GitCommitFileChange] = []
     public var worktreesToReturn: [GitWorktree] = []
     public var logToReturn: [GitCommit] = []
     public var graphLogToReturn: [GitCommit] = []
@@ -20,6 +24,7 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public var hooksPathToReturn = ".git/hooks"
     /// Keyed by branch name — the SHAs that branch owns exclusively.
     public var commitsOnBranchToReturn: [String: Set<String>] = [:]
+    public var mergedBranchesToReturn: Set<String> = []
     public var errorToThrow: Error?
 
     public private(set) var createWorktreeCalls: [(basePath: URL, branch: String, destination: URL)] = []
@@ -35,6 +40,11 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public private(set) var branchesCalls: [URL] = []
     public private(set) var commitDetailCalls: [(sha: String, repoPath: URL)] = []
     public private(set) var commitsOnBranchCalls: [(branch: String, base: String, repoPath: URL)] = []
+    public private(set) var comparisonCalls: [(base: String, repoPath: URL)] = []
+    public private(set) var checkoutCalls: [(branch: String, repoPath: URL)] = []
+    public private(set) var createBranchCalls: [(branch: String, repoPath: URL)] = []
+    public private(set) var deleteBranchCalls: [(branch: String, force: Bool, repoPath: URL)] = []
+    public private(set) var mergedBranchCalls: [(branch: String, base: String, repoPath: URL)] = []
 
     public init() {}
 
@@ -50,6 +60,8 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
 
     public func diff(at repoPath: URL, staged: Bool) async throws -> [FileDiff] {
         if let errorToThrow { throw errorToThrow }
+        if staged, let stagedDiffToReturn { return stagedDiffToReturn }
+        if !staged, let unstagedDiffToReturn { return unstagedDiffToReturn }
         return diffToReturn
     }
 
@@ -155,6 +167,40 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
         branchesCalls.append(repoPath)
         if let errorToThrow { throw errorToThrow }
         return branchesToReturn
+    }
+
+    public func defaultBranch(at repoPath: URL) async throws -> String {
+        if let errorToThrow { throw errorToThrow }
+        return defaultBranchToReturn
+    }
+
+    public func changesCompared(to base: String, at repoPath: URL) async throws -> [GitCommitFileChange] {
+        comparisonCalls.append((base, repoPath))
+        if let errorToThrow { throw errorToThrow }
+        return comparisonChangesToReturn
+    }
+
+    public func checkout(branch: String, at repoPath: URL) async throws {
+        checkoutCalls.append((branch, repoPath))
+        if let errorToThrow { throw errorToThrow }
+        branchToReturn = branch
+    }
+
+    public func createAndCheckoutBranch(named branch: String, at repoPath: URL) async throws {
+        createBranchCalls.append((branch, repoPath))
+        if let errorToThrow { throw errorToThrow }
+        branchToReturn = branch
+    }
+
+    public func deleteBranch(_ branch: String, force: Bool, at repoPath: URL) async throws {
+        deleteBranchCalls.append((branch, force, repoPath))
+        if let errorToThrow { throw errorToThrow }
+    }
+
+    public func isBranchMerged(_ branch: String, into base: String, at repoPath: URL) async throws -> Bool {
+        mergedBranchCalls.append((branch, base, repoPath))
+        if let errorToThrow { throw errorToThrow }
+        return mergedBranchesToReturn.contains(branch)
     }
 }
 
