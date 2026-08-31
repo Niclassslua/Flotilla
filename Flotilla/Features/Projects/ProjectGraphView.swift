@@ -91,11 +91,16 @@ struct ProjectGraphView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("ProjectGraph.NoMatches")
             } else if viewModel.filteredRows.isEmpty {
-                ContentUnavailableView(
-                    "Nothing on This Branch",
-                    systemImage: "arrow.triangle.branch",
-                    description: Text("No commits in the loaded window are reachable from “\(viewModel.selectedBranchFilter ?? "")”.")
-                )
+                ContentUnavailableView {
+                    Label {
+                        Text("Nothing on This Branch")
+                    } icon: {
+                        GitBranchIcon(size: 28)
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    }
+                } description: {
+                    Text("No commits in the loaded window are reachable from “\(viewModel.selectedBranchFilter ?? "")”.")
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("ProjectGraph.NoBranchMatches")
             } else {
@@ -144,7 +149,8 @@ struct ProjectGraphView: View {
                     ForEach(viewModel.branches, id: \.name) { branch in
                         GraphBranchChip(
                             title: branch.name,
-                            systemImage: branch.isRemote ? "cloud" : "arrow.triangle.branch",
+                            systemImage: branch.isRemote ? "cloud" : "",
+                            isBranch: !branch.isRemote,
                             laneColor: viewModel.laneColor(forBranch: branch),
                             isCurrent: branch.isCurrent,
                             isSelected: viewModel.selectedBranchFilter == branch.name
@@ -815,6 +821,7 @@ private struct GraphStatCell: View {
 private struct GraphBranchChip: View {
     let title: String
     let systemImage: String
+    var isBranch: Bool = false
     let laneColor: Color?
     let isCurrent: Bool
     let isSelected: Bool
@@ -829,6 +836,8 @@ private struct GraphBranchChip: View {
                     Circle()
                         .fill(laneColor)
                         .frame(width: 6, height: 6)
+                } else if isBranch {
+                    GitBranchIcon(size: 8)
                 } else {
                     Image(systemName: systemImage)
                         .font(.system(size: 8, weight: .semibold))
@@ -1002,8 +1011,12 @@ struct CommitRefChip: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: systemImage)
-                .font(.system(size: 8, weight: .semibold))
+            if systemImage == "arrow.triangle.branch" {
+                GitBranchIcon(size: 8)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: 8, weight: .semibold))
+            }
             Text(text)
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .lineLimit(1)

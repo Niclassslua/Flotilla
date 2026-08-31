@@ -41,7 +41,7 @@ struct DeleteSessionSheet: View {
 
             if let worktree = session.worktree {
                 VStack(alignment: .leading, spacing: 4) {
-                    Label(worktree.branchName, systemImage: "arrow.triangle.branch")
+                    GitBranchLabel(worktree.branchName, size: 12)
                     Text(worktree.worktreePath.path)
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)

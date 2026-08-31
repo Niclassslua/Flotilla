@@ -142,8 +142,7 @@ struct SessionRow: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
             if let branch = session.worktree?.branchName {
-                Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 8, weight: .medium))
+                GitBranchIcon(size: 9)
                 Text(branch)
                     .font(.caption2.monospaced())
                     .truncationMode(.middle)

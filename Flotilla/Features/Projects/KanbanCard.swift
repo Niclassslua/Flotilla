@@ -228,8 +228,7 @@ private struct GlassCard: View {
     /// card width and truncates in the middle rather than dropping the tail.
     private func branchRow(_ branch: String) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 10))
+            GitBranchIcon(size: 10)
                 .foregroundStyle(FlotillaColors.textTertiary)
             Text(branch)
                 .font(.system(size: 11, design: .monospaced))

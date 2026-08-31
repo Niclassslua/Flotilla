@@ -172,8 +172,7 @@ struct SessionCard<Terminal: View>: View {
             // Branch / Diff stat
             HStack(spacing: 8) {
                 if let branch = session.worktree?.branchName {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.caption2)
+                    GitBranchIcon(size: 10)
                         .foregroundStyle(.secondary)
                     Text(branch)
                         .font(.caption2.monospaced())
@@ -287,8 +286,7 @@ struct SessionCard<Terminal: View>: View {
 
     private var gitDiffBadge: some View {
         HStack(spacing: 8) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.caption)
+            GitBranchIcon(size: 11)
                 .foregroundStyle(.secondary)
 
             if let worktree = session.worktree {

@@ -135,8 +135,12 @@ struct ProjectDetailView: View {
         } label: {
             VStack(spacing: 5) {
                 HStack(spacing: 5) {
-                    Image(systemName: candidate.systemImage)
-                        .font(.system(size: FlotillaIconSize.small))
+                    if candidate == .git {
+                        GitBranchIcon(size: FlotillaIconSize.small)
+                    } else {
+                        Image(systemName: candidate.systemImage)
+                            .font(.system(size: FlotillaIconSize.small))
+                    }
                     Text(candidate.title)
                         .font(FlotillaTypography.caption.weight(isActive ? .semibold : .regular))
                 }
@@ -177,8 +181,7 @@ struct ProjectDetailView: View {
 
                         if let branch = currentBranch {
                             HStack(spacing: 4) {
-                                Image(systemName: "arrow.triangle.branch")
-                                    .font(.system(size: FlotillaIconSize.small))
+                                GitBranchIcon(size: FlotillaIconSize.small)
                                 Text(branch)
                                     .font(.system(size: 11, design: .monospaced))
                             }

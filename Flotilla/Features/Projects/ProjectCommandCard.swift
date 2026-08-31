@@ -73,8 +73,7 @@ struct ProjectCommandCard: View {
 
             if let branch = currentBranch {
                 HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: FlotillaIconSize.small))
+                    GitBranchIcon(size: FlotillaIconSize.small)
                     Text(branch)
                         .font(.system(size: 11, design: .monospaced))
                         .lineLimit(1)
@@ -115,7 +114,7 @@ struct ProjectCommandCard: View {
                     .fixedSize(horizontal: true, vertical: false)
 
                 if worktreeCount > 0 {
-                    Label("\(worktreeCount)", systemImage: "arrow.triangle.branch")
+                    GitBranchLabel("\(worktreeCount)", size: 11)
                         .help("\(worktreeCount) active worktrees")
                         .fixedSize(horizontal: true, vertical: false)
                 }

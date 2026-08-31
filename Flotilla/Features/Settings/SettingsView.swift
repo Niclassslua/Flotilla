@@ -223,11 +223,17 @@ private struct SettingsSidebarRow: View {
         Label {
             Text(tab.title)
         } icon: {
-            Image(systemName: tab.icon)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 24, height: 24)
-                .background(tab.color, in: .rect(cornerRadius: 6))
+            Group {
+                if tab == .git {
+                    GitBranchIcon(size: 13)
+                } else {
+                    Image(systemName: tab.icon)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+            }
+            .foregroundStyle(.white)
+            .frame(width: 24, height: 24)
+            .background(tab.color, in: .rect(cornerRadius: 6))
         }
         .padding(.vertical, 2)
     }
@@ -246,9 +252,13 @@ private struct SettingsSectionHeader: View {
         Label {
             Text(title)
         } icon: {
-            Image(systemName: systemImage)
-                .foregroundStyle(.tint)
+            if systemImage == "arrow.triangle.branch" {
+                GitBranchIcon(size: 12)
+            } else {
+                Image(systemName: systemImage)
+            }
         }
+        .foregroundStyle(.tint)
         .accessibilityElement(children: .combine)
     }
 }

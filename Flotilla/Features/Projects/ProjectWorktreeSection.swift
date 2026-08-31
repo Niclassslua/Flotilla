@@ -78,9 +78,14 @@ struct ProjectWorktreeSection: View {
         let session = matchingSession(for: wt)
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: FlotillaSpacing.small) {
-                Image(systemName: wt.isMainWorktree ? "house.fill" : "arrow.triangle.branch")
-                    .font(.system(size: FlotillaIconSize.medium))
-                    .foregroundStyle(wt.isMainWorktree ? FlotillaColors.accent : FlotillaColors.textSecondary)
+                if wt.isMainWorktree {
+                    Image(systemName: "house.fill")
+                        .font(.system(size: FlotillaIconSize.medium))
+                        .foregroundStyle(FlotillaColors.accent)
+                } else {
+                    GitBranchIcon(size: FlotillaIconSize.medium)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                }
 
                 Text(wt.branch)
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
@@ -138,7 +143,7 @@ struct ProjectWorktreeSection: View {
                 Button {
                     onOpenInGit(wt)
                 } label: {
-                    Label("Open in Git", systemImage: "arrow.triangle.branch")
+                    GitBranchLabel("Open in Git", size: 12)
                         .font(FlotillaTypography.caption)
                 }
                 .buttonStyle(.bordered)

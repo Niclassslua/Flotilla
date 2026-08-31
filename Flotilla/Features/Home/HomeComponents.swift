@@ -379,7 +379,7 @@ private struct HomeSessionRow: View {
             }
 
             if let branch = session.worktree?.branchName {
-                Label(branch, systemImage: "arrow.triangle.branch")
+                GitBranchLabel(branch, size: 10)
                     .font(FlotillaTypography.caption2)
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .labelStyle(.titleAndIcon)

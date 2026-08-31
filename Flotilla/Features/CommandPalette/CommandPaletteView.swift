@@ -219,10 +219,16 @@ private struct PaletteRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: systemImage)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.tint)
-                    .frame(width: 24)
+                if systemImage == "arrow.triangle.branch" {
+                    GitBranchIcon(size: 16)
+                        .foregroundStyle(.tint)
+                        .frame(width: 24)
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.tint)
+                        .frame(width: 24)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .foregroundStyle(.primary)

@@ -41,3 +41,4 @@ fixtures/
 # not something to check in — absolute paths to this user's Application
 # Support directory, rewritten on every agent-managed session launch.
 /.claude/settings.json
+/.agents/hooks.json

@@ -401,8 +401,12 @@ struct CommandBarDesign: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: FlotillaSpacing.xSmall) {
-                Image(systemName: symbol)
-                    .font(.system(size: FlotillaIconSize.xSmall))
+                if symbol == "arrow.triangle.branch" {
+                    GitBranchIcon(size: FlotillaIconSize.xSmall)
+                } else {
+                    Image(systemName: symbol)
+                        .font(.system(size: FlotillaIconSize.xSmall))
+                }
                 Text(title)
                     .font(FlotillaTypography.caption3.weight(.medium))
             }
@@ -421,9 +425,14 @@ struct CommandBarDesign: View {
     private var summaryLine: some View {
         let preview = draft.preview
         return HStack(spacing: FlotillaSpacing.small) {
-            Image(systemName: preview.isWorktree ? "arrow.triangle.branch" : "shippingbox")
-                .font(.system(size: FlotillaIconSize.xSmall))
-                .foregroundStyle(preview.isWorktree ? FlotillaColors.statusReady : FlotillaColors.textTertiary)
+            if preview.isWorktree {
+                GitBranchIcon(size: FlotillaIconSize.xSmall)
+                    .foregroundStyle(FlotillaColors.statusReady)
+            } else {
+                Image(systemName: "shippingbox")
+                    .font(.system(size: FlotillaIconSize.xSmall))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+            }
 
             Text(preview.displayBranch ?? preview.displayDirectory)
                 .font(.system(size: 10, design: .monospaced))

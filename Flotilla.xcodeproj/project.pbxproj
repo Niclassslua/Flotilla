@@ -48,6 +48,7 @@
 		1E472126681A86E7702A93E5 /* jest.svg in Resources */ = {isa = PBXBuildFile; fileRef = 935848EC63B4A85AD4942215 /* jest.svg */; };
 		1EE083B23BC3D3935B8148E9 /* WorkspaceNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EAAAB3E707A7482A2AAE988 /* WorkspaceNavigator.swift */; };
 		1FC54907C9F76FF970ED8B6F /* gemfile.svg in Resources */ = {isa = PBXBuildFile; fileRef = A3348D6A0B9FA97635592129 /* gemfile.svg */; };
+		207711AECF67EC657D7BBB8B /* GitBranchIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1431D6F1F2780952A6697EB2 /* GitBranchIcon.swift */; };
 		207D186B9F3E96CC368450FC /* FleetSmartList.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26E19A813CF60C404557C40 /* FleetSmartList.swift */; };
 		20DF16336CD35E2C123AD0CF /* GitSidebarUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7993ACB5B4FCFA5586BC7AD /* GitSidebarUITests.swift */; };
 		222CBE71880A1BC48CA71CB7 /* zig.svg in Resources */ = {isa = PBXBuildFile; fileRef = CE4999D5E0106AF58800F11A /* zig.svg */; };
@@ -207,6 +208,7 @@
 		B115C276FE1CE39BF8794C37 /* HomeComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEFE44DA481970CBCB874EFE /* HomeComponents.swift */; };
 		B2235264263ADB9B1C11DA00 /* HomeComposerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6ACC2BF0E8EE3D8EBC67C71 /* HomeComposerUITests.swift */; };
 		B28B43FA19D996E532BAA240 /* GitGraphLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9CA216025ED610FE445F0B8 /* GitGraphLayoutTests.swift */; };
+		B3B0631C46DF712E62A05356 /* git-branch.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5E7CD7C066464B1F9AACF09A /* git-branch.svg */; };
 		B4A38809E4CFB671B5376798 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE677A016A7E33854CFA93A /* MarkdownView.swift */; };
 		B5785D70AF40B3143A97E8B4 /* ProjectSkillsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05018E554FDC79B823BEC790 /* ProjectSkillsView.swift */; };
 		B6B245D5E12FEA55B329DEE6 /* database.svg in Resources */ = {isa = PBXBuildFile; fileRef = B1B10900DD61FF5C1C8B90CA /* database.svg */; };
@@ -251,6 +253,7 @@
 		DA2130B8E5D8E7EA1A0577CA /* SessionDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 264B5BE4E6D4D8B548110E6E /* SessionDraftTests.swift */; };
 		DAA30C8BD490C14B6C8D872A /* php.svg in Resources */ = {isa = PBXBuildFile; fileRef = 331E5245CCC381C50F5E95C4 /* php.svg */; };
 		DC3D056327FEA75A50E1AFB6 /* FileBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D849378E691F27DAD2C00871 /* FileBrowserView.swift */; };
+		DCD5AEE9F4FD4613A3AA8DE2 /* GitBranchIconTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EE363719E7D084B9B1D5B96 /* GitBranchIconTests.swift */; };
 		DDEAF468EAE1353733FC0787 /* KanbanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 433D3BE507D2D44750EAEDF9 /* KanbanViews.swift */; };
 		E00148B12BF6FE1353AC65E7 /* react.svg in Resources */ = {isa = PBXBuildFile; fileRef = 436A09BE5F1F4456C824B2AF /* react.svg */; };
 		E03FD7DF30CBB7A9DD49AF3A /* FileIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17EDDAD1F3E86B5AB3960D7 /* FileIconHelper.swift */; };
@@ -323,6 +326,7 @@
 		12E68DCCDCE28F08096D13BE /* Flotilla.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Flotilla.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1301A0CFAE4DF97657770E3D /* TerminalManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalManager.swift; sourceTree = "<group>"; };
 		13A5B80F477AE3E0441F3591 /* lua.svg */ = {isa = PBXFileReference; path = lua.svg; sourceTree = "<group>"; };
+		1431D6F1F2780952A6697EB2 /* GitBranchIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitBranchIcon.swift; sourceTree = "<group>"; };
 		1505FDEBF32FDDA8F3148254 /* AXID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXID.swift; sourceTree = "<group>"; };
 		16781BC5824C1FFA14F302F5 /* GridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridView.swift; sourceTree = "<group>"; };
 		17547DD85176D91B59F64C16 /* folder-log.svg */ = {isa = PBXFileReference; path = "folder-log.svg"; sourceTree = "<group>"; };
@@ -405,7 +409,9 @@
 		5A15137C679C6CBF7FF6F220 /* KnowledgeChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeChrome.swift; sourceTree = "<group>"; };
 		5C2D50B6652163301BEF829D /* c.svg */ = {isa = PBXFileReference; path = c.svg; sourceTree = "<group>"; };
 		5CBF5FBD34E5BFF83E229BA2 /* SessionTileChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTileChrome.swift; sourceTree = "<group>"; };
+		5E7CD7C066464B1F9AACF09A /* git-branch.svg */ = {isa = PBXFileReference; path = "git-branch.svg"; sourceTree = "<group>"; };
 		5EB51705DB89C9D2D870B82A /* LaunchpadDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadDesign.swift; sourceTree = "<group>"; };
+		5EE363719E7D084B9B1D5B96 /* GitBranchIconTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitBranchIconTests.swift; sourceTree = "<group>"; };
 		5F17AA690B0887B8577A6E5D /* folder-git.svg */ = {isa = PBXFileReference; path = "folder-git.svg"; sourceTree = "<group>"; };
 		5FC0F71DF5E99C8384B94842 /* ProjectChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectChoice.swift; sourceTree = "<group>"; };
 		5FEA3357E84747D12870D13A /* KanbanCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanCard.swift; sourceTree = "<group>"; };
@@ -712,6 +718,7 @@
 				243EC5070686C015EEEABAC8 /* folder.svg */,
 				04A4E317BD2ED88291A5138F /* font.svg */,
 				A3348D6A0B9FA97635592129 /* gemfile.svg */,
+				5E7CD7C066464B1F9AACF09A /* git-branch.svg */,
 				ACF1BC73FD352D9CADCA8CC9 /* git.svg */,
 				B66BD26E89CF3B708388E6BC /* go.svg */,
 				ECBC98B1E339659FBE0A518F /* graphql.svg */,
@@ -842,6 +849,7 @@
 			children = (
 				9CBBB0DF6922595B183EAA56 /* AgentBrand.swift */,
 				10E145E46FA66C4B797A708D /* EffortLevelPicker.swift */,
+				1431D6F1F2780952A6697EB2 /* GitBranchIcon.swift */,
 				26D1F33C25387BC4967D4692 /* MaterialFileIcon.swift */,
 				3802ED76F644B170E26A3B8C /* ModelPickerView.swift */,
 				4D6E13EA94FDC7BD4D03520F /* ProviderLogo.swift */,
@@ -975,6 +983,7 @@
 				A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */,
 				935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */,
 				51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */,
+				5EE363719E7D084B9B1D5B96 /* GitBranchIconTests.swift */,
 				E9CA216025ED610FE445F0B8 /* GitGraphLayoutTests.swift */,
 				874C07585626CF8D03699AB0 /* GitKitTests.swift */,
 				B8034B27D7FF60ED84FD5A58 /* GitLogTests.swift */,
@@ -1262,6 +1271,7 @@
 				BED752790A5BEF2BB5FA97FC /* folder.svg in Resources */,
 				5EDA08488E35BB0D519DDB39 /* font.svg in Resources */,
 				1FC54907C9F76FF970ED8B6F /* gemfile.svg in Resources */,
+				B3B0631C46DF712E62A05356 /* git-branch.svg in Resources */,
 				CBDDE8E2BD1EDA4A5925077E /* git.svg in Resources */,
 				6AEB6D26C1FD32A4B6FCD375 /* go.svg in Resources */,
 				13AD6C3EBF870E22C4317313 /* graphql.svg in Resources */,
@@ -1326,6 +1336,7 @@
 				5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */,
 				7666CEF06B123CCB5B58E56A /* FlotillaNotificationDelegateTests.swift in Sources */,
 				723875E0AA69C129B1AA034F /* FlotillaUnitTests.swift in Sources */,
+				DCD5AEE9F4FD4613A3AA8DE2 /* GitBranchIconTests.swift in Sources */,
 				B28B43FA19D996E532BAA240 /* GitGraphLayoutTests.swift in Sources */,
 				2C15A78E3C6B06BEBAC35D2E /* GitKitTests.swift in Sources */,
 				EAEB8C12F2DB24CAE6443071 /* GitLogTests.swift in Sources */,
@@ -1391,6 +1402,7 @@
 				79D00EBF60B5B164014FB12A /* FlotillaHeroTitleView.swift in Sources */,
 				449E6C54E371C899FC6DA7CA /* FlotillaNotificationDelegate.swift in Sources */,
 				CD66216E741FBEBC47E4244B /* FlotillaShell.swift in Sources */,
+				207711AECF67EC657D7BBB8B /* GitBranchIcon.swift in Sources */,
 				FF95C3EC5E17A2D158B287A7 /* GridDimensionsPicker.swift in Sources */,
 				40E4144C522F51072D9D5345 /* GridLayoutEngine.swift in Sources */,
 				0AE8349D00544B0EB9CD4DAA /* GridSelectionEngine.swift in Sources */,

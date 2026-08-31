@@ -412,8 +412,16 @@ struct LaunchpadDesign: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(FlotillaTypography.caption2.weight(.medium))
+            Label {
+                Text(title)
+            } icon: {
+                if symbol == "arrow.triangle.branch" {
+                    GitBranchIcon(size: FlotillaIconSize.xSmall)
+                } else {
+                    Image(systemName: symbol)
+                }
+            }
+            .font(FlotillaTypography.caption2.weight(.medium))
                 .foregroundStyle(isActive ? FlotillaColors.accentContent : FlotillaColors.textSecondary)
                 .padding(.horizontal, FlotillaSpacing.medium)
                 .padding(.vertical, FlotillaSpacing.small)
@@ -460,7 +468,7 @@ struct LaunchpadDesign: View {
         let preview = draft.preview
         return HStack(spacing: FlotillaSpacing.small) {
             if let branch = preview.displayBranch {
-                Label(branch, systemImage: "arrow.triangle.branch")
+                GitBranchLabel(branch, size: 10)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(FlotillaColors.statusWorking)
                     .padding(.horizontal, FlotillaSpacing.small)

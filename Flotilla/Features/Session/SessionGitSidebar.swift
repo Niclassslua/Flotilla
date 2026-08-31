@@ -497,8 +497,7 @@ struct SessionGitSidebar: View {
 
     private var header: some View {
         HStack(spacing: FlotillaSpacing.small) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: FlotillaIconSize.small, weight: .semibold))
+            GitBranchIcon(size: FlotillaIconSize.small)
                 .foregroundStyle(FlotillaColors.accent)
                 .accessibilityHidden(true)
             Text("Git")
@@ -535,8 +534,15 @@ struct SessionGitSidebar: View {
                     viewModel.selectedTab = tab
                 } label: {
                     VStack(spacing: 4) {
-                        Label(tab.title, systemImage: tab.systemImage)
-                            .font(FlotillaTypography.caption.weight(
+                        HStack(spacing: 5) {
+                            if tab == .branches {
+                                GitBranchIcon(size: FlotillaIconSize.small)
+                            } else {
+                                Image(systemName: tab.systemImage)
+                            }
+                            Text(tab.title)
+                        }
+                        .font(FlotillaTypography.caption.weight(
                                 viewModel.selectedTab == tab ? .semibold : .regular
                             ))
                             .foregroundStyle(
@@ -670,8 +676,15 @@ struct SessionGitSidebar: View {
             } else if let error = viewModel.errorMessage {
                 errorState("Couldn’t Read Branches", message: error)
             } else if viewModel.branches.isEmpty {
-                ContentUnavailableView("No Local Branches", systemImage: "arrow.triangle.branch")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView {
+                    Label {
+                        Text("No Local Branches")
+                    } icon: {
+                        GitBranchIcon(size: 28)
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -831,7 +844,7 @@ struct SessionGitSidebar: View {
                 }
             } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: "arrow.triangle.branch")
+                    GitBranchIcon(size: 11)
                     Text(viewModel.selectedLogBranch ?? viewModel.currentBranch ?? "Branch")
                         .lineLimit(1)
                         .truncationMode(.middle)

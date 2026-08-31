@@ -74,7 +74,7 @@ struct ProjectOverviewView: View {
             Spacer(minLength: FlotillaSpacing.small)
 
             if let branch = session.worktree?.branchName {
-                Label(branch, systemImage: "arrow.triangle.branch")
+                GitBranchLabel(branch, size: 10)
                     .font(FlotillaTypography.caption2)
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .labelStyle(.titleAndIcon)
@@ -166,7 +166,7 @@ struct ProjectOverviewView: View {
             SessionDiffStatView(session: session, diffStatStore: store.diffStatStore)
 
             if let branch = session.worktree?.branchName {
-                Label(branch, systemImage: "arrow.triangle.branch")
+                GitBranchLabel(branch, size: 10)
                     .font(FlotillaTypography.caption2)
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .labelStyle(.titleAndIcon)

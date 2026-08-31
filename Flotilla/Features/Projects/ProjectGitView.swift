@@ -134,8 +134,12 @@ struct ProjectGitView: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: selectedScopeURL == project.rootPath ? "house.fill" : "arrow.triangle.branch")
-                    .font(.system(size: 10))
+                if selectedScopeURL == project.rootPath {
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 10))
+                } else {
+                    GitBranchIcon(size: 10)
+                }
                 Text(currentScopeLabel)
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .lineLimit(1)

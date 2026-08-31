@@ -138,7 +138,7 @@ struct SessionBar: View {
             }
 
             if let branchName {
-                metaLabel(branchName, systemImage: "arrow.triangle.branch")
+                metaBranchLabel(branchName)
                     .accessibilityIdentifier(AXID.sessionBarBranch(session.title))
                     .layoutPriority(-1)
             }
@@ -204,6 +204,19 @@ struct SessionBar: View {
         }
     }
 
+    private func metaBranchLabel(_ text: String) -> some View {
+        Label {
+            Text(text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        } icon: {
+            GitBranchIcon(size: 10)
+        }
+        .labelStyle(.titleAndIcon)
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(FlotillaColors.textSecondary)
+    }
+
     private func metaLabel(_ text: String, systemImage: String) -> some View {
         Label {
             Text(text)
@@ -265,8 +278,7 @@ struct SessionBar: View {
                 .accessibilityLabel("Browse files")
                 .accessibilityIdentifier(AXID.toolbarOpenProjectFiles.rawValue)
 
-                barButton(
-                    "arrow.triangle.branch",
+                barBranchButton(
                     help: hasProject
                         ? "Review this session's changes"
                         : "This session is not assigned to a project, so there is no repository workspace to open.",
@@ -302,6 +314,10 @@ struct SessionBar: View {
         SessionBarIconButton(systemImage: systemImage, help: help, action: action)
     }
 
+    private func barBranchButton(help: String, action: @escaping () -> Void) -> some View {
+        SessionBarIconButton(isGitBranch: true, help: help, action: action)
+    }
+
     // MARK: - Rename
 
     private func beginRename() {
@@ -331,7 +347,8 @@ struct SessionBar: View {
 /// controls. The chip gives the pair an edge of its own and gives the pointer
 /// a 22pt square to land on, without costing the bar any height.
 private struct SessionBarIconButton: View {
-    let systemImage: String
+    var systemImage: String? = nil
+    var isGitBranch: Bool = false
     let help: String
     let action: () -> Void
 
@@ -350,18 +367,24 @@ private struct SessionBarIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(foreground)
-                .frame(width: Self.side, height: Self.side)
-                .background(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(
-                            FlotillaColors.textPrimary
-                                .opacity(isHovering ? FlotillaStateOpacity.hover : 0)
-                        )
-                )
-                .contentShape(Rectangle())
+            Group {
+                if isGitBranch {
+                    GitBranchIcon(size: 11)
+                } else if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 11, weight: .medium))
+                }
+            }
+            .foregroundStyle(foreground)
+            .frame(width: Self.side, height: Self.side)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(
+                        FlotillaColors.textPrimary
+                            .opacity(isHovering ? FlotillaStateOpacity.hover : 0)
+                    )
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(help)
