@@ -21,7 +21,6 @@ struct HomeDashboardView: View {
     let highlightUnseenCommits: Bool
     let defaultAgent: AgentKind
 
-    @State private var selectedProjectID: UUID?
     @State private var composerDraft: SessionDraft
 
     init(
@@ -65,54 +64,24 @@ struct HomeDashboardView: View {
             activityStore: activityStore,
             openCodeSubscription: openCodeSubscription,
             defaultAgent: defaultAgent,
-            openProject: { id in
-                withAnimation(.snappy(duration: 0.2)) {
-                    selectedProjectID = id
-                }
-                openProject(id)
-            },
+            openProject: openProject,
             openSession: openSession
         )
     }
 
     private var stats: HomeFleetStats { context.fleetStats }
 
-    private var activeDrilldownProject: Project? {
-        if let id = selectedProjectID ?? store.selectedProjectID {
-            return store.projects.first { $0.id == id }
-        }
-        return nil
-    }
-
+    /// Home is the dashboard, and only the dashboard.
+    ///
+    /// It used to swap its own content for a whole `ProjectDetailView` when a
+    /// project was picked, giving that destination two ways in — and because
+    /// the branch keyed off `store.selectedProjectID`, which persists,
+    /// returning to Home *after* visiting a project re-rendered the project
+    /// instead of the dashboard. Projects open in the detail column now,
+    /// through the navigator, like every other destination.
     var body: some View {
         Group {
-            if let project = activeDrilldownProject {
-                ProjectDetailView(
-                    project: project,
-                    sessions: store.sessions(for: project),
-                    store: store,
-                    terminalManager: terminalManager ?? TerminalManager(),
-                    openSession: openSession,
-                    openCodeSubscription: openCodeSubscription,
-                    highlightUnseenCommits: highlightUnseenCommits,
-                    createWorktreeByDefault: settingsViewModel.settings.sessionDefaults.createWorktreeByDefault,
-                    fetchBeforeCreatingWorktree: settingsViewModel.settings.git.fetchBeforeCreatingWorktree,
-                    defaultAgent: defaultAgent,
-                    onBackToHome: {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            selectedProjectID = nil
-                            store.selectedProjectID = nil
-                        }
-                    }
-                )
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .move(edge: .trailing)),
-                    removal: .opacity.combined(with: .move(edge: .trailing))
-                ))
-            } else {
-                overviewDashboard
-                    .transition(.opacity)
-            }
+            overviewDashboard
         }
         .accessibilityIdentifier(AXID.homeDashboard.rawValue)
     }
@@ -159,12 +128,7 @@ struct HomeDashboardView: View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.xxLarge) {
             HomeAttentionQueue(context: context, style: .panel)
             HomeRecentSessionsList(context: context, limit: 6)
-            HomeProjectsGallery(context: context) { id in
-                withAnimation(.snappy(duration: 0.2)) {
-                    selectedProjectID = id
-                    store.selectedProjectID = id
-                }
-            }
+            HomeProjectsGallery(context: context, onSelectProject: openProject)
             .padding(.top, FlotillaSpacing.small)
         }
     }

@@ -18,7 +18,6 @@ struct ProjectDetailView: View {
     let createWorktreeByDefault: Bool
     let fetchBeforeCreatingWorktree: Bool
     let defaultAgent: AgentKind
-    let onBackToHome: () -> Void
 
     @State private var currentBranch: String?
     @State private var projectDiffStat: GitDiffStat?
@@ -162,24 +161,12 @@ struct ProjectDetailView: View {
 
     private var projectHeader: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
+            // No in-page back control. The project used to be reachable only
+            // by drilling through Home, so it had to offer its own way out;
+            // now it is a navigator row like any other, and the toolbar's
+            // Back (⌘[) returns you to wherever you actually came from —
+            // which is often a session, not Home.
             HStack(alignment: .center, spacing: FlotillaSpacing.medium) {
-                Button(action: onBackToHome) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("Home")
-                            .font(FlotillaTypography.caption.weight(.medium))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
-                }
-                .buttonStyle(.plain)
-                .help("Back to Home")
-                .accessibilityIdentifier("ProjectDetail.BackButton")
-
-                Divider().frame(height: 20)
-
                 ProjectMark(title: project.name, tint: ProjectMark.tint(for: project))
 
                 VStack(alignment: .leading, spacing: 2) {

@@ -370,12 +370,6 @@ struct SessionSidebarRow: View {
         )
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .overlay(alignment: .trailing) {
-            if gridMembership != nil {
-                gridMembershipToggle
-                    .padding(.trailing, 10)
-            }
-        }
         .background {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(FlotillaColors.sidebar)
@@ -384,6 +378,29 @@ struct SessionSidebarRow: View {
                         .fill(rowFill)
                 }
         }
+        // Membership is drawn on the row's own chrome rather than added to its
+        // contents: a border, with a checkmark straddling the corner. Nothing
+        // is inserted into the row's layout, so the dense list keeps its
+        // rhythm and non-members are completely unmarked.
+        .overlay {
+            if isGridMember {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(FlotillaColors.accent.opacity(0.8), lineWidth: 1.5)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if isGridMember {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(FlotillaColors.accent)
+                    // A ring in the sidebar colour so the glyph reads as
+                    // sitting *on* the border rather than clipped by it.
+                    .background(FlotillaColors.sidebar, in: Circle())
+                    .offset(x: 3, y: -3)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityLabel(isGridMember ? "\(session.title), in grid" : session.title)
         .animation(.easeOut(duration: 0.1), value: isHovering)
         .onHover { isHovering = $0 }
         .listRowInsets(EdgeInsets())
@@ -430,27 +447,6 @@ struct SessionSidebarRow: View {
         }
     }
 
-    /// Grid membership as a control you can see and aim at, shown only while
-    /// the grid is the current presentation. The label says which way it goes,
-    /// so nothing depends on remembering what a tint meant.
-    @ViewBuilder
-    private var gridMembershipToggle: some View {
-        if let gridMembership {
-            Button {
-                gridMembership.onToggle(session.id)
-            } label: {
-                Image(systemName: isGridMember ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 12))
-                    .foregroundStyle(isGridMember ? FlotillaColors.accent : FlotillaColors.textTertiary)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(isGridMember ? "Remove from grid" : "Add to grid")
-            .accessibilityLabel(isGridMember ? "Remove \(session.title) from grid" : "Add \(session.title) to grid")
-            .accessibilityIdentifier("SessionRow-\(session.title)-GridToggle")
-        }
-    }
 }
 
 private struct SwipeToDeleteSession: ViewModifier {

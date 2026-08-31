@@ -62,8 +62,10 @@ final class FlotillaUITests: XCTestCase {
         XCTAssertTrue(fastWait(projectRow, timeout: 3), "projects should be selectable in the navigator")
         projectRow.click()
 
-        let backButton = app.descendants(matching: .any)["ProjectDetail.BackButton"].firstMatch
-        XCTAssertTrue(fastWait(backButton, timeout: 3))
+        // The project's own tab strip confirms we landed in its workspace.
+        // There is no in-page back control any more — the toolbar owns that.
+        let gitTab = app.descendants(matching: .any)["ProjectDetail.ModeTab-Git"].firstMatch
+        XCTAssertTrue(fastWait(gitTab, timeout: 3))
 
         // 4. Back returns to Home, the place we came from.
         let back = app.descendants(matching: .any)["Toolbar.Back"].firstMatch

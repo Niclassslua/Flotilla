@@ -155,8 +155,7 @@ struct DetailColumn: View {
                 highlightUnseenCommits: settingsViewModel.settings.git.highlightUnseenCommits,
                 createWorktreeByDefault: settingsViewModel.settings.sessionDefaults.createWorktreeByDefault,
                 fetchBeforeCreatingWorktree: settingsViewModel.settings.git.fetchBeforeCreatingWorktree,
-                defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode,
-                onBackToHome: { navigator.showHomeDashboard() }
+                defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode
             )
         } else {
             ContentUnavailableView("Project Not Found", systemImage: "folder.badge.questionmark")
