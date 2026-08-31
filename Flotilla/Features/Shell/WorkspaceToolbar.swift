@@ -85,10 +85,10 @@ struct WorkspaceToolbar: ToolbarContent {
         // Grid and Board, always present and always enabled. The segmented
         // picker they replace was hidden in exactly the scopes you would want
         // it from — Home and a project workspace — so reaching the grid from
-        // there meant a detour through the navigator. Keeping all four global
-        // actions in one primary-action group anchors them together at the
-        // trailing edge of the toolbar.
-        ToolbarItemGroup(placement: .primaryAction) {
+        // there meant a detour through the navigator. `.primaryAction` belongs
+        // on the leading edge on macOS, so the trailing spacer installer keeps
+        // this automatic group at the opposite edge of the window toolbar.
+        ToolbarItemGroup(placement: .automatic) {
             presentationButton(.grid, help: "Session grid", identifier: .toolbarShowGrid)
             presentationButton(.board, help: "Kanban board", identifier: .toolbarShowBoard)
 

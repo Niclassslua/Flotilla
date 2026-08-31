@@ -46,6 +46,7 @@ struct FlotillaShell: View {
             workspaceContent
                 .background { uiTestWindowPlacer }
                 .background { ephemeralWindowStateDisabler }
+                .background { WorkspaceToolbarTrailingSpacer() }
                 .sheet(item: modalSheetBinding) { sheet in
                     sheetContent(sheet)
                 }

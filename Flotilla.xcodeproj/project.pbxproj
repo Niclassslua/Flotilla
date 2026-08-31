@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0138C27B2F35C6571ECD5554 /* WorkspaceToolbarTrailingSpacer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D5CEA492F7CED6F3742843 /* WorkspaceToolbarTrailingSpacer.swift */; };
 		02176474DA0AB08F3A934184 /* SettingsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1C861503EB2892EBB8DBBC16 /* SettingsKit */; };
 		0291E3C0C76AD118F3E9ACCF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774460E09372B50991B8E9AB /* StatusBadge.swift */; };
 		03C524B09BE80FAB8C545A9D /* folder-open.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2629C3453D4DD4A9C5E57CB2 /* folder-open.svg */; };
@@ -467,6 +468,7 @@
 		A311B269879399C20B86A4F2 /* UITestWindowPlacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestWindowPlacer.swift; sourceTree = "<group>"; };
 		A3348D6A0B9FA97635592129 /* gemfile.svg */ = {isa = PBXFileReference; path = gemfile.svg; sourceTree = "<group>"; };
 		A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffPanelViewModelTests.swift; sourceTree = "<group>"; };
+		A4D5CEA492F7CED6F3742843 /* WorkspaceToolbarTrailingSpacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceToolbarTrailingSpacer.swift; sourceTree = "<group>"; };
 		A632307236D4D1877F74269E /* kotlin.svg */ = {isa = PBXFileReference; path = kotlin.svg; sourceTree = "<group>"; };
 		A7403957F3F54FB0A8391F06 /* ruby.svg */ = {isa = PBXFileReference; path = ruby.svg; sourceTree = "<group>"; };
 		A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionActivityStore.swift; sourceTree = "<group>"; };
@@ -887,6 +889,7 @@
 				0295C0B53AEFADD6762C616A /* WorkspaceNavigation.swift */,
 				4EAAAB3E707A7482A2AAE988 /* WorkspaceNavigator.swift */,
 				2F5B48EC4DF04020E549FAE6 /* WorkspaceToolbar.swift */,
+				A4D5CEA492F7CED6F3742843 /* WorkspaceToolbarTrailingSpacer.swift */,
 			);
 			path = Shell;
 			sourceTree = "<group>";
@@ -1443,6 +1446,7 @@
 				FAB72A24183523FBDF448F9C /* WorkspaceNavigation.swift in Sources */,
 				1EE083B23BC3D3935B8148E9 /* WorkspaceNavigator.swift in Sources */,
 				083EA44A9ACE8EFFB94A9377 /* WorkspaceToolbar.swift in Sources */,
+				0138C27B2F35C6571ECD5554 /* WorkspaceToolbarTrailingSpacer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
