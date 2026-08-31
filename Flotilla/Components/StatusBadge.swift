@@ -55,9 +55,6 @@ public struct StatusBadge: View {
     private let size: StatusBadgeSize
     private let showLabel: Bool
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isPulsing = false
-
     public init(
         _ status: SessionStatus?,
         waitingReason: SessionWaitingReason? = nil,
@@ -78,17 +75,6 @@ public struct StatusBadge: View {
         StatusPresentation.label(for: status, waitingReason: waitingReason)
     }
 
-    private var shouldPulse: Bool {
-        // The `repeatForever` pulse never lets the app idle, and XCUITest
-        // waits for idleness before every snapshot and interaction — under
-        // UI testing each query would otherwise stall for seconds.
-        status == .working && !reduceMotion && !Self.uiTesting
-    }
-
-    private static var uiTesting: Bool {
-        ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
-    }
-
     @ViewBuilder
     public var body: some View {
         if status != nil {
@@ -102,6 +88,13 @@ public struct StatusBadge: View {
             // same-sized stroked circle underneath as a pulse halo, and the
             // filled dot's own knockout border shrank it just enough to leave
             // the stroke showing — so a single status read as two rings.
+            //
+            // The halo left behind a `repeatForever` pulse animation on the
+            // whole badge with nothing bound to it, so the transaction latched
+            // onto the badge's *layout* instead and every `.working` row
+            // flowed in on an endless loop. Nothing here animates — if a pulse
+            // comes back, bind it to a property on this circle (see the beacon
+            // in `SessionRow`), never to the badge as a whole.
             Circle()
                 .fill(statusColor)
                 .frame(width: size.dotSize, height: size.dotSize)
@@ -117,15 +110,8 @@ public struct StatusBadge: View {
         .padding(.horizontal, size.horizontalPadding)
         .padding(.vertical, size.verticalPadding)
         .background(statusColor.opacity(0.1), in: Capsule())
-        .animation(pulseAnimation, value: isPulsing)
-        .onAppear { isPulsing = shouldPulse }
-        .onChange(of: shouldPulse) { _, pulsing in isPulsing = pulsing }
         .accessibilityLabel(statusLabel)
         .accessibilityAddTraits(status == .waitingForInput ? [.updatesFrequently] : [])
-    }
-
-    private var pulseAnimation: Animation? {
-        isPulsing ? .easeOut(duration: 1.1).repeatForever(autoreverses: false) : nil
     }
 }
 
