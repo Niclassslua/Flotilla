@@ -4,10 +4,25 @@ import SessionKit
 // Shared navigation types are now in WorkspaceNavigator.swift
 // This file only contains the command enum for the command palette
 
+/// Where a command lands. Exists so the palette can be checked for two entries
+/// that go to the same place — it shipped with two such pairs, which is how a
+/// user ends up choosing between labels that do the same thing.
+///
+/// See `docs/ui-model.md` § 1 for the destination canon.
+enum WorkspaceDestination: Hashable {
+    /// The landing surface: attention, activity, projects, composer.
+    case home
+    /// The session collection, in one of its presentations.
+    case sessions(WorkspacePresentation)
+    /// The currently selected session, full screen.
+    case focusedSession
+    /// A project-owned panel scoped to the selected session.
+    case sessionPanel(ProjectDetailView.ProjectTab)
+}
+
 enum WorkspaceCommand: String, CaseIterable, Identifiable {
     case newSession
-    case showOverview
-    case showProjects
+    case showHome
     case showSessions
     case showGrid
     case showBoard
@@ -20,11 +35,27 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
 
     var id: Self { self }
 
+    /// `nil` for commands that perform an action rather than navigating.
+    /// Every non-nil value must be unique across `allCases` — asserted by
+    /// `WorkspaceCommandTests.testNoTwoCommandsShareADestination`.
+    var destination: WorkspaceDestination? {
+        switch self {
+        case .newSession, .restoreSessions, .showSettings: nil
+        case .showHome: .home
+        case .showSessions: .sessions(.focus)
+        case .showGrid: .sessions(.grid)
+        case .showBoard: .sessions(.board)
+        case .showTerminal: .focusedSession
+        case .showFiles: .sessionPanel(.files)
+        case .showInstructions: .sessionPanel(.rules)
+        case .showChanges: .sessionPanel(.git)
+        }
+    }
+
     var title: String {
         switch self {
         case .newSession: "New session"
-        case .showOverview: "Go to Overview"
-        case .showProjects: "Go to Projects"
+        case .showHome: "Go to Home"
         case .showSessions: "Go to Sessions"
         case .showGrid: "Show session grid"
         case .showBoard: "Show Kanban board"
@@ -40,9 +71,8 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .newSession: "Launch an agent in a checkout or worktree"
-        case .showOverview: "Open the goal-first launch dashboard"
-        case .showProjects: "Browse local project workspaces"
-        case .showSessions: "Return to active session focus"
+        case .showHome: "Attention, activity and projects"
+        case .showSessions: "Every running agent"
         case .showGrid: "Tile every live terminal"
         case .showBoard: "Visualize sessions on a Kanban board"
         case .showTerminal: "Focus the selected session's terminal"
@@ -57,9 +87,8 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .newSession: "plus"
-        case .showOverview: "house"
-        case .showProjects: "folder"
-        case .showSessions: "terminal"
+        case .showHome: "house"
+        case .showSessions: "square.stack.3d.up"
         case .showGrid: "square.grid.2x2"
         case .showBoard: "square.grid.2x2.fill"
         case .showTerminal: "terminal"

@@ -76,7 +76,7 @@ final class ProjectOverviewTests: XCTestCase {
         navigator.selection = .project(projectID)
         navigator.setProjectTab(.files, for: projectID)
         navigator.selection = .allSessions
-        navigator.restoreOverviewSelection()
+        navigator.restoreHomeSelection()
 
         XCTAssertEqual(navigator.selection, .project(projectID))
         XCTAssertEqual(navigator.projectTab(for: projectID), .files)
@@ -87,9 +87,9 @@ final class ProjectOverviewTests: XCTestCase {
         let navigator = WorkspaceNavigator()
 
         navigator.selection = .project(UUID())
-        navigator.showOverviewDashboard()
+        navigator.showHomeDashboard()
         navigator.selection = .allSessions
-        navigator.restoreOverviewSelection()
+        navigator.restoreHomeSelection()
 
         XCTAssertEqual(navigator.selection, .overview)
     }
@@ -114,7 +114,7 @@ final class ProjectOverviewTests: XCTestCase {
         navigator.setProjectTab(.git, for: projectID)
         navigator.setProjectGitSubTab(.commits, for: projectID)
         navigator.selection = .allSessions
-        navigator.restoreOverviewSelection()
+        navigator.restoreHomeSelection()
 
         XCTAssertEqual(navigator.selection, .project(projectID))
         XCTAssertEqual(navigator.projectTab(for: projectID), .git)

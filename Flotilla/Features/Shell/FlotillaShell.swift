@@ -359,10 +359,8 @@ struct FlotillaShell: View {
         switch command {
         case .newSession:
             navigator.presentedSheet = .createSession
-        case .showOverview:
-            navigator.restoreOverviewSelection()
-        case .showProjects:
-            navigator.restoreOverviewSelection()
+        case .showHome:
+            navigator.restoreHomeSelection()
         case .showSessions:
             navigator.selection = .allSessions
             navigator.presentation = .focus
@@ -373,8 +371,16 @@ struct FlotillaShell: View {
             navigator.selection = .allSessions
             navigator.presentation = .board
         case .showTerminal:
-            navigator.selection = .allSessions
-            navigator.presentation = .focus
+            // Opens the selected session, which is what the command says it
+            // does. It used to navigate to the fleet — indistinguishable from
+            // `.showSessions` — so the palette offered two labels for one
+            // outcome and neither did what "Open Terminal" implies.
+            if let sessionID = store.selectedSessionID {
+                openSession(sessionID)
+            } else {
+                navigator.selection = .allSessions
+                navigator.presentation = .focus
+            }
         case .showFiles:
             navigator.openProjectPanel(.files, scopedTo: store.selectedSession)
         case .showInstructions:

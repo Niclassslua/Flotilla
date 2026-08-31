@@ -18,7 +18,7 @@ struct ProjectDetailView: View {
     let createWorktreeByDefault: Bool
     let fetchBeforeCreatingWorktree: Bool
     let defaultAgent: AgentKind
-    let onBackToOverview: () -> Void
+    let onBackToHome: () -> Void
 
     @State private var currentBranch: String?
     @State private var projectDiffStat: GitDiffStat?
@@ -163,11 +163,11 @@ struct ProjectDetailView: View {
     private var projectHeader: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
             HStack(alignment: .center, spacing: FlotillaSpacing.medium) {
-                Button(action: onBackToOverview) {
+                Button(action: onBackToHome) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 11, weight: .bold))
-                        Text("Overview")
+                        Text("Home")
                             .font(FlotillaTypography.caption.weight(.medium))
                     }
                     .padding(.horizontal, 8)
@@ -175,7 +175,7 @@ struct ProjectDetailView: View {
                     .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
                 }
                 .buttonStyle(.plain)
-                .help("Back to Overview")
+                .help("Back to Home")
                 .accessibilityIdentifier("ProjectDetail.BackButton")
 
                 Divider().frame(height: 20)

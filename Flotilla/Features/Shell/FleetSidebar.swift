@@ -183,15 +183,15 @@ enum SidebarFacet: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .overview: return "Projects"
+        case .overview: return "Home"
         case .sessions: return "Sessions"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .overview: return "folder.fill"
-        case .sessions: return "terminal.fill"
+        case .overview: return "house.fill"
+        case .sessions: return "square.stack.3d.up.fill"
         }
     }
 

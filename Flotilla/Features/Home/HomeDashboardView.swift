@@ -98,7 +98,7 @@ struct HomeDashboardView: View {
                     createWorktreeByDefault: settingsViewModel.settings.sessionDefaults.createWorktreeByDefault,
                     fetchBeforeCreatingWorktree: settingsViewModel.settings.git.fetchBeforeCreatingWorktree,
                     defaultAgent: defaultAgent,
-                    onBackToOverview: {
+                    onBackToHome: {
                         withAnimation(.snappy(duration: 0.2)) {
                             selectedProjectID = nil
                             store.selectedProjectID = nil

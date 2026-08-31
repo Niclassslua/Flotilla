@@ -163,7 +163,7 @@ struct FlotillaApp: App {
             }
             CommandMenu("Workspace") {
                 Button("Overview") {
-                    navigator.restoreOverviewSelection()
+                    navigator.restoreHomeSelection()
                 }
                 .keyboardShortcut("1", modifiers: .command)
                 Button("All Sessions") {

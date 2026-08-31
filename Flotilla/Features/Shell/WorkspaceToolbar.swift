@@ -46,7 +46,7 @@ struct WorkspaceToolbar: ToolbarContent {
             set: { newFacet in
                 switch newFacet {
                 case .overview:
-                    navigator.restoreOverviewSelection()
+                    navigator.restoreHomeSelection()
                 case .sessions:
                     navigator.selection = .allSessions
                 }

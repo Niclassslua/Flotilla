@@ -62,12 +62,12 @@ final class WorkspaceNavigator {
     /// Returns to the place the user last occupied in the Overview facet.
     /// Sessions are a sibling workspace, so visiting them must not flatten a
     /// project's internal navigation back to its dashboard.
-    func restoreOverviewSelection() {
+    func restoreHomeSelection() {
         selection = lastOverviewSelection
     }
 
     /// Intentionally leaves a project drill-down for the overview dashboard.
-    func showOverviewDashboard() {
+    func showHomeDashboard() {
         selection = .overview
     }
 
@@ -183,7 +183,7 @@ enum SidebarItem: Hashable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .overview: return "Overview"
+        case .overview: return "Home"
         case .allSessions: return "All Sessions"
         case .project: return "Project"
         case .session: return "Session"

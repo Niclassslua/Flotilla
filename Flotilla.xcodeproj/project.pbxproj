@@ -152,6 +152,7 @@
 		81C78C6DD775CB433EF6872E /* RestartSessionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66DA9DABD1725C0E701BD2A /* RestartSessionUITests.swift */; };
 		81E957F5ED399AFD4BD9EDD5 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F0079146D1AF9E1A0A6F9F /* AppEnvironment.swift */; };
 		83F179C1B1D103DB991D3502 /* ProjectChoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63689F7E4DAECB7FD921AAB7 /* ProjectChoiceTests.swift */; };
+		83F56354A117C03458E0CEBE /* WorkspaceCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE265177398E961FA34A01E /* WorkspaceCommandTests.swift */; };
 		83FAF40E1A1F2C4439FF2D4F /* react_ts.svg in Resources */ = {isa = PBXBuildFile; fileRef = D9BD989755A64D4561511867 /* react_ts.svg */; };
 		841E3D902B9337CCD3AE2DF3 /* vue.svg in Resources */ = {isa = PBXBuildFile; fileRef = B954B8EC3F165103B7890A21 /* vue.svg */; };
 		8697AF15D47A068A4E78F516 /* folder-components.svg in Resources */ = {isa = PBXBuildFile; fileRef = 748E930383D36285416CD109 /* folder-components.svg */; };
@@ -485,6 +486,7 @@
 		BC9392379FA6157AC0E50DFD /* folder-yarn.svg */ = {isa = PBXFileReference; path = "folder-yarn.svg"; sourceTree = "<group>"; };
 		BD24ACC6FE42CAC4547A58DE /* FlotillaUnitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FlotillaUnitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BDBFFC3F29C53DA1CFD3C166 /* FlotillaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FlotillaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BDE265177398E961FA34A01E /* WorkspaceCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCommandTests.swift; sourceTree = "<group>"; };
 		BECCD7A6308B107F37525D5D /* TerminalPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPipelineTests.swift; sourceTree = "<group>"; };
 		C038C5B8AB4AE5F31A21ECD0 /* TmuxSessionWrapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TmuxSessionWrapping.swift; sourceTree = "<group>"; };
 		C1C8B09D3B46D48A26D09B62 /* video.svg */ = {isa = PBXFileReference; path = video.svg; sourceTree = "<group>"; };
@@ -967,6 +969,7 @@
 				317375274369CC35C23D6991 /* SettingsKitTests.swift */,
 				9E981131F173F30668314C97 /* SkillFrontmatterTests.swift */,
 				BECCD7A6308B107F37525D5D /* TerminalPipelineTests.swift */,
+				BDE265177398E961FA34A01E /* WorkspaceCommandTests.swift */,
 				E9DCBD80E1B4F78415924591 /* WorkspaceFileServiceTests.swift */,
 			);
 			path = FlotillaUnitTests;
@@ -1314,6 +1317,7 @@
 				A0E3F72416EEFECD3A87AEA3 /* SettingsKitTests.swift in Sources */,
 				898E0363CFDA00161E6395C4 /* SkillFrontmatterTests.swift in Sources */,
 				1C1642696393DBA72C1AF11F /* TerminalPipelineTests.swift in Sources */,
+				83F56354A117C03458E0CEBE /* WorkspaceCommandTests.swift in Sources */,
 				C33C5A5725D92F74245FB8CC /* WorkspaceFileServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

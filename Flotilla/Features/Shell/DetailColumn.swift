@@ -152,7 +152,7 @@ case .grid:
                 createWorktreeByDefault: settingsViewModel.settings.sessionDefaults.createWorktreeByDefault,
                 fetchBeforeCreatingWorktree: settingsViewModel.settings.git.fetchBeforeCreatingWorktree,
                 defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode,
-                onBackToOverview: { navigator.showOverviewDashboard() }
+                onBackToHome: { navigator.showHomeDashboard() }
             )
         } else {
             ContentUnavailableView("Project Not Found", systemImage: "folder.badge.questionmark")
@@ -173,7 +173,7 @@ case .grid:
 
     private var scopeTitle: String {
         switch navigator.selection {
-        case .overview: return "Overview"
+        case .overview: return "Home"
         case .allSessions: return "Sessions"
         case .project(let id):
             return store.projects.first(where: { $0.id == id })?.name ?? "Project"
