@@ -122,7 +122,9 @@ struct ProjectOverviewView: View {
     @ViewBuilder
     private var recentSessionsSection: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-            HomeSectionHeader(title: "Recent sessions", count: sessions.count)
+            // The rendered rows, not every session in the project: active ones
+            // are filtered out above and shown in their own section.
+            HomeSectionHeader(title: "Recent sessions", count: recentSessions.count)
 
             if recentSessions.isEmpty && activeSessions.isEmpty {
                 HomeEmptyHint(text: "Sessions you start will collect here.")

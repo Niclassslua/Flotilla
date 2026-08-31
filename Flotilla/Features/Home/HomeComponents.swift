@@ -311,7 +311,10 @@ struct HomeRecentSessionsList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
             if showsHeader {
-                HomeSectionHeader(title: "Recent sessions", count: context.store.sessions.count)
+                // Counts the rows actually rendered. `recentSessions(limit:)`
+                // drops whatever the attention queue already shows, so the
+                // whole-fleet count claimed more than the list below it held.
+                HomeSectionHeader(title: "Recent sessions", count: sessions.count)
             }
             if sessions.isEmpty {
                 HomeEmptyHint(text: "Sessions you start will collect here.")
@@ -501,6 +504,7 @@ struct HomeProjectsGallery: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             .buttonStyle(.borderedProminent)
+            .tint(FlotillaColors.accent)
             .controlSize(.small)
             .tint(FlotillaColors.accent)
             .help("Add a repository to Flotilla")

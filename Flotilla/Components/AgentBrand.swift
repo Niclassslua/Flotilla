@@ -32,20 +32,29 @@ enum AgentBrand {
         }
     }
 
-    /// Accent color for a skill framework, matching agent brand colors where applicable.
+    /// Accent color for a skill framework, matching agent brand colors where
+    /// applicable.
+    ///
+    /// Every case must resolve to a *distinct* color: these sit in one column
+    /// of the skills ledger, where a color that repeats is worse than no color
+    /// at all. Two used to collide — `.custom` fell through to the same accent
+    /// as `.claude`, and `.gemini` inherited Antigravity's azure next to
+    /// Codex's indigo — so both are pinned here instead of resolving through
+    /// `agentKind`.
     static func accentColor(for framework: SkillFramework) -> Color {
-        if let kind = framework.agentKind {
-            return accentColor(for: kind)
-        }
         switch framework {
+        case .gemini:
+            // Still an Antigravity brand color, just not the one a glance
+            // confuses with Codex.
+            return antigravityGradientColors[1]
+        case .custom:
+            return Color(white: 0.55)
         case .cursor:
             return Color(white: 0.90)
         case .agents:
             return Color(red: 0.40, green: 0.70, blue: 0.65)
-        case .custom:
-            return FlotillaColors.accent
-        case .claude, .codex, .gemini:
-            return FlotillaColors.accent
+        case .claude, .codex:
+            return framework.agentKind.map(accentColor(for:)) ?? FlotillaColors.accent
         }
     }
 

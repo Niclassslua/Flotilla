@@ -265,14 +265,20 @@ func formatByteSize(_ bytes: Int) -> String {
     return formatter.string(fromByteCount: Int64(bytes))
 }
 
-/// Compact relative date for card footers: "just now", "12m ago", "3d ago",
-/// then an absolute "MMM d" once a week has passed.
+/// Compact relative date for prose contexts: "just now", "12 min ago",
+/// "3d ago", then an absolute "MMM d" once a week has passed.
+///
+/// Minutes spell out as "min": "2m ago" reads as either two minutes or two
+/// months, and the same column carried both registers.
+///
+/// Not for table columns — mixing relative and absolute values in one column
+/// makes the rows incomparable by eye. Use `formatLedgerDate` there.
 func formatRelativeDate(_ date: Date) -> String {
     let seconds = max(0, Date().timeIntervalSince(date))
     if seconds < 60 {
         return "just now"
     } else if seconds < 3600 {
-        return "\(Int(seconds / 60))m ago"
+        return "\(Int(seconds / 60)) min ago"
     } else if seconds < 86400 {
         return "\(Int(seconds / 3600))h ago"
     } else if seconds < 86400 * 7 {
@@ -282,4 +288,21 @@ func formatRelativeDate(_ date: Date) -> String {
         formatter.dateFormat = "MMM d"
         return formatter.string(from: date)
     }
+}
+
+/// One register for a whole date column, so every row can be compared against
+/// every other at a glance. Today collapses to a clock time; anything older
+/// than the current year carries its year rather than silently colliding with
+/// a date twelve months away.
+func formatLedgerDate(_ date: Date) -> String {
+    let calendar = Calendar.current
+    let formatter = DateFormatter()
+    if calendar.isDateInToday(date) {
+        formatter.dateFormat = "HH:mm"
+    } else if calendar.component(.year, from: date) == calendar.component(.year, from: Date()) {
+        formatter.dateFormat = "MMM d"
+    } else {
+        formatter.dateFormat = "MMM d yy"
+    }
+    return formatter.string(from: date)
 }

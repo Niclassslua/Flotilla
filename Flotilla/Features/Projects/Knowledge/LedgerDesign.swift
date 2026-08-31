@@ -21,11 +21,23 @@ struct LedgerDesign: View {
             }
             .frame(minWidth: 360, idealWidth: 520, maxHeight: .infinity)
 
-            detail
-                .frame(minWidth: FlotillaLayoutWidth.inspectorMin, idealWidth: 620, maxHeight: .infinity)
+            // Dropped entirely when nothing is selected, rather than held open
+            // on a "Select a Skill" placeholder: an `HSplitView` pane cannot be
+            // dragged below its `minWidth`, so the placeholder permanently cost
+            // the list the width its rows were truncating for.
+            if viewModel.selected != nil {
+                detail
+                    .frame(minWidth: FlotillaLayoutWidth.inspectorMin, idealWidth: 620, maxHeight: .infinity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FlotillaColors.canvas)
+        // Opening onto an empty pane beside truncated rows told the user
+        // nothing; the first row is a better default than no row.
+        .task(id: items.map(\.id)) {
+            guard viewModel.selected == nil, let first = items.first else { return }
+            await viewModel.select(first)
+        }
     }
 
     // MARK: - Table
@@ -180,10 +192,14 @@ private struct LedgerRow: View {
                     .foregroundStyle(item.byteSize == 0 ? FlotillaColors.warning : FlotillaColors.textTertiary)
                     .frame(width: 64, alignment: .trailing)
 
-                Text(item.lastModified.map(formatRelativeDate) ?? "—")
+                // Absolute, never relative. Mixing the two in one column put
+                // "Apr 19" next to "2m ago" — values that cannot be compared by
+                // eye, in a unit ("m") that reads as either minutes or months.
+                Text(item.lastModified.map(formatLedgerDate) ?? "—")
                     .font(FlotillaTypography.caption3.monospaced())
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .frame(width: 62, alignment: .trailing)
+                    .help(item.lastModified.map { "Modified \(formatRelativeDate($0))" } ?? "Never modified")
             }
             .padding(.horizontal, FlotillaSpacing.medium)
             .padding(.vertical, 6)
@@ -201,7 +217,10 @@ private struct LedgerRow: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .withFlotillaMotion(.fast, value: isSelected)
-        .help(item.subtitle)
+        // The path, not the subtitle: two entries can ship byte-identical
+        // titles and descriptions (`handoff` does), and only the file they
+        // come from tells them apart.
+        .help(item.url.path)
         .accessibilityLabel("\(item.title), \(item.scopeLabel)")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityIdentifier(AXID.knowledgeItem.rawValue + item.title)

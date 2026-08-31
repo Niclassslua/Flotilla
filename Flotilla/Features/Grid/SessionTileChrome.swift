@@ -177,6 +177,7 @@ struct TileTerminalBody: View {
             } actions: {
                 Button("Restart Session", action: onRestart)
                     .buttonStyle(.borderedProminent)
+                    .tint(FlotillaColors.accent)
                     .controlSize(.small)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -188,8 +189,17 @@ struct TileTerminalBody: View {
 // MARK: - Surface
 
 /// Card background, border, context menu, and drag source — the parts that are
-/// identical across designs. The border colour carries state: accent when
-/// active, the waiting-for-input colour when the agent needs the user.
+/// identical across designs.
+///
+/// The border is reserved for the one state that needs a human *now*. It used
+/// to carry accent for "selected" as well, at the same 1.5pt in a near
+/// identical hue, so the tile's one glanceable channel answered "which is
+/// selected" instead of "which needs me". Selection moved to an inset ring,
+/// which reads as chrome rather than as state.
+///
+/// Crashed deliberately gets no border: `TileTitleLockup` already spells the
+/// status out in words, so the state is carried (and carried accessibly)
+/// without painting a grid of red rectangles.
 struct SessionTileSurface: ViewModifier {
     let session: Session
     let isActive: Bool
@@ -198,16 +208,19 @@ struct SessionTileSurface: ViewModifier {
 
     @State private var isDropTarget = false
 
+    private var needsInput: Bool { session.status == .waitingForInput }
+
     private var borderColor: Color {
+        // A drag in progress is transient chrome, so it may briefly outrank
+        // status; everything else defers to it.
         if isDropTarget { return FlotillaColors.accent }
-        if isActive { return FlotillaColors.accent.opacity(0.75) }
-        if session.status == .waitingForInput { return FlotillaColors.statusWaitingForInput.opacity(0.8) }
+        if needsInput { return FlotillaColors.statusWaitingForInput.opacity(0.8) }
         return FlotillaColors.separator.opacity(0.75)
     }
 
     private var borderWidth: CGFloat {
         if isDropTarget { return 2 }
-        return isActive || session.status == .waitingForInput ? 1.5 : 1
+        return needsInput ? 1.5 : 1
     }
 
     func body(content: Content) -> some View {
@@ -217,6 +230,16 @@ struct SessionTileSurface: ViewModifier {
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(borderColor, lineWidth: borderWidth)
+            }
+            .overlay {
+                // Selection: an inset ring, inside the border and separated
+                // from it by a gap, so the two never read as one signal at a
+                // glance.
+                if isActive {
+                    RoundedRectangle(cornerRadius: cornerRadius - 3, style: .continuous)
+                        .strokeBorder(FlotillaColors.accent, lineWidth: 1.5)
+                        .padding(3)
+                }
             }
             .contextMenu {
                 // Bare buttons: a `contextMenu` builds a native NSMenu, so a

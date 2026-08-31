@@ -240,9 +240,28 @@ final class KnowledgeItemTests: XCTestCase {
     func testRelativeDateBuckets() {
         let now = Date()
         XCTAssertEqual(formatRelativeDate(now), "just now")
-        XCTAssertEqual(formatRelativeDate(now.addingTimeInterval(-120)), "2m ago")
+        // "min", not "m": "2m ago" reads as either two minutes or two months.
+        XCTAssertEqual(formatRelativeDate(now.addingTimeInterval(-120)), "2 min ago")
         XCTAssertEqual(formatRelativeDate(now.addingTimeInterval(-7200)), "2h ago")
         XCTAssertEqual(formatRelativeDate(now.addingTimeInterval(-86400 * 3)), "3d ago")
+    }
+
+    /// A date column has to be comparable down its length, so every value in
+    /// it is absolute — never the relative register used in prose.
+    func testLedgerDatesAreAlwaysAbsolute() {
+        let now = Date()
+        for offset in [0, -120, -7200, -86400 * 3, -86400 * 30, -86400 * 400] {
+            let rendered = formatLedgerDate(now.addingTimeInterval(TimeInterval(offset)))
+            XCTAssertFalse(rendered.hasSuffix("ago"), "\(rendered) is relative")
+            XCTAssertFalse(rendered.contains("just now"), "\(rendered) is relative")
+        }
+    }
+
+    func testLedgerDateCarriesYearOnlyOutsideTheCurrentOne() {
+        let now = Date()
+        XCTAssertFalse(formatLedgerDate(now.addingTimeInterval(-86400 * 3)).contains(":"))
+        // Today collapses to a clock time so same-day edits stay orderable.
+        XCTAssertTrue(formatLedgerDate(now).contains(":"))
     }
 
     func testRelativeDateFallsBackToAbsoluteAfterAWeek() {

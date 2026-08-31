@@ -59,19 +59,37 @@ final class AgentBrandTests: XCTestCase {
             AgentBrand.accentColor(for: SkillFramework.codex),
             AgentBrand.accentColor(for: AgentKind.codexCLI)
         )
-        assertColorsEqual(
-            AgentBrand.accentColor(for: SkillFramework.gemini),
-            AgentBrand.accentColor(for: AgentKind.antigravity)
-        )
-        assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.custom), FlotillaColors.accent)
         assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.cursor), Color(white: 0.90))
         assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.agents), Color(red: 0.40, green: 0.70, blue: 0.65))
+
+        // `.gemini` and `.custom` deliberately do *not* follow their agent
+        // mapping — see `testSkillFrameworkAccentColorsAreAllDistinct`.
+        assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.gemini), AgentBrand.antigravityGradientColors[1])
+        assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.custom), Color(white: 0.55))
+    }
+
+    /// These colors sit in one column of the skills ledger, so a repeat is
+    /// worse than no color at all. Two used to collide: `.custom` fell through
+    /// to the same accent as `.claude`, and `.gemini` inherited Antigravity's
+    /// azure right beside Codex's indigo.
+    func testSkillFrameworkAccentColorsAreAllDistinct() {
+        let frameworks: [SkillFramework] = [.claude, .agents, .codex, .cursor, .gemini, .custom]
+        for (offset, lhs) in frameworks.enumerated() {
+            for rhs in frameworks.dropFirst(offset + 1) {
+                let a = resolveRGB(AgentBrand.accentColor(for: lhs))
+                let b = resolveRGB(AgentBrand.accentColor(for: rhs))
+                let distance = abs(a.r - b.r) + abs(a.g - b.g) + abs(a.b - b.b)
+                XCTAssertGreaterThan(
+                    distance, 0.15,
+                    "\(lhs.displayName) and \(rhs.displayName) are too close to tell apart in the ledger"
+                )
+            }
+        }
     }
 
     func testSkillFrameworkConvenienceExtensions() {
         assertColorsEqual(SkillFramework.claude.accentColor, AgentBrand.accentColor(for: .claudeCode))
         assertColorsEqual(SkillFramework.codex.accentColor, AgentBrand.accentColor(for: .codexCLI))
-        assertColorsEqual(SkillFramework.gemini.accentColor, AgentBrand.accentColor(for: .antigravity))
         assertColorsEqual(AgentKind.claudeCode.accentColor, FlotillaColors.accent)
     }
 

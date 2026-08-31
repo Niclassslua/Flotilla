@@ -200,6 +200,7 @@ struct KnowledgeDetailView: View {
                     isEditing = false
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
                 .controlSize(.small)
             } else {
                 Button {

@@ -536,6 +536,7 @@ struct FileBrowserView: View {
                     Label("Open in Default App", systemImage: "arrow.up.forward.app")
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
                 .controlSize(.regular)
 
                 Button {
@@ -587,6 +588,7 @@ struct FileBrowserView: View {
                     Label("Open in Default App", systemImage: "arrow.up.forward.app")
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
                 .controlSize(.regular)
 
                 Button {

@@ -131,6 +131,7 @@ case .grid:
                     store.restartSession(sessionID: session.id)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
                 .accessibilityIdentifier("Restart Session")
             }
             .accessibilityIdentifier("TerminalPlaceholder")
@@ -241,6 +242,7 @@ struct EmptyWorkspaceView: View {
             }
             Button(hasSessions ? "New Session" : "Launch First Session", action: onCreate)
                 .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
                 .controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

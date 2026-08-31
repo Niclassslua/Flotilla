@@ -1,8 +1,13 @@
 import SwiftUI
 import SessionKit
+import DesignSystem
 
 struct DeleteSessionSheet: View {
     let session: Session
+    /// Whether the session still owns a live PTY. Deleting one stops the agent
+    /// mid-work, which nothing here can undo, so it is called out rather than
+    /// left for the user to remember.
+    var isRunning: Bool = false
     let onCancel: () -> Void
     let onDelete: (Bool) -> Void
 
@@ -14,12 +19,24 @@ struct DeleteSessionSheet: View {
                     .foregroundStyle(.red)
                     .symbolRenderingMode(.hierarchical)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Delete “\(session.title)”? ")
+                    Text("Delete “\(session.title)”?")
                         .font(.title3.weight(.semibold))
                     Text(explanation)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            if isRunning {
+                Label(
+                    "This session's agent is still running. Deleting it stops the process immediately.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.callout)
+                .foregroundStyle(FlotillaColors.statusWaitingForInput)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("DeleteSessionDialog.RunningWarning")
             }
 
             if let worktree = session.worktree {
@@ -35,28 +52,57 @@ struct DeleteSessionSheet: View {
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
             }
 
-            HStack {
-                Button("Cancel", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("DeleteSessionDialog.Cancel")
-                Spacer()
+            // Stacked full-width rather than a row: at this sheet's width three
+            // buttons side by side truncated "Keep Worktree, Delete Session" to
+            // "Keep Worktree, Delete Ses…" — the one label that distinguishes
+            // the two destructive outcomes. Return belongs to Cancel; deleting
+            // a branch on a keypress has no undo.
+            VStack(spacing: 8) {
                 if session.worktree != nil {
-                    Button("Keep Worktree, Delete Session") { onDelete(false) }
+                    destructiveButton(
+                        "Delete Session & Worktree",
+                        axID: "DeleteSessionDialog.DeleteWithWorktree"
+                    ) { onDelete(true) }
+
+                    // `role: .destructive` renders as an ordinary button outside
+                    // a confirmation dialog, so the outcomes are separated by
+                    // tint as well as by label: only the branch-destroying path
+                    // is red.
+                    Button("Keep Worktree, Delete Session Only") { onDelete(false) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity)
                         .accessibilityIdentifier("DeleteSessionDialog.KeepWorktreeDeleteSession")
+                } else {
+                    destructiveButton(
+                        "Delete Session",
+                        axID: "DeleteSessionDialog.DeleteSessionOnly"
+                    ) { onDelete(false) }
                 }
-                Button(session.worktree == nil ? "Delete Session" : "Delete Session & Worktree", role: .destructive) {
-                    onDelete(session.worktree != nil)
-                }
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier(
-                    session.worktree == nil
-                        ? "DeleteSessionDialog.DeleteSessionOnly"
-                        : "DeleteSessionDialog.DeleteWithWorktree"
-                )
+
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("DeleteSessionDialog.Cancel")
             }
         }
         .padding(24)
         .frame(width: 500)
+    }
+
+    private func destructiveButton(
+        _ title: String,
+        axID: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(title, role: .destructive, action: action)
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .tint(.red)
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier(axID)
     }
 
     private var explanation: String {

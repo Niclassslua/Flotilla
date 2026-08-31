@@ -498,6 +498,14 @@ private struct AgentSettingsPane: View {
                             Button("Choose…") { chooseExecutable(for: agent) }
                         }
                     }
+                    // "Find automatically" left the resolved binary invisible:
+                    // there was no way to see what Flotilla would actually
+                    // launch, or whether the agent was detected at all.
+                    AgentExecutableStatusRow(
+                        agent: agent,
+                        configuredPath: pathBinding(for: agent).wrappedValue,
+                        locator: PATHExecutableLocator()
+                    )
                     LabeledContent("Arguments") {
                         TextEditor(text: argumentsBinding(for: agent))
                             .font(.system(.callout, design: .monospaced))
@@ -735,6 +743,85 @@ private struct ShortcutsSettingsPane: View {
                 ("Delete Session", "⌘⌫"),
             ]),
         ]
+    }
+}
+
+/// What Flotilla will actually launch for one agent, and where that came from.
+/// Mirrors `ToolStatusRow`, but has to resolve the same way the launcher does:
+/// an explicit, executable path in Settings wins; otherwise discovery on the
+/// augmented PATH. Never colour alone — the state is always written out.
+private struct AgentExecutableStatusRow: View {
+    let agent: AgentKind
+    let configuredPath: String
+    let locator: any ExecutableLocating
+
+    private enum Resolution {
+        case explicit(URL)
+        case discovered(URL)
+        /// A path is set in Settings but is not an executable file.
+        case explicitMissing(String)
+        case notFound(binary: String)
+    }
+
+    private var resolution: Resolution {
+        let binary = AgentCatalog.descriptor(for: agent).binaryName
+        let trimmed = configuredPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return FileManager.default.isExecutableFile(atPath: trimmed)
+                ? .explicit(URL(fileURLWithPath: trimmed))
+                : .explicitMissing(trimmed)
+        }
+        if let found = locator.locate(binary) { return .discovered(found) }
+        return .notFound(binary: binary)
+    }
+
+    private var isResolved: Bool {
+        switch resolution {
+        case .explicit, .discovered: true
+        case .explicitMissing, .notFound: false
+        }
+    }
+
+    private var detail: String {
+        switch resolution {
+        case .explicit(let url): url.path
+        case .discovered(let url): url.path
+        case .explicitMissing(let path): "Not executable: \(path)"
+        case .notFound(let binary): "\(binary) not found on PATH"
+        }
+    }
+
+    private var origin: String {
+        switch resolution {
+        case .explicit: "Set in Settings"
+        case .discovered: "Found automatically"
+        case .explicitMissing: "Check the path above"
+        case .notFound: "Install it, or choose a path above"
+        }
+    }
+
+    var body: some View {
+        LabeledContent("Resolved") {
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(isResolved ? FlotillaColors.accent : Color.orange)
+                        .frame(width: 7, height: 7)
+                        .accessibilityHidden(true)
+                    Text(detail)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(isResolved ? .primary : .secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+                Text(origin)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("\(AgentCatalog.descriptor(for: agent).accessibilityIDPrefix)Resolved")
     }
 }
 

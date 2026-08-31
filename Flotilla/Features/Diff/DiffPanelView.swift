@@ -310,6 +310,7 @@ struct DiffPanelView: View {
                         Task { await viewModel.commit() }
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(FlotillaColors.accent)
                     .disabled(!canCommit)
                     .accessibilityIdentifier("DiffPanel.CommitButton")
                 }
@@ -419,8 +420,22 @@ struct DiffFileRow: View {
                     rowButton(systemImage: "plus.circle", help: "Stage", action: onStage)
                         .accessibilityIdentifier("DiffPanel.File-\(entry.path)-Stage")
                 }
-                rowButton(systemImage: "trash", help: "Discard", action: { isConfirmingDiscard = true })
-                    .accessibilityIdentifier("DiffPanel.File-\(entry.path)-Discard")
+
+                // Discard throws away uncommitted agent work and its immediate
+                // neighbour is a reversible staging toggle. They used to render
+                // identically — same size, same weight, same grey — so the
+                // destructive one is pulled out of the group and coloured.
+                Divider()
+                    .frame(height: 12)
+                    .padding(.horizontal, 4)
+
+                rowButton(
+                    systemImage: "trash",
+                    help: "Discard — cannot be undone",
+                    isDestructive: true,
+                    action: { isConfirmingDiscard = true }
+                )
+                .accessibilityIdentifier("DiffPanel.File-\(entry.path)-Discard")
             }
         }
         .padding(.vertical, 2)
@@ -440,15 +455,20 @@ struct DiffFileRow: View {
         }
     }
 
-    private func rowButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+    private func rowButton(
+        systemImage: String,
+        help: String,
+        isDestructive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 11))
-                .frame(width: 20, height: 20)
+                .font(.system(size: isDestructive ? 12 : 11, weight: isDestructive ? .semibold : .regular))
+                .frame(width: 22, height: 20)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(isDestructive ? AnyShapeStyle(FlotillaColors.danger) : AnyShapeStyle(.secondary))
         .help(help)
     }
 }

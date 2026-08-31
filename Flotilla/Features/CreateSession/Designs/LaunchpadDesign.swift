@@ -497,6 +497,7 @@ struct LaunchpadDesign: View {
                     .font(FlotillaTypography.callout.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
+            .tint(FlotillaColors.accent)
             .controlSize(.large)
             .tint(FlotillaColors.accent)
             .disabled(!draft.canLaunch)

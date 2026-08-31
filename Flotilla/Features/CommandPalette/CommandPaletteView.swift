@@ -416,6 +416,7 @@ struct RestoreSessionsView: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
                 .disabled(selectedIDs.isEmpty)
             }
             .padding(16)

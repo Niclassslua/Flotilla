@@ -308,6 +308,7 @@ struct FlotillaShell: View {
             if let session = store.sessions.first(where: { $0.id == sessionID }) {
                 DeleteSessionSheet(
                     session: session,
+                    isRunning: store.process(for: sessionID) != nil,
                     onCancel: { navigator.presentedSheet = nil },
                     onDelete: { deleteWorktree in
                         navigator.presentedSheet = nil
