@@ -9,8 +9,9 @@ import DesignSystem
 /// They used to be bare `.borderless` buttons 4pt apart, which is what made
 /// the cluster look crowded and unevenly spaced: `.borderless` paints nothing
 /// at all on macOS, so what set each control's width was the intrinsic width
-/// of its glyph — `plus.square.on.square` is half again as wide as `eraser` —
-/// and with only 4pt between them the gaps read as random rather than equal.
+/// of its glyph — `plus.rectangle.on.rectangle` is half again as wide as
+/// `eraser` — and with only 4pt between them the gaps read as random rather
+/// than equal.
 /// A fixed-height chip with its own padding normalises the widths, so equal
 /// spacing finally looks equal, and gives each control a 28pt target and a
 /// hover state that a bare glyph never had.
@@ -119,7 +120,7 @@ struct GridAddAllButton: View {
                 capacity: dimensions.capacity
             )
         } label: {
-            Image(systemName: "plus.square.on.square").gridBarIcon()
+            Image(systemName: "plus.rectangle.on.rectangle").gridBarIcon()
         }
         .disabled(candidates.isEmpty || isFull)
         .accessibilityLabel("Add all sessions that fit")
@@ -143,11 +144,14 @@ struct GridEmptyButton: View {
         GridBarControl(help: "Empty grid") {
             settingsViewModel.emptyGrid()
         } label: {
-            // Paired with Add all's `plus.square.on.square` rather than the
-            // unrelated `eraser` it used to draw: the two sit side by side and
-            // do opposite things to the same list, which the matched glyphs
-            // say and two unrelated ones did not.
-            Image(systemName: "minus.square.on.square").gridBarIcon()
+            // Paired with Add all's `plus.rectangle.on.rectangle` rather than
+            // the unrelated `eraser` it used to draw: the two sit side by side
+            // and do opposite things to the same list, which the matched
+            // glyphs say and two unrelated ones did not. The pair is the
+            // rectangle family and not the square one because SF Symbols has
+            // no `minus.square.on.square` to pair with — that name renders
+            // nothing at all, which is how Empty went invisible.
+            Image(systemName: "rectangle.on.rectangle.slash").gridBarIcon()
         }
         .disabled(isEmpty)
         .accessibilityLabel("Empty grid")
