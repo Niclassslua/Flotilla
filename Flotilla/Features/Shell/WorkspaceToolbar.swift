@@ -82,12 +82,20 @@ struct WorkspaceToolbar: ToolbarContent {
             .accessibilityIdentifier(AXID.toolbarForward.rawValue)
         }
 
+        // Everything after this point sits at the trailing edge. No placement
+        // does that on macOS — `.primaryAction` and `.automatic` both resolve
+        // to the leading run of the toolbar, right after the navigation items,
+        // which is why the global actions used to sit against the back/forward
+        // pair. A flexible `ToolbarSpacer` is what separates a leading group
+        // from a trailing one; it absorbs the slack between them. It only works
+        // from a toolbar declared inside the split view — see `FlotillaShell`.
+        ToolbarSpacer(.flexible)
+
         // Grid and Board, always present and always enabled. The segmented
         // picker they replace was hidden in exactly the scopes you would want
         // it from — Home and a project workspace — so reaching the grid from
-        // there meant a detour through the navigator. `.primaryAction` belongs
-        // on the leading edge on macOS, so the trailing spacer installer keeps
-        // this automatic group at the opposite edge of the window toolbar.
+        // there meant a detour through the navigator. Keeping all four global
+        // actions in one group anchors them together.
         ToolbarItemGroup(placement: .automatic) {
             presentationButton(.grid, help: "Session grid", identifier: .toolbarShowGrid)
             presentationButton(.board, help: "Kanban board", identifier: .toolbarShowBoard)

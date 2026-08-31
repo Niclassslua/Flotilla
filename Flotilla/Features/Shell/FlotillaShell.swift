@@ -46,19 +46,10 @@ struct FlotillaShell: View {
             workspaceContent
                 .background { uiTestWindowPlacer }
                 .background { ephemeralWindowStateDisabler }
-                .background { WorkspaceToolbarTrailingSpacer() }
                 .sheet(item: modalSheetBinding) { sheet in
                     sheetContent(sheet)
                 }
             overlayPresentation
-        }
-        .toolbar {
-            WorkspaceToolbar(
-                navigator: navigator,
-                store: store,
-                settingsViewModel: settingsViewModel,
-                onCommandPalette: { navigator.presentedSheet = .commandPalette }
-            )
         }
         .task {
             await restoreWorkspaceSelection()
@@ -211,6 +202,24 @@ struct FlotillaShell: View {
                 onCreateSession: { navigator.presentedSheet = .createSession },
                 onCommandPalette: { navigator.presentedSheet = .commandPalette }
             )
+            // Declared on the detail column rather than on the `ZStack` that
+            // wraps the whole split view. From outside the `NavigationSplitView`
+            // SwiftUI resolves every `ToolbarSpacer` against the *sidebar*
+            // toolbar section, so both of `WorkspaceToolbar`'s spacers were
+            // hoisted ahead of the sidebar toggle — the fixed gap never
+            // separated the wordmark from the history controls, and the
+            // flexible one had nothing to its left to push against, leaving the
+            // four global actions packed against Forward mid-window. Declared
+            // here, the spacers land in the detail section in declaration
+            // order and the flexible one takes up the slack.
+            .toolbar {
+                WorkspaceToolbar(
+                    navigator: navigator,
+                    store: store,
+                    settingsViewModel: settingsViewModel,
+                    onCommandPalette: { navigator.presentedSheet = .commandPalette }
+                )
+            }
         }
         .navigationSplitViewStyle(.balanced)
         .environment(\.workspaceNavigator, navigator)
