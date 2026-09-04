@@ -59,7 +59,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .shortcuts: .teal
         case .sessions: .indigo
         case .terminal: .cyan
-        case .git: .green
+        case .git: FlotillaColors.accent
         case .notifications: .red
         case .agents: .purple
         // case .appearance: .pink
@@ -225,7 +225,7 @@ private struct SettingsSidebarRow: View {
         } icon: {
             Group {
                 if tab == .git {
-                    GitBranchIcon(size: 13)
+                    GitIcon(size: 13)
                 } else {
                     Image(systemName: tab.icon)
                         .font(.system(size: 12, weight: .semibold))

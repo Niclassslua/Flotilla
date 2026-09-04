@@ -220,7 +220,7 @@ private struct PaletteRow: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 if systemImage == "arrow.triangle.branch" {
-                    GitBranchIcon(size: 16)
+                    GitIcon(size: 16)
                         .foregroundStyle(.tint)
                         .frame(width: 24)
                 } else {

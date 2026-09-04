@@ -497,7 +497,7 @@ struct SessionGitSidebar: View {
 
     private var header: some View {
         HStack(spacing: FlotillaSpacing.small) {
-            GitBranchIcon(size: FlotillaIconSize.small)
+            GitIcon(size: FlotillaIconSize.small)
                 .foregroundStyle(FlotillaColors.accent)
                 .accessibilityHidden(true)
             Text("Git")

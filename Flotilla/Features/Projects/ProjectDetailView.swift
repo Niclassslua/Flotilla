@@ -136,7 +136,7 @@ struct ProjectDetailView: View {
             VStack(spacing: 5) {
                 HStack(spacing: 5) {
                     if candidate == .git {
-                        GitBranchIcon(size: FlotillaIconSize.small)
+                        GitIcon(size: FlotillaIconSize.small)
                     } else {
                         Image(systemName: candidate.systemImage)
                             .font(.system(size: FlotillaIconSize.small))

@@ -143,7 +143,7 @@ struct ProjectWorktreeSection: View {
                 Button {
                     onOpenInGit(wt)
                 } label: {
-                    GitBranchLabel("Open in Git", size: 12)
+                    GitLabel("Open in Git", size: 12)
                         .font(FlotillaTypography.caption)
                 }
                 .buttonStyle(.bordered)

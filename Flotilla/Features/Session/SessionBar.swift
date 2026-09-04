@@ -315,7 +315,7 @@ struct SessionBar: View {
     }
 
     private func barBranchButton(help: String, action: @escaping () -> Void) -> some View {
-        SessionBarIconButton(isGitBranch: true, help: help, action: action)
+        SessionBarIconButton(isGit: true, help: help, action: action)
     }
 
     // MARK: - Rename
@@ -349,6 +349,7 @@ struct SessionBar: View {
 private struct SessionBarIconButton: View {
     var systemImage: String? = nil
     var isGitBranch: Bool = false
+    var isGit: Bool = false
     let help: String
     let action: () -> Void
 
@@ -368,7 +369,9 @@ private struct SessionBarIconButton: View {
     var body: some View {
         Button(action: action) {
             Group {
-                if isGitBranch {
+                if isGit {
+                    GitIcon(size: 11)
+                } else if isGitBranch {
                     GitBranchIcon(size: 11)
                 } else if let systemImage {
                     Image(systemName: systemImage)
