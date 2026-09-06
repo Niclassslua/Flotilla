@@ -258,6 +258,7 @@ struct DetailColumn: View {
                 sessions: store.sessions(for: project),
                 store: store,
                 terminalManager: terminalManager,
+                activityStore: activityStore,
                 openSession: onOpenSession,
                 openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
                 highlightUnseenCommits: settingsViewModel.settings.git.highlightUnseenCommits,

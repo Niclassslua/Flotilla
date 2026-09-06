@@ -139,11 +139,13 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 
 | Say | What it is | Code |
 | --- | --- | --- |
-| **Project detail** | The whole project workspace: header, mode tabs, tab content. | `ProjectDetailView` — `Features/Projects/` |
-| **Project header** | Name, branch, diff stat, and actions above the tabs. | `ProjectDetailView.projectHeader` |
-| **Mode tabs** | The five-tab strip: **Overview · Git · Files · Skills · Rules**. | `ProjectDetailView.ProjectTab` |
-| **Project overview tab** | Active sessions, worktrees, recent sessions. | `ProjectOverviewView` |
-| **Worktree section** | The worktree list — used both by the overview tab and by Git's worktree-scoped Changes. | `ProjectWorktreeSection` |
+| **Project detail** | Thin entry point: builds the workspace context and renders the Stream workspace. | `ProjectDetailView` — `Features/Projects/` |
+| **Project workspace** *(or "the Stream")* | The whole project surface: a masthead over a two-region body — the activity feed on the left, the context column on the right. Git / Files / Skills / Rules render through it under a return breadcrumb. | `StreamProjectWorkspace` — `Features/Projects/Workspaces/` |
+| **Masthead** | The `surface`-banded header: project mark, name, path, the monospace **instrument row** (branch · drift · working-copy delta · commits/wk), and the surface links. | `StreamProjectWorkspace.masthead` |
+| **Surface links** | The **Git · Files · Skills · Rules** row in the masthead; each carries the `ProjectDetail.ModeTab-<Title>` identifier. The surface model is still `ProjectDetailView.ProjectTab`. | `StreamProjectWorkspace.surfaceNav` |
+| **Activity feed** | The centred timeline: sessions and recent commits interleaved by recency down a spine, day-banded, with hero rows for live / waiting / ready sessions and an "earlier commits" footer. | `StreamProjectWorkspace.feed` / `timeline` |
+| **Context column** | The full-height right panel: **Worktrees** (list + show-all), **Working tree** (diff / branch / ahead → Git), **This week** (commits / sessions / churn). | `StreamProjectWorkspace.contextColumn` |
+| **Surface return bar** | The `← Overview / Git` breadcrumb shown above a routed-through surface. | `SurfaceReturnBar` — `Workspaces/ProjectWorkspaceChrome.swift` |
 | **Git tab** | Hosts the sub-tab bar and the scope picker. | `ProjectGitView` |
 | **Git sub-tabs** | **Changes** and **Commits**, inside the Git tab. | `ProjectGitView.GitSubTab` |
 | **Scope picker** | The control choosing which worktree/checkout the Git tab is looking at. | `ProjectGitView.scopePicker` |
@@ -287,11 +289,12 @@ The Home view above contains the **composer**, **summary line**, **attention que
 
 ### Project workspace
 
-![Project Overview tab showing active sessions, worktrees, and recent sessions](images/ui-vocabulary/project-overview.png)
+> These two images predate the Stream redesign and need re-shooting; the current
+> workspace is the masthead + activity feed + context column described above.
 
-**Worktree section**
+![Project workspace — activity feed and context column](images/ui-vocabulary/project-overview.png)
 
-![The worktree section and its main-checkout worktree card](images/ui-vocabulary/worktree-section.png)
+![The worktrees block in the context column](images/ui-vocabulary/worktree-section.png)
 
 | Commit graph and history | Knowledge catalog ledger |
 | --- | --- |
