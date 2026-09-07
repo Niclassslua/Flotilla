@@ -146,17 +146,17 @@ struct DetailColumn: View {
         }
     }
 
-    /// Files and the full Changes workspace still land on the project scope.
-    /// The first action now opens the compact, session-scoped Git inspector
-    /// without unmounting the terminal beneath it.
+    /// Files still lands on the project scope. The sidebar toggle opens the
+    /// compact, session-scoped Git inspector without unmounting the terminal
+    /// beneath it; the full Changes workspace is reached from the View menu
+    /// (⇧⌘G) rather than from a button on the bar.
     private func sessionBarActions(for session: Session) -> SessionBarActions {
         SessionBarActions(
             onRename: { store.renameSession(sessionID: session.id, newTitle: $0) },
             onToggleGitSidebar: {
                 gitSidebarSessionID = gitSidebarSessionID == session.id ? nil : session.id
             },
-            onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
-            onReviewChanges: { navigator.openProjectPanel(.git, scopedTo: session) }
+            onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) }
         )
     }
 

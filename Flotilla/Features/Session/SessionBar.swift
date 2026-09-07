@@ -8,7 +8,6 @@ struct SessionBarActions {
     var onRename: (String) -> Void = { _ in }
     var onToggleGitSidebar: () -> Void = {}
     var onBrowseFiles: () -> Void = {}
-    var onReviewChanges: () -> Void = {}
     var onFocus: () -> Void = {}
     var onRemoveFromGrid: () -> Void = {}
 }
@@ -252,21 +251,13 @@ struct SessionBar: View {
                 .accessibilityLabel("Session age")
                 .accessibilityIdentifier(AXID.sessionBarAge(session.title))
 
-            // The three icons are one cluster, at the same 2pt as the tile's
+            // The two icons are one cluster, at the same 2pt as the tile's
             // pair: 8pt between chips that already carry their own margin
-            // read as three separate controls that happened to land together.
+            // read as two separate controls that happened to land together.
+            //
+            // The sidebar toggle sits last, against the bar's trailing edge,
+            // because that is the edge the sidebar itself opens from.
             HStack(spacing: 2) {
-                barButton(
-                    "sidebar.right",
-                    help: hasProject
-                        ? "Toggle Git sidebar"
-                        : "This session is not assigned to a project, so there is no repository sidebar to show.",
-                    action: actions.onToggleGitSidebar
-                )
-                    .disabled(!hasProject)
-                    .accessibilityLabel("Git sidebar")
-                    .accessibilityIdentifier(AXID.sessionBarGitSidebarToggle.rawValue)
-
                 barButton(
                     "folder",
                     help: hasProject
@@ -278,15 +269,16 @@ struct SessionBar: View {
                 .accessibilityLabel("Browse files")
                 .accessibilityIdentifier(AXID.toolbarOpenProjectFiles.rawValue)
 
-                barBranchButton(
+                barButton(
+                    "sidebar.right",
                     help: hasProject
-                        ? "Review this session's changes"
-                        : "This session is not assigned to a project, so there is no repository workspace to open.",
-                    action: actions.onReviewChanges
+                        ? "Toggle Git sidebar"
+                        : "This session is not assigned to a project, so there is no repository sidebar to show.",
+                    action: actions.onToggleGitSidebar
                 )
                 .disabled(!hasProject)
-                .accessibilityLabel("Review changes")
-                .accessibilityIdentifier(AXID.toolbarOpenProjectGit.rawValue)
+                .accessibilityLabel("Git sidebar")
+                .accessibilityIdentifier(AXID.sessionBarGitSidebarToggle.rawValue)
             }
         }
     }
@@ -312,10 +304,6 @@ struct SessionBar: View {
 
     private func barButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
         SessionBarIconButton(systemImage: systemImage, help: help, action: action)
-    }
-
-    private func barBranchButton(help: String, action: @escaping () -> Void) -> some View {
-        SessionBarIconButton(isGit: true, help: help, action: action)
     }
 
     // MARK: - Rename
@@ -349,7 +337,6 @@ struct SessionBar: View {
 private struct SessionBarIconButton: View {
     var systemImage: String? = nil
     var isGitBranch: Bool = false
-    var isGit: Bool = false
     let help: String
     let action: () -> Void
 
@@ -369,9 +356,7 @@ private struct SessionBarIconButton: View {
     var body: some View {
         Button(action: action) {
             Group {
-                if isGit {
-                    GitIcon(size: 11)
-                } else if isGitBranch {
+                if isGitBranch {
                     GitBranchIcon(size: 11)
                 } else if let systemImage {
                     Image(systemName: systemImage)

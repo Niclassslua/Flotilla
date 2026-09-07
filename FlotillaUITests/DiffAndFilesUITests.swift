@@ -25,10 +25,12 @@ final class DiffAndFilesUITests: XCTestCase {
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 8))
         sessionRow.click()
 
-        // 1. Test Diff panel via the toolbar's "Git Changes" jump, scoped to this session's worktree
-        let openGitButton = app.descendants(matching: .any)["Toolbar.OpenProjectGit"].firstMatch
-        XCTAssertTrue(openGitButton.waitForExistence(timeout: 3))
-        openGitButton.click()
+        // 1. Test Diff panel via View > Changes, scoped to this session's
+        // worktree. The session bar's Git button is gone, so the menu's
+        // keyboard shortcut is now the entry point this covers.
+        let filesButton = app.descendants(matching: .any)["Toolbar.OpenProjectFiles"].firstMatch
+        XCTAssertTrue(filesButton.waitForExistence(timeout: 3))
+        app.typeKey("g", modifierFlags: [.command, .shift])
 
         // Longer timeout than the other checks: navigating here now goes
         // through the project's worktree resolution first, which is slower

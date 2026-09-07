@@ -26,10 +26,9 @@ public enum AXID: String, Sendable {
     case toolbarBack = "Toolbar.Back"
     case toolbarForward = "Toolbar.Forward"
     case topBarLogo = "TopBar.Logo"
-    /// These two moved from the window toolbar onto the session bar and kept
-    /// their identifiers: they name the same two actions on the same session,
-    /// and six UI-test lookups already depend on the spelling.
-    case toolbarOpenProjectGit = "Toolbar.OpenProjectGit"
+    /// Moved from the window toolbar onto the session bar and kept its
+    /// identifier: it names the same action on the same session, and the
+    /// UI-test lookups already depend on the spelling.
     case toolbarOpenProjectFiles = "Toolbar.OpenProjectFiles"
 
     // MARK: - Session group bar
