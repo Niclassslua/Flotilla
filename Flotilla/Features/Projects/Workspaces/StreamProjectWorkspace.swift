@@ -18,7 +18,10 @@ struct StreamProjectWorkspace: View {
 
     @State private var pulse: ProjectPulse = .empty
     @State private var worktrees: [GitWorktree] = []
+    @State private var snapshots: [URL: WorktreeSnapshot] = [:]
     @State private var showAllWorktrees = false
+    @State private var worktreePendingDeletion: GitWorktree?
+    @State private var selectedWeekDay: Int?
 
     // Timeline geometry. The spine sits between the time gutter and the node
     // lane; everything downstream is measured from these constants.
@@ -68,8 +71,20 @@ struct StreamProjectWorkspace: View {
         .background(FlotillaColors.canvas)
         .task(id: project.id) {
             pulse = await ProjectPulse.load(root: project.rootPath, git: context.store.gitService)
-            worktrees = (try? await context.store.gitService.listWorktrees(at: project.rootPath)) ?? []
+            await refreshWorktrees()
         }
+    }
+
+    /// Re-reads the worktree list and each worktree's working-copy state. Run
+    /// on appearance and after a deletion, so the rail never shows a checkout
+    /// that is no longer on disk.
+    private func refreshWorktrees() async {
+        let list = (try? await context.store.gitService.listWorktrees(at: project.rootPath)) ?? []
+        worktrees = list
+        snapshots = await WorktreeSnapshot.loadAll(
+            paths: list.map(\.path),
+            git: context.store.gitService
+        )
     }
 
     // MARK: - Masthead
@@ -224,100 +239,124 @@ struct StreamProjectWorkspace: View {
 
     // MARK: - Context column
 
+    /// The right rail: the main checkout's working-copy state up top, every
+    /// worktree under it as a live, right-clickable row, and the week's commit
+    /// rhythm at the bottom.
     private var contextColumn: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                worktreesBlock
-                Divider()
                 workingTreeBlock
+                Divider()
+                worktreesBlock
                 Divider()
                 thisWeekBlock
             }
         }
         .background(FlotillaColors.sidebar)
-    }
-
-    private var sortedWorktrees: [GitWorktree] {
-        worktrees.sorted { lhs, rhs in
-            if lhs.isMainWorktree != rhs.isMainWorktree { return lhs.isMainWorktree }
-            let ls = sessionFor(lhs) != nil, rs = sessionFor(rhs) != nil
-            if ls != rs { return ls }
-            return lhs.branch < rhs.branch
+        .accessibilityIdentifier(AXID.projectWorktreesSection.rawValue)
+        .confirmationDialog(
+            worktreePendingDeletion.map { "Delete the worktree on “\($0.branch)”?" } ?? "",
+            isPresented: Binding(
+                get: { worktreePendingDeletion != nil },
+                set: { if !$0 { worktreePendingDeletion = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: worktreePendingDeletion
+        ) { worktree in
+            Button("Delete Worktree & Branch", role: .destructive) {
+                delete(worktree, deleteBranch: true)
+            }
+            .accessibilityIdentifier("Project.WorktreeDelete.WithBranch")
+            Button("Delete Worktree, Keep Branch") {
+                delete(worktree, deleteBranch: false)
+            }
+            .accessibilityIdentifier("Project.WorktreeDelete.KeepBranch")
+            Button("Cancel", role: .cancel) { worktreePendingDeletion = nil }
+        } message: { worktree in
+            Text(deletionWarning(for: worktree))
         }
     }
 
-    @ViewBuilder
-    private var worktreesBlock: some View {
-        let all = sortedWorktrees
-        let shown = showAllWorktrees ? all : Array(all.prefix(worktreePreview))
-        let attached = all.filter { sessionFor($0) != nil }.count
-
-        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-            HStack(spacing: FlotillaSpacing.small) {
-                sectionLabel("Worktrees")
-                Text("\(all.count)")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(FlotillaColors.textTertiary)
-                Spacer()
-                if attached > 0 {
-                    Text("\(attached) active")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(FlotillaColors.statusWorking)
-                }
-            }
-            .padding(.bottom, 2)
-
-            if all.isEmpty {
-                Text("No worktrees").font(.system(size: 11)).foregroundStyle(FlotillaColors.textTertiary)
-            } else {
-                ForEach(shown, id: \.path) { worktreeCell($0) }
-                if all.count > worktreePreview {
-                    Button {
-                        withAnimation(FlotillaMotion.fast.curve) { showAllWorktrees.toggle() }
-                    } label: {
-                        Text(showAllWorktrees ? "Show fewer" : "Show all \(all.count) →")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(FlotillaColors.textSecondary)
-                            .padding(.top, 4)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+    /// Everything the dialog has to say that the title can't: the directory
+    /// that is about to leave the disk, the uncommitted work inside it, and
+    /// the session that would go with it.
+    private func deletionWarning(for worktree: GitWorktree) -> String {
+        var lines = [worktree.path.path]
+        if let snapshot = snapshots[worktree.path.standardizedFileURL], !snapshot.isClean {
+            lines.append(
+                "\(snapshot.changedFileCount) uncommitted file\(snapshot.changedFileCount == 1 ? "" : "s") "
+                + "(+\(snapshot.diffStat.additions) −\(snapshot.diffStat.deletions)) will be lost."
+            )
         }
-        .padding(FlotillaSpacing.large)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        if let session = sessionFor(worktree) {
+            lines.append("The session “\(session.title)” lives here and will be deleted too.")
+        }
+        return lines.joined(separator: "\n")
     }
 
+    private func delete(_ worktree: GitWorktree, deleteBranch: Bool) {
+        worktreePendingDeletion = nil
+        Task {
+            await context.store.deleteWorktree(
+                at: worktree.path,
+                in: project.rootPath,
+                branch: worktree.branch,
+                deleteBranch: deleteBranch
+            )
+            await refreshWorktrees()
+        }
+    }
+
+    // MARK: Working tree
+
+    /// The main checkout at a glance. The diff bar carries the shape of the
+    /// change — how much of it is additions — which the two numbers alone
+    /// never showed.
     private var workingTreeBlock: some View {
-        Button {
-            openGit()
-        } label: {
+        Button(action: openGit) {
             VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-                sectionLabel("Working tree")
-                    .padding(.bottom, 2)
-
                 HStack(spacing: FlotillaSpacing.small) {
-                    if pulse.diffStat.isEmpty {
-                        Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundStyle(FlotillaColors.success)
-                        Text("Clean").font(.system(size: 13)).foregroundStyle(FlotillaColors.textSecondary)
-                    } else {
-                        Text("+\(pulse.diffStat.additions)").foregroundStyle(FlotillaColors.diffAdded)
-                        Text("−\(pulse.diffStat.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
-                        Text("· \(pulse.changedFileCount) file\(pulse.changedFileCount == 1 ? "" : "s")")
-                            .foregroundStyle(FlotillaColors.textTertiary)
+                    sectionLabel("Working tree")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+
+                HStack(spacing: 6) {
+                    GitBranchIcon(size: 11)
+                    Text(pulse.branch ?? "—")
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(FlotillaColors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: FlotillaSpacing.small)
+                    if pulse.unpushedCount > 0 {
+                        countChip("↑\(pulse.unpushedCount)", tint: FlotillaColors.statusReady)
                     }
                 }
-                .font(.system(size: 13, design: .monospaced))
 
-                HStack(spacing: FlotillaSpacing.small) {
-                    Label(pulse.branch ?? "—", systemImage: "arrow.triangle.branch")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                        .lineLimit(1)
-                    if pulse.unpushedCount > 0 {
-                        Text("↑\(pulse.unpushedCount)")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(FlotillaColors.statusReady)
+                if pulse.diffStat.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(FlotillaColors.success)
+                        Text("Working tree clean")
+                            .font(.system(size: 12))
+                            .foregroundStyle(FlotillaColors.textSecondary)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 7) {
+                        DiffBar(stat: pulse.diffStat, height: 8)
+                        HStack(spacing: 8) {
+                            Text("+\(pulse.diffStat.additions)").foregroundStyle(FlotillaColors.diffAdded)
+                            Text("−\(pulse.diffStat.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
+                            Spacer()
+                            Text("\(pulse.changedFileCount) file\(pulse.changedFileCount == 1 ? "" : "s")")
+                                .foregroundStyle(FlotillaColors.textTertiary)
+                        }
+                        .font(.system(size: 12, design: .monospaced))
+                        .monospacedDigit()
                     }
                 }
             }
@@ -328,19 +367,181 @@ struct StreamProjectWorkspace: View {
         .buttonStyle(.plain)
     }
 
+    private func countChip(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.12), in: Capsule())
+    }
+
+    // MARK: Worktrees
+
+    private var sortedWorktrees: [GitWorktree] {
+        worktrees.sorted { lhs, rhs in
+            if lhs.isMainWorktree != rhs.isMainWorktree { return lhs.isMainWorktree }
+            let ls = sessionFor(lhs) != nil, rs = sessionFor(rhs) != nil
+            if ls != rs { return ls }
+            let ld = snapshots[lhs.path.standardizedFileURL]?.isClean == false
+            let rd = snapshots[rhs.path.standardizedFileURL]?.isClean == false
+            if ld != rd { return ld }
+            return lhs.branch < rhs.branch
+        }
+    }
+
+    @ViewBuilder
+    private var worktreesBlock: some View {
+        let all = sortedWorktrees
+        let shown = showAllWorktrees ? all : Array(all.prefix(worktreePreview))
+        let attached = all.filter { sessionFor($0) != nil }.count
+
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: FlotillaSpacing.small) {
+                sectionLabel("Worktrees")
+                Text("\(all.count)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                Spacer()
+                if attached > 0 {
+                    countChip("\(attached) active", tint: FlotillaColors.statusWorking)
+                }
+            }
+            .padding(.horizontal, FlotillaSpacing.small)
+            .padding(.bottom, 4)
+
+            if all.isEmpty {
+                Text("No worktrees")
+                    .font(.system(size: 11))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .padding(.horizontal, FlotillaSpacing.small)
+            } else {
+                ForEach(shown, id: \.path) { worktree in
+                    WorktreeContextRow(
+                        worktree: worktree,
+                        session: sessionFor(worktree),
+                        snapshot: snapshots[worktree.path.standardizedFileURL],
+                        onOpen: { openWorktreeInGit(worktree) },
+                        onOpenSession: { context.openSession($0) },
+                        onRequestDelete: { worktreePendingDeletion = worktree }
+                    )
+                }
+                if all.count > worktreePreview {
+                    Button {
+                        withAnimation(FlotillaMotion.fast.curve) { showAllWorktrees.toggle() }
+                    } label: {
+                        Text(showAllWorktrees ? "Show fewer" : "Show all \(all.count) →")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(FlotillaColors.textSecondary)
+                            .padding(.top, 6)
+                            .padding(.horizontal, FlotillaSpacing.small)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(FlotillaSpacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func openWorktreeInGit(_ worktree: GitWorktree) {
+        navigator.setProjectGitScope(worktree.path, for: project.id)
+        withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(.git, for: project.id) }
+    }
+
+    // MARK: This week
+
+    /// The week's commit rhythm, and the numbers behind whichever slice of it
+    /// is in focus: the whole week by default, or one day once a bar is
+    /// picked.
     private var thisWeekBlock: some View {
-        let week = weekStat
+        let days = weekDays
+        let focused = selectedWeekDay.flatMap { id in days.first { $0.id == id } }
+        let stat = focused?.stat ?? weekStat
+
         return VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-            sectionLabel("This week")
-                .padding(.bottom, 2)
-            weekRow("Commits", "\(commitsThisWeek)")
-            weekRow("Sessions", "\(stats.total)")
-            if !week.isEmpty {
-                weekRow("Churn", "+\(week.additions) −\(week.deletions)")
+            HStack(spacing: FlotillaSpacing.small) {
+                sectionLabel("This week")
+                Spacer()
+                if let focused {
+                    Text(focused.longLabel)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                    Button {
+                        withAnimation(FlotillaMotion.fast.curve) { selectedWeekDay = nil }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Show the whole week")
+                }
+            }
+            .padding(.bottom, 2)
+
+            CommitWeekChart(days: days, selection: $selectedWeekDay) { day in
+                openHistory(around: day.date)
+            }
+
+            weekRow("Commits", "\(focused?.count ?? commitsThisWeek)")
+            if focused == nil {
+                weekRow("Sessions", "\(stats.total)")
+            }
+            if !stat.isEmpty {
+                weekRow("Churn", "+\(stat.additions) −\(stat.deletions)")
+            }
+
+            if let focused, focused.count > 0 {
+                Button {
+                    openHistory(around: focused.date)
+                } label: {
+                    Text("Open in history →")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                        .padding(.top, 2)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(FlotillaSpacing.large)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Opens the Git surface's commit history with that day's newest commit
+    /// selected, so picking a bar lands on the work it counts.
+    private func openHistory(around day: Date) {
+        let calendar = Calendar.current
+        let root = project.rootPath.standardizedFileURL
+        navigator.setProjectGitScope(root, for: project.id)
+        navigator.setProjectGitSubTab(.commits, for: project.id)
+        if let commit = pulse.recentCommits.first(where: { calendar.isDate($0.authorDate, inSameDayAs: day) }) {
+            navigator.projectGraphViewModel(for: root, gitService: context.store.gitService).selectedSHA = commit.sha
+        }
+        withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(.git, for: project.id) }
+    }
+
+    private var weekDays: [CommitWeekChart.Day] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let initial = DateFormatter()
+        initial.dateFormat = "EEEEE"
+        let long = DateFormatter()
+        long.dateFormat = "EEE d MMM"
+
+        return (0..<7).reversed().map { offset in
+            let day = calendar.date(byAdding: .day, value: -offset, to: today) ?? today
+            let commits = pulse.recentCommits.filter { calendar.isDate($0.authorDate, inSameDayAs: day) }
+            return CommitWeekChart.Day(
+                id: offset,
+                initial: initial.string(from: day),
+                longLabel: offset == 0 ? "Today" : long.string(from: day),
+                date: day,
+                count: commits.count,
+                stat: commits.reduce(GitDiffStat(additions: 0, deletions: 0)) { $0 + $1.stat },
+                isToday: offset == 0
+            )
+        }
     }
 
     private func weekRow(_ label: String, _ value: String) -> some View {
@@ -362,46 +563,6 @@ struct StreamProjectWorkspace: View {
         context.sessions.first {
             ($0.worktree?.worktreePath ?? $0.workingDirectory).standardizedFileURL == wt.path.standardizedFileURL
         }
-    }
-
-    private func worktreeCell(_ wt: GitWorktree) -> some View {
-        let session = sessionFor(wt)
-        return Button {
-            navigator.setProjectGitScope(wt.path, for: project.id)
-            withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(.git, for: project.id) }
-        } label: {
-            HStack(spacing: FlotillaSpacing.small) {
-                Group {
-                    if wt.isMainWorktree {
-                        Image(systemName: "house.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(FlotillaColors.accent)
-                    } else {
-                        Circle()
-                            .fill(session.map { StatusPresentation.color(for: $0.status) } ?? FlotillaColors.separatorStrong)
-                            .frame(width: 6, height: 6)
-                    }
-                }
-                .frame(width: 12)
-
-                Text(wt.branch)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(session != nil || wt.isMainWorktree ? FlotillaColors.textSecondary : FlotillaColors.textTertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                Spacer(minLength: FlotillaSpacing.small)
-
-                if let session {
-                    Text(session.agent.displayName)
-                        .font(.system(size: 10))
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                }
-            }
-            .padding(.vertical, 5)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
     }
 
     private func sectionLabel(_ text: String) -> some View {
@@ -765,5 +926,281 @@ private struct StreamEntry: Identifiable {
         return session.status == .working
             || session.status == .waitingForInput
             || session.status == .readyForReview
+    }
+}
+
+// MARK: - Worktree row
+
+/// One worktree in the context rail: what branch it is on, who is working in
+/// it, and how far its working copy has drifted — plus the right-click menu
+/// that opens, reveals, or deletes it.
+private struct WorktreeContextRow: View {
+    let worktree: GitWorktree
+    let session: Session?
+    let snapshot: WorktreeSnapshot?
+    let onOpen: () -> Void
+    let onOpenSession: (UUID) -> Void
+    let onRequestDelete: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(alignment: .center, spacing: FlotillaSpacing.small) {
+                indicator
+                    .frame(width: 12)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(worktree.branch)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(isProminent ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        metrics
+                    }
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 10))
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(.horizontal, FlotillaSpacing.small)
+            .padding(.vertical, 6)
+            .background {
+                RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                    .fill(isHovering ? FlotillaColors.surfaceElevated : .clear)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .accessibilityIdentifier(AXID.worktreeRow(worktree.branch))
+        .contextMenu {
+            Button("Open in Git", action: onOpen)
+            if let session {
+                Button("Open Session") { onOpenSession(session.id) }
+            }
+            Divider()
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([worktree.path])
+            }
+            Button("Copy Path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(worktree.path.path, forType: .string)
+            }
+            Button("Copy Branch") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(worktree.branch, forType: .string)
+            }
+            if !worktree.isMainWorktree {
+                Divider()
+                Button("Delete Worktree…", role: .destructive, action: onRequestDelete)
+                    .accessibilityIdentifier("Project.WorktreeRow-\(worktree.branch)-DeleteMenuItem")
+            }
+        }
+    }
+
+    private var isProminent: Bool { session != nil || worktree.isMainWorktree }
+
+    @ViewBuilder
+    private var indicator: some View {
+        if worktree.isMainWorktree {
+            Image(systemName: "house.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(FlotillaColors.accent)
+        } else if let session {
+            Circle()
+                .fill(StatusPresentation.color(for: session.status))
+                .frame(width: 6, height: 6)
+        } else {
+            Circle()
+                .strokeBorder(FlotillaColors.separatorStrong, lineWidth: 1)
+                .frame(width: 6, height: 6)
+        }
+    }
+
+    /// The loudest thing true about this checkout: uncommitted work first,
+    /// then unpushed commits, then nothing at all.
+    @ViewBuilder
+    private var metrics: some View {
+        if let snapshot, !snapshot.isClean {
+            HStack(spacing: 5) {
+                DiffBar(stat: snapshot.diffStat, height: 4, spacing: 1.5)
+                    .frame(width: 28)
+                Text("+\(snapshot.diffStat.additions)").foregroundStyle(FlotillaColors.diffAdded)
+                Text("−\(snapshot.diffStat.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
+            }
+            .font(.system(size: 10, design: .monospaced))
+            .monospacedDigit()
+        } else if let snapshot, snapshot.unpushedCount > 0 {
+            Text("↑\(snapshot.unpushedCount)")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(FlotillaColors.statusReady)
+        }
+    }
+
+    private var subtitle: String? {
+        if let session {
+            return "\(session.title) · \(session.agent.displayName)"
+        }
+        if worktree.isMainWorktree { return "Main checkout" }
+        if let snapshot, snapshot.changedFileCount > 0 {
+            return "\(snapshot.changedFileCount) uncommitted file\(snapshot.changedFileCount == 1 ? "" : "s")"
+        }
+        return nil
+    }
+}
+
+// MARK: - Diff bar
+
+/// Additions and deletions as one proportional green/red bar on a faint
+/// track. Each present side is floored at a visible width, so a one-line
+/// change reads as a sliver rather than rounding away to nothing.
+private struct DiffBar: View {
+    let stat: GitDiffStat
+    var height: CGFloat = 6
+    var spacing: CGFloat = 2
+
+    var body: some View {
+        GeometryReader { geo in
+            let widths = segmentWidths(in: geo.size.width)
+            HStack(spacing: spacing) {
+                if stat.additions > 0 {
+                    Capsule().fill(FlotillaColors.diffAdded).frame(width: widths.additions)
+                }
+                if stat.deletions > 0 {
+                    Capsule().fill(FlotillaColors.diffRemoved).frame(width: widths.deletions)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .frame(height: height)
+        .background { Capsule().fill(FlotillaColors.separator) }
+        .accessibilityLabel("\(stat.additions) additions, \(stat.deletions) deletions")
+    }
+
+    private func segmentWidths(in width: CGFloat) -> (additions: CGFloat, deletions: CGFloat) {
+        let total = CGFloat(stat.additions + stat.deletions)
+        guard total > 0 else { return (0, 0) }
+
+        let hasBoth = stat.additions > 0 && stat.deletions > 0
+        let usable = max(0, width - (hasBoth ? spacing : 0))
+        var additions = usable * CGFloat(stat.additions) / total
+        var deletions = usable - additions
+
+        if hasBoth {
+            let floorWidth = min(height, usable / 2)
+            if additions < floorWidth {
+                additions = floorWidth
+                deletions = usable - additions
+            } else if deletions < floorWidth {
+                deletions = floorWidth
+                additions = usable - deletions
+            }
+        } else if stat.additions == 0 {
+            additions = 0
+            deletions = usable
+        } else {
+            additions = usable
+            deletions = 0
+        }
+        return (additions, deletions)
+    }
+}
+
+// MARK: - Commit week chart
+
+/// Seven days of commits as hoverable, selectable bars. Hovering reveals that
+/// day's count above its bar; clicking pins the day so the numbers under the
+/// chart describe it, and clicking the pinned day again opens its commits in
+/// the history surface.
+private struct CommitWeekChart: View {
+    struct Day: Identifiable, Equatable {
+        let id: Int
+        let initial: String
+        let longLabel: String
+        let date: Date
+        let count: Int
+        let stat: GitDiffStat
+        let isToday: Bool
+    }
+
+    let days: [Day]
+    @Binding var selection: Int?
+    let onActivate: (Day) -> Void
+
+    @State private var hovered: Int?
+
+    private let barsHeight: CGFloat = 34
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 3) {
+            ForEach(days) { day in
+                column(day)
+            }
+        }
+        .animation(FlotillaMotion.fast.curve, value: hovered)
+        .animation(FlotillaMotion.fast.curve, value: selection)
+    }
+
+    private func column(_ day: Day) -> some View {
+        let isFocused = hovered == day.id || selection == day.id
+        let peak = max(1, days.map(\.count).max() ?? 1)
+
+        return Button {
+            if selection == day.id {
+                onActivate(day)
+            } else {
+                selection = day.id
+            }
+        } label: {
+            VStack(spacing: 3) {
+                // Always laid out, so revealing a count never shifts the bars.
+                Text(isFocused ? "\(day.count)" : " ")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .frame(height: 11)
+
+                ZStack(alignment: .bottom) {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(isFocused ? FlotillaColors.accent.opacity(0.10) : .clear)
+                        .frame(height: barsHeight)
+
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(fill(for: day, isFocused: isFocused))
+                        .frame(height: max(2, barsHeight * CGFloat(day.count) / CGFloat(peak)))
+                }
+                .frame(height: barsHeight)
+
+                Text(day.initial)
+                    .font(.system(size: 9, weight: day.isToday || isFocused ? .bold : .regular))
+                    .foregroundStyle(
+                        day.isToday || isFocused ? FlotillaColors.textSecondary : FlotillaColors.textTertiary
+                    )
+
+                // Selection ticks the day it pins.
+                Capsule()
+                    .fill(selection == day.id ? FlotillaColors.accent : .clear)
+                    .frame(width: 10, height: 2)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 ? day.id : (hovered == day.id ? nil : hovered) }
+        .help("\(day.longLabel) — \(day.count) commit\(day.count == 1 ? "" : "s")")
+        .accessibilityIdentifier(AXID.commitWeekChartDay(day.id))
+    }
+
+    private func fill(for day: Day, isFocused: Bool) -> Color {
+        guard day.count > 0 else { return FlotillaColors.separatorStrong }
+        if isFocused { return FlotillaColors.accent }
+        return FlotillaColors.accent.opacity(day.isToday ? 0.85 : 0.5)
     }
 }

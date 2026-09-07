@@ -1075,6 +1075,37 @@ final class AppStore {
         }
     }
 
+    /// Removes a worktree from a project checkout. When a session is bound to
+    /// that directory the session goes with it, so no session record is left
+    /// pointing at a path that no longer exists. Failures surface through
+    /// `lastOperationError` instead of throwing: every caller is a menu item.
+    func deleteWorktree(
+        at path: URL,
+        in repoPath: URL,
+        branch: String,
+        deleteBranch: Bool
+    ) async {
+        lastOperationError = nil
+
+        if let session = sessions.first(where: {
+            $0.worktree?.worktreePath.standardizedFileURL == path.standardizedFileURL
+        }) {
+            await deleteSession(sessionID: session.id, deleteWorktree: true, deleteBranch: deleteBranch)
+            return
+        }
+
+        do {
+            try await gitService.removeWorktree(
+                at: path,
+                in: repoPath,
+                branch: branch,
+                deleteBranch: deleteBranch
+            )
+        } catch {
+            lastOperationError = "The worktree could not be removed: \(error.localizedDescription)"
+        }
+    }
+
     /// Creates (and immediately starts) a new session: saves the project if
     /// it's new, resolves main-checkout-vs-new-worktree via `WorktreePlanner`,
     /// starts the selected agent's real PTY-backed process, and selects it.

@@ -5,7 +5,7 @@ import DesignSystem
 
 /// The at-a-glance state of a project's main checkout: branch, how far it has
 /// drifted from its upstream, the size of the working-copy delta, worktree
-/// count, and the last two dozen commits. Loaded once when the workspace
+/// count, and its recent commits. Loaded once when the workspace
 /// appears and feeds the masthead instrument row, the activity feed, and the
 /// context column.
 struct ProjectPulse: Equatable, Sendable {
@@ -36,7 +36,7 @@ struct ProjectPulse: Equatable, Sendable {
         if let worktrees = try? await git.listWorktrees(at: root) {
             pulse.worktreeCount = worktrees.count
         }
-        if let commits = try? await git.log(at: root, ref: nil, skip: 0, maxCount: 24) {
+        if let commits = try? await git.log(at: root, ref: nil, skip: 0, maxCount: 60) {
             pulse.recentCommits = commits
         }
         return pulse

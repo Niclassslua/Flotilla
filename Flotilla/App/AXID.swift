@@ -279,6 +279,18 @@ public enum AXID: String, Sendable {
         "ProjectRow-\(name)"
     }
 
+    /// Creates a worktree row identifier from its branch name — the context
+    /// rail keys its rows by branch, which is unique per worktree.
+    public static func worktreeRow(_ branch: String) -> String {
+        "Project.WorktreeRow-\(branch)"
+    }
+
+    /// Creates a commit-week-chart bar identifier, keyed by how many days back
+    /// the bar sits (0 is today).
+    public static func commitWeekChartDay(_ daysAgo: Int) -> String {
+        "Project.CommitWeekChart.Day-\(daysAgo)"
+    }
+
     /// Creates a command palette result identifier
     public static func commandPaletteResult(_ index: Int) -> String {
         "CommandPalette.Result-\(index)"
