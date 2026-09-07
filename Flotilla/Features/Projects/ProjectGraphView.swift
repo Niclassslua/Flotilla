@@ -30,11 +30,14 @@ struct ProjectGraphView: View {
     }
 
     var body: some View {
+        // Equal ideal widths so the graph and the commit detail open 50/50 and
+        // shrink in step; the minimums stay apart because the graph still has
+        // to fit its fixed stat/author/time/SHA columns plus a lane gutter.
         HSplitView {
             graphPane
-                .frame(minWidth: 540, idealWidth: 720)
+                .frame(minWidth: 460, idealWidth: 640)
             CommitDetailView(viewModel: viewModel)
-                .frame(minWidth: 360, idealWidth: 460)
+                .frame(minWidth: 360, idealWidth: 640)
         }
         .task(id: viewModel.repoPath) {
             viewModel.sessions = sessions
