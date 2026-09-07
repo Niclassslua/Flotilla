@@ -406,6 +406,14 @@ private struct FractionSplit<Leading: View, Trailing: View>: View {
 
     private let handleWidth: CGFloat = 9
 
+    /// The sweet spot the divider settles into, and how close a drag has to
+    /// come before it does. AppKit spells this
+    /// `splitView(_:constrainSplitPosition:ofSubviewAt:)`; SwiftUI has no
+    /// equivalent — `presentationDetents` covers sheets only — so the split
+    /// applies it itself.
+    private let snapFraction: CGFloat = 0.5
+    private let snapDistance: CGFloat = 26
+
     var body: some View {
         GeometryReader { geo in
             let total = geo.size.width
@@ -431,6 +439,14 @@ private struct FractionSplit<Leading: View, Trailing: View>: View {
         return min(max(available * fraction, leadingMin), available - trailingMin)
     }
 
+    /// Pulls a dragged split point onto the sweet spot once it comes within
+    /// `snapDistance`, so letting go anywhere near the middle lands on an even
+    /// split instead of a few pixels off it.
+    private func snapped(_ width: CGFloat, in available: CGFloat) -> CGFloat {
+        let target = available * snapFraction
+        return abs(width - target) <= snapDistance ? target : width
+    }
+
     private func handle(total: CGFloat) -> some View {
         Rectangle()
             .fill(FlotillaColors.separator)
@@ -446,7 +462,8 @@ private struct FractionSplit<Leading: View, Trailing: View>: View {
                         let available = max(1, total - handleWidth)
                         let start = dragStartWidth ?? leadingWidth(total: total)
                         if dragStartWidth == nil { dragStartWidth = start }
-                        fraction = min(max((start + value.translation.width) / available, 0), 1)
+                        let dragged = start + value.translation.width
+                        fraction = min(max(snapped(dragged, in: available) / available, 0), 1)
                     }
                     .onEnded { _ in dragStartWidth = nil }
             )
