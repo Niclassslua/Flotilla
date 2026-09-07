@@ -489,7 +489,7 @@ struct StreamProjectWorkspace: View {
                 weekRow("Sessions", "\(stats.total)")
             }
             if !stat.isEmpty {
-                weekRow("Churn", "+\(stat.additions) −\(stat.deletions)")
+                churnRow(stat)
             }
 
             if let focused, focused.count > 0 {
@@ -542,6 +542,27 @@ struct StreamProjectWorkspace: View {
                 isToday: offset == 0
             )
         }
+    }
+
+    /// Churn is a diff like any other, so it reads like one: green additions,
+    /// red deletions, and the same proportional bar the working tree uses —
+    /// the balance of the week's work at a glance instead of two grey numbers.
+    private func churnRow(_ stat: GitDiffStat) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Churn")
+                    .font(.system(size: 12))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                Spacer()
+                HStack(spacing: 6) {
+                    Text("+\(stat.additions)").foregroundStyle(FlotillaColors.diffAdded)
+                    Text("−\(stat.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
+                }
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+            }
+            DiffBar(stat: stat, height: 5)
+        }
+        .padding(.top, 1)
     }
 
     private func weekRow(_ label: String, _ value: String) -> some View {
@@ -720,9 +741,11 @@ struct StreamProjectWorkspace: View {
                 .lineLimit(1)
             Spacer(minLength: FlotillaSpacing.small)
             if !commit.stat.isEmpty {
-                Text("+\(commit.stat.additions) −\(commit.stat.deletions)")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(FlotillaColors.textTertiary.opacity(0.7))
+                HStack(spacing: 4) {
+                    Text("+\(commit.stat.additions)").foregroundStyle(FlotillaColors.diffAdded)
+                    Text("−\(commit.stat.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
+                }
+                .font(.system(size: 10, design: .monospaced))
             }
             Text(commit.shortSHA)
                 .font(.system(size: 11, design: .monospaced))
