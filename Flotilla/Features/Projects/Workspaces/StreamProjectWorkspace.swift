@@ -1060,9 +1060,7 @@ private struct WorktreeContextRow: View {
     @ViewBuilder
     private var metrics: some View {
         if let snapshot, !snapshot.isClean {
-            HStack(spacing: 5) {
-                DiffBar(stat: snapshot.diffStat, height: 4, spacing: 1.5)
-                    .frame(width: 28)
+            HStack(spacing: 4) {
                 Text("+\(snapshot.diffStat.additions)").foregroundStyle(FlotillaColors.diffAdded)
                 Text("−\(snapshot.diffStat.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
             }
