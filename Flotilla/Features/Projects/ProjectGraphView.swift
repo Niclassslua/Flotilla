@@ -10,6 +10,7 @@ import DesignSystem
 /// Combines visual branch topology, rich search, date categorization (by month/year),
 /// agent attributions, and direct web links into a unified commit experience.
 struct ProjectGraphView: View {
+    @Environment(\.workspaceNavigator) private var navigator
     let sessions: [Session]
     let highlightUnseenCommits: Bool
 
@@ -30,10 +31,13 @@ struct ProjectGraphView: View {
     }
 
     var body: some View {
-        FractionSplit(leadingMin: 460, trailingMin: 360) {
+        SnappingSplit(leadingMin: 460, trailingMin: 360) {
             graphPane
         } trailing: {
+            // The detail pane is hosted in AppKit, which does not inherit the
+            // SwiftUI environment, so the navigator it reads is handed over.
             CommitDetailView(viewModel: viewModel)
+                .environment(\.workspaceNavigator, navigator)
         }
         .task(id: viewModel.repoPath) {
             viewModel.sessions = sessions
@@ -386,98 +390,116 @@ struct ProjectGraphView: View {
 
 // MARK: - Split
 
-/// A two-pane horizontal split that opens at an even 50/50 and stays wherever
-/// the user drags it.
+/// A two-pane split that opens at an even 50/50, settles back onto it when a
+/// drag comes near, and keeps each pane above its minimum.
 ///
-/// `HSplitView` cannot do this: it never consults the `idealWidth` its panes
-/// ask for. It parks each pane at its *minimum* and hands the whole surplus to
-/// whichever pane is greedy — here the commit detail, which ends in
-/// `.frame(maxWidth: .infinity)` — so the graph opened pinned to its minimum
-/// however wide the window was, and raising its ideal width did nothing.
-private struct FractionSplit<Leading: View, Trailing: View>: View {
+/// This hosts a real `NSSplitView` because neither SwiftUI route works here.
+/// `HSplitView` never consults the ideal widths its panes ask for: it parks
+/// each at its minimum and hands the surplus to whichever pane is greedy, so
+/// the graph opened pinned to its minimum at any window width. And a
+/// hand-rolled `DragGesture` divider fights the cursor — on macOS the gesture
+/// is cancelled once the pointer leaves the dragged view's frame, which is
+/// exactly what a divider does as it follows the drag, so the split
+/// oscillated and the sweet spot turned that wobble into a jump.
+///
+/// AppKit has owned this behaviour all along: `constrainSplitPosition` is the
+/// sweet spot, and it is the same hook Xcode's own editor split uses.
+private struct SnappingSplit<Leading: View, Trailing: View>: NSViewRepresentable {
     let leadingMin: CGFloat
     let trailingMin: CGFloat
+    /// How close a drag has to come to the middle before it settles there.
+    var snapDistance: CGFloat = 22
     @ViewBuilder var leading: () -> Leading
     @ViewBuilder var trailing: () -> Trailing
 
-    /// The leading pane's share of the surface. Half until dragged.
-    @State private var fraction: CGFloat = 0.5
-    /// Where inside the handle the drag started, so the divider doesn't
-    /// teleport to centre itself under the cursor on the first event.
-    @State private var grabOffset: CGFloat?
+    func makeCoordinator() -> Coordinator {
+        Coordinator(leadingMin: leadingMin, trailingMin: trailingMin, snapDistance: snapDistance)
+    }
 
-    private let handleWidth: CGFloat = 9
-    private let surface = "FractionSplit.Surface"
+    func makeNSView(context: Context) -> NSSplitView {
+        let split = CentredSplitView()
+        split.isVertical = true
+        split.dividerStyle = .thin
+        split.delegate = context.coordinator
 
-    /// The sweet spot the divider settles into, and how close a drag has to
-    /// come before it does. AppKit spells this
-    /// `splitView(_:constrainSplitPosition:ofSubviewAt:)`; SwiftUI has no
-    /// equivalent — `presentationDetents` covers sheets only — so the split
-    /// applies it itself.
-    private let snapFraction: CGFloat = 0.5
-    private let snapDistance: CGFloat = 18
+        let leadingHost = NSHostingView(rootView: leading())
+        let trailingHost = NSHostingView(rootView: trailing())
+        for host in [leadingHost as NSView, trailingHost as NSView] {
+            // The split view sets pane frames itself; an intrinsic size out of
+            // the hosted SwiftUI would fight the divider.
+            host.translatesAutoresizingMaskIntoConstraints = true
+        }
+        leadingHost.sizingOptions = []
+        trailingHost.sizingOptions = []
+        context.coordinator.leadingHost = leadingHost
+        context.coordinator.trailingHost = trailingHost
 
-    var body: some View {
-        GeometryReader { geo in
-            let total = geo.size.width
-            HStack(spacing: 0) {
-                leading()
-                    .frame(width: leadingWidth(total: total))
-                handle(total: total)
-                trailing()
-                    .frame(maxWidth: .infinity)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .coordinateSpace(.named(surface))
+        split.addArrangedSubview(leadingHost)
+        split.addArrangedSubview(trailingHost)
+        return split
+    }
+
+    func updateNSView(_ splitView: NSSplitView, context: Context) {
+        context.coordinator.leadingMin = leadingMin
+        context.coordinator.trailingMin = trailingMin
+        context.coordinator.snapDistance = snapDistance
+        context.coordinator.leadingHost?.rootView = leading()
+        context.coordinator.trailingHost?.rootView = trailing()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSSplitViewDelegate {
+        var leadingMin: CGFloat
+        var trailingMin: CGFloat
+        var snapDistance: CGFloat
+        var leadingHost: NSHostingView<Leading>?
+        var trailingHost: NSHostingView<Trailing>?
+
+        init(leadingMin: CGFloat, trailingMin: CGFloat, snapDistance: CGFloat) {
+            self.leadingMin = leadingMin
+            self.trailingMin = trailingMin
+            self.snapDistance = snapDistance
+        }
+
+        func splitView(
+            _ splitView: NSSplitView,
+            constrainMinCoordinate proposedMinimumPosition: CGFloat,
+            ofSubviewAt dividerIndex: Int
+        ) -> CGFloat {
+            max(proposedMinimumPosition, leadingMin)
+        }
+
+        func splitView(
+            _ splitView: NSSplitView,
+            constrainMaxCoordinate proposedMaximumPosition: CGFloat,
+            ofSubviewAt dividerIndex: Int
+        ) -> CGFloat {
+            min(proposedMaximumPosition, splitView.bounds.width - splitView.dividerThickness - trailingMin)
+        }
+
+        /// The sweet spot: a drag passing within `snapDistance` of the middle
+        /// settles exactly on it.
+        func splitView(
+            _ splitView: NSSplitView,
+            constrainSplitPosition proposedPosition: CGFloat,
+            ofSubviewAt dividerIndex: Int
+        ) -> CGFloat {
+            let centre = (splitView.bounds.width - splitView.dividerThickness) / 2
+            return abs(proposedPosition - centre) <= snapDistance ? centre : proposedPosition
         }
     }
+}
 
-    /// The split point, clamped so neither pane is squeezed under its minimum.
-    /// When the surface is too narrow to honour both, the fraction wins and
-    /// both panes shrink together rather than one collapsing.
-    private func leadingWidth(total: CGFloat) -> CGFloat {
-        let available = max(0, total - handleWidth)
-        guard available > leadingMin + trailingMin else {
-            return available * fraction
-        }
-        return min(max(available * fraction, leadingMin), available - trailingMin)
-    }
+/// Parks the divider in the middle the first time the split view has a real
+/// width; after that the position is the user's to move.
+private final class CentredSplitView: NSSplitView {
+    private var hasCentred = false
 
-    /// Pulls a dragged split point onto the sweet spot once it comes within
-    /// `snapDistance`, so letting go anywhere near the middle lands on an even
-    /// split instead of a few pixels off it.
-    private func snapped(_ width: CGFloat, in available: CGFloat) -> CGFloat {
-        let target = available * snapFraction
-        return abs(width - target) <= snapDistance ? target : width
-    }
-
-    private func handle(total: CGFloat) -> some View {
-        Rectangle()
-            .fill(FlotillaColors.separator)
-            .frame(width: 1)
-            .frame(width: handleWidth)
-            .contentShape(.rect)
-            .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-            }
-            // Tracked as an absolute position in the split's own coordinate
-            // space, never as a translation: the handle moves as it is dragged,
-            // so a local translation is measured against a frame that keeps
-            // shifting underneath it — the divider oscillates, and snapping
-            // turns that wobble into a jump.
-            .gesture(
-                DragGesture(minimumDistance: 1, coordinateSpace: .named(surface))
-                    .onChanged { value in
-                        let available = max(1, total - handleWidth)
-                        let offset = grabOffset
-                            ?? (value.startLocation.x - leadingWidth(total: total) - handleWidth / 2)
-                        if grabOffset == nil { grabOffset = offset }
-                        let width = value.location.x - offset - handleWidth / 2
-                        fraction = min(max(snapped(width, in: available) / available, 0), 1)
-                    }
-                    .onEnded { _ in grabOffset = nil }
-            )
-            .accessibilityIdentifier("ProjectGraph.SplitHandle")
+    override func layout() {
+        super.layout()
+        guard !hasCentred, arrangedSubviews.count == 2, bounds.width > 0 else { return }
+        hasCentred = true
+        setPosition((bounds.width - dividerThickness) / 2, ofDividerAt: 0)
     }
 }
 
