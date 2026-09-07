@@ -71,13 +71,15 @@ public enum FlotillaLayoutWidth: Sendable {
     // + separator + a full branch name like "flotilla/worktree-cleanup"
     // (155pt) on the metadata line, or a long title like "Investigate flaky
     // terminal snapshot test" (229pt) + its timestamp (19pt) on the title
-    // line — needs ~260-320pt of actual content width. `ideal` is
-    // deliberately generous so a fresh launch makes the session sidebar
-    // unmistakable; `min` still supports a compact user-resized layout, and
-    // `max` leaves a useful detail column at the 1,280pt default window width.
+    // line — needs ~260-320pt of actual content width. `ideal` sits just past
+    // that worst case rather than well beyond it: the sidebar is a list to
+    // pick from, and the detail column is where the work happens, so a fresh
+    // launch should not hand it half the window. `min` still supports a
+    // compact user-resized layout, and `max` leaves room to widen it for long
+    // branch names without swallowing the detail column.
     public static let sidebarMin: CGFloat = 260
-    public static let sidebarIdeal: CGFloat = 600
-    public static let sidebarMax: CGFloat = 720
+    public static let sidebarIdeal: CGFloat = 360
+    public static let sidebarMax: CGFloat = 560
     /// Shared by docked detail surfaces. The Git sidebar needs enough room
     /// for a filename, path, and diff stat while remaining subordinate to the
     /// live terminal it supplements.
