@@ -719,6 +719,10 @@ final class AppStore {
         replacing fallbackWorktree: WorktreeInfo?
     ) async {
         if let fallbackWorktree {
+            if let index = sessions.firstIndex(where: { $0.id == sessionID }),
+               sessions[index].workingDirectory == fallbackWorktree.worktreePath {
+                processManager.terminate(sessionID: sessionID)
+            }
             try? await gitService.removeWorktree(
                 at: fallbackWorktree.worktreePath,
                 in: fallbackWorktree.baseCheckoutPath,

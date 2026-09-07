@@ -52,10 +52,13 @@ enum ChildProcessEnvironment {
     }
 
     /// Foundation `Process` otherwise inherits Flotilla's complete environment
-    /// at `run()`, bypassing the sanitization used by the PTY launch path.
+    /// and current working directory at `run()`. Spawning helper commands with
+    /// `currentDirectoryURL = /` prevents a daemon (such as the tmux server)
+    /// from inheriting a deletable worktree directory as its working directory.
     static func makeProcess() -> Process {
         let process = Process()
         process.environment = sanitized(ProcessInfo.processInfo.environment)
+        process.currentDirectoryURL = URL(fileURLWithPath: "/")
         return process
     }
 

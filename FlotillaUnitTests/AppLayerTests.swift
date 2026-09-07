@@ -234,6 +234,24 @@ final class SessionProcessManagerTests: XCTestCase {
         )
     }
 
+    func testTmuxWrappedLaunchUsesRootWorkingDirectoryForOuterProcess() throws {
+        let factory = RecordingProcessFactory()
+        let manager = SessionProcessManager(
+            locator: FixedExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/local/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxServerProbe: StubTmuxServerProbe(usable: true)
+        )
+
+        let model = session()
+        let process = try manager.start(session: model)
+        let mock = try XCTUnwrap(process as? MockPTYProcess)
+
+        XCTAssertEqual(mock.startedWorkingDirectory?.path, "/")
+    }
+
     func testMissingAgentFailsTruthfullyWithoutCreatingFallbackProcess() {
         let factory = RecordingProcessFactory()
         let manager = SessionProcessManager(

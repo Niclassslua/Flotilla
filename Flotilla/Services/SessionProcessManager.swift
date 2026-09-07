@@ -335,12 +335,18 @@ final class SessionProcessManager {
             }
         }
 
+        // When wrapped in tmux, the pane's working directory is specified via `-c`
+        // in `launch.arguments`. The outer tmux client PTY process itself is started
+        // in `/` so that if this invocation starts the server daemon, the daemon's
+        // own working directory is root (which is never deleted) rather than a
+        // temporary or deletable worktree.
+        let ptyWorkingDirectory = tmuxExecutable == nil ? session.workingDirectory : URL(fileURLWithPath: "/")
         do {
             try process.start(
                 executable: launch.executable,
                 arguments: launch.arguments,
                 environment: launch.environment,
-                workingDirectory: session.workingDirectory,
+                workingDirectory: ptyWorkingDirectory,
                 initialSize: size
             )
         } catch {
