@@ -402,9 +402,12 @@ private struct FractionSplit<Leading: View, Trailing: View>: View {
 
     /// The leading pane's share of the surface. Half until dragged.
     @State private var fraction: CGFloat = 0.5
-    @State private var dragStartWidth: CGFloat?
+    /// Where inside the handle the drag started, so the divider doesn't
+    /// teleport to centre itself under the cursor on the first event.
+    @State private var grabOffset: CGFloat?
 
     private let handleWidth: CGFloat = 9
+    private let surface = "FractionSplit.Surface"
 
     /// The sweet spot the divider settles into, and how close a drag has to
     /// come before it does. AppKit spells this
@@ -412,7 +415,7 @@ private struct FractionSplit<Leading: View, Trailing: View>: View {
     /// equivalent — `presentationDetents` covers sheets only — so the split
     /// applies it itself.
     private let snapFraction: CGFloat = 0.5
-    private let snapDistance: CGFloat = 26
+    private let snapDistance: CGFloat = 18
 
     var body: some View {
         GeometryReader { geo in
@@ -425,6 +428,7 @@ private struct FractionSplit<Leading: View, Trailing: View>: View {
                     .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .coordinateSpace(.named(surface))
         }
     }
 
@@ -456,16 +460,22 @@ private struct FractionSplit<Leading: View, Trailing: View>: View {
             .onHover { inside in
                 if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
             }
+            // Tracked as an absolute position in the split's own coordinate
+            // space, never as a translation: the handle moves as it is dragged,
+            // so a local translation is measured against a frame that keeps
+            // shifting underneath it — the divider oscillates, and snapping
+            // turns that wobble into a jump.
             .gesture(
-                DragGesture(minimumDistance: 1)
+                DragGesture(minimumDistance: 1, coordinateSpace: .named(surface))
                     .onChanged { value in
                         let available = max(1, total - handleWidth)
-                        let start = dragStartWidth ?? leadingWidth(total: total)
-                        if dragStartWidth == nil { dragStartWidth = start }
-                        let dragged = start + value.translation.width
-                        fraction = min(max(snapped(dragged, in: available) / available, 0), 1)
+                        let offset = grabOffset
+                            ?? (value.startLocation.x - leadingWidth(total: total) - handleWidth / 2)
+                        if grabOffset == nil { grabOffset = offset }
+                        let width = value.location.x - offset - handleWidth / 2
+                        fraction = min(max(snapped(width, in: available) / available, 0), 1)
                     }
-                    .onEnded { _ in dragStartWidth = nil }
+                    .onEnded { _ in grabOffset = nil }
             )
             .accessibilityIdentifier("ProjectGraph.SplitHandle")
     }
