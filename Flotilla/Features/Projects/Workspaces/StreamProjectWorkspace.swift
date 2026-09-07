@@ -200,7 +200,15 @@ struct StreamProjectWorkspace: View {
             withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(tab, for: project.id) }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 11, weight: .medium))
+                // Git gets the real Git mark, the way the command palette,
+                // settings, and the session sidebar draw it — the SF Symbol
+                // branch glyph belongs next to a branch name, not on the
+                // link that opens the Git surface.
+                if tab == .git {
+                    GitIcon(size: 11)
+                } else {
+                    Image(systemName: symbol).font(.system(size: 11, weight: .medium))
+                }
                 Text(title).font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(FlotillaColors.textSecondary)
