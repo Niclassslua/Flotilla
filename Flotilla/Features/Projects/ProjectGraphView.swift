@@ -30,14 +30,10 @@ struct ProjectGraphView: View {
     }
 
     var body: some View {
-        // Equal ideal widths so the graph and the commit detail open 50/50 and
-        // shrink in step; the minimums stay apart because the graph still has
-        // to fit its fixed stat/author/time/SHA columns plus a lane gutter.
-        HSplitView {
+        FractionSplit(leadingMin: 460, trailingMin: 360) {
             graphPane
-                .frame(minWidth: 460, idealWidth: 640)
+        } trailing: {
             CommitDetailView(viewModel: viewModel)
-                .frame(minWidth: 360, idealWidth: 640)
         }
         .task(id: viewModel.repoPath) {
             viewModel.sessions = sessions
@@ -387,6 +383,76 @@ struct ProjectGraphView: View {
 }
 
 // MARK: - Metrics
+
+// MARK: - Split
+
+/// A two-pane horizontal split that opens at an even 50/50 and stays wherever
+/// the user drags it.
+///
+/// `HSplitView` cannot do this: it never consults the `idealWidth` its panes
+/// ask for. It parks each pane at its *minimum* and hands the whole surplus to
+/// whichever pane is greedy — here the commit detail, which ends in
+/// `.frame(maxWidth: .infinity)` — so the graph opened pinned to its minimum
+/// however wide the window was, and raising its ideal width did nothing.
+private struct FractionSplit<Leading: View, Trailing: View>: View {
+    let leadingMin: CGFloat
+    let trailingMin: CGFloat
+    @ViewBuilder var leading: () -> Leading
+    @ViewBuilder var trailing: () -> Trailing
+
+    /// The leading pane's share of the surface. Half until dragged.
+    @State private var fraction: CGFloat = 0.5
+    @State private var dragStartWidth: CGFloat?
+
+    private let handleWidth: CGFloat = 9
+
+    var body: some View {
+        GeometryReader { geo in
+            let total = geo.size.width
+            HStack(spacing: 0) {
+                leading()
+                    .frame(width: leadingWidth(total: total))
+                handle(total: total)
+                trailing()
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// The split point, clamped so neither pane is squeezed under its minimum.
+    /// When the surface is too narrow to honour both, the fraction wins and
+    /// both panes shrink together rather than one collapsing.
+    private func leadingWidth(total: CGFloat) -> CGFloat {
+        let available = max(0, total - handleWidth)
+        guard available > leadingMin + trailingMin else {
+            return available * fraction
+        }
+        return min(max(available * fraction, leadingMin), available - trailingMin)
+    }
+
+    private func handle(total: CGFloat) -> some View {
+        Rectangle()
+            .fill(FlotillaColors.separator)
+            .frame(width: 1)
+            .frame(width: handleWidth)
+            .contentShape(.rect)
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let available = max(1, total - handleWidth)
+                        let start = dragStartWidth ?? leadingWidth(total: total)
+                        if dragStartWidth == nil { dragStartWidth = start }
+                        fraction = min(max((start + value.translation.width) / available, 0), 1)
+                    }
+                    .onEnded { _ in dragStartWidth = nil }
+            )
+            .accessibilityIdentifier("ProjectGraph.SplitHandle")
+    }
+}
 
 enum GraphMetrics {
     static let rowHeight: CGFloat = 34
