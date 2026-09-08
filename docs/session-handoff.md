@@ -213,9 +213,15 @@ happens.
 
 ## Persistence
 
-Migration `v8_addHandoffOwnership`
-(`GRDBSessionRepository.swift:145`) adds five nullable columns to `session`,
-flattened from the domain model the way `WorktreeInfo` already is:
+Migrations `v8`–`v10` add the columns below to `session`, all nullable and
+flattened from the domain model the way `WorktreeInfo` already is.
+
+They are three migrations rather than one for a reason worth remembering: a
+migrator records each migration by name and skips what it has already applied,
+so **editing a migration that has run anywhere adds the change for nobody** —
+new installs get it, existing ones silently do not. `MigrationUpgradePathTests`
+guards this by migrating a database only part of the way and then forward; a
+fresh database structurally cannot catch it.
 
 | column | domain |
 |---|---|
@@ -223,6 +229,8 @@ flattened from the domain model the way `WorktreeInfo` already is:
 | `handoffSourceAgent` | `PendingHandoff.sourceAgent` |
 | `handoffSourceSessionID` | `PendingHandoff.sourceSessionID` |
 | `handoffSourceTranscriptPath` | `PendingHandoff.sourceTranscriptPath` |
+| `handoffSourceModel` | `PendingHandoff.sourceModel` |
+| `handoffSourceEffort` | `PendingHandoff.sourceEffort` |
 | `handoffStartedAt` | `PendingHandoff.startedAt` |
 
 `PendingHandoff` is reassembled in `SessionRecord.toDomain()` only when all
@@ -476,6 +484,12 @@ limit of the log, not a shortcut.
 - **Tool-call structure out of Antigravity.** Never in the log to begin with.
 - **Images into Codex or OpenCode.**
 - **Subagent (sidechain) conversations out of Claude.**
+- **The session's model and effort.** Both name one vendor's options —
+  `opusplan` means nothing to Codex, `gpt-6-astra` nothing to Claude, and
+  `.minimal` / `.ultra` are Codex-only effort levels. A handoff resets both to
+  the destination's own defaults rather than handing it a model it will refuse
+  to start on. `PendingHandoff` remembers them so a rollback restores what the
+  session was running.
 
 `HandoffService.Plan` reports the countable part of this before the move.
 

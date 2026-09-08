@@ -215,6 +215,57 @@ final class HandoffServiceTests: XCTestCase {
         )
     }
 
+    /// A model names one vendor's option. `opusplan` means nothing to Codex and
+    /// `gpt-6-astra` means nothing to Claude — carrying either across makes the
+    /// destination refuse to start on a model it has never heard of.
+    func testHandoffResetsModelAndEffortToTheDestinationsDefaults() async throws {
+        let source = try writeClaudeTranscript()
+        var subject = session(transcript: source)
+        subject.model = "opusplan"
+        subject.effort = .max
+
+        let plan = try service.plan(for: subject, to: .codexCLI)
+        let moved = try await service.perform(plan)
+
+        XCTAssertNil(moved.model, "the destination picks its own model")
+        XCTAssertNil(moved.effort)
+        XCTAssertEqual(starter.startedSessions.last?.model, nil, "and launches without one")
+        XCTAssertEqual(starter.startedSessions.last?.effort, nil)
+
+        // Remembered, so a rollback can put them back.
+        XCTAssertEqual(moved.pendingHandoff?.sourceModel, "opusplan")
+        XCTAssertEqual(moved.pendingHandoff?.sourceEffort, .max)
+    }
+
+    func testRollbackRestoresTheModelAndEffortTheSessionWasRunning() async throws {
+        let source = try writeClaudeTranscript()
+        var subject = session(transcript: source)
+        subject.model = "opusplan"
+        subject.effort = .high
+
+        let plan = try service.plan(for: subject, to: .codexCLI)
+        let moved = try await service.perform(plan)
+        let restored = try await service.rollback(moved)
+
+        XCTAssertEqual(restored.agent, .claudeCode)
+        XCTAssertEqual(restored.model, "opusplan")
+        XCTAssertEqual(restored.effort, .high)
+        XCTAssertEqual(starter.startedSessions.last?.model, "opusplan", "relaunched as it was")
+    }
+
+    /// A session with no override must not acquire one.
+    func testASessionWithoutAModelStaysWithoutOne() async throws {
+        let source = try writeClaudeTranscript()
+        let plan = try service.plan(for: session(transcript: source), to: .codexCLI)
+        let moved = try await service.perform(plan)
+
+        XCTAssertNil(moved.model)
+        XCTAssertNil(moved.pendingHandoff?.sourceModel)
+        let restored = try await service.rollback(moved)
+        XCTAssertNil(restored.model)
+        XCTAssertNil(restored.effort)
+    }
+
     // MARK: - Settling
 
     func testFinalizeReleasesTheSourceOnceTheDestinationHasProvedItself() async throws {

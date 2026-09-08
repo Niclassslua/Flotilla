@@ -32,7 +32,9 @@ final class MigrationUpgradePathTests: XCTestCase {
                 "handoffSourceAgent",
                 "handoffSourceSessionID",
                 "handoffSourceTranscriptPath",
-                "handoffStartedAt"
+                "handoffStartedAt",
+                "handoffSourceModel",
+                "handoffSourceEffort"
             ] {
                 XCTAssertTrue(columns.contains(expected), "session is missing \(expected)")
             }
@@ -58,6 +60,30 @@ final class MigrationUpgradePathTests: XCTestCase {
         try migrator.migrate(queue)
         try queue.read { db in
             XCTAssertTrue(try self.columns(of: "session", in: db).contains("handoffSourceSessionID"))
+        }
+    }
+
+    /// Same shape as the v8 case, one migration later: a database that stopped
+    /// at v9 must still reach the current schema.
+    func testADatabaseStoppedAtV9UpgradesToTheCurrentSchema() throws {
+        let queue = try DatabaseQueue()
+        let migrator = GRDBSessionRepository.migrator
+
+        try migrator.migrate(queue, upTo: "v9_addHandoffSourceSessionID")
+        try queue.read { db in
+            let columns = try self.columns(of: "session", in: db)
+            XCTAssertTrue(columns.contains("handoffSourceSessionID"))
+            XCTAssertFalse(
+                columns.contains("handoffSourceModel"),
+                "if v9 already adds this, a column has been folded back into an applied migration"
+            )
+        }
+
+        try migrator.migrate(queue)
+        try queue.read { db in
+            let columns = try self.columns(of: "session", in: db)
+            XCTAssertTrue(columns.contains("handoffSourceModel"))
+            XCTAssertTrue(columns.contains("handoffSourceEffort"))
         }
     }
 

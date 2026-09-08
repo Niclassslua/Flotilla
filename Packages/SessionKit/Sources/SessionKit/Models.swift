@@ -263,17 +263,28 @@ public struct PendingHandoff: Codable, Hashable, Sendable {
     public let sourceSessionID: String
     /// The still-intact transcript that agent would resume from.
     public let sourceTranscriptPath: URL
+    /// The model and effort the session was running under.
+    ///
+    /// Both are cleared by a handoff — they name a *specific agent's* model and
+    /// reasoning levels, and mean nothing to another vendor — so they are kept
+    /// here to be put back if the move is rolled back.
+    public let sourceModel: String?
+    public let sourceEffort: AgentEffort?
     public let startedAt: Date
 
     public init(
         sourceAgent: AgentKind,
         sourceSessionID: String,
         sourceTranscriptPath: URL,
+        sourceModel: String? = nil,
+        sourceEffort: AgentEffort? = nil,
         startedAt: Date = Date()
     ) {
         self.sourceAgent = sourceAgent
         self.sourceSessionID = sourceSessionID
         self.sourceTranscriptPath = sourceTranscriptPath
+        self.sourceModel = sourceModel
+        self.sourceEffort = sourceEffort
         self.startedAt = startedAt
     }
 }

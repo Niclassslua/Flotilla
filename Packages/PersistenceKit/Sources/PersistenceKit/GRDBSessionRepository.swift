@@ -169,6 +169,15 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 table.add(column: "handoffSourceSessionID", .text)
             }
         }
+        migrator.registerMigration("v10_addHandoffSourceModelAndEffort") { db in
+            // A handoff clears the session's model and effort, because both
+            // name a specific vendor's options. These remember what to put back
+            // if the move is rolled back.
+            try db.alter(table: "session") { table in
+                table.add(column: "handoffSourceModel", .text)
+                table.add(column: "handoffSourceEffort", .text)
+            }
+        }
         return migrator
     }
 

@@ -81,6 +81,8 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var handoffSourceAgent: String?
     var handoffSourceSessionID: String?
     var handoffSourceTranscriptPath: String?
+    var handoffSourceModel: String?
+    var handoffSourceEffort: String?
     var handoffStartedAt: Date?
     var terminalScrollback: Data
     var createdAt: Date
@@ -107,6 +109,8 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         handoffSourceAgent = session.pendingHandoff?.sourceAgent.rawValue
         handoffSourceSessionID = session.pendingHandoff?.sourceSessionID
         handoffSourceTranscriptPath = session.pendingHandoff?.sourceTranscriptPath.path
+        handoffSourceModel = session.pendingHandoff?.sourceModel
+        handoffSourceEffort = session.pendingHandoff?.sourceEffort?.rawValue
         handoffStartedAt = session.pendingHandoff?.startedAt
         terminalScrollback = session.terminalScrollback
         createdAt = session.createdAt
@@ -195,6 +199,8 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
                 sourceAgent: sourceAgent,
                 sourceSessionID: handoffSourceSessionID,
                 sourceTranscriptPath: URL(fileURLWithPath: handoffSourceTranscriptPath),
+                sourceModel: handoffSourceModel,
+                sourceEffort: handoffSourceEffort.flatMap(AgentEffort.init(rawValue:)),
                 startedAt: handoffStartedAt
             )
         } else {

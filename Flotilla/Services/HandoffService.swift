@@ -192,10 +192,22 @@ final class HandoffService {
         moved.agent = plan.target
         moved.agentSessionID = handle.nativeSessionID
         moved.nativeTranscriptPath = handle.transcriptURL
+
+        // A model and an effort level belong to the agent that was running, not
+        // to the session. `opusplan` means nothing to Codex and `gpt-6-astra`
+        // means nothing to Claude; carrying either across makes the destination
+        // refuse to start on a model it has never heard of. Effort is the same
+        // shape of problem — `.minimal` and `.ultra` are Codex-only, `.max` is
+        // not universal — so both reset to the destination's own default and
+        // are remembered for a rollback.
+        moved.model = nil
+        moved.effort = nil
         moved.pendingHandoff = PendingHandoff(
             sourceAgent: session.agent,
             sourceSessionID: sourceSessionID,
             sourceTranscriptPath: plan.sourceTranscript,
+            sourceModel: session.model,
+            sourceEffort: session.effort,
             startedAt: now()
         )
 
@@ -249,6 +261,8 @@ final class HandoffService {
         restored.agent = pending.sourceAgent
         restored.agentSessionID = pending.sourceSessionID
         restored.nativeTranscriptPath = pending.sourceTranscriptPath
+        restored.model = pending.sourceModel
+        restored.effort = pending.sourceEffort
         restored.pendingHandoff = nil
 
         processManager.terminate(sessionID: session.id)
