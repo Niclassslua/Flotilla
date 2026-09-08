@@ -762,7 +762,17 @@ final class AppStore {
     /// Distinct from `moveSessionToAgent(sessionID:agent:)`, which changes the
     /// agent and deliberately starts a *fresh* conversation.
     func handoffSession(sessionID: UUID, to target: AgentKind) async {
-        metadataMonitor.cancel(sessionID)
+        // Deliberately does *not* cancel this session's metadata monitoring the
+        // way `restartSession` does. That tears down the self-report descriptor
+        // task, and when agent-managed titles are on it is the only route a
+        // session has to a title — `syncAgentSessionMetadata` returns early in
+        // that mode. Cancelling here left a session stuck on its provisional
+        // name forever, with nothing to restart the wait, and did so even when
+        // the handoff went on to fail.
+        //
+        // Nothing needs cancelling: a handoff keeps the conversation, so a
+        // pending title is still this session's title, and discovery cannot
+        // clobber the new agent's id because it only pins when none is set.
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         lastOperationError = nil
         let source = sessions[index].agent

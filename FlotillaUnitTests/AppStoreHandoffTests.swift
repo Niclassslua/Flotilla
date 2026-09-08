@@ -3,6 +3,7 @@ import SessionKit
 import GitKit
 import ProcessKit
 import PersistenceKit
+import SettingsKit
 @testable import TranscriptKit
 @testable import Flotilla
 
@@ -150,6 +151,70 @@ final class AppStoreHandoffTests: XCTestCase {
             store.lastOperationError?.contains("returned to") == true,
             "the user is told what happened, got: \(store.lastOperationError ?? "nil")"
         )
+    }
+
+    /// A session names itself by writing a descriptor that Flotilla waits for.
+    /// When agent-managed titles are on that wait is the *only* route to a
+    /// title, so anything that cancels it strands the session on its
+    /// provisional name with nothing to restart it.
+    ///
+    /// Handing off used to cancel it — before even knowing whether the handoff
+    /// would succeed, so a refused one stranded the title too.
+    func testAFailedHandoffDoesNotStrandAPendingSelfReportTitle() async throws {
+        /// Withholds the descriptor until the test releases it, so it can
+        /// arrive strictly after the handoff attempt.
+        final class Gate: @unchecked Sendable {
+            var isOpen = false
+        }
+        let gate = Gate()
+
+        var settings = AppSettings()
+        settings.sessionDefaults.agentManagedTitleEnabled = true
+
+        let monitor = SessionMetadataMonitor(
+            dependencies: .init(
+                discover: { _ in nil },
+                readDescriptor: { _, _ in
+                    while !gate.isOpen {
+                        try? await Task.sleep(for: .milliseconds(10))
+                    }
+                    return AgentSelfReportDescriptor(title: "Reported title")
+                }
+            )
+        )
+
+        let factory = RecordingProcessFactory()
+        let processManager = manager(factory: factory)
+        let store = AppStore(
+            repository: try GRDBSessionRepository(),
+            gitService: MockGitService(),
+            processManager: processManager,
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            settingsProvider: { settings },
+            metadataMonitor: monitor,
+            handoffService: handoffService(processManager: processManager)
+        )
+
+        await store.createSession(
+            title: "Provisional name",
+            goal: "Name yourself",
+            agent: .claudeCode,
+            projectFolder: nil,
+            checkoutMode: .mainCheckout
+        )
+        let session = try XCTUnwrap(store.sessions.first)
+
+        // No transcript was seeded, so this refuses — and must leave the
+        // session, and its pending title, untouched.
+        await store.handoffSession(sessionID: session.id, to: .codexCLI)
+        XCTAssertNotNil(store.lastOperationError)
+        XCTAssertEqual(store.sessions.first?.agent, .claudeCode)
+
+        // The agent names itself only now.
+        gate.isOpen = true
+        await waitUntil { store.sessions.first?.title == "Reported title" }
+
+        XCTAssertEqual(store.sessions.first?.title, "Reported title")
     }
 
     func testHandoffTargetsExcludeTheCurrentAgentAndUnwritableOnes() async throws {
