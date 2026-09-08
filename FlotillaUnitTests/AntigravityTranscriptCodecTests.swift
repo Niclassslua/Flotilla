@@ -113,19 +113,53 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
     }
 
     /// The guard that keeps this from resolving to somebody else's session.
-    func testIgnoresConversationsOlderThanTheLaunch() throws {
-        let file = try writeTranscript([
+    func testIgnoresConversationsCreatedBeforeTheLaunch() throws {
+        try writeTranscript([
             #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"an older conversation"}"#
         ])
-        try FileManager.default.setAttributes(
-            [.modificationDate: Date().addingTimeInterval(-3600)],
-            ofItemAtPath: file.path
-        )
 
         XCTAssertNil(try codec.discoverSession(
             workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
-            since: Date().addingTimeInterval(-60)
-        ))
+            since: Date().addingTimeInterval(60)
+        ), "a conversation that predates the launch is not ours")
+    }
+
+    /// The association that matters when several sessions have run: ours is the
+    /// first conversation created after we launched, not the most recent one.
+    /// A conversation created weeks ago but touched today would win on
+    /// modification time and is a different session entirely.
+    func testPicksTheEarliestConversationStartedAfterTheLaunch() throws {
+        let launchedAt = Date()
+
+        let ours = try writeTranscript(
+            [#"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"ours"}"#]
+        )
+        // A conversation a later session started.
+        let laterID = "ffffffff-1111-2222-3333-444444444444"
+        let laterDirectory = brain
+            .appendingPathComponent(laterID, isDirectory: true)
+            .appendingPathComponent(".system_generated/logs", isDirectory: true)
+        try FileManager.default.createDirectory(at: laterDirectory, withIntermediateDirectories: true)
+        try #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"theirs"}"#
+            .write(to: laterDirectory.appendingPathComponent("transcript.jsonl"), atomically: true, encoding: .utf8)
+
+        // Make ours unambiguously the earlier of the two.
+        try FileManager.default.setAttributes(
+            [.creationDate: launchedAt.addingTimeInterval(5)],
+            ofItemAtPath: brain.appendingPathComponent(conversationID).path
+        )
+        try FileManager.default.setAttributes(
+            [.creationDate: launchedAt.addingTimeInterval(600)],
+            ofItemAtPath: brain.appendingPathComponent(laterID).path
+        )
+
+        let found = try codec.discoverSession(
+            workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
+            since: launchedAt.addingTimeInterval(-30)
+        )
+
+        XCTAssertEqual(found?.sessionID, conversationID)
+        XCTAssertEqual(found?.url.standardizedFileURL, ours.standardizedFileURL)
     }
 
     /// A directory the agent created but never spoke in is not worth moving.

@@ -1,6 +1,7 @@
 import Foundation
 import AgentKit
 import SessionKit
+import TranscriptKit
 
 /// Owns background work for a session run; metadata is applied by AppStore.
 @MainActor
@@ -29,10 +30,37 @@ final class SessionMetadataMonitor {
 
     struct Dependencies {
         var discover: @MainActor (Session) async -> DiscoveredAgentSession? = { session in
-            await AgentSessionProviderRegistry.default.fetchLatestSession(
+            if let found = await AgentSessionProviderRegistry.default.fetchLatestSession(
                 for: session.agent,
                 workingDirectory: session.workingDirectory,
                 since: session.createdAt.addingTimeInterval(-30)
+            ) {
+                return found
+            }
+
+            // The providers answer from each agent's own catalog, which can lag
+            // the conversation or omit it entirely — Antigravity registers one
+            // only once it has titled it, and records no working directory at
+            // all, so a session that has plainly been used stays undiscovered.
+            //
+            // The transcript on disk is the earlier and more reliable evidence.
+            // It yields only an id (no title, no cwd), which is exactly what is
+            // needed: without it the session cannot be resumed after a relaunch
+            // and cannot be handed off. `AppStore` already declines to apply an
+            // empty title.
+            guard let reader = TranscriptCodecRegistry.flotilla().reader(for: session.agent),
+                  let discovered = try? reader.discoverSession(
+                      workingDirectory: session.workingDirectory,
+                      since: session.createdAt.addingTimeInterval(-30)
+                  )
+            else { return nil }
+
+            return DiscoveredAgentSession(
+                id: discovered.sessionID,
+                title: "",
+                workingDirectory: session.workingDirectory,
+                lastActiveAt: nil,
+                agent: session.agent
             )
         }
         var readDescriptor: @MainActor (URL, Duration) async -> AgentSelfReportDescriptor? = { path, timeout in

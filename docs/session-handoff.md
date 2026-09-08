@@ -188,8 +188,27 @@ directory where the format has one, as Codex does), and **never** fall back to
 "the newest transcript anywhere" — that resolves to somebody else's
 conversation.
 
+Prefer **creation** time over modification time, and take the **earliest**
+conversation started at or after launch rather than the latest. A conversation
+created weeks ago can be modified today, so "most recently modified since
+launch" happily resolves to a long-running conversation belonging to someone
+else; "first created after launch" cannot. Anything created before the launch
+belongs to an earlier session, anything after to a later one.
+
 `HandoffService.plan` uses it only when no id has been pinned yet, and the id it
 finds is what the move records as its source.
+
+`SessionMetadataMonitor` also falls back to it when the agent's own catalog
+returns nothing, so the id is normally pinned within seconds of launch. That
+matters beyond handoff: `SessionProcessManager.start` derives
+`ResumeIntent.resume(_:)` from `Session.agentSessionID`, so a discoverable agent
+whose id was never pinned comes back from an app relaunch as a **fresh
+conversation** — silently, because a surviving tmux session hides it until the
+next reboot.
+
+`AppStore` will not pin an id another session already holds. Association by
+launch time is sound but not proof, and two sessions resuming one conversation
+would append to the same history and fork it.
 
 ### Capability matrix
 

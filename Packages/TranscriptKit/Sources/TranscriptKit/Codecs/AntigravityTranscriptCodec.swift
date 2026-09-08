@@ -99,38 +99,45 @@ public struct AntigravityTranscriptCodec: TranscriptReading {
 }
 
 extension AntigravityTranscriptCodec {
-    /// Antigravity records a conversation's existence in
-    /// `conversation_summaries.db` only once it has titled it, which can be
-    /// long after the conversation is under way — and it writes no workspace
-    /// into the log at all. Matching on a title or a working directory
-    /// therefore misses a live session entirely.
+    /// Antigravity records a conversation in `conversation_summaries.db` only
+    /// once it has titled it, and writes no workspace into the log at all. A
+    /// live session is therefore invisible to title or working-directory
+    /// matching, sometimes for minutes.
     ///
-    /// The directory itself is the evidence: `brain/<conversation id>/` appears
-    /// when the agent starts, so the conversation begun at or after our launch
-    /// is ours.
+    /// The directory is the evidence: `brain/<conversation id>/` is created
+    /// when the agent starts. So the conversation to associate with a session
+    /// is the **earliest** one created at or after that session launched —
+    /// anything created before belongs to an earlier session, and anything
+    /// created later belongs to a later one.
+    ///
+    /// Creation time, not modification time. A conversation created weeks ago
+    /// can be modified today, so "most recently modified since launch" happily
+    /// resolves to somebody else's long-running conversation; "first created
+    /// after launch" cannot.
     public func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)? {
         let candidates = (try? FileManager.default.contentsOfDirectory(
             at: brainDirectory,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.creationDateKey],
             options: [.skipsHiddenFiles]
         )) ?? []
 
-        let matches: [(id: String, url: URL, modified: Date)] = candidates.compactMap { directory in
+        let started: [(id: String, url: URL, created: Date)] = candidates.compactMap { directory in
             let transcript = directory
                 .appendingPathComponent(".system_generated/logs/transcript.jsonl")
             guard FileManager.default.fileExists(atPath: transcript.path) else { return nil }
-            guard let modified = try? transcript.resourceValues(forKeys: [.contentModificationDateKey])
-                .contentModificationDate else { return nil }
-            // `since` is our launch: anything older belongs to another session.
-            guard modified >= since else { return nil }
-            return (directory.lastPathComponent, transcript, modified)
+            guard let created = try? directory.resourceValues(forKeys: [.creationDateKey]).creationDate,
+                  created >= since
+            else { return nil }
+            return (directory.lastPathComponent, transcript, created)
         }
 
-        guard let newest = matches.max(by: { $0.modified < $1.modified }) else { return nil }
-        // A directory with no conversation in it is not worth handing over.
-        guard let entries = try? readNative(at: newest.url), entries.hasConversationalContent else {
-            return nil
+        // Earliest, not latest — see the note above.
+        for candidate in started.sorted(by: { $0.created < $1.created }) {
+            guard let entries = try? readNative(at: candidate.url),
+                  entries.hasConversationalContent
+            else { continue }
+            return (candidate.id, candidate.url)
         }
-        return (newest.id, newest.url)
+        return nil
     }
 }

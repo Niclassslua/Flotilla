@@ -461,9 +461,16 @@ final class AppStore {
         if let discovered = await metadataMonitor.discover(session) {
             guard metadataMonitor.isCurrent(generation, for: sessionID),
                   sessions.contains(where: { $0.id == sessionID }) else { return }
-            // Pin the discovered native session ID before title guards
+            // Pin the discovered native session ID before title guards.
+            //
+            // Never take one another session already holds: discovery for an
+            // agent that records no working directory is an association by
+            // launch time, and two sessions must not end up resuming the same
+            // conversation — which would have them append to one history and
+            // fork it.
             if let index = sessions.firstIndex(where: { $0.id == sessionID }),
-               sessions[index].agentSessionID == nil || sessions[index].agentSessionID?.isEmpty == true {
+               sessions[index].agentSessionID == nil || sessions[index].agentSessionID?.isEmpty == true,
+               !sessions.contains(where: { $0.id != sessionID && $0.agentSessionID == discovered.id }) {
                 sessions[index].agentSessionID = discovered.id
                 try? repository.save(mergingLiveScrollback(sessions[index]))
             }
