@@ -189,6 +189,7 @@ GitKit         → ProcessKit
 PersistenceKit → SessionKit, GRDB.swift (external)
 TerminalKit    → ProcessKit, SwiftTerm (external)
 HooksKit       → SessionKit, ProcessKit
+TranscriptKit  → SessionKit
 
 Flotilla (app) → all packages
 ```
@@ -206,6 +207,7 @@ Flotilla (app) → all packages
 | **PersistenceKit** | GRDBSessionRepository (SQLite), versioned migrations (v1–v3) | GRDB.swift 6.29+ |
 | **TerminalKit** | TerminalController, SwiftUI/AppKit bridge to SwiftTerm | SwiftTerm 1.2+ |
 | **HooksKit** | SessionStatusObserver, WaitingNotificationGate, TerminalOutputDigest | None |
+| **TranscriptKit** | CanonicalEntry, TranscriptReading/TranscriptWriting codecs, ToolCallPairing, TranscriptCodecRegistry — reads and writes agents' native transcripts so a session can move between agents | None |
 
 ### Package Structure Convention
 
@@ -222,6 +224,48 @@ Packages/<Name>/
 - All public APIs use `public` access control
 - All types are `Sendable` where possible
 - No internal state leaks across module boundaries
+
+## Session Handoff
+
+A running session can be moved to another agent with its conversation intact.
+The move is a **transcode, not a summary**: the current agent's native
+transcript is read into `CanonicalEntry` values and re-emitted in the
+destination's own format, so the destination resumes what it takes to be its
+own prior session. No model is involved.
+
+**Move, not copy.** Exactly one agent owns a conversation. `HandoffService`
+writes the destination and relaunches, but leaves the source transcript on disk
+and records a `PendingHandoff`. Only once the destination survives its probation
+window is the source released; a destination that dies inside it is rolled back
+onto a transcript that was never deleted.
+
+Not to be confused with `AppStore.moveSessionToAgent(sessionID:agent:)`, which
+changes the agent and deliberately starts a **fresh** conversation — that is the
+Kanban agent-lane gesture.
+
+| agent | source | destination | why |
+|---|:-:|:-:|---|
+| Claude Code | yes | yes | JSONL transcript, both directions |
+| Codex CLI | yes | yes | rollout file; no SQLite catalog row needed |
+| Antigravity | yes | no | resume state is undocumented protobuf |
+| OpenCode | no | yes | written via `opencode import`; its CLI has no session delete, so it cannot release one |
+
+These differences are expressed by **which protocol each codec conforms to**
+(`TranscriptReading`, `TranscriptWriting`, or both), so the destination picker
+cannot offer an impossible move and no rule has to be remembered.
+
+Things that will bite you when changing this area:
+
+- `AppStore.handleProcessEvent`'s resume self-heal clears `agentSessionID` and
+  relaunches blank. The handoff probation branch **must** stay ahead of it.
+- A relaunch onto a different binary requires `terminate` **and**
+  `killServerSideSession`; a surviving tmux session makes `new-session -A`
+  reattach to the old agent with no error to show for it.
+- `HookEventReceiver` binds to an agent's hook schema for its lifetime, so
+  `HookCoordinator.resync(sessionID:)` must run after the agent changes.
+- Never derive a transcript path with `standardizedFileURL`: it resolves
+  symlinks only for paths that exist, so the location would change the first
+  time a worktree was created.
 
 ## Key Domain Models
 
