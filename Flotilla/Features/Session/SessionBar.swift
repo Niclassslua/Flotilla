@@ -314,7 +314,7 @@ struct SessionBar: View {
                     Label {
                         Text(session.agent.displayName)
                     } icon: {
-                        ProviderLogo.menuImage(for: session.agent, size: Self.menuGlyphSize)
+                        ProviderLogo.fixedSize(for: session.agent, size: Self.menuGlyphSize)
                     }
                 }
                 .disabled(true)
@@ -339,7 +339,7 @@ struct SessionBar: View {
                             Label {
                                 Text(target.displayName)
                             } icon: {
-                                ProviderLogo.menuImage(for: target, size: Self.menuGlyphSize)
+                                ProviderLogo.fixedSize(for: target, size: Self.menuGlyphSize)
                             }
                         }
                     }
@@ -348,7 +348,13 @@ struct SessionBar: View {
         } label: {
             agentChipLabel
         }
-        .menuStyle(.borderlessButton)
+        // `.borderlessButton` renders the label through AppKit, which discards
+        // the capsule and the chevron and sizes the brand mark itself — the
+        // 608pt Codex raster then painted across the whole bar. `.button` with
+        // a plain button style keeps the label in SwiftUI's hands, so what is
+        // written here is what appears.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help(
@@ -361,9 +367,10 @@ struct SessionBar: View {
         .accessibilityIdentifier(AXID.sessionBarHandoff(session.title))
     }
 
-    /// See ``ProviderLogo/menuImage(for:size:)`` for why menu glyphs are drawn
-    /// at an explicit size rather than framed.
+    /// See ``ProviderLogo/fixedSize(for:size:)`` for why both the chip's glyph
+    /// and the menu's are drawn at an explicit size rather than framed.
     private static let menuGlyphSize: CGFloat = 14
+    private static let chipGlyphSize: CGFloat = 13
 
     private var isHandingOff: Bool { session.pendingHandoff != nil }
 
@@ -374,7 +381,7 @@ struct SessionBar: View {
         let accent = AgentBrand.accentColor(for: session.agent)
         return HStack(spacing: 5) {
             ProviderLogo(agent: session.agent)
-                .frame(width: 13, height: 13)
+                .frame(width: Self.chipGlyphSize, height: Self.chipGlyphSize)
                 .opacity(isHandingOff ? 0.5 : 1)
 
             Text(session.agent.displayName)

@@ -28,18 +28,21 @@ struct ProviderLogo: View {
 }
 
 extension ProviderLogo {
-    /// A brand mark at a guaranteed point size, for places that render through
-    /// AppKit rather than SwiftUI layout.
+    /// A brand mark at a guaranteed point size, for anywhere AppKit does the
+    /// sizing instead of SwiftUI layout.
     ///
-    /// `Menu` content becomes an `NSMenu`, which sizes item images itself and
-    /// does not reliably honour a SwiftUI `.frame` on a custom icon view. That
-    /// is survivable for the vector marks, which scale to whatever box they are
-    /// given, and not for Codex: it is a 608×607 raster with no scale key, so
-    /// its intrinsic size is 608pt and it arrives several hundred points tall.
+    /// Both a `Menu`'s items and — under `.menuStyle(.borderlessButton)` — its
+    /// *label* are rendered through AppKit, which sizes images itself and does
+    /// not reliably honour a SwiftUI `.frame` on the view inside. That is
+    /// survivable for the vector marks, which scale to whatever box they are
+    /// given, and not for Codex: it is a 608×607 raster with no scale key in
+    /// its `Contents.json`, so its intrinsic size is 608pt and it renders as a
+    /// full-height banner across the row.
     ///
-    /// Drawing into an explicitly sized `NSImage` removes the question — the
-    /// image *is* the requested size before SwiftUI or AppKit sees it.
-    static func menuImage(for agent: AgentKind, size: CGFloat = 14) -> Image {
+    /// Drawing into an explicitly sized `NSImage` removes the negotiation —
+    /// the image *is* the requested size before SwiftUI or AppKit sees it.
+    /// Use ``ProviderLogo`` itself anywhere SwiftUI owns the layout.
+    static func fixedSize(for agent: AgentKind, size: CGFloat) -> Image {
         guard let source = NSImage(named: agent.logoImageName) else {
             return Image(systemName: "square.dashed")
         }
