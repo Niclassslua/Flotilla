@@ -314,7 +314,7 @@ struct SessionBar: View {
                     Label {
                         Text(session.agent.displayName)
                     } icon: {
-                        Image(session.agent.logoImageName).renderingMode(.original)
+                        ProviderLogo.menuImage(for: session.agent, size: Self.menuGlyphSize)
                     }
                 }
                 .disabled(true)
@@ -339,7 +339,7 @@ struct SessionBar: View {
                             Label {
                                 Text(target.displayName)
                             } icon: {
-                                Image(target.logoImageName).renderingMode(.original)
+                                ProviderLogo.menuImage(for: target, size: Self.menuGlyphSize)
                             }
                         }
                     }
@@ -360,6 +360,10 @@ struct SessionBar: View {
         .accessibilityHint("Hand off this session to another agent")
         .accessibilityIdentifier(AXID.sessionBarHandoff(session.title))
     }
+
+    /// See ``ProviderLogo/menuImage(for:size:)`` for why menu glyphs are drawn
+    /// at an explicit size rather than framed.
+    private static let menuGlyphSize: CGFloat = 14
 
     private var isHandingOff: Bool { session.pendingHandoff != nil }
 
