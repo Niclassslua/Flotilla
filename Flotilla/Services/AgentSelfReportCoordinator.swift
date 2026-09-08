@@ -36,14 +36,17 @@ enum AgentSelfReportCoordinator {
         supportDirectory: URL,
         timeout: Duration = .seconds(25)
     ) async -> AgentSelfReportDescriptor? {
-        let path = descriptorPath(for: sessionID, supportDirectory: supportDirectory)
+        await waitForDescriptor(at: descriptorPath(for: sessionID, supportDirectory: supportDirectory), timeout: timeout)
+    }
+
+    static func waitForDescriptor(at path: URL, timeout: Duration) async -> AgentSelfReportDescriptor? {
         let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
+        while !Task.isCancelled, ContinuousClock.now < deadline {
             if let data = try? Data(contentsOf: path),
                let descriptor = try? JSONDecoder().decode(AgentSelfReportDescriptor.self, from: data) {
                 return descriptor
             }
-            try? await Task.sleep(for: .milliseconds(500))
+            do { try await Task.sleep(for: .milliseconds(500)) } catch { return nil }
         }
         return nil
     }

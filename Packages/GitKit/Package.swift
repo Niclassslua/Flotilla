@@ -7,7 +7,8 @@ let package = Package(
     products: [
         .library(name: "GitKit", targets: ["GitKit"])
     ],
+    dependencies: [.package(path: "../ProcessKit")],
     targets: [
-        .target(name: "GitKit")
+        .target(name: "GitKit", dependencies: ["ProcessKit"])
     ]
 )

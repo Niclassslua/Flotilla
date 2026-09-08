@@ -29,19 +29,6 @@ private final class StubTmuxServerProbe: TmuxServerProbing, @unchecked Sendable 
     func serverIsUsable(tmuxExecutable: URL) -> Bool { usable }
 }
 
-private final class RecordingProcessFactory: PTYProcessCreating, @unchecked Sendable {
-    var shouldFailToStart = false
-    private(set) var processes: [MockPTYProcess] = []
-
-    func makeProcess() -> any PTYProcessProtocol {
-        let process = MockPTYProcess()
-        process.echoInputToOutput = true
-        process.shouldFailToStart = shouldFailToStart
-        processes.append(process)
-        return process
-    }
-}
-
 /// `SessionDraft` is the state both `CommandBarDesign` (the modal launcher)
 /// and `LaunchpadDesign` (the home composer) edit. These pin the behaviour
 /// that differs between the two hosts: whether an empty goal blocks

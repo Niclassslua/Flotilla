@@ -1,4 +1,5 @@
 import Foundation
+import ProcessKit
 
 private func syntheticAddedLines(from text: String) -> [String] {
     var lines = text.components(separatedBy: "\n")
@@ -304,7 +305,7 @@ public struct GitService: GitServiceProtocol {
     private let runner: CommandRunning
     private let gitExecutable: URL?
 
-    public init(runner: CommandRunning = ProcessCommandRunner(), gitExecutable: URL? = nil) {
+    public init(runner: CommandRunning = ProcessCommandRunner(environmentOverrides: ["GIT_TERMINAL_PROMPT": "0"]), gitExecutable: URL? = nil) {
         self.runner = runner
         self.gitExecutable = gitExecutable
     }

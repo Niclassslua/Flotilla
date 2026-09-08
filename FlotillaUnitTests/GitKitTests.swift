@@ -1,5 +1,6 @@
 import XCTest
 import GitKit
+import ProcessKit
 
 /// Crafted multi-file/multi-hunk input, exercised directly rather than
 /// only through a real git repo — precise edge cases (multiple hunks in
@@ -705,39 +706,3 @@ final class GitServiceRealRepoTests: XCTestCase {
     }
 }
 
-final class ProcessCommandRunnerTests: XCTestCase {
-    func testDrainsLargeOutputWithoutPipeDeadlock() async throws {
-        let result = try await ProcessCommandRunner().run(
-            ["1", "100000"],
-            executable: URL(fileURLWithPath: "/usr/bin/seq"),
-            workingDirectory: URL(fileURLWithPath: "/tmp")
-        )
-
-        XCTAssertEqual(result.exitCode, 0)
-        XCTAssertTrue(result.stdout.hasPrefix("1\n2\n3\n"))
-        XCTAssertTrue(result.stdout.hasSuffix("100000\n"))
-        XCTAssertGreaterThan(result.stdout.utf8.count, 500_000)
-    }
-
-    func testInheritsParentEnvironmentForPathLookups() async throws {
-        let result = try await ProcessCommandRunner().run(
-            ["-c", "echo $HOME"],
-            executable: URL(fileURLWithPath: "/bin/sh"),
-            workingDirectory: URL(fileURLWithPath: "/tmp")
-        )
-        XCTAssertFalse(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "HOME should be inherited from the parent process")
-    }
-
-    func testTimeoutCancelsHungProcessAndThrows() async throws {
-        do {
-            _ = try await ProcessCommandRunner(timeout: 0.2).run(
-                ["100"],
-                executable: URL(fileURLWithPath: "/bin/sleep"),
-                workingDirectory: URL(fileURLWithPath: "/tmp")
-            )
-            XCTFail("expected a timeout error")
-        } catch let error as CommandTimeoutError {
-            XCTAssertEqual(error.seconds, 0.2)
-        }
-    }
-}
