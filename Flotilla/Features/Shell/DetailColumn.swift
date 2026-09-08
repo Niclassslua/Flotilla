@@ -338,34 +338,251 @@ struct DetailColumn: View {
     }
 }
 
+/// The detail column with nothing to show: either a first run with no sessions
+/// at all, or a fleet where none is selected. The first-run branch doubles as
+/// onboarding — it names the three moves the app is built around and shows the
+/// status signals the user will be reading from then on.
 struct EmptyWorkspaceView: View {
     let hasSessions: Bool
     let onCreate: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
     var body: some View {
-        VStack(spacing: 22) {
-            Image(systemName: "point.3.connected.trianglepath.dotted")
-                .font(.system(size: 48, weight: .light))
+        Group {
+            if hasSessions {
+                selectPrompt
+            } else {
+                onboarding
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(alignment: .top) {
+            RadialGradient(
+                colors: [FlotillaColors.accent.opacity(0.07), .clear],
+                center: .center,
+                startRadius: 0,
+                endRadius: 460
+            )
+            .frame(height: 620)
+            .allowsHitTesting(false)
+        }
+        .background(FlotillaColors.canvas)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 10)
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { appeared = true }
+        }
+    }
+
+    // MARK: First run
+
+    private var onboarding: some View {
+        VStack(spacing: FlotillaSpacing.xLarge) {
+            FormationMark(reduceMotion: reduceMotion)
+
+            VStack(spacing: FlotillaSpacing.small) {
+                Text("Your agents, in formation")
+                    .font(FlotillaTypography.display)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                Text("Run coding agents in parallel, each in its own worktree — and keep sight of every one.")
+                    .font(FlotillaTypography.body)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 400)
+            }
+
+            workflowPanel
+
+            VStack(spacing: FlotillaSpacing.medium) {
+                Button("Launch First Session", action: onCreate)
+                    .buttonStyle(.borderedProminent)
+                    .tint(FlotillaColors.accent)
+                    .controlSize(.large)
+                ShortcutHintRow(hints: [("⌘N", "new session"), ("⌘K", "command palette")])
+            }
+        }
+        .padding(FlotillaSpacing.xxLarge)
+        .frame(maxWidth: 560)
+    }
+
+    private var workflowPanel: some View {
+        VStack(spacing: 0) {
+            WorkflowRow(
+                icon: "terminal",
+                title: "Launch an isolated session",
+                detail: "Each agent works in its own git worktree, so parallel runs never step on each other."
+            )
+            Divider().overlay(FlotillaColors.separator)
+            WorkflowRow(icon: "dot.radiowaves.up.forward", title: "Read the signals") {
+                SignalLegend()
+            }
+            Divider().overlay(FlotillaColors.separator)
+            WorkflowRow(
+                icon: "arrow.left.arrow.right",
+                title: "Move without losing context",
+                detail: "Hand a session to another agent or jump between worktrees — history and state follow."
+            )
+        }
+        .flotillaPanel()
+    }
+
+    // MARK: Fleet with no selection
+
+    private var selectPrompt: some View {
+        VStack(spacing: FlotillaSpacing.large) {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 34, weight: .light))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(FlotillaColors.accent)
                 .accessibilityHidden(true)
-            VStack(spacing: 7) {
-                Text(hasSessions ? "Choose a session" : "Your agents, in formation")
-                    .font(.title2.weight(.semibold))
-                Text(hasSessions
-                    ? "Select an agent from the sidebar to open its live terminal and workspace."
-                    : "Launch isolated coding sessions, watch their signals, and move between worktrees without losing context.")
-                    .foregroundStyle(.secondary)
+            VStack(spacing: FlotillaSpacing.small) {
+                Text("Choose a session")
+                    .font(FlotillaTypography.title)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                Text("Select an agent from the sidebar to open its live terminal and workspace.")
+                    .font(FlotillaTypography.body)
+                    .foregroundStyle(FlotillaColors.textSecondary)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 430)
+                    .frame(maxWidth: 360)
             }
-            Button(hasSessions ? "New Session" : "Launch First Session", action: onCreate)
-                .buttonStyle(.borderedProminent)
-                .tint(FlotillaColors.accent)
-                .controlSize(.large)
+            VStack(spacing: FlotillaSpacing.medium) {
+                Button("New Session", action: onCreate)
+                    .buttonStyle(.borderedProminent)
+                    .tint(FlotillaColors.accent)
+                    .controlSize(.large)
+                ShortcutHintRow(hints: [("⌘[", "previous"), ("⌘]", "next"), ("⌘K", "palette")])
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.accent.opacity(0.025))
+        .padding(FlotillaSpacing.xxLarge)
+    }
+}
+
+/// The app's mark in a soft accent medallion with a slow sonar ring — enough
+/// life to read as "live fleet" without becoming a distraction.
+private struct FormationMark: View {
+    let reduceMotion: Bool
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(FlotillaColors.accent.opacity(0.10))
+                .frame(width: 96, height: 96)
+            Circle()
+                .strokeBorder(FlotillaColors.accent.opacity(0.4), lineWidth: 1)
+                .frame(width: 96, height: 96)
+                .scaleEffect(pulse ? 1.3 : 1)
+                .opacity(pulse ? 0 : 0.6)
+            Image(systemName: "point.3.connected.trianglepath.dotted")
+                .font(.system(size: 40, weight: .light))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(FlotillaColors.accent)
+        }
+        .accessibilityHidden(true)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeOut(duration: 2.4).repeatForever(autoreverses: false)) {
+                pulse = true
+            }
+        }
+    }
+}
+
+private struct WorkflowRow<Accessory: View>: View {
+    let icon: String
+    let title: String
+    var detail: String?
+    @ViewBuilder var accessory: () -> Accessory
+
+    var body: some View {
+        HStack(alignment: .top, spacing: FlotillaSpacing.medium) {
+            Image(systemName: icon)
+                .font(.system(size: FlotillaIconSize.medium, weight: .medium))
+                .foregroundStyle(FlotillaColors.accent)
+                .frame(width: 34, height: 34)
+                .background(
+                    FlotillaColors.accent.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: FlotillaSpacing.xSmall) {
+                Text(title)
+                    .font(FlotillaTypography.callout.weight(.semibold))
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                if let detail {
+                    Text(detail)
+                        .font(FlotillaTypography.caption)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                accessory()
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(FlotillaSpacing.large)
+    }
+}
+
+extension WorkflowRow where Accessory == EmptyView {
+    init(icon: String, title: String, detail: String?) {
+        self.init(icon: icon, title: title, detail: detail, accessory: { EmptyView() })
+    }
+}
+
+/// The three fleet signals, spelled out with their real status colours so the
+/// legend the user sees here matches the dots on every session row.
+private struct SignalLegend: View {
+    private let signals: [(color: Color, label: String)] = [
+        (FlotillaColors.statusWorking, "Working"),
+        (FlotillaColors.statusWaitingForInput, "Needs input"),
+        (FlotillaColors.statusReady, "Ready for review"),
+    ]
+
+    var body: some View {
+        HStack(spacing: FlotillaSpacing.medium) {
+            ForEach(signals, id: \.label) { signal in
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(signal.color)
+                        .frame(width: 7, height: 7)
+                    Text(signal.label)
+                        .font(FlotillaTypography.caption2)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                }
+            }
+        }
+        .padding(.top, 2)
+    }
+}
+
+private struct ShortcutHintRow: View {
+    let hints: [(key: String, label: String)]
+
+    var body: some View {
+        HStack(spacing: FlotillaSpacing.medium) {
+            ForEach(hints, id: \.key) { hint in
+                HStack(spacing: 6) {
+                    Text(hint.key)
+                        .font(FlotillaTypography.caption2.monospaced())
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            FlotillaColors.surfaceElevated,
+                            in: RoundedRectangle(cornerRadius: FlotillaRadius.control)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: FlotillaRadius.control)
+                                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+                        )
+                    Text(hint.label)
+                        .font(FlotillaTypography.caption2)
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
