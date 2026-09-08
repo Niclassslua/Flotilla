@@ -205,7 +205,8 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
             "rollout-\(stamp.fileStamp)-\(sessionID).jsonl"
         )
         let iso = Self.iso8601(timestamp)
-        let cwd = workingDirectory.standardizedFileURL.path
+        // Raw, not standardized — see ClaudeTranscriptCodec.projectSlug.
+        let cwd = workingDirectory.path
 
         var lines: [String] = [
             Self.encode([

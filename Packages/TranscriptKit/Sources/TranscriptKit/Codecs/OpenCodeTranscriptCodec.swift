@@ -85,7 +85,8 @@ public struct OpenCodeTranscriptCodec: TranscriptWriting {
         sessionID: String
     ) async throws -> ResumeHandle {
         let openCodeID = Self.openCodeSessionID(from: sessionID)
-        let directory = workingDirectory.standardizedFileURL.path
+        // Raw, not standardized — see ClaudeTranscriptCodec.projectSlug.
+        let directory = workingDirectory.path
         let created = Int(now().timeIntervalSince1970 * 1000)
 
         var messages: [[String: Any]] = []

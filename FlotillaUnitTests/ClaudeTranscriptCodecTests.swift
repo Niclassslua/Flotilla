@@ -55,6 +55,21 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         )
     }
 
+    /// `standardizedFileURL` resolves symlinks only for paths that *exist*, so
+    /// standardizing here would silently relocate a session's transcript the
+    /// first time its worktree was created — writing it where the agent does
+    /// not look. The slug must be a function of the path and nothing else.
+    func testProjectSlugDoesNotChangeWhenTheDirectoryComesIntoExistence() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SlugStability-\(UUID().uuidString)", isDirectory: true)
+        let beforeItExists = ClaudeTranscriptCodec.projectSlug(for: directory)
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        XCTAssertEqual(ClaudeTranscriptCodec.projectSlug(for: directory), beforeItExists)
+    }
+
     func testTranscriptURLResolvesViaTheSlugDirectory() throws {
         let written = try writeTranscript([#"{"type":"user","sessionId":"\#(sessionID)"}"#])
         let found = try codec.transcriptURL(sessionID: sessionID, workingDirectory: workingDirectory)

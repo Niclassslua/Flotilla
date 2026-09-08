@@ -50,8 +50,17 @@ public struct ClaudeTranscriptCodec: TranscriptReading, TranscriptWriting {
 
     /// Claude's directory name for a working directory: the absolute path with
     /// every separator turned into a dash, leading separator included.
+    ///
+    /// Deliberately *not* standardized. `standardizedFileURL` resolves symlinks
+    /// only for paths that exist — so `/private/tmp/x` becomes `/tmp/x` once the
+    /// directory is created and stays `/private/tmp/x` before that. Feeding it
+    /// here would make a session's transcript location depend on whether its
+    /// worktree happened to exist at the moment of the call, and a handoff
+    /// would write into a directory the agent never reads. The raw path is what
+    /// Flotilla also hands the process as its working directory, so deriving
+    /// the slug from it keeps the two in step.
     static func projectSlug(for workingDirectory: URL) -> String {
-        workingDirectory.standardizedFileURL.path.replacingOccurrences(of: "/", with: "-")
+        workingDirectory.path.replacingOccurrences(of: "/", with: "-")
     }
 
     // MARK: - TranscriptReading
@@ -260,7 +269,7 @@ extension ClaudeTranscriptCodec {
         let file = directory.appendingPathComponent("\(sessionID).jsonl")
 
         var envelope: [String: Any] = [
-            "cwd": workingDirectory.standardizedFileURL.path,
+            "cwd": workingDirectory.path,
             "sessionId": sessionID,
             "version": cliVersion,
             "userType": "external",
