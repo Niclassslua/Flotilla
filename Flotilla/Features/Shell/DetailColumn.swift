@@ -156,7 +156,9 @@ struct DetailColumn: View {
             onToggleGitSidebar: {
                 gitSidebarSessionID = gitSidebarSessionID == session.id ? nil : session.id
             },
-            onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) }
+            onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
+            handoffTargets: store.handoffTargets(for: session),
+            onHandoff: { target in Task { await store.handoffSession(sessionID: session.id, to: target) } }
         )
     }
 

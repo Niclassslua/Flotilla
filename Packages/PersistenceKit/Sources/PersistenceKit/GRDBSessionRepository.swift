@@ -142,6 +142,19 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 WHERE statusFilter IN ('idle', 'finished')
                 """)
         }
+        migrator.registerMigration("v8_addHandoffOwnership") { db in
+            // Which transcript the session's agent currently owns, and — while
+            // a handoff is on probation — what to put back if the destination
+            // never starts. All nullable: every existing session predates
+            // handoff and has neither.
+            try db.alter(table: "session") { table in
+                table.add(column: "nativeTranscriptPath", .text)
+                table.add(column: "handoffSourceAgent", .text)
+                table.add(column: "handoffSourceSessionID", .text)
+                table.add(column: "handoffSourceTranscriptPath", .text)
+                table.add(column: "handoffStartedAt", .datetime)
+            }
+        }
         return migrator
     }
 

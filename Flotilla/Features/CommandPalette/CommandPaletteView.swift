@@ -8,6 +8,11 @@ struct CommandPaletteView: View {
     let perform: (WorkspaceCommand) -> Void
     let openProject: (UUID) -> Void
     let openSession: (UUID) -> Void
+    /// Destinations for the session currently in focus. Empty when nothing is
+    /// selected, when no codec can write the destination, or while a move is
+    /// already in flight — so the section simply does not appear.
+    var handoffTargets: [AgentKind] = []
+    var onHandoff: (AgentKind) -> Void = { _ in }
     let onDismiss: () -> Void
 
     @State private var query = ""
@@ -39,8 +44,22 @@ struct CommandPaletteView: View {
         }
     }
 
-    private var totalCount: Int {
+    private var matchingHandoffTargets: [AgentKind] {
+        guard !query.isEmpty else { return handoffTargets }
+        return handoffTargets.filter {
+            $0.displayName.localizedCaseInsensitiveContains(query)
+                || "hand off".localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    /// Where the handoff rows begin. They are last so that adding them leaves
+    /// every existing section's index arithmetic untouched.
+    private var handoffOffset: Int {
         allMatchingCommands.count + matchingProjects.count + matchingSessions.count
+    }
+
+    private var totalCount: Int {
+        handoffOffset + matchingHandoffTargets.count
     }
 
     var body: some View {
@@ -87,11 +106,15 @@ struct CommandPaletteView: View {
                         let project = matchingProjects[idx]
                         onDismiss()
                         openProject(project.id)
-                    } else if selectedIndex < totalCount {
+                    } else if selectedIndex < handoffOffset {
                         let idx = selectedIndex - allMatchingCommands.count - matchingProjects.count
                         let session = matchingSessions[idx]
                         onDismiss()
                         openSession(session.id)
+                    } else if selectedIndex < totalCount {
+                        let target = matchingHandoffTargets[selectedIndex - handoffOffset]
+                        onDismiss()
+                        onHandoff(target)
                     }
                     return .handled
                 } else if press.key == .escape {
@@ -154,7 +177,23 @@ struct CommandPaletteView: View {
                         }
                     }
 
-                    if allMatchingCommands.isEmpty && matchingProjects.isEmpty && matchingSessions.isEmpty {
+                    if !matchingHandoffTargets.isEmpty {
+                        PaletteSectionTitle("Hand off this session")
+                        ForEach(Array(matchingHandoffTargets.enumerated()), id: \.element) { idx, target in
+                            PaletteRow(
+                                title: "Hand off to \(target.displayName)",
+                                subtitle: "Move this session and its conversation to \(target.displayName)",
+                                systemImage: "arrow.left.arrow.right"
+                            ) {
+                                onDismiss()
+                                onHandoff(target)
+                            }
+                            .background(selectedIndex == handoffOffset + idx ? Color.accentColor.opacity(0.2) : .clear)
+                        }
+                    }
+
+                    if allMatchingCommands.isEmpty && matchingProjects.isEmpty && matchingSessions.isEmpty
+                        && matchingHandoffTargets.isEmpty {
                         ContentUnavailableView.search(text: query)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 36)

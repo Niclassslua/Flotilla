@@ -10,6 +10,11 @@ struct SessionBarActions {
     var onBrowseFiles: () -> Void = {}
     var onFocus: () -> Void = {}
     var onRemoveFromGrid: () -> Void = {}
+    /// Destinations offered in the handoff menu. Empty hides the control
+    /// entirely — a session with no writable destination, or one already
+    /// mid-move, has nothing to offer.
+    var handoffTargets: [AgentKind] = []
+    var onHandoff: (AgentKind) -> Void = { _ in }
 }
 
 /// The bar that states what one session *is*, and what you can do to it.
@@ -258,6 +263,8 @@ struct SessionBar: View {
             // The sidebar toggle sits last, against the bar's trailing edge,
             // because that is the edge the sidebar itself opens from.
             HStack(spacing: 2) {
+                handoffMenu
+
                 barButton(
                     "folder",
                     help: hasProject
@@ -280,6 +287,30 @@ struct SessionBar: View {
                 .accessibilityLabel("Git sidebar")
                 .accessibilityIdentifier(AXID.sessionBarGitSidebarToggle.rawValue)
             }
+        }
+    }
+
+    /// Moves this session to another agent, carrying the conversation across.
+    ///
+    /// A menu rather than a button because the destination is the decision —
+    /// and it is hidden outright when there is nowhere to go, since a disabled
+    /// control here would ask the user to reason about codec availability.
+    @ViewBuilder
+    private var handoffMenu: some View {
+        if !actions.handoffTargets.isEmpty {
+            Menu {
+                ForEach(actions.handoffTargets) { target in
+                    Button(target.displayName) { actions.onHandoff(target) }
+                }
+            } label: {
+                Image(systemName: "arrow.left.arrow.right")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 22)
+            .help("Hand off to another agent, keeping this conversation")
+            .accessibilityLabel("Hand off session")
+            .accessibilityIdentifier(AXID.sessionBarHandoff(session.title))
         }
     }
 

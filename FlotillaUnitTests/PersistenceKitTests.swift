@@ -147,6 +147,55 @@ final class PersistenceKitTests: XCTestCase {
         try? FileManager.default.removeItem(at: dbPath.deletingLastPathComponent())
     }
 
+    func testHandoffOwnershipColumnsRoundTrip() throws {
+        let repo = try GRDBSessionRepository()
+        let pending = PendingHandoff(
+            sourceAgent: .claudeCode,
+            sourceSessionID: "claude-session-uuid",
+            sourceTranscriptPath: URL(fileURLWithPath: "/tmp/source/abc.jsonl"),
+            startedAt: Self.fixedDate
+        )
+        let session = Session(
+            title: "Handoff test",
+            goal: "Goal",
+            agent: .codexCLI,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: nil,
+            agentSessionID: "codex-uuid",
+            nativeTranscriptPath: URL(fileURLWithPath: "/tmp/target/rollout.jsonl"),
+            pendingHandoff: pending,
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        )
+        try repo.save(session)
+
+        let (_, sessions) = try repo.loadAll()
+        let restored = try XCTUnwrap(sessions.first)
+        XCTAssertEqual(restored.nativeTranscriptPath?.path, "/tmp/target/rollout.jsonl")
+        XCTAssertEqual(restored.pendingHandoff, pending)
+    }
+
+    /// A session at rest carries no probation record, and must not invent one.
+    func testSessionWithoutHandoffRoundTripsWithNilFields() throws {
+        let repo = try GRDBSessionRepository()
+        try repo.save(Session(
+            title: "Ordinary",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: nil,
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        ))
+
+        let (_, sessions) = try repo.loadAll()
+        let restored = try XCTUnwrap(sessions.first)
+        XCTAssertNil(restored.nativeTranscriptPath)
+        XCTAssertNil(restored.pendingHandoff)
+    }
+
     func testAgentSessionIDPersistsAndRoundTrips() throws {
         let repo = try GRDBSessionRepository()
         let session = Session(

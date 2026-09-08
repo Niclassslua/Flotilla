@@ -64,6 +64,7 @@ Flotilla/
 |------|--------|
 | `docs/ui-vocabulary.md` | Canonical names for every UI region and component — use these terms in prompts, issues, and review comments |
 | `docs/provider-hooks.md` | Per-provider hook wiring and the status-transition matrix |
+| `docs/session-handoff.md` | Moving a live session between agents: the codec layer, the transaction, every agent's transcript format, and how to add a fifth agent |
 | `.impeccable.md` | Brand and visual design guidelines |
 
 ## Architecture
@@ -189,6 +190,7 @@ GitKit         → ProcessKit
 PersistenceKit → SessionKit, GRDB.swift (external)
 TerminalKit    → ProcessKit, SwiftTerm (external)
 HooksKit       → SessionKit, ProcessKit
+TranscriptKit  → SessionKit
 
 Flotilla (app) → all packages
 ```
@@ -206,6 +208,7 @@ Flotilla (app) → all packages
 | **PersistenceKit** | GRDBSessionRepository (SQLite), versioned migrations (v1–v3) | GRDB.swift 6.29+ |
 | **TerminalKit** | TerminalController, SwiftUI/AppKit bridge to SwiftTerm | SwiftTerm 1.2+ |
 | **HooksKit** | SessionStatusObserver, WaitingNotificationGate, TerminalOutputDigest | None |
+| **TranscriptKit** | CanonicalEntry, TranscriptReading/TranscriptWriting codecs, ToolCallPairing, TranscriptCodecRegistry — reads and writes agents' native transcripts so a session can move between agents | None |
 
 ### Package Structure Convention
 
@@ -222,6 +225,38 @@ Packages/<Name>/
 - All public APIs use `public` access control
 - All types are `Sendable` where possible
 - No internal state leaks across module boundaries
+
+## Session Handoff
+
+A running session can be moved to another agent with its conversation intact.
+The move is a **transcode, not a summary**: the current agent's native transcript
+is read into `CanonicalEntry` values and re-emitted in the destination's own
+format, so the destination resumes what it takes to be its own prior session.
+
+Exactly one agent owns a conversation. `HandoffService` writes the destination
+and relaunches, but leaves the source transcript in place and records a
+`PendingHandoff`; only once the destination survives its probation window is the
+source released. A destination that dies inside it is rolled back onto a
+transcript that was never deleted.
+
+Not to be confused with `AppStore.moveSessionToAgent(sessionID:agent:)`, which
+changes the agent and deliberately starts a **fresh** conversation — that is the
+Kanban agent-lane gesture.
+
+| agent | source | destination |
+|---|:-:|:-:|
+| Claude Code | yes | yes |
+| Codex CLI | yes | yes |
+| Antigravity | yes | no |
+| OpenCode | no | yes |
+
+These differences are expressed by which protocol each codec conforms to
+(`TranscriptReading`, `TranscriptWriting`, or both), so the destination picker
+cannot offer an impossible move.
+
+**See `docs/session-handoff.md`** for the codec layer, the transaction, every
+agent's transcript format, how to verify a codec against a real CLI, and the
+invariants that will bite you when changing this area.
 
 ## Key Domain Models
 

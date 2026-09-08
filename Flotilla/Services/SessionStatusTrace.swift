@@ -30,6 +30,10 @@ struct SessionStatusOrigin: Sendable {
     static let launch = Self("session launched")
     static let restart = Self("session restarted by user")
     static let resumeRetry = Self("resume failed — relaunched with fresh context")
+    static func handoff(from source: AgentKind, to target: AgentKind) -> Self {
+        Self("handed off from \(source.displayName) to \(target.displayName)")
+    }
+    static let handoffRollback = Self("handoff destination did not start — returned to the source agent")
     static let restoreFailed = Self("restore at app launch failed")
     static let boardMove = Self("user moved the card on the board")
     static let uiTestFixture = Self("UI-test fixture")

@@ -326,6 +326,12 @@ struct FlotillaShell: View {
                 perform: perform,
                 openProject: openProject,
                 openSession: openSession,
+                handoffTargets: store.selectedSession.map { store.handoffTargets(for: $0) } ?? [],
+                onHandoff: { target in
+                    if let sessionID = store.selectedSession?.id {
+                        Task { await store.handoffSession(sessionID: sessionID, to: target) }
+                    }
+                },
                 onDismiss: { navigator.presentedSheet = nil }
             )
         case .shortcuts:
