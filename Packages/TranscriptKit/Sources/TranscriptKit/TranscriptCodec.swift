@@ -58,6 +58,31 @@ public protocol TranscriptReading: Sendable {
     /// between releases, so a strict parser would break on every upstream
     /// version bump.
     func readNative(at url: URL) throws -> [CanonicalEntry]
+
+    /// Finds the session this agent started for us, for agents that mint their
+    /// own id rather than accepting one at launch.
+    ///
+    /// A `.discoverable` agent's id is normally pinned in the background by
+    /// `SessionMetadataMonitor`, but that runs on a poll and leans on the
+    /// agent's own catalog — which can lag the conversation by minutes, or omit
+    /// it entirely until the agent has titled it. A handoff should not be
+    /// refused because a catalog has not caught up.
+    ///
+    /// `since` is when Flotilla launched the agent, which is the reliable link:
+    /// whatever transcript this agent began at or after that moment is the one
+    /// belonging to this session. Implementations must not fall back to "the
+    /// newest transcript anywhere" — that resolves to somebody else's
+    /// conversation.
+    ///
+    /// Returns `nil` when nothing matches, and by default for agents whose id
+    /// is assigned at launch and therefore always known.
+    func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)?
+}
+
+extension TranscriptReading {
+    public func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)? {
+        nil
+    }
 }
 
 /// Writing ``CanonicalEntry`` values into an agent's native transcript format,

@@ -31,6 +31,9 @@ final class HandoffService {
     struct Plan: Equatable {
         let session: Session
         let target: AgentKind
+        /// The source agent's own id. Resolved during planning, because for an
+        /// agent that mints its own it may not be on the session yet.
+        let sourceSessionID: String
         let sourceTranscript: URL
         let entries: [CanonicalEntry]
         /// Tool calls that never returned and were given a placeholder result.
@@ -113,25 +116,41 @@ final class HandoffService {
         guard registry.writer(for: target) != nil else {
             throw HandoffError.targetNotWritable(target)
         }
-        guard let nativeID = session.agentSessionID, !nativeID.isEmpty else {
-            throw HandoffError.noNativeSession
-        }
-
-        // Prefer the recorded path. Rediscovery by working directory is a
-        // fallback only: sessions share directories, and `workingDirectory`
-        // can be rewritten after launch for an agent-managed worktree, so it
-        // is not a reliable way to find *this* conversation.
+        // An agent that mints its own id may not have had it pinned yet — the
+        // background monitor polls, and leans on the agent's own catalog, which
+        // can lag the conversation or omit it until the agent has titled it.
+        // Asking the codec directly is what stops a live session being refused
+        // as "not started".
+        let nativeID: String
         let source: URL
-        if let recorded = session.nativeTranscriptPath,
-           FileManager.default.fileExists(atPath: recorded.path) {
-            source = recorded
-        } else if let found = try reader.transcriptURL(
-            sessionID: nativeID,
-            workingDirectory: session.workingDirectory
+        if let recorded = session.agentSessionID, !recorded.isEmpty {
+            nativeID = recorded
+
+            // Prefer the recorded path. Rediscovery by working directory is a
+            // fallback only: sessions share directories, and `workingDirectory`
+            // can be rewritten after launch for an agent-managed worktree, so
+            // it is not a reliable way to find *this* conversation.
+            if let path = session.nativeTranscriptPath,
+               FileManager.default.fileExists(atPath: path.path) {
+                source = path
+            } else if let found = try reader.transcriptURL(
+                sessionID: nativeID,
+                workingDirectory: session.workingDirectory
+            ) {
+                source = found
+            } else {
+                throw HandoffError.sourceNotFound(session.agent)
+            }
+        } else if let discovered = try reader.discoverSession(
+            workingDirectory: session.workingDirectory,
+            // A small grace before launch: the agent may create its transcript
+            // fractionally before the process is recorded as started.
+            since: session.createdAt.addingTimeInterval(-30)
         ) {
-            source = found
+            nativeID = discovered.sessionID
+            source = discovered.url
         } else {
-            throw HandoffError.sourceNotFound(session.agent)
+            throw HandoffError.noNativeSession
         }
 
         // Consuming a transcript deletes it, so prove it is ours first.
@@ -149,6 +168,7 @@ final class HandoffService {
         return Plan(
             session: session,
             target: target,
+            sourceSessionID: nativeID,
             sourceTranscript: source,
             entries: paired.entries,
             synthesizedToolResults: paired.synthesizedResults,
@@ -168,9 +188,7 @@ final class HandoffService {
             throw HandoffError.targetNotWritable(plan.target)
         }
         let session = plan.session
-        guard let sourceSessionID = session.agentSessionID else {
-            throw HandoffError.noNativeSession
-        }
+        let sourceSessionID = plan.sourceSessionID
 
         // A fresh identity per move. Reusing one risks colliding with a
         // transcript the destination already has, and Codex refuses to resume

@@ -91,6 +91,55 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
         XCTAssertNil(try codec.embeddedSessionID(at: url))
     }
 
+    // MARK: - Discovery
+
+    /// Antigravity writes its `conversation_summaries.db` row only once it has
+    /// titled a conversation, and writes no workspace into the log at all — so
+    /// a live session is invisible to title/cwd matching. Discovery keys off the
+    /// launch time instead, which is what makes a fresh session handoff-able.
+    func testDiscoversAConversationStartedAfterLaunch() throws {
+        let launchedAt = Date()
+        try writeTranscript([
+            #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"do the thing"}"#
+        ])
+
+        let found = try codec.discoverSession(
+            workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
+            since: launchedAt.addingTimeInterval(-30)
+        )
+
+        XCTAssertEqual(found?.sessionID, conversationID, "no title and no workspace required")
+        XCTAssertNotNil(found?.url)
+    }
+
+    /// The guard that keeps this from resolving to somebody else's session.
+    func testIgnoresConversationsOlderThanTheLaunch() throws {
+        let file = try writeTranscript([
+            #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"an older conversation"}"#
+        ])
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(-3600)],
+            ofItemAtPath: file.path
+        )
+
+        XCTAssertNil(try codec.discoverSession(
+            workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
+            since: Date().addingTimeInterval(-60)
+        ))
+    }
+
+    /// A directory the agent created but never spoke in is not worth moving.
+    func testIgnoresAConversationWithNoContent() throws {
+        try writeTranscript([
+            #"{"step_index":0,"source":"SYSTEM","type":"CHECKPOINT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"{{ CHECKPOINT 0 }}"}"#
+        ])
+
+        XCTAssertNil(try codec.discoverSession(
+            workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
+            since: Date().addingTimeInterval(-30)
+        ))
+    }
+
     func testTheShippingRegistryOffersAntigravityAsASourceButNeverADestination() {
         let registry = TranscriptCodecRegistry.default
 

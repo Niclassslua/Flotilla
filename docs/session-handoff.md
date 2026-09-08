@@ -141,6 +141,8 @@ public protocol TranscriptReading: Sendable {
     func transcriptURL(sessionID: String, workingDirectory: URL) throws -> URL?
     func embeddedSessionID(at url: URL) throws -> String?
     func readNative(at url: URL) throws -> [CanonicalEntry]
+    /// Optional. See "Agents that mint their own id" below.
+    func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)?
 }
 
 public protocol TranscriptWriting: Sendable {
@@ -164,6 +166,30 @@ file path, a UUID embedded in a filename, a server-assigned id. It carries
 
 `writeNative` is `async` because one destination is written by handing a
 prepared file to its own CLI. The file-backed codecs never suspend.
+
+### Agents that mint their own id
+
+A `.assignable` agent (Claude Code) is told its session id at launch, so
+`Session.agentSessionID` is always known. A `.discoverable` agent chooses its
+own, and the id is normally pinned afterwards by `SessionMetadataMonitor`, which
+polls the agent's own catalog.
+
+That is not good enough for a handoff. Antigravity writes its
+`conversation_summaries.db` row only once it has *titled* a conversation, and
+writes no workspace into its log at all — so a session that has plainly been
+typed into can be invisible to catalog lookups for minutes, and a handoff would
+refuse it as "not started".
+
+`discoverSession(workingDirectory:since:)` is the answer, and `since` is the
+reliable link: Flotilla launched the agent, so the transcript that agent began
+at or after that moment is this session's. Implement it for any agent whose id
+is not assigned at launch, match on the launch time (and on the recorded working
+directory where the format has one, as Codex does), and **never** fall back to
+"the newest transcript anywhere" — that resolves to somebody else's
+conversation.
+
+`HandoffService.plan` uses it only when no id has been pinned yet, and the id it
+finds is what the move records as its source.
 
 ### Capability matrix
 
@@ -523,7 +549,11 @@ Add `Packages/TranscriptKit/Sources/TranscriptKit/Codecs/<Agent>TranscriptCodec.
 Rules that apply to every codec:
 
 - **Locate by session id, never by recency or by scanning a directory for the
-  newest file.** Sessions share working directories.
+  newest file.** Sessions share working directories. The one exception is
+  `discoverSession(workingDirectory:since:)`, which is bounded by the launch
+  time precisely so that it cannot drift onto another session.
+- **Implement `discoverSession` if the agent mints its own id**, or a live
+  session will be refused as "not started" whenever the agent's catalog lags.
 - **Never standardize paths.** See the Claude slug note above.
 - **Skip unknown record types.** Do not fail a whole file on one bad line.
 - **Inject anything that is not pure file I/O** — CLI versions, model

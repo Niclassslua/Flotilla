@@ -29,6 +29,23 @@ final class RecordingProcessStarter: SessionProcessStarting {
     func killServerSideSession(sessionID: UUID) { calls.append(.killServerSide(sessionID)) }
 }
 
+/// Stands in for a `.discoverable` agent whose id has not been pinned yet: it
+/// knows nothing by session id and everything by launch time.
+private struct StubDiscoveringReader: TranscriptReading {
+    let agent: AgentKind = .claudeCode
+    let sessionID: String
+    let url: URL
+
+    func transcriptURL(sessionID: String, workingDirectory: URL) throws -> URL? { nil }
+    func embeddedSessionID(at url: URL) throws -> String? { sessionID }
+    func readNative(at url: URL) throws -> [CanonicalEntry] {
+        try ClaudeTranscriptCodec().readNative(at: url)
+    }
+    func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)? {
+        (sessionID, url)
+    }
+}
+
 @MainActor
 final class HandoffServiceTests: XCTestCase {
     private var home: URL!
@@ -161,6 +178,35 @@ final class HandoffServiceTests: XCTestCase {
 
         XCTAssertTrue(starter.calls.isEmpty)
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    /// The reported failure: an Antigravity session that has clearly been typed
+    /// into still reported "This session has not started a conversation yet",
+    /// because its id is pinned by a background poll that leans on the agent's
+    /// own catalog — and that catalog omits a conversation until it is titled.
+    func testPlanResolvesTheSessionWhenNoNativeIDHasBeenPinnedYet() throws {
+        let source = try writeClaudeTranscript()
+        var unpinned = session(transcript: nil)
+        unpinned.agentSessionID = nil
+
+        // Claude's codec cannot discover, so this must still refuse...
+        XCTAssertThrowsError(try service.plan(for: unpinned, to: .codexCLI)) { error in
+            XCTAssertEqual(error as? HandoffService.HandoffError, .noNativeSession)
+        }
+
+        // ...but a codec that can discover resolves it, and the id it finds is
+        // what the move records as the source.
+        let discovering = HandoffService(
+            processManager: starter,
+            registry: TranscriptCodecRegistry(
+                readers: [StubDiscoveringReader(sessionID: claudeSessionID, url: source)],
+                writers: [codex]
+            ),
+            now: { Self.fixedDate }
+        )
+        let plan = try discovering.plan(for: unpinned, to: .codexCLI)
+        XCTAssertEqual(plan.sourceSessionID, claudeSessionID)
+        XCTAssertEqual(plan.sourceTranscript, source)
     }
 
     // MARK: - Performing

@@ -474,3 +474,52 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
         return (year, month, day, stamp)
     }
 }
+
+extension CodexTranscriptCodec {
+    /// Codex mints its own session id, so a session Flotilla launched has no id
+    /// until something reads it back. Rollouts do record their `cwd`, so this
+    /// can match on both the working directory and the launch time rather than
+    /// on time alone.
+    public func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)? {
+        guard let enumerator = FileManager.default.enumerator(
+            at: sessionsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        let wanted = workingDirectory.path
+        var best: (sessionID: String, url: URL, modified: Date)?
+
+        for case let url as URL in enumerator {
+            guard url.pathExtension == "jsonl",
+                  url.lastPathComponent.hasPrefix("rollout-"),
+                  let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+                      .contentModificationDate,
+                  modified >= since
+            else { continue }
+
+            guard let sessionID = (try? embeddedSessionID(at: url)) ?? nil else { continue }
+            guard Self.recordedWorkingDirectory(at: url) == wanted else { continue }
+
+            if best == nil || modified > best!.modified {
+                best = (sessionID, url, modified)
+            }
+        }
+
+        guard let best else { return nil }
+        return (best.sessionID, best.url)
+    }
+
+    /// The `cwd` a rollout's `session_meta` claims, without parsing the rest.
+    static func recordedWorkingDirectory(at url: URL) -> String? {
+        guard let lines = try? lines(of: url) else { return nil }
+        for line in lines.prefix(4) {
+            guard let record = decodeObject(line),
+                  record["type"] as? String == "session_meta",
+                  let payload = record["payload"] as? [String: Any]
+            else { continue }
+            return payload["cwd"] as? String
+        }
+        return nil
+    }
+}

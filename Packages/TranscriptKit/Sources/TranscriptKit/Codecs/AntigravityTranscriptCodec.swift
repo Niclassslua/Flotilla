@@ -97,3 +97,40 @@ public struct AntigravityTranscriptCodec: TranscriptReading {
         return Date()
     }
 }
+
+extension AntigravityTranscriptCodec {
+    /// Antigravity records a conversation's existence in
+    /// `conversation_summaries.db` only once it has titled it, which can be
+    /// long after the conversation is under way — and it writes no workspace
+    /// into the log at all. Matching on a title or a working directory
+    /// therefore misses a live session entirely.
+    ///
+    /// The directory itself is the evidence: `brain/<conversation id>/` appears
+    /// when the agent starts, so the conversation begun at or after our launch
+    /// is ours.
+    public func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)? {
+        let candidates = (try? FileManager.default.contentsOfDirectory(
+            at: brainDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        let matches: [(id: String, url: URL, modified: Date)] = candidates.compactMap { directory in
+            let transcript = directory
+                .appendingPathComponent(".system_generated/logs/transcript.jsonl")
+            guard FileManager.default.fileExists(atPath: transcript.path) else { return nil }
+            guard let modified = try? transcript.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate else { return nil }
+            // `since` is our launch: anything older belongs to another session.
+            guard modified >= since else { return nil }
+            return (directory.lastPathComponent, transcript, modified)
+        }
+
+        guard let newest = matches.max(by: { $0.modified < $1.modified }) else { return nil }
+        // A directory with no conversation in it is not worth handing over.
+        guard let entries = try? readNative(at: newest.url), entries.hasConversationalContent else {
+            return nil
+        }
+        return (newest.id, newest.url)
+    }
+}
