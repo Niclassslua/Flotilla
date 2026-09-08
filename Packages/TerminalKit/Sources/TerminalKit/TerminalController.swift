@@ -87,6 +87,13 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     private static let maximumReplayBytes = 2 * 1_024 * 1_024
     private static let replayTrimSlack = 256 * 1_024
 
+    /// A new PTY client starts with full-screen addressing. Retained renderers
+    /// and saved output may still have the previous client's DECLRMM/DECOM
+    /// enabled, so even a correct tmux repaint wraps at the old right margin.
+    /// CAN also terminates an escape sequence cut short by the old connection.
+    /// These are display bytes only; keep history and the measured size intact.
+    private static let connectionMarginReset = Data("\u{18}\u{1B}[?69l\u{1B}[?6l\u{1B}[r".utf8)
+
     /// `accessibilityIdentifier` must be unique per session (e.g. include
     /// the session title) — Grid View can show several terminals mounted
     /// simultaneously, so a fixed identifier would be ambiguous.
@@ -129,6 +136,9 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
                 Task { @MainActor in
                     await publishAccessibleContent()
                 }
+            }
+            if customReflowHandler != nil {
+                resetConnectionMargins()
             }
         }
         consumeOutput()
@@ -406,9 +416,11 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// tmux reattach) while keeping existing TerminalViews, fonts, and scrollback warm.
     @MainActor
     public func rebind(process: PTYProcessProtocol) {
+        self.outputTask?.cancel()
+        flushPendingOutput()
+        resetConnectionMargins()
         self.processID = process.id
         self.process = process
-        self.outputTask?.cancel()
         self.hasSentInitialResize = false
         consumeOutput()
 
@@ -436,6 +448,20 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         hasSentInitialResize = true
         process.resize(size)
         onPTYResize?(size)
+    }
+
+    @MainActor
+    private func resetConnectionMargins() {
+        // Record the boundary too: renderers created later replay the old
+        // output, and must reach the same clean margin state before live data.
+        appendToReplayBuffer(Self.connectionMarginReset)
+        let bytes = [UInt8](Self.connectionMarginReset)
+        isReplaying = true
+        for view in terminalViews.values {
+            view.feed(byteArray: bytes[...])
+        }
+        isReplaying = false
+        invalidateScreenText()
     }
 
     /// Applies host-app presentation preferences without recreating the

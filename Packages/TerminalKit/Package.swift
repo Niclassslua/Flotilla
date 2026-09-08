@@ -18,6 +18,7 @@ let package = Package(
                 "ProcessKit",
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ]
-        )
+        ),
+        .testTarget(name: "TerminalKitTests", dependencies: ["TerminalKit", "ProcessKit"])
     ]
 )
