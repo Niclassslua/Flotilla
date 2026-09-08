@@ -585,10 +585,7 @@ struct CommitFileRow: View {
                 .foregroundStyle(FlotillaColors.textTertiary)
                 .frame(width: 10)
 
-            Text(kindMarker)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(kindColor)
-                .frame(width: 14)
+            FileChangeKindBadge(kind: file.kind, size: 16)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(file.path)
@@ -635,27 +632,6 @@ struct CommitFileRow: View {
         }
     }
 
-    private var kindMarker: String {
-        switch file.kind {
-        case .added: return "A"
-        case .modified: return "M"
-        case .deleted: return "D"
-        case .renamed: return "R"
-        case .copied: return "C"
-        case .typeChanged: return "T"
-        case .unmerged: return "U"
-        }
-    }
-
-    private var kindColor: Color {
-        switch file.kind {
-        case .added: return FlotillaColors.diffAdded
-        case .deleted: return FlotillaColors.diffRemoved
-        case .modified: return FlotillaColors.accent
-        case .renamed, .copied: return FlotillaColors.textSecondary
-        case .typeChanged, .unmerged: return FlotillaColors.warning
-        }
-    }
 }
 
 // MARK: - Hunk

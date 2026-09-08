@@ -211,6 +211,7 @@
 		B2235264263ADB9B1C11DA00 /* HomeComposerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6ACC2BF0E8EE3D8EBC67C71 /* HomeComposerUITests.swift */; };
 		B28B43FA19D996E532BAA240 /* GitGraphLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9CA216025ED610FE445F0B8 /* GitGraphLayoutTests.swift */; };
 		B3B0631C46DF712E62A05356 /* git-branch.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5E7CD7C066464B1F9AACF09A /* git-branch.svg */; };
+		B405B6FBA7BE63CA144193BC /* FileChangeKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F914E3566BA5361082F9D6 /* FileChangeKind.swift */; };
 		B4A38809E4CFB671B5376798 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE677A016A7E33854CFA93A /* MarkdownView.swift */; };
 		B5785D70AF40B3143A97E8B4 /* ProjectSkillsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05018E554FDC79B823BEC790 /* ProjectSkillsView.swift */; };
 		B6B245D5E12FEA55B329DEE6 /* database.svg in Resources */ = {isa = PBXBuildFile; fileRef = B1B10900DD61FF5C1C8B90CA /* database.svg */; };
@@ -549,6 +550,7 @@
 		E178BD5EBC01AC5A04E68745 /* GitIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitIcon.swift; sourceTree = "<group>"; };
 		E17EDDAD1F3E86B5AB3960D7 /* FileIconHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileIconHelper.swift; sourceTree = "<group>"; };
 		E26E19A813CF60C404557C40 /* FleetSmartList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FleetSmartList.swift; sourceTree = "<group>"; };
+		E2F914E3566BA5361082F9D6 /* FileChangeKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileChangeKind.swift; sourceTree = "<group>"; };
 		E4129D9B51A69DC7D9B98130 /* typescript.svg */ = {isa = PBXFileReference; path = typescript.svg; sourceTree = "<group>"; };
 		E447D72455281E06A6338116 /* StreamProjectWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamProjectWorkspace.swift; sourceTree = "<group>"; };
 		E493E2028BBE35E962D2F085 /* css.svg */ = {isa = PBXFileReference; path = css.svg; sourceTree = "<group>"; };
@@ -878,6 +880,7 @@
 				47A8019491687751346DAF32 /* DiffPanelView.swift */,
 				9C7A3A8B4DE935213297C06D /* DiffStatBadge.swift */,
 				E030FA9058EADAD4C052103C /* DiffStatStore.swift */,
+				E2F914E3566BA5361082F9D6 /* FileChangeKind.swift */,
 			);
 			path = Diff;
 			sourceTree = "<group>";
@@ -1418,6 +1421,7 @@
 				76F2C75FA09583861226B553 /* EffortLevelPicker.swift in Sources */,
 				9EF1F90551B678BAE0ECF065 /* EphemeralWindowStateDisabler.swift in Sources */,
 				DC3D056327FEA75A50E1AFB6 /* FileBrowserView.swift in Sources */,
+				B405B6FBA7BE63CA144193BC /* FileChangeKind.swift in Sources */,
 				E03FD7DF30CBB7A9DD49AF3A /* FileIconHelper.swift in Sources */,
 				74394149F4CEEEAE7AEE61C0 /* FileNode.swift in Sources */,
 				D13E9805C0BEC6E01EAB756B /* FleetSidebar.swift in Sources */,
