@@ -53,6 +53,9 @@ final class HookCoordinator {
         self.dispatcher = dispatcher
         self.notificationsEnabled = notificationsEnabled
         self.hookSupportDirectory = hookSupportDirectory
+        store.onAgentChanged = { [weak self] sessionID in
+            self?.resync(sessionID: sessionID)
+        }
         if requestsAuthorization, notificationsEnabled(), ProcessInfo.processInfo.environment["UI_TESTING"] != "1" {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
@@ -91,6 +94,34 @@ final class HookCoordinator {
     /// wrong.
     /// `applyObservedStatus`'s existing no-op-on-unchanged-status guard
     /// keeps two agreeing sources from being noisier than one.
+    /// Rebuilds this session's observation against the agent it is running
+    /// *now*.
+    ///
+    /// `observe(sessionID:)` is idempotent by design and returns early when a
+    /// monitor already exists, and the `HookEventReceiver` it builds captures
+    /// the session's `AgentKind` for its lifetime — `observation(forLine:agent:)`
+    /// branches its entire JSON schema on that value. After a handoff the
+    /// session is a different agent writing a different hook format, so the
+    /// receiver must be replaced rather than reused; left alone it parses the
+    /// new agent's events against the old agent's schema and silently drops
+    /// them, degrading status to the screen heuristic alone.
+    ///
+    /// `observeAll()`'s teardown cannot cover this: it keys off
+    /// `store.process(for:) == nil`, and `SessionProcessManager.terminate`
+    /// deliberately leaves the process entry in place until the exit handler
+    /// fires, so that condition is not yet true when the move happens.
+    func resync(sessionID: UUID) {
+        monitors[sessionID]?.stop()
+        hookReceivers[sessionID]?.stop()
+        tasks[sessionID]?.cancel()
+        monitors[sessionID] = nil
+        hookReceivers[sessionID] = nil
+        tasks[sessionID] = nil
+        gates[sessionID] = nil
+        arbiters[sessionID] = nil
+        observe(sessionID: sessionID)
+    }
+
     private func observe(sessionID: UUID) {
         guard monitors[sessionID] == nil else { return }
         guard let session = store.sessions.first(where: { $0.id == sessionID }) else { return }

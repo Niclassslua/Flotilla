@@ -249,7 +249,7 @@ extension ClaudeTranscriptCodec {
         _ entries: [CanonicalEntry],
         workingDirectory: URL,
         sessionID: String
-    ) throws -> ResumeHandle {
+    ) async throws -> ResumeHandle {
         let directory = projectsDirectory
             .appendingPathComponent(Self.projectSlug(for: workingDirectory), isDirectory: true)
         try FileManager.default.createDirectory(

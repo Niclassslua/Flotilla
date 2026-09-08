@@ -247,6 +247,37 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// A handoff that has written the destination agent's transcript and relaunched
+/// the session, but whose destination has not yet proved it can run.
+///
+/// It exists so the source transcript can outlive the switch. Deleting the
+/// source at the moment of the move would make a destination that fails to
+/// start — a missing binary, an expired login — unrecoverable; keeping this
+/// record means the session can be put back exactly as it was.
+public struct PendingHandoff: Codable, Hashable, Sendable {
+    /// The agent the session is returned to if the destination never starts.
+    public let sourceAgent: AgentKind
+    /// That agent's own session id. Needed to put the session back, and to
+    /// find the source's sidecar state once the move is confirmed — by then
+    /// `agentSessionID` names the destination and no longer identifies it.
+    public let sourceSessionID: String
+    /// The still-intact transcript that agent would resume from.
+    public let sourceTranscriptPath: URL
+    public let startedAt: Date
+
+    public init(
+        sourceAgent: AgentKind,
+        sourceSessionID: String,
+        sourceTranscriptPath: URL,
+        startedAt: Date = Date()
+    ) {
+        self.sourceAgent = sourceAgent
+        self.sourceSessionID = sourceSessionID
+        self.sourceTranscriptPath = sourceTranscriptPath
+        self.startedAt = startedAt
+    }
+}
+
 public struct Session: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
     public var title: String
@@ -273,6 +304,14 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public var workflowStage: WorkflowStage?
     /// Native agent session ID for session resumption across launches
     public var agentSessionID: String?
+    /// Where the current agent keeps this session's transcript.
+    ///
+    /// Recorded rather than rediscovered: several sessions can share a working
+    /// directory, so "the newest transcript here" resolves to the wrong
+    /// conversation. `nil` until a handoff writes one.
+    public var nativeTranscriptPath: URL?
+    /// Set while a handoff is on probation; `nil` at rest.
+    public var pendingHandoff: PendingHandoff?
     /// Raw PTY byte stream retained across launches and replayed into
     /// SwiftTerm. Capped by the app before persistence.
     public var terminalScrollback: Data
@@ -294,6 +333,8 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         kanbanColumnID: UUID? = nil,
         workflowStage: WorkflowStage? = nil,
         agentSessionID: String? = nil,
+        nativeTranscriptPath: URL? = nil,
+        pendingHandoff: PendingHandoff? = nil,
         terminalScrollback: Data = Data(),
         createdAt: Date = Date(),
         lastActiveAt: Date = Date()
@@ -312,6 +353,8 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         self.kanbanColumnID = kanbanColumnID
         self.workflowStage = workflowStage
         self.agentSessionID = agentSessionID
+        self.nativeTranscriptPath = nativeTranscriptPath
+        self.pendingHandoff = pendingHandoff
         self.terminalScrollback = terminalScrollback
         self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt

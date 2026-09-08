@@ -37,8 +37,8 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
     // MARK: - Layout
 
-    func testWritesIntoDateNestedDirectoryWithSessionIDInTheFilename() throws {
-        let handle = try codec.writeNative(
+    func testWritesIntoDateNestedDirectoryWithSessionIDInTheFilename() async throws {
+        let handle = try await codec.writeNative(
             [.userMessage(text: "hello", timestamp: Self.writeTime)],
             workingDirectory: workingDirectory,
             sessionID: sessionID
@@ -54,16 +54,17 @@ final class CodexTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(handle.nativeSessionID, sessionID)
     }
 
-    func testRejectsASessionIDThatIsNotAUUID() {
-        XCTAssertThrowsError(
-            try codec.writeNative([], workingDirectory: workingDirectory, sessionID: "not-a-uuid")
-        ) { error in
+    func testRejectsASessionIDThatIsNotAUUID() async {
+        do {
+            _ = try await codec.writeNative([], workingDirectory: workingDirectory, sessionID: "not-a-uuid")
+            XCTFail("expected an invalid session id to be refused")
+        } catch {
             XCTAssertEqual(error as? TranscriptCodecError, .invalidSessionID("not-a-uuid"))
         }
     }
 
-    func testHeaderRecordsComeFirstAndCarryTheSessionIdentity() throws {
-        let handle = try codec.writeNative(
+    func testHeaderRecordsComeFirstAndCarryTheSessionIdentity() async throws {
+        let handle = try await codec.writeNative(
             [.userMessage(text: "hello", timestamp: Self.writeTime)],
             workingDirectory: workingDirectory,
             sessionID: sessionID
@@ -84,14 +85,14 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
     /// A handed-off transcript must feed the model *and* the TUI's scrollback.
     /// Without the mirror the user resumes into a blank screen.
-    func testHandoffMarkerAddsTUIMirrorRecords() throws {
+    func testHandoffMarkerAddsTUIMirrorRecords() async throws {
         let entries: [CanonicalEntry] = [
             .userMessage(text: "add a test", timestamp: Self.writeTime),
             .assistantMessage(text: "done", timestamp: Self.writeTime),
             .handoffMarker(from: .claudeCode, to: .codexCLI, reason: "user-requested", timestamp: Self.writeTime)
         ]
 
-        let handle = try codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
         let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
 
         XCTAssertEqual(payloadTypes(in: parsed, ofRecordType: "event_msg"), ["user_message", "agent_message"])
@@ -100,13 +101,13 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
     /// An ordinary write — one Codex itself would have produced — must not
     /// duplicate turns, or the scrollback shows everything twice.
-    func testWithoutHandoffMarkerNoMirrorIsWritten() throws {
+    func testWithoutHandoffMarkerNoMirrorIsWritten() async throws {
         let entries: [CanonicalEntry] = [
             .userMessage(text: "add a test", timestamp: Self.writeTime),
             .assistantMessage(text: "done", timestamp: Self.writeTime)
         ]
 
-        let handle = try codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
         let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
 
         XCTAssertTrue(payloadTypes(in: parsed, ofRecordType: "event_msg").isEmpty)
@@ -115,13 +116,13 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
     // MARK: - Tool calls
 
-    func testToolCallsAreWrittenWithArgumentsAsAJSONString() throws {
+    func testToolCallsAreWrittenWithArgumentsAsAJSONString() async throws {
         let entries: [CanonicalEntry] = [
             .toolUse(id: "call_1", tool: "shell", input: Data(#"{"command":"ls"}"#.utf8), timestamp: Self.writeTime),
             .toolResult(toolUseID: "call_1", output: "file.txt", isError: false, timestamp: Self.writeTime)
         ]
 
-        let handle = try codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
         let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
 
         XCTAssertEqual(payloadTypes(in: parsed, ofRecordType: "response_item"), ["function_call", "function_call_output"])
@@ -134,9 +135,75 @@ final class CodexTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(payload["arguments"] as? String, #"{"command":"ls"}"#)
     }
 
+    /// Codex draws tool activity from `CommandExecution` items built out of
+    /// live process state we do not have, so carried-over tool calls are
+    /// mirrored as commentary. Without this the resumed scrollback shows the
+    /// talking but none of the doing.
+    func testToolActivityIsMirroredAsCommentaryForTheTUI() async throws {
+        let entries: [CanonicalEntry] = [
+            .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls -la"}"#.utf8), timestamp: Self.writeTime),
+            .toolResult(toolUseID: "call_1", output: "file.txt", isError: false, timestamp: Self.writeTime),
+            .toolUse(id: "call_2", tool: "Read", input: Data(#"{"file_path":"README.md"}"#.utf8), timestamp: Self.writeTime),
+            .toolResult(toolUseID: "call_2", output: "boom, it failed", isError: true, timestamp: Self.writeTime),
+            .handoffMarker(from: .claudeCode, to: .codexCLI, reason: "user-requested", timestamp: Self.writeTime)
+        ]
+
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
+
+        let commentary: [String] = parsed.compactMap { record in
+            guard record["type"] as? String == "event_msg",
+                  let payload = record["payload"] as? [String: Any],
+                  payload["phase"] as? String == "commentary"
+            else { return nil }
+            return payload["message"] as? String
+        }
+
+        XCTAssertEqual(commentary.count, 3, "two calls and the one failure")
+        XCTAssertTrue(commentary[0].contains("Bash"))
+        XCTAssertTrue(commentary[0].contains("ls -la"), "the command a human would recognise, not raw JSON")
+        XCTAssertTrue(commentary[1].contains("README.md"))
+        XCTAssertTrue(commentary[2].contains("boom, it failed"), "a failed tool is worth showing")
+
+        // The model still reads the real records, not the commentary.
+        XCTAssertEqual(
+            payloadTypes(in: parsed, ofRecordType: "response_item"),
+            ["function_call", "function_call_output", "function_call", "function_call_output"]
+        )
+    }
+
+    func testWithoutAHandoffMarkerToolActivityIsNotMirrored() async throws {
+        let entries: [CanonicalEntry] = [
+            .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls"}"#.utf8), timestamp: Self.writeTime),
+            .toolResult(toolUseID: "call_1", output: "nope", isError: true, timestamp: Self.writeTime)
+        ]
+
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
+
+        XCTAssertTrue(parsed.filter { $0["type"] as? String == "event_msg" }.isEmpty)
+    }
+
+    func testCommentaryIsNotReadBackAsConversation() async throws {
+        let entries: [CanonicalEntry] = [
+            .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls"}"#.utf8), timestamp: Self.writeTime),
+            .toolResult(toolUseID: "call_1", output: "file.txt", isError: false, timestamp: Self.writeTime),
+            .handoffMarker(from: .claudeCode, to: .codexCLI, reason: "user-requested", timestamp: Self.writeTime)
+        ]
+
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let recovered = try codec.readNative(at: XCTUnwrap(handle.transcriptURL))
+
+        // Round-trip stability: mirroring must not grow the conversation.
+        XCTAssertEqual(recovered, [
+            .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls"}"#.utf8), timestamp: Self.writeTime),
+            .toolResult(toolUseID: "call_1", output: "file.txt", isError: false, timestamp: Self.writeTime)
+        ])
+    }
+
     // MARK: - Sanitising
 
-    func testSanitizeDropsImagesWhichCodexCannotRepresent() {
+    func testSanitizeDropsImagesWhichCodexCannotRepresent() async {
         let entries: [CanonicalEntry] = [
             .userMessage(text: "look", timestamp: Self.writeTime),
             .image(mimeType: "image/png", base64: "AAAA", timestamp: Self.writeTime)
@@ -147,7 +214,7 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
     // MARK: - Reading back
 
-    func testRoundTripsItsOwnOutput() throws {
+    func testRoundTripsItsOwnOutput() async throws {
         let entries: [CanonicalEntry] = [
             .userMessage(text: "add a test", timestamp: Self.writeTime),
             .assistantMessage(text: "looking", timestamp: Self.writeTime),
@@ -155,21 +222,21 @@ final class CodexTranscriptCodecTests: XCTestCase {
             .toolResult(toolUseID: "call_1", output: "file.txt", isError: false, timestamp: Self.writeTime)
         ]
 
-        let handle = try codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
         let recovered = try codec.readNative(at: XCTUnwrap(handle.transcriptURL))
 
         XCTAssertEqual(recovered, entries)
     }
 
     /// The mirror exists for the TUI only; reading must not see each turn twice.
-    func testReadingIgnoresTheTUIMirror() throws {
+    func testReadingIgnoresTheTUIMirror() async throws {
         let entries: [CanonicalEntry] = [
             .userMessage(text: "one", timestamp: Self.writeTime),
             .assistantMessage(text: "two", timestamp: Self.writeTime),
             .handoffMarker(from: .claudeCode, to: .codexCLI, reason: "user-requested", timestamp: Self.writeTime)
         ]
 
-        let handle = try codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
         let recovered = try codec.readNative(at: XCTUnwrap(handle.transcriptURL))
 
         XCTAssertEqual(recovered, [
@@ -178,8 +245,8 @@ final class CodexTranscriptCodecTests: XCTestCase {
         ])
     }
 
-    func testReasoningItemsAreNeverWrittenAndAreSkippedWhenRead() throws {
-        let handle = try codec.writeNative(
+    func testReasoningItemsAreNeverWrittenAndAreSkippedWhenRead() async throws {
+        let handle = try await codec.writeNative(
             [.assistantMessage(text: "answer", timestamp: Self.writeTime)],
             workingDirectory: workingDirectory,
             sessionID: sessionID
@@ -199,8 +266,8 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
     // MARK: - Location
 
-    func testLocatesAndIdentifiesAWrittenTranscript() throws {
-        let handle = try codec.writeNative(
+    func testLocatesAndIdentifiesAWrittenTranscript() async throws {
+        let handle = try await codec.writeNative(
             [.userMessage(text: "hello", timestamp: Self.writeTime)],
             workingDirectory: workingDirectory,
             sessionID: sessionID
@@ -211,8 +278,8 @@ final class CodexTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(try codec.embeddedSessionID(at: XCTUnwrap(found)), sessionID)
     }
 
-    func testRemoveNativeStateDeletesTheRollout() throws {
-        let handle = try codec.writeNative(
+    func testRemoveNativeStateDeletesTheRollout() async throws {
+        let handle = try await codec.writeNative(
             [.userMessage(text: "hello", timestamp: Self.writeTime)],
             workingDirectory: workingDirectory,
             sessionID: sessionID

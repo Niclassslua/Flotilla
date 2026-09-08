@@ -266,6 +266,10 @@ public enum AXID: String, Sendable {
         "SessionBar-\(title)-Worktree"
     }
 
+    public static func sessionBarHandoff(_ title: String) -> String {
+        "SessionBar.Handoff.\(title)"
+    }
+
     public static func sessionBarAge(_ title: String) -> String {
         "SessionBar-\(title)-Age"
     }

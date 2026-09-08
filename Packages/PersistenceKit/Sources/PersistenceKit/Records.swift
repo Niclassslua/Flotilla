@@ -77,6 +77,11 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var kanbanColumnID: String?
     var workflowStage: String?
     var agentSessionID: String?
+    var nativeTranscriptPath: String?
+    var handoffSourceAgent: String?
+    var handoffSourceSessionID: String?
+    var handoffSourceTranscriptPath: String?
+    var handoffStartedAt: Date?
     var terminalScrollback: Data
     var createdAt: Date
     var lastActiveAt: Date
@@ -98,6 +103,11 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         kanbanColumnID = session.kanbanColumnID?.uuidString
         workflowStage = session.workflowStage?.rawValue
         agentSessionID = session.agentSessionID
+        nativeTranscriptPath = session.nativeTranscriptPath?.path
+        handoffSourceAgent = session.pendingHandoff?.sourceAgent.rawValue
+        handoffSourceSessionID = session.pendingHandoff?.sourceSessionID
+        handoffSourceTranscriptPath = session.pendingHandoff?.sourceTranscriptPath.path
+        handoffStartedAt = session.pendingHandoff?.startedAt
         terminalScrollback = session.terminalScrollback
         createdAt = session.createdAt
         lastActiveAt = session.lastActiveAt
@@ -172,6 +182,25 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             workflowStageValue = nil
         }
 
+        // A pending handoff is only meaningful with all three parts; a row
+        // carrying some but not others is a half-written probation record and
+        // is treated as no handoff in flight.
+        let pending: PendingHandoff?
+        if let handoffSourceAgent,
+           let sourceAgent = AgentKind(rawValue: handoffSourceAgent),
+           let handoffSourceSessionID,
+           let handoffSourceTranscriptPath,
+           let handoffStartedAt {
+            pending = PendingHandoff(
+                sourceAgent: sourceAgent,
+                sourceSessionID: handoffSourceSessionID,
+                sourceTranscriptPath: URL(fileURLWithPath: handoffSourceTranscriptPath),
+                startedAt: handoffStartedAt
+            )
+        } else {
+            pending = nil
+        }
+
         return Session(
             id: uuid,
             title: title,
@@ -187,6 +216,8 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             kanbanColumnID: kanbanColumnUUID,
             workflowStage: workflowStageValue,
             agentSessionID: agentSessionID,
+            nativeTranscriptPath: nativeTranscriptPath.map { URL(fileURLWithPath: $0) },
+            pendingHandoff: pending,
             terminalScrollback: terminalScrollback,
             createdAt: createdAt,
             lastActiveAt: lastActiveAt

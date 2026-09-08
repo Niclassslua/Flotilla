@@ -51,7 +51,7 @@ final class TranscriptHandoffRoundTripTests: XCTestCase {
         return file
     }
 
-    func testClaudeTranscriptSurvivesTheMoveToCodex() throws {
+    func testClaudeTranscriptSurvivesTheMoveToCodex() async throws {
         let source = try writeClaudeTranscript()
 
         // Ownership check, as the handoff transaction will do it.
@@ -68,7 +68,7 @@ final class TranscriptHandoffRoundTripTests: XCTestCase {
         XCTAssertEqual(paired.synthesizedResults, 1)
         XCTAssertEqual(paired.droppedOrphanResults, 0)
 
-        let handle = try codex.writeNative(
+        let handle = try await codex.writeNative(
             codex.sanitize(paired.entries),
             workingDirectory: workingDirectory,
             sessionID: codexSessionID
@@ -100,12 +100,12 @@ final class TranscriptHandoffRoundTripTests: XCTestCase {
 
     /// The receiving agent must be able to find what we wrote using only the
     /// id we pinned — that id is what the launch layer will resume by.
-    func testTheWrittenRolloutIsDiscoverableByThePinnedIdentity() throws {
+    func testTheWrittenRolloutIsDiscoverableByThePinnedIdentity() async throws {
         let source = try writeClaudeTranscript()
         let entries = try claude.readNative(at: source)
             .appendingHandoffMarker(from: .claudeCode, to: .codexCLI, at: Self.writeTime)
 
-        _ = try codex.writeNative(
+        _ = try await codex.writeNative(
             codex.sanitize(ToolCallPairing.pair(entries).entries),
             workingDirectory: workingDirectory,
             sessionID: codexSessionID
@@ -116,7 +116,7 @@ final class TranscriptHandoffRoundTripTests: XCTestCase {
         XCTAssertEqual(try codex.embeddedSessionID(at: XCTUnwrap(located)), codexSessionID)
     }
 
-    func testRegistryOffersCodexAsATargetForAClaudeSession() {
+    func testRegistryOffersCodexAsATargetForAClaudeSession() async {
         let readers: [any TranscriptReading] = [claude, codex]
         let writers: [any TranscriptWriting] = [claude, codex]
         let registry = TranscriptCodecRegistry(readers: readers, writers: writers)

@@ -183,7 +183,7 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
         _ entries: [CanonicalEntry],
         workingDirectory: URL,
         sessionID: String
-    ) throws -> ResumeHandle {
+    ) async throws -> ResumeHandle {
         guard Self.isUUID(sessionID) else {
             throw TranscriptCodecError.invalidSessionID(sessionID)
         }
@@ -290,6 +290,12 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
                 ]))
 
             case let .toolUse(id, tool, input, _):
+                if mirrorForTUI {
+                    lines.append(Self.commentary(
+                        Self.toolCallSummary(tool: tool, input: input),
+                        at: stampedAt
+                    ))
+                }
                 lines.append(Self.encode([
                     "timestamp": stampedAt,
                     "type": "response_item",
@@ -301,7 +307,12 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
                     ]
                 ]))
 
-            case let .toolResult(toolUseID, output, _, _):
+            case let .toolResult(toolUseID, output, isError, _):
+                // A failed tool is worth showing; a successful one is usually
+                // large and the model already has it in full below.
+                if mirrorForTUI, isError {
+                    lines.append(Self.commentary("\u{26A0} \(Self.truncate(output, to: 200))", at: stampedAt))
+                }
                 // Codex's `function_call_output` has no error field, so a
                 // failed tool reads back as an ordinary result. Inventing one
                 // is worse than losing it: an unrecognised key is at best
@@ -347,6 +358,66 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
     }
 
     // MARK: - Encoding helpers
+
+    /// Codex draws tool activity from `item_completed` records carrying
+    /// `CommandExecution` items — a shape built from live process state
+    /// (`process_id`, a `file://` cwd, a `parsed_cmd` breakdown) that a
+    /// transcode simply does not have. Fabricating one risks a record Codex
+    /// cannot parse, which would cost us the resume that currently works.
+    ///
+    /// So carried-over tool activity is mirrored as commentary instead: the
+    /// user sees that the previous agent ran something and what it was, and
+    /// nothing invented reaches the model, which reads the real `function_call`
+    /// records below. Presentation only, and deliberately modest.
+    static func commentary(_ message: String, at timestamp: String) -> String {
+        encode([
+            "timestamp": timestamp,
+            "type": "event_msg",
+            "payload": [
+                "type": "agent_message",
+                "message": message,
+                "phase": "commentary",
+                "memory_citation": NSNull()
+            ]
+        ])
+    }
+
+    /// A one-line rendering of a tool call. Prefers the arguments a human would
+    /// recognise — a command, a path, a pattern — over dumping the JSON.
+    static func toolCallSummary(tool: String, input: Data) -> String {
+        let arguments = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any]
+        let interesting = ["command", "cmd", "path", "file_path", "pattern", "query", "url"]
+
+        var detail: String?
+        if let arguments {
+            for key in interesting {
+                guard let value = arguments[key] else { continue }
+                if let list = value as? [String] {
+                    detail = list.joined(separator: " ")
+                } else if let text = value as? String {
+                    detail = text
+                }
+                if detail != nil { break }
+            }
+            if detail == nil, !arguments.isEmpty,
+               let json = try? JSONSerialization.data(withJSONObject: arguments),
+               let text = String(data: json, encoding: .utf8) {
+                detail = text
+            }
+        }
+
+        guard let detail, !detail.isEmpty else { return "\u{2699} \(tool)" }
+        return "\u{2699} \(tool)  \(truncate(detail, to: 160))"
+    }
+
+    static func truncate(_ text: String, to limit: Int) -> String {
+        let flattened = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        guard flattened.count > limit else { return flattened }
+        return flattened.prefix(limit) + "\u{2026}"
+    }
 
     static func isUUID(_ value: String) -> Bool {
         UUID(uuidString: value) != nil

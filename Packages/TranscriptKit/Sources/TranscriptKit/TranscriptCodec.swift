@@ -78,11 +78,14 @@ public protocol TranscriptWriting: Sendable {
     /// `sessionID` is the identity the transcript must claim. Passing it in
     /// rather than minting one inside the codec is what lets the caller pin a
     /// move to a known id and verify it afterwards.
+    /// `async` because one destination — OpenCode — is written by handing a
+    /// prepared file to its own CLI rather than by writing a transcript
+    /// ourselves. The file-backed codecs simply do not suspend.
     func writeNative(
         _ entries: [CanonicalEntry],
         workingDirectory: URL,
         sessionID: String
-    ) throws -> ResumeHandle
+    ) async throws -> ResumeHandle
 
     /// Removes this agent's state for a session that has moved elsewhere.
     ///

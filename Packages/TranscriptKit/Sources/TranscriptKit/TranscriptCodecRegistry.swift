@@ -20,6 +20,17 @@ public struct TranscriptCodecRegistry: Sendable {
         self.writers = Dictionary(uniqueKeysWithValues: writers.map { ($0.agent, $0) })
     }
 
+    /// The codecs Flotilla ships with.
+    ///
+    /// Antigravity appears only in `readers`, permanently: its resume state is
+    /// protobuf in a per-conversation SQLite database with no published schema,
+    /// so a session can be escaped from it but never moved into it. OpenCode is
+    /// absent from both pending its HTTP session API.
+    public static let `default` = TranscriptCodecRegistry(
+        readers: [ClaudeTranscriptCodec(), CodexTranscriptCodec(), AntigravityTranscriptCodec()],
+        writers: [ClaudeTranscriptCodec(), CodexTranscriptCodec()]
+    )
+
     public func reader(for agent: AgentKind) -> (any TranscriptReading)? {
         readers[agent]
     }

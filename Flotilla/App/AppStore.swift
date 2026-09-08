@@ -27,6 +27,12 @@ final class AppStore {
     /// decides whether/how to notify from here, so this stays a plain
     /// closure rather than pulling a notification dependency into AppStore.
     var onSessionFinished: ((Session) -> Void)?
+    /// Fires when a session's agent changes under it, so status observation can
+    /// be rebuilt against the new agent. Hook event schemas differ per agent and
+    /// a `HookEventReceiver` binds to one for its lifetime, so a receiver that
+    /// outlives the change parses the new agent's output against the old
+    /// agent's format. Same plain-closure rationale as `onSessionFinished`.
+    var onAgentChanged: ((UUID) -> Void)?
 
     let repository: SessionRepository
     let gitService: GitServiceProtocol
@@ -46,6 +52,10 @@ final class AppStore {
     private let statusMachine = SessionStatusMachine()
     private let scrollbackStore = SessionScrollbackStore()
     private let metadataMonitor: SessionMetadataMonitor
+    private let handoffService: HandoffService
+    /// Sessions whose handoff destination has not yet proved it can run.
+    @ObservationIgnored
+    private var handoffProbation: Set<UUID> = []
     @ObservationIgnored
     private var sessionResumeStarts: [UUID: Date] = [:]
     @ObservationIgnored
@@ -58,9 +68,11 @@ final class AppStore {
         processManager: SessionProcessManager,
         worktreeBaseDirectoryProvider: @escaping () -> URL,
         settingsProvider: @escaping () -> AppSettings = { AppSettings() },
-        metadataMonitor: SessionMetadataMonitor = SessionMetadataMonitor()
+        metadataMonitor: SessionMetadataMonitor = SessionMetadataMonitor(),
+        handoffService: HandoffService? = nil
     ) {
         self.metadataMonitor = metadataMonitor
+        self.handoffService = handoffService ?? HandoffService(processManager: processManager)
         self.repository = repository
         self.kanbanStore = KanbanStore(repository: repository)
         self.gitService = gitService
@@ -727,6 +739,92 @@ final class AppStore {
         }
     }
 
+    // MARK: - Handoff
+
+    /// Agents this session can be moved to with its conversation intact.
+    ///
+    /// Empty when no codec can write the destination — which is how Antigravity
+    /// stays out of the picker without anyone hardcoding the rule — and while a
+    /// move is already in flight.
+    func handoffTargets(for session: Session) -> [AgentKind] {
+        handoffService.canHandOff(session) ? handoffService.targets(for: session) : []
+    }
+
+    /// Moves a session to another agent, carrying its conversation across.
+    ///
+    /// Distinct from `moveSessionToAgent(sessionID:agent:)`, which changes the
+    /// agent and deliberately starts a *fresh* conversation.
+    func handoffSession(sessionID: UUID, to target: AgentKind) async {
+        metadataMonitor.cancel(sessionID)
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        lastOperationError = nil
+        let source = sessions[index].agent
+
+        do {
+            let plan = try handoffService.plan(for: sessions[index], to: target)
+            let moved = try await handoffService.perform(plan)
+            handoffProbation.insert(sessionID)
+            sessions[index] = transition(moved, to: .working, origin: .handoff(from: source, to: target))
+            try repository.save(mergingLiveScrollback(sessions[index]))
+            onAgentChanged?(sessionID)
+            scheduleHandoffSettlement(sessionID: sessionID)
+            scheduleTitleSync(forSessionID: sessionID)
+        } catch {
+            lastOperationError = error.localizedDescription
+        }
+    }
+
+    /// The source transcript is kept until the destination has stayed alive
+    /// long enough to have actually read it.
+    private func scheduleHandoffSettlement(sessionID: UUID) {
+        let window = handoffService.probationWindow
+        Task { [weak self] in
+            try? await Task.sleep(for: window)
+            self?.settleHandoff(sessionID: sessionID)
+        }
+    }
+
+    private func settleHandoff(sessionID: UUID) {
+        guard handoffProbation.remove(sessionID) != nil,
+              let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let settled = handoffService.finalize(sessions[index])
+        sessions[index] = settled
+        try? repository.save(mergingLiveScrollback(settled))
+    }
+
+    /// A destination that died inside its probation window goes back to the
+    /// agent it came from, onto the transcript that was never deleted.
+    ///
+    /// This must run *before* the generic resume self-heal in
+    /// `handleProcessEvent`: that path clears `agentSessionID` and relaunches
+    /// with a blank context, which after a handoff would throw away the very
+    /// history the move existed to preserve.
+    private func handleHandoffTermination(sessionID: UUID, exitCode: Int32) async {
+        handoffProbation.remove(sessionID)
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+
+        guard exitCode != 0 else {
+            // A clean exit is a session that finished, not a move that failed.
+            let settled = handoffService.finalize(sessions[index])
+            sessions[index] = settled
+            try? repository.save(mergingLiveScrollback(settled))
+            applyObservedStatus(.readyForReview, origin: .processExit(code: exitCode), toSessionID: sessionID)
+            return
+        }
+
+        let attempted = sessions[index].agent
+        do {
+            let restored = try await handoffService.rollback(sessions[index])
+            sessions[index] = transition(restored, to: .working, origin: .handoffRollback)
+            try repository.save(mergingLiveScrollback(sessions[index]))
+            onAgentChanged?(sessionID)
+            lastOperationError = "\(attempted.displayName) did not start, so the session was returned to \(restored.agent.displayName) with its conversation intact."
+        } catch {
+            lastOperationError = "The handoff failed and could not be undone: \(error.localizedDescription)"
+            applyObservedStatus(.crashed, origin: .processExit(code: exitCode), toSessionID: sessionID)
+        }
+    }
+
     func reattachSession(sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         do {
@@ -1097,6 +1195,10 @@ final class AppStore {
     private func handleProcessEvent(_ event: SessionProcessManager.SessionProcessEvent) {
         switch event {
         case let .terminated(sessionID, exitCode):
+            if handoffProbation.contains(sessionID) {
+                Task { await handleHandoffTermination(sessionID: sessionID, exitCode: exitCode) }
+                return
+            }
             if exitCode != 0,
                let index = sessions.firstIndex(where: { $0.id == sessionID }),
                sessions[index].agent != .antigravity,

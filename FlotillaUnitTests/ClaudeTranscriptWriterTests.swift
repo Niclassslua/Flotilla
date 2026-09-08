@@ -26,16 +26,16 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    private func write(_ entries: [CanonicalEntry]) throws -> [[String: Any]] {
-        let handle = try codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+    private func write(_ entries: [CanonicalEntry]) async throws -> [[String: Any]] {
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
         let url = try XCTUnwrap(handle.transcriptURL)
         return try ClaudeTranscriptCodec.lines(of: url).compactMap { ClaudeTranscriptCodec.decodeObject($0) }
     }
 
     // MARK: - Structure
 
-    func testWritesLeadingPermissionModeRecordAndNamesTheFileBySessionID() throws {
-        let handle = try codec.writeNative(
+    func testWritesLeadingPermissionModeRecordAndNamesTheFileBySessionID() async throws {
+        let handle = try await codec.writeNative(
             [.userMessage(text: "hi", timestamp: Self.epoch)],
             workingDirectory: workingDirectory,
             sessionID: sessionID
@@ -51,8 +51,8 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
 
     /// Claude refuses a transcript whose chain is broken, so every
     /// conversational record must point at the one before it.
-    func testParentChainIsUnbrokenAndStartsAtNull() throws {
-        let records = try write([
+    func testParentChainIsUnbrokenAndStartsAtNull() async throws {
+        let records = try await write([
             .userMessage(text: "one", timestamp: Self.epoch),
             .assistantMessage(text: "two", timestamp: Self.epoch),
             .userMessage(text: "three", timestamp: Self.epoch)
@@ -70,8 +70,8 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
         }
     }
 
-    func testAssistantTextAndToolCallsCoalesceIntoOneRecord() throws {
-        let records = try write([
+    func testAssistantTextAndToolCallsCoalesceIntoOneRecord() async throws {
+        let records = try await write([
             .assistantMessage(text: "looking", timestamp: Self.epoch),
             .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls"}"#.utf8), timestamp: Self.epoch),
             .toolUse(id: "call_2", tool: "Read", input: Data(#"{"path":"a.txt"}"#.utf8), timestamp: Self.epoch)
@@ -91,8 +91,8 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
 
     /// Tool results and the user's next message are one turn. Splitting them
     /// would put an empty user turn between the results and the reply.
-    func testToolResultsAndAFollowingUserMessageShareOneRecord() throws {
-        let records = try write([
+    func testToolResultsAndAFollowingUserMessageShareOneRecord() async throws {
+        let records = try await write([
             .toolResult(toolUseID: "call_1", output: "file.txt", isError: false, timestamp: Self.epoch),
             .toolResult(toolUseID: "call_2", output: "boom", isError: true, timestamp: Self.epoch),
             .userMessage(text: "now fix it", timestamp: Self.epoch)
@@ -108,8 +108,8 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
         XCTAssertEqual(blocks[1]["is_error"] as? Bool, true)
     }
 
-    func testSystemNotesAreWrittenOutsideTheParentChain() throws {
-        let records = try write([
+    func testSystemNotesAreWrittenOutsideTheParentChain() async throws {
+        let records = try await write([
             .userMessage(text: "one", timestamp: Self.epoch),
             .systemNote(text: "a notice", timestamp: Self.epoch),
             .userMessage(text: "two", timestamp: Self.epoch)
@@ -124,8 +124,8 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
         XCTAssertEqual(users[1]["parentUuid"] as? String, users[0]["uuid"] as? String)
     }
 
-    func testHandoffMarkerIsNotWritten() throws {
-        let records = try write([
+    func testHandoffMarkerIsNotWritten() async throws {
+        let records = try await write([
             .userMessage(text: "one", timestamp: Self.epoch),
             .handoffMarker(from: .codexCLI, to: .claudeCode, reason: "user-requested", timestamp: Self.epoch)
         ])
@@ -136,7 +136,7 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
 
     // MARK: - Round trip
 
-    func testRoundTripsItsOwnOutput() throws {
+    func testRoundTripsItsOwnOutput() async throws {
         let entries: [CanonicalEntry] = [
             .userMessage(text: "list the files", timestamp: Self.epoch),
             .assistantMessage(text: "looking", timestamp: Self.epoch),
@@ -145,7 +145,7 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
             .userMessage(text: "thanks", timestamp: Self.epoch)
         ]
 
-        let handle = try codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
+        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
         let recovered = try codec.readNative(at: XCTUnwrap(handle.transcriptURL))
 
         XCTAssertEqual(recovered, entries)
@@ -154,8 +154,8 @@ final class ClaudeTranscriptWriterTests: XCTestCase {
 
     // MARK: - Move-out
 
-    func testRemoveNativeStateClearsTheTranscriptAndItsSidecars() throws {
-        let handle = try codec.writeNative(
+    func testRemoveNativeStateClearsTheTranscriptAndItsSidecars() async throws {
+        let handle = try await codec.writeNative(
             [.userMessage(text: "hi", timestamp: Self.epoch)],
             workingDirectory: workingDirectory,
             sessionID: sessionID
