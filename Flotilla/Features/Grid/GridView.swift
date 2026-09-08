@@ -17,6 +17,7 @@ struct GridView: View {
     let terminalManager: TerminalManager
     @Binding var activeSessionID: UUID?
     let openSession: (UUID) -> Void
+    let onCreateSession: () -> Void
     /// What subset of the fleet this grid draws from. Shared with Board and
     /// Focus, so switching presentation changes how the fleet is shown and
     /// never which sessions are in it — see `SessionScope`.
@@ -55,19 +56,18 @@ struct GridView: View {
                 // Names the narrowing that produced the emptiness — "no
                 // sessions" is unhelpful when the answer is that this smart
                 // list happens to be empty right now.
-                ContentUnavailableView(
-                    scope.isEverything ? "No Live Sessions" : "Nothing in This View",
-                    systemImage: "square.grid.2x2",
-                    description: Text(scope.emptyDescription)
+                emptyState(
+                    title: scope.isEverything ? "Your grid starts here" : "Nothing in this view",
+                    description: scope.isEverything
+                        ? "Launch a coding agent, then bring your sessions together in one view."
+                        : scope.emptyDescription,
+                    showsCreateAction: scope.isEverything
                 )
-                .accessibilityIdentifier("GridEmptyState")
             } else if visibleSessions.isEmpty {
-                ContentUnavailableView(
-                    "No Sessions in the Grid",
-                    systemImage: "square.grid.2x2",
-                    description: Text("Select sessions from the sidebar, or add as many as fit \(dimensions.label).")
+                emptyState(
+                    title: "No sessions in the grid",
+                    description: "Select sessions from the sidebar, or add as many as fit \(dimensions.label)."
                 )
-                .accessibilityIdentifier("GridEmptyState")
             } else {
                 grid
                     .accessibilityIdentifier("GridView")
@@ -94,6 +94,57 @@ struct GridView: View {
                 }
             )
         }
+    }
+
+    private func emptyState(
+        title: String,
+        description: String,
+        showsCreateAction: Bool = false
+    ) -> some View {
+        VStack(spacing: FlotillaSpacing.xLarge) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(FlotillaColors.accent)
+                .frame(width: 64, height: 64)
+                .background(
+                    FlotillaColors.accent.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: FlotillaRadius.panel)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: FlotillaRadius.panel)
+                        .strokeBorder(FlotillaColors.accent.opacity(0.18), lineWidth: 1)
+                }
+                .accessibilityHidden(true)
+
+            VStack(spacing: FlotillaSpacing.small) {
+                Text(title)
+                    .font(FlotillaTypography.title)
+                    .tracking(FlotillaTypography.Tracking.tight)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                Text(description)
+                    .font(FlotillaTypography.body)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .lineSpacing(3)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 320)
+
+            if showsCreateAction {
+                Button(action: onCreateSession) {
+                    Label("New Session", systemImage: "plus")
+                        .font(FlotillaTypography.callout.weight(.semibold))
+                        .padding(.horizontal, FlotillaSpacing.small)
+                        .frame(minHeight: 32)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
+                .controlSize(.large)
+                .accessibilityIdentifier("GridEmptyState.NewSession")
+            }
+        }
+        .padding(FlotillaSpacing.xxLarge)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("GridEmptyState")
     }
 
     private var grid: some View {

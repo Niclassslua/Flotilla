@@ -80,6 +80,7 @@ struct DetailColumn: View {
                     terminalManager: terminalManager,
                     activeSessionID: $activeGridSessionID,
                     openSession: onOpenSession,
+                    onCreateSession: onCreateSession,
                     scope: navigator.sessionScope,
                     settingsViewModel: settingsViewModel
                 )
