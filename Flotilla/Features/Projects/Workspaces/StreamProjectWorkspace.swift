@@ -16,9 +16,17 @@ struct StreamProjectWorkspace: View {
     @Environment(\.workspaceNavigator) private var navigator
     let context: ProjectWorkspaceContext
 
-    @State private var pulse: ProjectPulse = .empty
-    @State private var worktrees: [GitWorktree] = []
-    @State private var snapshots: [URL: WorktreeSnapshot] = [:]
+    @State private var viewModel: ProjectOverviewViewModel
+
+    init(context: ProjectWorkspaceContext) {
+        self.context = context
+        _viewModel = State(initialValue: ProjectOverviewViewModel(gitService: context.store.gitService))
+    }
+
+    private var pulse: ProjectPulse { viewModel.pulse }
+    private var worktrees: [GitWorktree] { viewModel.worktrees }
+    private var snapshots: [URL: WorktreeSnapshot] { viewModel.snapshots }
+    private var timelineElements: [TimelineElement] { viewModel.timelineElements }
     @State private var showAllWorktrees = false
     @State private var worktreePendingDeletion: GitWorktree?
     @State private var selectedWeekDay: Int?
@@ -30,7 +38,6 @@ struct StreamProjectWorkspace: View {
     private let columnGap: CGFloat = 14
     private let readingWidth: CGFloat = 820
     private let contextWidth: CGFloat = 344
-    private let commitLimit = 6
     private let worktreePreview = 12
 
     private var project: Project { context.project }
@@ -69,22 +76,12 @@ struct StreamProjectWorkspace: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FlotillaColors.canvas)
-        .task(id: project.id) {
-            pulse = await ProjectPulse.load(root: project.rootPath, git: context.store.gitService)
-            await refreshWorktrees()
+        .onChange(of: context.sessions, initial: true) { _, sessions in
+            viewModel.sessions = sessions
         }
-    }
-
-    /// Re-reads the worktree list and each worktree's working-copy state. Run
-    /// on appearance and after a deletion, so the rail never shows a checkout
-    /// that is no longer on disk.
-    private func refreshWorktrees() async {
-        let list = (try? await context.store.gitService.listWorktrees(at: project.rootPath)) ?? []
-        worktrees = list
-        snapshots = await WorktreeSnapshot.loadAll(
-            paths: list.map(\.path),
-            git: context.store.gitService
-        )
+        .task(id: project.id) {
+            await viewModel.load(root: project.rootPath)
+        }
     }
 
     // MARK: - Masthead
@@ -311,7 +308,7 @@ struct StreamProjectWorkspace: View {
                 branch: worktree.branch,
                 deleteBranch: deleteBranch
             )
-            await refreshWorktrees()
+            await viewModel.refreshWorktrees()
         }
     }
 
@@ -813,78 +810,6 @@ struct StreamProjectWorkspace: View {
         .padding(FlotillaSpacing.xxLarge)
     }
 
-    // MARK: - Data
-
-    private var attentionSessions: [Session] {
-        context.sessions
-            .filter { $0.status == .waitingForInput }
-            .sorted { $0.lastActiveAt > $1.lastActiveAt }
-    }
-
-    /// Non-attention sessions and recent commits, newest first, bucketed by day.
-    private var dayGroups: [(label: String, items: [StreamEntry])] {
-        let attentionIDs = Set(attentionSessions.map(\.id))
-        let sessionEntries = context.sessions
-            .filter { !attentionIDs.contains($0.id) }
-            .map { StreamEntry(session: $0) }
-        let commitEntries = pulse.recentCommits.prefix(commitLimit).map { StreamEntry(commit: $0) }
-
-        let merged = (sessionEntries + commitEntries).sorted { $0.date > $1.date }
-        guard !merged.isEmpty else { return [] }
-
-        let calendar = Calendar.current
-        var order: [String] = []
-        var buckets: [String: [StreamEntry]] = [:]
-        for entry in merged {
-            let key = Self.dayLabel(for: entry.date, calendar: calendar)
-            if buckets[key] == nil { order.append(key) }
-            buckets[key, default: []].append(entry)
-        }
-        return order.map { ($0, buckets[$0] ?? []) }
-    }
-
-    private var earlierCommitCount: Int {
-        max(0, pulse.recentCommits.count - commitLimit)
-    }
-
-    /// The flattened timeline: day/attention bands interleaved with entry rows,
-    /// then an "earlier commits" footer. One list so the spine is continuous
-    /// within a day and breaks cleanly at each band.
-    private var timelineElements: [TimelineElement] {
-        var out: [TimelineElement] = []
-
-        if !attentionSessions.isEmpty {
-            out.append(.band("Needs you"))
-            for session in attentionSessions {
-                out.append(.entry(StreamEntry(session: session), isLast: false))
-            }
-        }
-
-        let groups = dayGroups
-        for (groupIndex, group) in groups.enumerated() {
-            out.append(.band(group.label))
-            for (rowIndex, entry) in group.items.enumerated() {
-                let lastOverall = groupIndex == groups.count - 1 && rowIndex == group.items.count - 1
-                out.append(.entry(entry, isLast: lastOverall && earlierCommitCount == 0))
-            }
-        }
-
-        if earlierCommitCount > 0 { out.append(.footer(earlierCommitCount)) }
-        return out
-    }
-
-    private static func dayLabel(for date: Date, calendar: Calendar) -> String {
-        if calendar.isDateInToday(date) { return "Today" }
-        if calendar.isDateInYesterday(date) { return "Yesterday" }
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: Date())).day ?? 0
-        if days < 7 {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE"
-            return formatter.string(from: date)
-        }
-        return "Earlier"
-    }
-
     // MARK: - Actions
 
     private func activate(_ entry: StreamEntry) {
@@ -905,58 +830,6 @@ struct StreamProjectWorkspace: View {
         navigator.setProjectGitSubTab(.commits, for: project.id)
         navigator.projectGraphViewModel(for: root, gitService: context.store.gitService).selectedSHA = commit.sha
         withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(.git, for: project.id) }
-    }
-}
-
-// MARK: - Timeline model
-
-private enum TimelineElement: Identifiable {
-    case band(String)
-    case entry(StreamEntry, isLast: Bool)
-    case footer(Int)
-
-    var id: String {
-        switch self {
-        case .band(let label): return "band-\(label)"
-        case .entry(let entry, _): return entry.id
-        case .footer: return "footer"
-        }
-    }
-}
-
-private struct StreamEntry: Identifiable {
-    enum Payload {
-        case session(Session)
-        case commit(GitCommit)
-    }
-
-    let id: String
-    let date: Date
-    let payload: Payload
-    var isAttention = false
-
-    init(session: Session) {
-        id = "s-\(session.id)"
-        date = session.lastActiveAt
-        payload = .session(session)
-        isAttention = session.status == .waitingForInput
-    }
-
-    init(commit: GitCommit) {
-        id = "c-\(commit.sha)"
-        date = commit.authorDate
-        payload = .commit(commit)
-    }
-
-    var timeLabel: String { HomeTimestamp.compact(date) }
-
-    /// Sessions that are live, waiting, or awaiting review get the emphasised
-    /// row treatment — bigger title, haloed node, more air.
-    var isHero: Bool {
-        guard case .session(let session) = payload else { return false }
-        return session.status == .working
-            || session.status == .waitingForInput
-            || session.status == .readyForReview
     }
 }
 

@@ -6,17 +6,6 @@ import PersistenceKit
 import SettingsKit
 @testable import Flotilla
 
-private final class RecordingProcessFactory: PTYProcessCreating, @unchecked Sendable {
-    private(set) var processes: [MockPTYProcess] = []
-
-    func makeProcess() -> any PTYProcessProtocol {
-        let process = MockPTYProcess()
-        process.echoInputToOutput = true
-        processes.append(process)
-        return process
-    }
-}
-
 @MainActor
 final class KanbanPersistenceTests: XCTestCase {
     func testKanbanBoardRoundTrip() throws {

@@ -314,6 +314,10 @@ private final class StubWorkspaceFileService: WorkspaceFileServicing, @unchecked
     private(set) var instructionFilesCallCount = 0
     private(set) var writtenText: [String] = []
 
+    func metadata(at url: URL) async -> WorkspaceFileMetadata {
+        WorkspaceFileMetadata(size: nil, modificationDate: nil)
+    }
+
     func fileTree(at root: URL) async throws -> [FileNode] { [] }
 
     func instructionFiles(in root: URL) async throws -> [RuleFileEntry] {

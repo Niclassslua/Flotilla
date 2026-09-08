@@ -1,4 +1,5 @@
 import Foundation
+import ProcessKit
 
 /// PR creation via the GitHub CLI. Kept separate from `GitServiceProtocol`:
 /// `gh` is a distinct binary with distinct availability (see
@@ -21,7 +22,7 @@ public struct GhService: GhServiceProtocol {
     private let runner: CommandRunning
     private let ghExecutable: URL
 
-    public init(ghExecutable: URL, runner: CommandRunning = ProcessCommandRunner()) {
+    public init(ghExecutable: URL, runner: CommandRunning = ProcessCommandRunner(environmentOverrides: ["GIT_TERMINAL_PROMPT": "0"])) {
         self.ghExecutable = ghExecutable
         self.runner = runner
     }

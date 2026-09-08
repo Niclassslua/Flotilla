@@ -12,10 +12,14 @@ import SettingsKit
 final class AppStore {
     private(set) var projects: [Project] = []
     private(set) var sessions: [Session] = []
-    private(set) var kanbanBoards: [KanbanBoard] = []
+    let kanbanStore: KanbanStore
+    var kanbanBoards: [KanbanBoard] { kanbanStore.kanbanBoards }
     var selectedSessionID: UUID?
     var selectedProjectID: UUID?
-    var selectedKanbanBoardID: UUID?
+    var selectedKanbanBoardID: UUID? {
+        get { kanbanStore.selectedKanbanBoardID }
+        set { kanbanStore.selectedKanbanBoardID = newValue }
+    }
     var lastCreationError: String?
     var lastOperationError: String?
     /// Called once per clean process exit (never on `.crashed`), after the
@@ -40,28 +44,12 @@ final class AppStore {
     private let settingsProvider: () -> AppSettings
     private let worktreePlanner = WorktreePlanner()
     private let statusMachine = SessionStatusMachine()
-    private var scrollbackSaveTasks: [UUID: Task<Void, Never>] = [:]
-    private static let maximumScrollbackBytes = 256 * 1_024  // 256 KB ring buffer
-    private static let scrollbackTrimSlack = 64 * 1_024
-    private static let scrollbackSaveDebounce = Duration.milliseconds(2000) // 2 s
+    private let scrollbackStore = SessionScrollbackStore()
+    private let metadataMonitor: SessionMetadataMonitor
     @ObservationIgnored
     private var sessionResumeStarts: [UUID: Date] = [:]
     @ObservationIgnored
     private var sessionResumeRetried: Set<UUID> = []
-
-    /// Live terminal output, kept out of the observed `sessions` array.
-    ///
-    /// `sessions` is an `@Observable`-tracked property read by most of the
-    /// view hierarchy (session lists, grid tiles, activity strips). PTY
-    /// output arrives many times per rendered frame from a chatty TUI, and
-    /// mutating `sessions` on every chunk used to re-evaluate that entire
-    /// hierarchy at PTY frequency instead of display frequency — the root
-    /// cause of the terminal's dropped frame rate. `terminalScrollback` on a
-    /// `Session` remains the source of truth for what gets persisted; this
-    /// dictionary is the fast, unobserved path terminal output actually
-    /// flows through, merged back into a `Session` only at save time.
-    @ObservationIgnored
-    private var liveScrollback: [UUID: Data] = [:]
 
     init(
         repository: SessionRepository,
@@ -69,9 +57,12 @@ final class AppStore {
         ghService: GhServiceProtocol? = nil,
         processManager: SessionProcessManager,
         worktreeBaseDirectoryProvider: @escaping () -> URL,
-        settingsProvider: @escaping () -> AppSettings = { AppSettings() }
+        settingsProvider: @escaping () -> AppSettings = { AppSettings() },
+        metadataMonitor: SessionMetadataMonitor = SessionMetadataMonitor()
     ) {
+        self.metadataMonitor = metadataMonitor
         self.repository = repository
+        self.kanbanStore = KanbanStore(repository: repository)
         self.gitService = gitService
         self.ghService = ghService
         self.diffStatStore = DiffStatStore(gitService: gitService)
@@ -81,7 +72,7 @@ final class AppStore {
         processManager.eventHandler = { [weak self] event in
             self?.handleProcessEvent(event)
         }
-        reload()
+        if reload() { restoreSessions() }
         loadKanbanBoards()
     }
 
@@ -108,21 +99,23 @@ final class AppStore {
         return directory
     }
 
-    func reload() {
+    @discardableResult
+    func reload() -> Bool {
         do {
             let loaded = try repository.loadAll()
             projects = loaded.projects
             sessions = loaded.sessions
-            for session in loaded.sessions where liveScrollback[session.id] == nil {
-                liveScrollback[session.id] = session.terminalScrollback
-            }
-            // Reap orphaned tmux sessions left behind by crashes or external deletions
-            let activeIDs = Set(loaded.sessions.map(\.id))
-            processManager.reapOrphanTmuxSessions(knownSessionIDs: activeIDs)
+            scrollbackStore.seed(loaded.sessions)
         } catch {
             lastOperationError = "Session data could not be loaded: \(error.localizedDescription)"
-            return
+            return false
         }
+        return true
+    }
+
+    /// Launch-time recovery only. Refreshing saved data never starts processes.
+    private func restoreSessions() {
+        processManager.reapOrphanTmuxSessions(knownSessionIDs: Set(sessions.map(\.id)))
 
         // One-time migration: sessions created before the fix above have the
         // raw home directory persisted as their working directory. Redirect
@@ -176,82 +169,37 @@ final class AppStore {
     }
 
     func createKanbanBoard(_ board: KanbanBoard) throws {
-        try repository.saveKanbanBoard(board)
+        try kanbanStore.create(board)
     }
 
     func loadKanbanBoards() {
-        do {
-            kanbanBoards = try repository.loadKanbanBoards()
-            // Ensure we have a global board
-            if !kanbanBoards.contains(where: { $0.projectID == nil }) {
-                let globalBoard = try repository.getOrCreateDefaultKanbanBoard(forProject: nil, name: "All Projects")
-                kanbanBoards.append(globalBoard)
-            }
-            // Ensure each project has a board
-            for project in projects {
-                if !kanbanBoards.contains(where: { $0.projectID == project.id }) {
-                    let board = try repository.getOrCreateDefaultKanbanBoard(forProject: project.id, name: project.name)
-                    kanbanBoards.append(board)
-                }
-            }
-            // Select first board if none selected
-            if selectedKanbanBoardID == nil {
-                selectedKanbanBoardID = kanbanBoards.first?.id
-            }
-        } catch {
-            lastOperationError = "Kanban boards could not be loaded: \(error.localizedDescription)"
-        }
+        performBoardOperation { kanbanStore.load(projects: projects) }
     }
 
-    var selectedKanbanBoard: KanbanBoard? {
-        kanbanBoards.first { $0.id == selectedKanbanBoardID }
-    }
+    var selectedKanbanBoard: KanbanBoard? { kanbanStore.selectedKanbanBoard }
 
-    func selectKanbanBoard(_ boardID: UUID) {
-        selectedKanbanBoardID = boardID
-    }
+    func selectKanbanBoard(_ boardID: UUID) { kanbanStore.selectKanbanBoard(boardID) }
 
     func selectKanbanBoard(forProject projectID: UUID?) {
-        if let board = kanbanBoards.first(where: { $0.projectID == projectID }) {
-            selectedKanbanBoardID = board.id
-        }
+        kanbanStore.selectKanbanBoard(forProject: projectID)
     }
 
     func saveKanbanBoard(_ board: KanbanBoard) {
-        do {
-            try repository.saveKanbanBoard(board)
-            if let index = kanbanBoards.firstIndex(where: { $0.id == board.id }) {
-                kanbanBoards[index] = board
-            }
-        } catch {
-            lastOperationError = "Kanban board could not be saved: \(error.localizedDescription)"
-        }
+        performBoardOperation { kanbanStore.save(board) }
     }
 
     func updateKanbanBoardColumnMode(_ mode: KanbanColumnMode) {
-        guard var board = selectedKanbanBoard else { return }
-        board.columnMode = mode
-        // Reset custom columns based on new mode
-        switch mode {
-        case .status:
-            board.customColumns = KanbanColumn.defaultStatusColumns()
-        case .agents:
-            board.customColumns = KanbanColumn.defaultAgentColumns()
-        case .workflow:
-            board.customColumns = KanbanColumn.defaultWorkflowColumns()
-        case .custom:
-            // Keep existing custom columns
-            break
-        }
-        board.updatedAt = Date()
-        saveKanbanBoard(board)
+        performBoardOperation { kanbanStore.updateKanbanBoardColumnMode(mode) }
     }
 
     func updateKanbanCardOrder(_ cardOrder: [String: Int]) {
-        guard var board = selectedKanbanBoard else { return }
-        board.cardOrder = cardOrder
-        board.updatedAt = Date()
-        saveKanbanBoard(board)
+        performBoardOperation { kanbanStore.updateKanbanCardOrder(cardOrder) }
+    }
+
+    private func performBoardOperation(_ operation: () -> Void) {
+        kanbanStore.lastOperationError = nil
+        operation()
+        if let error = kanbanStore.lastOperationError { lastOperationError = error }
     }
 
     func moveSessionToColumn(sessionID: UUID, columnID: UUID) {
@@ -323,42 +271,11 @@ final class AppStore {
     }
 
     func getColumnsForBoard(_ board: KanbanBoard) -> [KanbanColumn] {
-        switch board.columnMode {
-        case .status:
-            return KanbanColumn.defaultStatusColumns()
-        case .agents:
-            return KanbanColumn.defaultAgentColumns()
-        case .workflow:
-            return KanbanColumn.defaultWorkflowColumns()
-        case .custom:
-            return board.customColumns.sorted { $0.order < $1.order }
-        }
+        kanbanStore.getColumnsForBoard(board)
     }
 
     func getSessionsForColumn(_ column: KanbanColumn, board: KanbanBoard) -> [Session] {
-        let relevantSessions: [Session]
-        if let projectID = board.projectID {
-            relevantSessions = sessions.filter { $0.projectID == projectID }
-        } else {
-            relevantSessions = sessions
-        }
-
-        return relevantSessions.filter { session in
-            switch board.columnMode {
-            case .status:
-                return column.statusFilter == session.status
-            case .agents:
-                return column.agentFilter == session.agent
-            case .workflow:
-                return column.workflowStageFilter == session.workflowStage
-            case .custom:
-                return column.id == session.kanbanColumnID
-            }
-        }.sorted { lhs, rhs in
-            let lhsOrder = board.cardOrder[lhs.id.uuidString] ?? 0
-            let rhsOrder = board.cardOrder[rhs.id.uuidString] ?? 0
-            return lhsOrder < rhsOrder
-        }
+        kanbanStore.getSessionsForColumn(column, board: board, sessions: sessions)
     }
 
     /// The live process backing a session, if one has been started.
@@ -420,20 +337,17 @@ final class AppStore {
     /// The terminal output a session's renderer should replay, preferring
     /// the live buffer over whatever `terminalScrollback` last persisted.
     func scrollback(for sessionID: UUID) -> Data {
-        liveScrollback[sessionID] ?? sessions.first(where: { $0.id == sessionID })?.terminalScrollback ?? Data()
+        scrollbackStore.buffer(for: sessionID) ?? sessions.first(where: { $0.id == sessionID })?.terminalScrollback ?? Data()
     }
 
     /// Returns `session` with its `terminalScrollback` replaced by the live
     /// buffer, if any. Every `repository.save` of a session pulled from
     /// `sessions` must go through this — `sessions[index].terminalScrollback`
-    /// is not kept current (see `liveScrollback`), so saving it unmerged
+    /// is not kept current (see `SessionScrollbackStore`), so saving it unmerged
     /// would overwrite the persisted history with a stale, possibly empty,
     /// snapshot.
     private func mergingLiveScrollback(_ session: Session) -> Session {
-        guard let live = liveScrollback[session.id] else { return session }
-        var session = session
-        session.terminalScrollback = live
-        return session
+        scrollbackStore.merging(session)
     }
 
     /// `SessionStatusMachine.transition` with a trace line attached, so every
@@ -531,13 +445,10 @@ final class AppStore {
     /// auto-generated session title and session ID, applying both if found.
     func syncAgentSessionMetadata(forSessionID sessionID: UUID) async {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
-        // Only look for native agent sessions active around or after this session was launched
-        let searchSince = session.createdAt.addingTimeInterval(-30)
-        if let discovered = await AgentSessionProviderRegistry.default.fetchLatestSession(
-            for: session.agent,
-            workingDirectory: session.workingDirectory,
-            since: searchSince
-        ) {
+        let generation = metadataMonitor.generation(for: sessionID)
+        if let discovered = await metadataMonitor.discover(session) {
+            guard metadataMonitor.isCurrent(generation, for: sessionID),
+                  sessions.contains(where: { $0.id == sessionID }) else { return }
             // Pin the discovered native session ID before title guards
             if let index = sessions.firstIndex(where: { $0.id == sessionID }),
                sessions[index].agentSessionID == nil || sessions[index].agentSessionID?.isEmpty == true {
@@ -564,41 +475,12 @@ final class AppStore {
         await syncAgentSessionMetadata(forSessionID: sessionID)
     }
 
-    /// Spawns a lightweight background retry loop that checks the agent's
-    /// native session storage to pick up auto-generated titles and session
-    /// IDs as soon as the agent produces them.
-    ///
-    /// Starts with tight intervals (1s, 2.5s, 5s, 9s, 15s, 25s) to catch the
-    /// common case fast, then keeps polling every `steadyStateInterval`
-    /// while the session stays active. The steady-state tail matters: an
-    /// agent that pauses on an interactive tool-permission prompt (e.g. a
-    /// CLI agent asking to approve a shell command) can take far longer than
-    /// 25s for a human to notice and respond, and a fixed short schedule
-    /// gives up before the agent ever writes its title. Bounded by
-    /// `giveUpAfter` so an abandoned-but-still-open session doesn't poll
-    /// forever.
     func scheduleTitleSync(forSessionID sessionID: UUID) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let burstDelays: [TimeInterval] = [1.0, 2.5, 5.0, 9.0, 15.0, 25.0]
-            let steadyStateInterval: TimeInterval = 20.0
-            let giveUpAfter: TimeInterval = 1800
-            var elapsed: TimeInterval = 0
-
-            for delay in burstDelays {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                elapsed += delay
-                guard self.isSessionActive(sessionID) else { return }
-                await self.syncAgentSessionMetadata(forSessionID: sessionID)
-            }
-
-            while elapsed < giveUpAfter {
-                try? await Task.sleep(nanoseconds: UInt64(steadyStateInterval * 1_000_000_000))
-                elapsed += steadyStateInterval
-                guard self.isSessionActive(sessionID) else { return }
-                await self.syncAgentSessionMetadata(forSessionID: sessionID)
-            }
-        }
+        metadataMonitor.startDiscovery(for: sessionID, isActive: { [weak self] in
+            self?.isSessionActive(sessionID) ?? false
+        }, refresh: { [weak self] in
+            await self?.syncAgentSessionMetadata(forSessionID: sessionID)
+        })
     }
 
     /// Whether a session is still in a state where its agent process is
@@ -648,63 +530,18 @@ final class AppStore {
 
     // MARK: - Agent self-report
 
-    /// Fallback-creating an app-managed worktree only kicks in once the
-    /// agent has had this long to write its own descriptor. A shorter
-    /// window races an interactive tool-permission prompt (e.g. a CLI
-    /// agent asking a human to approve the `git worktree add` command) —
-    /// the human can easily take longer than a few seconds to notice and
-    /// respond, and firing the fallback mid-approval leaves the session
-    /// with a spurious duplicate worktree.
-    /// `var`, not `let`: tests override this to a short interval so they
-    /// don't have to sleep for real minutes to exercise the fallback path.
-    static var selfReportFallbackAfter: Duration = .seconds(180)
-    /// Absolute cap on how long a self-report poll loop runs for one
-    /// session, so an abandoned-but-still-open session doesn't poll
-    /// forever in the background. `var` for the same test-override reason.
-    static var selfReportGiveUpAfter: Duration = .seconds(1800)
-    /// `var` for the same test-override reason.
-    static var selfReportPollChunk: Duration = .seconds(20)
-
-    /// Polls for the agent's self-report descriptor file and applies any
-    /// metadata it contains (title, worktree branch/path) to the session.
-    ///
-    /// Keeps polling in `selfReportPollChunk` increments for as long as the
-    /// session is still active. If `wantsWorktree` and the agent hasn't
-    /// reported in by `selfReportFallbackAfter`, an app-managed worktree is
-    /// created as a stopgap — but polling continues afterward, so if the
-    /// agent's own descriptor arrives later (e.g. once a human finally
-    /// approves a pending tool-permission prompt) it still wins: the
-    /// stopgap worktree is discarded and the agent-reported one takes over.
-    private func awaitAgentSelfReport(
-        sessionID: UUID,
-        descriptorPath: URL,
-        wantsWorktree: Bool,
-        projectFolder: URL?
-    ) async {
-        let supportDirectory = TmuxSessionWrapping.defaultSupportDirectory()
-        var elapsed: Duration = .zero
-        var fallbackWorktree: WorktreeInfo?
-
-        while elapsed < Self.selfReportGiveUpAfter {
-            if let descriptor = await AgentSelfReportCoordinator.waitForDescriptor(
-                sessionID: sessionID,
-                supportDirectory: supportDirectory,
-                timeout: Self.selfReportPollChunk
-            ) {
-                await applySelfReport(descriptor, sessionID: sessionID, projectFolder: projectFolder, replacing: fallbackWorktree)
-                return
+    private func monitorSelfReport(sessionID: UUID, descriptorPath: URL, wantsWorktree: Bool, projectFolder: URL?) {
+        metadataMonitor.startSelfReport(
+            for: sessionID, path: descriptorPath, wantsWorktree: wantsWorktree,
+            exists: { [weak self] in self?.sessions.contains(where: { $0.id == sessionID }) ?? false },
+            isActive: { [weak self] in self?.isSessionActive(sessionID) ?? false },
+            fallback: { [weak self] in
+                await self?.fallBackToAppManagedWorktree(sessionID: sessionID, projectFolder: projectFolder)
+            },
+            apply: { [weak self] descriptor, fallback in
+                await self?.applySelfReport(descriptor, sessionID: sessionID, projectFolder: projectFolder, replacing: fallback)
             }
-            elapsed += Self.selfReportPollChunk
-
-            guard sessions.contains(where: { $0.id == sessionID }) else { return }
-            let isActive = isSessionActive(sessionID)
-
-            if wantsWorktree, fallbackWorktree == nil, elapsed >= Self.selfReportFallbackAfter || !isActive {
-                fallbackWorktree = await fallBackToAppManagedWorktree(sessionID: sessionID, projectFolder: projectFolder)
-            }
-
-            if !isActive { return }
-        }
+        )
     }
 
     /// Applies a (possibly late-arriving) self-report descriptor. When a
@@ -734,7 +571,7 @@ final class AppStore {
             }
         }
 
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard !Task.isCancelled, let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
 
         // Apply title (same guards syncAgentSessionMetadata already applies).
         if let reportedTitle = descriptor.title {
@@ -771,7 +608,7 @@ final class AppStore {
 
     /// Re-runs today's `WorktreePlanner` + `gitService.createWorktree` flow
     /// when the agent hasn't responded to the self-report request within
-    /// `selfReportFallbackAfter`. Returns the worktree it created, so the
+    /// the configured fallback timeout. Returns the worktree it created, so the
     /// caller can discard it later if the agent's own descriptor still
     /// shows up.
     ///
@@ -802,6 +639,10 @@ final class AppStore {
                 worktreePath: worktree.path,
                 baseCheckoutPath: basePath
             )
+            guard !Task.isCancelled, let index = sessions.firstIndex(where: { $0.id == sessionID }) else {
+                try? await gitService.removeWorktree(at: worktree.path, in: basePath, branch: worktree.branch, deleteBranch: true)
+                return nil
+            }
             sessions[index].worktree = worktreeInfo
             sessions[index].workingDirectory = worktree.path
             try repository.save(mergingLiveScrollback(sessions[index]))
@@ -821,25 +662,8 @@ final class AppStore {
     /// the row it's about to persist) or the repository.
     func appendTerminalOutput(_ data: Data, toSessionID sessionID: UUID) {
         guard !data.isEmpty, sessions.contains(where: { $0.id == sessionID }) else { return }
-        // Appended in place, through the dictionary's own storage. Lifting the
-        // `Data` into a local `var` first gives its buffer a second reference,
-        // so the append can never be in-place and copies the whole scrollback
-        // — up to 320 KB — on every flush, on the main actor.
-        liveScrollback[sessionID, default: Data()].append(data)
-        // Trim with slack rather than back down to the cap on every chunk:
-        // turns an O(chunks) sequence of front-removals into an amortized
-        // O(1) one, at the cost of briefly overshooting the cap.
-        if let buffer = liveScrollback[sessionID],
-           buffer.count > Self.maximumScrollbackBytes + Self.scrollbackTrimSlack {
-            // Binding `buffer` here is fine where binding it above was not:
-            // `suffix` allocates a new value either way, so there is no
-            // in-place append for a second reference to spoil.
-            liveScrollback[sessionID] = Data(buffer.suffix(Self.maximumScrollbackBytes))
-        }
-        scrollbackSaveTasks[sessionID]?.cancel()
-        scrollbackSaveTasks[sessionID] = Task { [weak self] in
-            try? await Task.sleep(for: Self.scrollbackSaveDebounce)
-            guard !Task.isCancelled, let self else { return }
+        scrollbackStore.append(data, to: sessionID) { [weak self] in
+            guard let self else { return }
             guard let index = self.sessions.firstIndex(where: { $0.id == sessionID }) else { return }
             let snapshot = self.mergingLiveScrollback(self.sessions[index])
             let repository = self.repository
@@ -863,22 +687,20 @@ final class AppStore {
     /// Immediately flushes all debounced live scrollback buffers to the persistent
     /// repository, cancelling in-flight debounce timers. Called before app termination
     /// to guarantee zero terminal history loss on Cmd+Q.
+    func shutdown() {
+        metadataMonitor.cancelAll()
+        flushLiveScrollback()
+    }
+
     func flushLiveScrollback() {
-        for (_, task) in scrollbackSaveTasks {
-            task.cancel()
-        }
-        scrollbackSaveTasks.removeAll()
-        // One transaction for the whole fleet. This runs on the main thread on
-        // purpose — the app is terminating and the write has to complete before
-        // it does — so the cost of doing it per session was paid directly in
-        // how long the window took to close.
-        let pending = sessions
-            .filter { liveScrollback[$0.id] != nil }
+        scrollbackStore.cancelPendingSaves()
+        let pending = sessions.filter { scrollbackStore.buffer(for: $0.id) != nil }
             .map(mergingLiveScrollback)
         try? repository.save(pending)
     }
 
     func restartSession(sessionID: UUID) {
+        metadataMonitor.cancel(sessionID)
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         lastOperationError = nil
         // Terminate existing process first, then destroy any tmux session
@@ -1036,6 +858,7 @@ final class AppStore {
     ) async {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         lastOperationError = nil
+        metadataMonitor.cancel(sessionID)
 
         processManager.terminate(sessionID: sessionID)
         processManager.killServerSideSession(sessionID: sessionID)
@@ -1061,9 +884,7 @@ final class AppStore {
             return
         }
 
-        scrollbackSaveTasks[sessionID]?.cancel()
-        scrollbackSaveTasks[sessionID] = nil
-        liveScrollback[sessionID] = nil
+        scrollbackStore.remove(sessionID)
 
         if selectedSessionID == sessionID {
             selectedSessionID = nil
@@ -1245,14 +1066,12 @@ final class AppStore {
             // Kick off background polling for the agent's self-report
             // descriptor when either agent-managed feature is active.
             if let selfReportDescriptorPath, (wantsAgentWorktree || wantsAgentTitle) {
-                Task { @MainActor [weak self] in
-                    await self?.awaitAgentSelfReport(
-                        sessionID: sessionID,
-                        descriptorPath: selfReportDescriptorPath,
-                        wantsWorktree: wantsAgentWorktree,
-                        projectFolder: projectFolder
-                    )
-                }
+                monitorSelfReport(
+                    sessionID: sessionID,
+                    descriptorPath: selfReportDescriptorPath,
+                    wantsWorktree: wantsAgentWorktree,
+                    projectFolder: projectFolder
+                )
             }
 
             return session.id

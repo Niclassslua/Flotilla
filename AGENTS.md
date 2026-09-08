@@ -44,12 +44,12 @@ Flotilla/
 │   │   ├── Diff/                  # DiffPanelView, DiffStatBadge, DiffStatStore, CommitDetail
 │   │   ├── CommandPalette/        # CommandPaletteView, CommandPalettePanel
 │   │   ├── Settings/              # SettingsView, SettingsViewModel, Startup warning/checks
-│   │   └── FileBrowser/           # FileBrowserView, FileNode, icon helpers
-│   ├── Services/                  # SessionProcessManager, HookCoordinator, WorkspaceRegistry, ActivityStore
+│   │   └── FileBrowser/           # FileBrowserView, FileBrowserViewModel, WorkspaceFileServicing, icon helpers
+│   ├── Services/                  # SessionProcessManager, SessionMetadataMonitor, SessionScrollbackStore, HookCoordinator, WorkspaceRegistry, ActivityStore
 │   ├── Components/                # StatusBadge, MaterialFileIcon, ProviderLogo, AgentBrand, pickers
 │   └── Resources/                 # Assets.xcassets, MaterialIcons SVG catalog
 ├── docs/                          # Long-form references (provider hooks, UI vocabulary)
-├── FlotillaUnitTests/             # Unit tests (28 test suites)
+├── FlotillaUnitTests/             # Unit tests (77 suites, named after the subsystem they cover)
 ├── FlotillaUITests/               # UI tests
 ├── Packages/                      # 10 local Swift packages
 ├── project.yml                    # XcodeGen specification
@@ -103,9 +103,23 @@ final class AppStore {
 ```
 
 - All state is `@MainActor`-isolated
-- Terminal scrollback uses a 256 KB ring buffer with 2s debounced persistence
 - Process events flow through `processManager.eventHandler` callback
 - Views observe state changes via `@Bindable var store: AppStore`
+
+`AppStore` owns the observable session/project state and is the entry point for
+session commands; work with its own lifetime or storage is delegated to
+collaborators it holds:
+
+| Collaborator | Owns |
+|--------------|------|
+| `SessionScrollbackStore` | The 256 KB scrollback ring buffer and its 2s debounced persistence. Deliberately **not** `@Observable` — PTY output must not invalidate session views |
+| `SessionMetadataMonitor` | Title-discovery and self-report polling tasks, keyed by session ID, with the generation check that rejects a result from a superseded run |
+| `KanbanStore` | Board configuration and its persistence. Board actions that change a *session* still go back through `AppStore` and its traced status-transition wrapper |
+| `DiffStatStore` | Per-session diff statistics |
+
+`reload()` refreshes the persisted snapshot and nothing else. Restarting
+processes is launch-time recovery (`restoreSessions()`), run once from `init`
+— a refresh after session creation must never traverse it.
 
 ### Protocol-Oriented Boundaries
 
@@ -169,9 +183,9 @@ SessionKit (leaf)
 SettingsKit (leaf)
 ProcessKit (leaf)
 DesignSystem (leaf)
-GitKit (leaf)
 
 AgentKit       → SessionKit, SettingsKit, ProcessKit
+GitKit         → ProcessKit
 PersistenceKit → SessionKit, GRDB.swift (external)
 TerminalKit    → ProcessKit, SwiftTerm (external)
 HooksKit       → SessionKit, ProcessKit
@@ -184,8 +198,8 @@ Flotilla (app) → all packages
 | Package | Purpose | External Deps |
 |---------|---------|---------------|
 | **SessionKit** | Domain models (Session, Project, AgentKind, SessionStatus), SessionRepository protocol, SessionStatusMachine, BranchNaming | None |
-| **ProcessKit** | PTY process abstraction (forkpty-backed), PTYProcessProtocol, CommandRunning, StartupEnvironmentChecker, OutputBroadcaster | None |
-| **GitKit** | GitServiceProtocol, GitService (real), MockGitService, WorktreePlanner, diff parsing | None |
+| **ProcessKit** | PTY process abstraction (forkpty-backed), PTYProcessProtocol, the one `CommandRunning`/`ProcessCommandRunner` subprocess runner, StartupEnvironmentChecker, OutputBroadcaster | None |
+| **GitKit** | GitServiceProtocol, GitService (real), MockGitService, WorktreePlanner, diff parsing | ProcessKit |
 | **DesignSystem** | FlotillaPalette (colors), FlotillaSpacing, FlotillaRadius, FlotillaPanel modifier, StatusIndicator | None |
 | **SettingsKit** | AppSettings (Codable), SettingsStoring, UserDefaultsSettingsStore | None |
 | **AgentKit** | AgentProviding, CLIAgentProvider, AgentLaunchPlan, ModelCatalogFetcher | None |
@@ -522,7 +536,7 @@ Import only what you need. Package modules are imported by product name.
 | File | Why It Matters |
 |------|---------------|
 | `Flotilla/App/AppEnvironment.swift` | DI container — read this first to understand what's wired where |
-| `Flotilla/App/AppStore.swift` | Central state — all business logic lives here |
+| `Flotilla/App/AppStore.swift` | Observable owner of sessions and projects, and the entry point for session commands |
 | `Flotilla/Features/Shell/FlotillaShell.swift` | Root shell view — navigation and split presentation |
 | `Flotilla/Services/SessionProcessManager.swift` | Process lifecycle — start, terminate, event handling |
 | `Flotilla/Features/Session/TerminalManager.swift` | Terminal controller lifecycle — retain/release per session |
@@ -531,4 +545,4 @@ Import only what you need. Package modules are imported by product name.
 | `Packages/SessionKit/Sources/SessionKit/Models.swift` | Core domain types — Session, Project, AgentKind, SessionStatus |
 | `Packages/ProcessKit/Sources/ProcessKit/PTYProcessProtocol.swift` | Core process abstraction — read to understand PTY protocol |
 | `Packages/PersistenceKit/Sources/PersistenceKit/GRDBSessionRepository.swift` | Database layer — migrations, CRUD operations |
-| `make test` | Run unit test suite (355 tests) |
+| `make test` | Run unit test suite (537 tests) |
