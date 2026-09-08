@@ -70,6 +70,7 @@ struct SessionBar: View {
     /// than in a permanent `@State String` means the field can never show a
     /// stale title after the agent renames the session underneath it.
     @State private var draftTitle: String?
+    @State private var isAgentChipHovered = false
     @FocusState private var isEditingTitle: Bool
 
     // MARK: - Derived identity
@@ -132,6 +133,11 @@ struct SessionBar: View {
                         ? AXID.gridTileStatus(session.title)
                         : AXID.sessionBarStatus(session.title)
                 )
+
+            if variant == .focus {
+                agentChip
+                    .layoutPriority(2)
+            }
 
             titleLockup
                 .layoutPriority(3)
@@ -263,8 +269,6 @@ struct SessionBar: View {
             // The sidebar toggle sits last, against the bar's trailing edge,
             // because that is the edge the sidebar itself opens from.
             HStack(spacing: 2) {
-                handoffMenu
-
                 barButton(
                     "folder",
                     help: hasProject
@@ -290,28 +294,108 @@ struct SessionBar: View {
         }
     }
 
-    /// Moves this session to another agent, carrying the conversation across.
+    /// Which agent is driving this session, and the way to change it.
     ///
-    /// A menu rather than a button because the destination is the decision —
-    /// and it is hidden outright when there is nowhere to go, since a disabled
-    /// control here would ask the user to reason about codec availability.
-    @ViewBuilder
-    private var handoffMenu: some View {
-        if !actions.handoffTargets.isEmpty {
-            Menu {
-                ForEach(actions.handoffTargets) { target in
-                    Button(target.displayName) { actions.onHandoff(target) }
+    /// This sits in the identity lockup rather than the action cluster because
+    /// the agent is part of *what this session is*, alongside its status and
+    /// its branch — not something you do to it. It also replaces an
+    /// `arrow.left.arrow.right` chip that named neither the current agent nor
+    /// the destination, so the single most consequential thing about a session
+    /// was the one thing the bar did not say.
+    ///
+    /// Always a menu, even with nowhere to go: a chip that vanishes when a
+    /// handoff is unavailable would make the agent itself disappear from the
+    /// bar, and the disabled row explains the "why" that an absent control
+    /// cannot.
+    private var agentChip: some View {
+        Menu {
+            Section("Running") {
+                Button {} label: {
+                    Label {
+                        Text(session.agent.displayName)
+                    } icon: {
+                        Image(session.agent.logoImageName).renderingMode(.original)
+                    }
                 }
-            } label: {
-                Image(systemName: "arrow.left.arrow.right")
+                .disabled(true)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 22)
-            .help("Hand off to another agent, keeping this conversation")
-            .accessibilityLabel("Hand off session")
-            .accessibilityIdentifier(AXID.sessionBarHandoff(session.title))
+
+            if isHandingOff {
+                Section {
+                    Button("Moving to \(session.agent.displayName)…") {}
+                        .disabled(true)
+                }
+            } else if actions.handoffTargets.isEmpty {
+                Section {
+                    Button("No other agent can continue this session") {}
+                        .disabled(true)
+                }
+            } else {
+                Section("Hand off to") {
+                    ForEach(actions.handoffTargets) { target in
+                        Button {
+                            actions.onHandoff(target)
+                        } label: {
+                            Label {
+                                Text(target.displayName)
+                            } icon: {
+                                Image(target.logoImageName).renderingMode(.original)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            agentChipLabel
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(
+            actions.handoffTargets.isEmpty
+                ? "Running \(session.agent.displayName)"
+                : "Running \(session.agent.displayName) — hand off to another agent, keeping this conversation"
+        )
+        .accessibilityLabel("Agent: \(session.agent.displayName)")
+        .accessibilityHint("Hand off this session to another agent")
+        .accessibilityIdentifier(AXID.sessionBarHandoff(session.title))
+    }
+
+    private var isHandingOff: Bool { session.pendingHandoff != nil }
+
+    /// The brand mark carries the recognition, so the tint is the agent's own
+    /// colour at low opacity rather than the app accent — two sessions on
+    /// different agents should be tellable apart from across the room.
+    private var agentChipLabel: some View {
+        let accent = AgentBrand.accentColor(for: session.agent)
+        return HStack(spacing: 5) {
+            ProviderLogo(agent: session.agent)
+                .frame(width: 13, height: 13)
+                .opacity(isHandingOff ? 0.5 : 1)
+
+            Text(session.agent.displayName)
+                .font(variant.font.weight(.medium))
+                .foregroundStyle(FlotillaColors.textPrimary)
+                .lineLimit(1)
+
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(FlotillaColors.textTertiary)
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 5)
+        .padding(.vertical, 3)
+        .background(
+            Capsule(style: .continuous)
+                .fill(accent.opacity(isAgentChipHovered ? 0.20 : 0.12))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(accent.opacity(0.28), lineWidth: 1)
+        )
+        .contentShape(Capsule(style: .continuous))
+        .onHover { isAgentChipHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isAgentChipHovered)
     }
 
     /// Spacing 2 rather than 0: the chips already reserve their own margin
