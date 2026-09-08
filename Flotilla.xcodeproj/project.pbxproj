@@ -11,6 +11,7 @@
 		02176474DA0AB08F3A934184 /* SettingsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1C861503EB2892EBB8DBBC16 /* SettingsKit */; };
 		0291E3C0C76AD118F3E9ACCF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774460E09372B50991B8E9AB /* StatusBadge.swift */; };
 		03C524B09BE80FAB8C545A9D /* folder-open.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2629C3453D4DD4A9C5E57CB2 /* folder-open.svg */; };
+		053C8A9B368A7E496912C699 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 00D8EFD13A42CFF2395B81EB /* GRDB */; };
 		075CD0C76B8E2F897B615EE9 /* AgentBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CBBB0DF6922595B183EAA56 /* AgentBrand.swift */; };
 		083EA44A9ACE8EFFB94A9377 /* WorkspaceToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F5B48EC4DF04020E549FAE6 /* WorkspaceToolbar.swift */; };
 		086753F1FC0C729EB93423C4 /* SessionTileChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBF5FBD34E5BFF83E229BA2 /* SessionTileChrome.swift */; };
@@ -139,6 +140,7 @@
 		600E6983114516A27AE5210F /* OverlayDismissalUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE89D74F35F795F9E1002456 /* OverlayDismissalUITests.swift */; };
 		60F8D66D526A1F2C9959EE07 /* FileBrowserViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F43AD8E48B9A5959853AD088 /* FileBrowserViewModel.swift */; };
 		61F2823FD7496FCE86869513 /* java.svg in Resources */ = {isa = PBXBuildFile; fileRef = 72A26D2D9E8717D231C82438 /* java.svg */; };
+		6268FFC42AD3171ED78F7D44 /* MigrationUpgradePathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CA8A24D4653864FEBAA97C1 /* MigrationUpgradePathTests.swift */; };
 		637004D5D1461CF87C3755A3 /* folder-github.svg in Resources */ = {isa = PBXBuildFile; fileRef = 1B5700FE6569E0924F5F69FA /* folder-github.svg */; };
 		644FCEA7D4BB6A77F34CB0D7 /* AgentManagedWorktreeAndTitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1D5E06B90B0528533B4EC2 /* AgentManagedWorktreeAndTitleTests.swift */; };
 		6487C3349D2437B1C79A6820 /* ProjectGitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F37756AA07340F3ED847CB /* ProjectGitView.swift */; };
@@ -537,6 +539,7 @@
 		8B92EDEF9A089878F5FAB62C /* folder-hook.svg */ = {isa = PBXFileReference; path = "folder-hook.svg"; sourceTree = "<group>"; };
 		8BDC9600CEDB1A97835AA0DB /* HomeDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDashboardView.swift; sourceTree = "<group>"; };
 		8C5DEE977614F52F1F9245E5 /* folder-packages.svg */ = {isa = PBXFileReference; path = "folder-packages.svg"; sourceTree = "<group>"; };
+		8CA8A24D4653864FEBAA97C1 /* MigrationUpgradePathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationUpgradePathTests.swift; sourceTree = "<group>"; };
 		8D17E25AD62D144EB77DF189 /* FleetSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FleetSidebar.swift; sourceTree = "<group>"; };
 		8D44993C17D8BB530AB04C2F /* prettier.svg */ = {isa = PBXFileReference; path = prettier.svg; sourceTree = "<group>"; };
 		8EE677A016A7E33854CFA93A /* MarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownView.swift; sourceTree = "<group>"; };
@@ -716,6 +719,7 @@
 				7B1F17DE94EC64B7DFE901A8 /* PersistenceKit in Frameworks */,
 				43A4D21424AEED786AE4CE1F /* SettingsKit in Frameworks */,
 				C2A86539B36CB26F846CCE89 /* TranscriptKit in Frameworks */,
+				053C8A9B368A7E496912C699 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1134,6 +1138,7 @@
 				CD408488BFF9C6CA7DFEB01A /* KnowledgeItemTests.swift */,
 				69A132A0EB20507E866EC37E /* MarqueeTextTests.swift */,
 				36694C982342171E13852132 /* MaterialFileIconTests.swift */,
+				8CA8A24D4653864FEBAA97C1 /* MigrationUpgradePathTests.swift */,
 				F0FC0E7A5D4334D57338B01E /* ModelCatalogTests.swift */,
 				F7647E6E3F8217B4210D6634 /* MonacoLanguageMappingTests.swift */,
 				C63F73DEF25FEB4C95FF8659 /* OpenCodeTranscriptCodecTests.swift */,
@@ -1270,6 +1275,7 @@
 				90BE8C16AC4B2147D4D413C4 /* PersistenceKit */,
 				39463F934BA5F312F4731DD2 /* SettingsKit */,
 				F8B8DDAE0EF1AA8675B343B1 /* TranscriptKit */,
+				00D8EFD13A42CFF2395B81EB /* GRDB */,
 			);
 			productName = FlotillaUnitTests;
 			productReference = BD24ACC6FE42CAC4547A58DE /* FlotillaUnitTests.xctest */;
@@ -1354,6 +1360,7 @@
 			mainGroup = E89EF3D4E09ED808B311CE42;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				7082D199A13E9B153E377E87 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				239E1943B6B75F02BC022B94 /* XCRemoteSwiftPackageReference "textual" */,
 				CA1976FF94E74F456F831E02 /* XCLocalSwiftPackageReference "Packages/AgentKit" */,
 				3B1A5111A453E6A75651DFEA /* XCLocalSwiftPackageReference "Packages/DesignSystem" */,
@@ -1524,6 +1531,7 @@
 				E26D09AD781C65D3B9F9C687 /* KnowledgeItemTests.swift in Sources */,
 				0DFD66003C7849EC743560A7 /* MarqueeTextTests.swift in Sources */,
 				86C85E4BEC1283DF930F454F /* MaterialFileIconTests.swift in Sources */,
+				6268FFC42AD3171ED78F7D44 /* MigrationUpgradePathTests.swift in Sources */,
 				0BFC04E001C343E474DCDC70 /* ModelCatalogTests.swift in Sources */,
 				C8EB697F01CA679EF2319C7A /* MonacoLanguageMappingTests.swift in Sources */,
 				FED88A86153E3F5DD04D03D3 /* OpenCodeTranscriptCodecTests.swift in Sources */,
@@ -2188,9 +2196,22 @@
 				minimumVersion = 0.5.0;
 			};
 		};
+		7082D199A13E9B153E377E87 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.29.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		00D8EFD13A42CFF2395B81EB /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7082D199A13E9B153E377E87 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
 		1C861503EB2892EBB8DBBC16 /* SettingsKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SettingsKit;

@@ -1,0 +1,104 @@
+import XCTest
+import GRDB
+import SessionKit
+@testable import PersistenceKit
+
+/// Migrating a *fresh* database proves only that the final schema is reachable
+/// from nothing. It cannot catch a migration that was edited after it had
+/// already run somewhere: the migrator records each migration by name and skips
+/// what it has seen, so the edit reaches new installs and no existing one.
+///
+/// That is exactly how `handoffSourceSessionID` went missing — added to v8
+/// after v8 had run, so every new database looked correct while the developer's
+/// own failed on insert. These tests step a database part of the way and then
+/// forward, which is the only shape that catches it.
+final class MigrationUpgradePathTests: XCTestCase {
+    private func columns(of table: String, in db: Database) throws -> Set<String> {
+        Set(try db.columns(in: table).map(\.name))
+    }
+
+    /// Every column `SessionRecord` writes must exist after a full migration.
+    /// Written from the record's own insert statement rather than a hand-kept
+    /// list, so a future column cannot be added to one and forgotten in the
+    /// other.
+    func testFullyMigratedSchemaCarriesEveryHandoffColumn() throws {
+        let queue = try DatabaseQueue()
+        try GRDBSessionRepository.migrator.migrate(queue)
+
+        try queue.read { db in
+            let columns = try self.columns(of: "session", in: db)
+            for expected in [
+                "nativeTranscriptPath",
+                "handoffSourceAgent",
+                "handoffSourceSessionID",
+                "handoffSourceTranscriptPath",
+                "handoffStartedAt"
+            ] {
+                XCTAssertTrue(columns.contains(expected), "session is missing \(expected)")
+            }
+        }
+    }
+
+    /// A database that stopped at v8 — the state every install that ran the
+    /// original v8 is in — must reach the current schema by migrating forward.
+    func testADatabaseStoppedAtV8UpgradesToTheCurrentSchema() throws {
+        let queue = try DatabaseQueue()
+        let migrator = GRDBSessionRepository.migrator
+
+        try migrator.migrate(queue, upTo: "v8_addHandoffOwnership")
+        try queue.read { db in
+            let columns = try self.columns(of: "session", in: db)
+            XCTAssertTrue(columns.contains("handoffSourceAgent"), "v8 should have landed")
+            XCTAssertFalse(
+                columns.contains("handoffSourceSessionID"),
+                "if v8 already adds this, the column has been folded back into an applied migration"
+            )
+        }
+
+        try migrator.migrate(queue)
+        try queue.read { db in
+            XCTAssertTrue(try self.columns(of: "session", in: db).contains("handoffSourceSessionID"))
+        }
+    }
+
+    /// The end state must be identical whether a database arrived in one step
+    /// or in two — otherwise an upgraded install and a fresh one diverge.
+    func testUpgradedAndFreshDatabasesEndWithTheSameSchema() throws {
+        let stepwise = try DatabaseQueue()
+        let migrator = GRDBSessionRepository.migrator
+        try migrator.migrate(stepwise, upTo: "v8_addHandoffOwnership")
+        try migrator.migrate(stepwise)
+
+        let fresh = try DatabaseQueue()
+        try migrator.migrate(fresh)
+
+        let stepwiseColumns = try stepwise.read { try self.columns(of: "session", in: $0) }
+        let freshColumns = try fresh.read { try self.columns(of: "session", in: $0) }
+        XCTAssertEqual(stepwiseColumns, freshColumns)
+    }
+
+    /// The failure as the user met it: saving a session against a database that
+    /// only reached v8 must work once it is migrated forward.
+    func testSavingASessionSucceedsAfterUpgradingFromV8() throws {
+        let queue = try DatabaseQueue()
+        let migrator = GRDBSessionRepository.migrator
+        try migrator.migrate(queue, upTo: "v8_addHandoffOwnership")
+        try migrator.migrate(queue)
+
+        let session = Session(
+            title: "Upgraded",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: nil
+        )
+        try queue.write { db in
+            try SessionRecord(session: session).insert(db)
+        }
+
+        let restored = try queue.read { db in try SessionRecord.fetchAll(db) }
+        XCTAssertEqual(restored.count, 1)
+        XCTAssertNil(restored.first?.handoffSourceSessionID)
+    }
+}

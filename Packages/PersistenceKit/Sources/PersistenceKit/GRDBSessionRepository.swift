@@ -48,7 +48,10 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
         return queue
     }
 
-    private static var migrator: DatabaseMigrator {
+    /// Internal rather than private so tests can migrate a database only part
+    /// of the way and prove the *upgrade* path, not just a fresh install. A
+    /// fresh database cannot catch a migration that was edited after it ran.
+    static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1_createSessionAndProject") { db in
             try db.create(table: "project") { t in
@@ -150,9 +153,20 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
             try db.alter(table: "session") { table in
                 table.add(column: "nativeTranscriptPath", .text)
                 table.add(column: "handoffSourceAgent", .text)
-                table.add(column: "handoffSourceSessionID", .text)
                 table.add(column: "handoffSourceTranscriptPath", .text)
                 table.add(column: "handoffStartedAt", .datetime)
+            }
+        }
+        migrator.registerMigration("v9_addHandoffSourceSessionID") { db in
+            // Separate from v8 on purpose. This column belongs with the four
+            // above and was meant to ship inside v8, but v8 had already run on
+            // real databases by the time it was needed — and a migrator skips a
+            // migration it has already recorded, so editing v8 added the column
+            // for nobody while every new install looked correct. A migration
+            // that has run anywhere is immutable; the only way to add to it is
+            // to add after it.
+            try db.alter(table: "session") { table in
+                table.add(column: "handoffSourceSessionID", .text)
             }
         }
         return migrator
