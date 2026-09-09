@@ -5,12 +5,12 @@ import XCTest
 /// (`CreateSessionUITests`), this one requires a non-empty goal — it never
 /// leaves the screen, so a stray ⌘↩ is far easier to trigger by accident.
 ///
-/// Note: creating *any* session — foreground or background — navigates the
-/// whole app away from Home, because `AppStore.createSession` unconditionally
-/// sets `selectedSessionID`, which `FlotillaShell` observes and follows. That
-/// is existing app behaviour, not specific to this composer, so these tests
-/// don't assert on staying on the Home screen after a launch — see
-/// `SessionDraftTests.testClearGoalOnlyTouchesTheGoal` for the goal-reset
+/// "Launch & Open" navigates the app to the new session; "Launch & Stay Here"
+/// must leave the app on Home. That split is driven by `selectAfterCreating`,
+/// which `SessionDraft.launch(opensSession:)` forwards to
+/// `AppStore.createSession` — `testLaunchAndStayHereKeepsHomeOnScreen` guards
+/// it, since it is easy to silently regress back to an unconditional select.
+/// See `SessionDraftTests.testClearGoalOnlyTouchesTheGoal` for the goal-reset
 /// behaviour itself, unit-tested in isolation.
 @MainActor
 final class HomeComposerUITests: XCTestCase {
@@ -47,5 +47,24 @@ final class HomeComposerUITests: XCTestCase {
         launchButton.click()
 
         XCTAssertTrue(fastWait(element(app, "SessionRow-Investigate the flaky teardown"), timeout: 5))
+    }
+
+    func testLaunchAndStayHereKeepsHomeOnScreen() {
+        let app = launchedApp()
+
+        let goalField = element(app, "Home.GoalField")
+        XCTAssertTrue(fastWait(goalField, timeout: 8))
+        goalField.click()
+        goalField.typeText("Draft the migration notes")
+
+        let stayButton = element(app, "Home.BackgroundButton")
+        XCTAssertTrue(stayButton.isEnabled)
+        stayButton.click()
+
+        // The session is created...
+        XCTAssertTrue(fastWait(element(app, "SessionRow-Draft the migration notes"), timeout: 5))
+        // ...but the app stays on Home rather than following it into the detail column.
+        XCTAssertTrue(element(app, "Home.GoalField").exists,
+                      "\"Launch & Stay Here\" must not navigate away from the Home dashboard")
     }
 }

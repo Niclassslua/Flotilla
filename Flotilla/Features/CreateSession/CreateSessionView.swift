@@ -114,7 +114,7 @@ struct CreateSessionView: View {
     private func launch(opensSession: Bool) {
         Task {
             store.lastCreationError = nil
-            guard let id = await draft.launch() else { return }
+            guard let id = await draft.launch(opensSession: opensSession) else { return }
             if opensSession { didCreateSession(id) }
             dismiss()
         }

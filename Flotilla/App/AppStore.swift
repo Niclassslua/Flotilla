@@ -1055,7 +1055,8 @@ final class AppStore {
         projectFolder: URL?,
         checkoutMode: CheckoutMode,
         deliverGoal: Bool = true,
-        fetchBeforeCreatingWorktree: Bool = false
+        fetchBeforeCreatingWorktree: Bool = false,
+        selectAfterCreating: Bool = true
     ) async -> UUID? {
         lastCreationError = nil
         var createdWorktree: WorktreeInfo?
@@ -1175,7 +1176,13 @@ final class AppStore {
             }
 
             reload()
-            selectedSessionID = session.id
+            // "Launch & Stay Here" passes `selectAfterCreating: false` so the
+            // fleet/home view it was launched from stays put. Selecting here
+            // unconditionally used to drag the detail column onto the new
+            // session regardless of which launch button was pressed.
+            if selectAfterCreating {
+                selectedSessionID = session.id
+            }
             scheduleTitleSync(forSessionID: session.id)
 
             // Kick off background polling for the agent's self-report

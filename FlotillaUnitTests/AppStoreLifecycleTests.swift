@@ -69,6 +69,34 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(factory.processes.first?.sentInput.isEmpty == true)
     }
 
+    /// "Launch & Stay Here" forwards `selectAfterCreating: false`: the session
+    /// is created and running, but selection stays put so the fleet/home view
+    /// it was launched from doesn't get dragged onto the new session.
+    func testLaunchWithoutSelectingLeavesSelectionAlone() async throws {
+        let repository = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: factory),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+
+        await store.createSession(
+            title: "Background chore",
+            goal: "Run in the background",
+            agent: .claudeCode,
+            projectFolder: nil,
+            checkoutMode: .mainCheckout,
+            selectAfterCreating: false
+        )
+
+        XCTAssertNil(store.lastCreationError)
+        XCTAssertEqual(store.sessions.count, 1)
+        XCTAssertEqual(store.sessions.first?.status, .working)
+        XCTAssertNil(store.selectedSessionID, "\"Launch & Stay Here\" must not change the current selection")
+    }
+
     func testObservedWaitingReasonUpdatesAndPersistsWithoutAStatusChange() async throws {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()

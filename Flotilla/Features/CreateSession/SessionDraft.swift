@@ -151,7 +151,7 @@ final class SessionDraft {
     /// Returns the created session's ID, or `nil` if creation failed — in which
     /// case `store.lastCreationError` carries the reason and the window stays
     /// open so the user can correct and retry.
-    func launch() async -> UUID? {
+    func launch(opensSession: Bool = true) async -> UUID? {
         isCreating = true
         defer { isCreating = false }
 
@@ -165,7 +165,8 @@ final class SessionDraft {
             projectFolder: projectChoice.folder,
             checkoutMode: effectiveCheckoutMode,
             deliverGoal: !goalToDeliver.isEmpty,
-            fetchBeforeCreatingWorktree: fetchBeforeCreatingWorktree
+            fetchBeforeCreatingWorktree: fetchBeforeCreatingWorktree,
+            selectAfterCreating: opensSession
         )
     }
 
