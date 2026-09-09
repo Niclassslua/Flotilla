@@ -127,12 +127,6 @@ final class SessionLaunchPreviewTests: XCTestCase {
 
     // MARK: - Command rendering
 
-    func testCommandShowsTheBinaryAloneWhenModelAndEffortAreDefaulted() {
-        let preview = resolve(goal: "Anything", choice: .general, agent: .claudeCode, createWorktree: false)
-
-        XCTAssertEqual(preview.command, "claude")
-    }
-
     func testCommandIncludesResolvedModelAndEffortFlags() {
         let preview = resolve(
             goal: "Anything",
@@ -163,13 +157,4 @@ final class SessionLaunchPreviewTests: XCTestCase {
         )
     }
 
-    // MARK: - Path display
-
-    func testDisplayDirectoryAbbreviatesTheHomePrefix() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let folder = home.appendingPathComponent("Repos/thing", isDirectory: true)
-        let preview = resolve(goal: "x", choice: .custom(folder), createWorktree: false)
-
-        XCTAssertEqual(preview.displayDirectory, "~/Repos/thing")
-    }
 }

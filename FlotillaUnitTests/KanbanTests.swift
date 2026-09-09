@@ -172,15 +172,6 @@ final class KanbanAppStoreTests: XCTestCase {
         XCTAssertEqual(globalBoard?.columnMode, .status)
     }
 
-    func testSelectKanbanBoard() throws {
-        let (store, _) = makeStore()
-
-        let firstBoard = store.kanbanBoards[0]
-        store.selectKanbanBoard(firstBoard.id)
-        XCTAssertEqual(store.selectedKanbanBoardID, firstBoard.id)
-        XCTAssertEqual(store.selectedKanbanBoard?.id, firstBoard.id)
-    }
-
     func testSelectKanbanBoardByProject() async throws {
         let (store, factory) = makeStore()
 

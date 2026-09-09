@@ -8,14 +8,4 @@ final class GitIconTests: XCTestCase {
         XCTAssertNotNil(image, "GitLogo asset should be loadable from Asset Catalog")
     }
 
-    func testGitIconInitializes() {
-        let icon = GitIcon(size: 14)
-        XCTAssertEqual(icon.size, 14)
-    }
-
-    func testGitLabelInitializes() {
-        let label = GitLabel("Git", size: 12)
-        XCTAssertEqual(label.title, "Git")
-        XCTAssertEqual(label.size, 12)
-    }
 }

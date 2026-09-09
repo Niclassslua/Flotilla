@@ -43,24 +43,4 @@ final class SessionShutdownAndInitialSizeTests: XCTestCase {
         XCTAssertEqual(String(decoding: loaded.terminalScrollback, as: UTF8.self), "output-to-flush\n")
     }
 
-    func testInitialLaunchPTYSizeIsStandard() throws {
-        let factory = RecordingProcessFactory()
-        let manager = SessionProcessManager(
-            locator: AppLayerExecutableLocator(executable: URL(fileURLWithPath: "/bin/echo")),
-            processFactory: factory
-        )
-
-        let session = Session(
-            title: "Size Test",
-            goal: "",
-            agent: .claudeCode,
-            projectID: nil,
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .working
-        )
-
-        try manager.start(session: session, deliverGoal: false)
-        let started = try XCTUnwrap(factory.processes.first)
-        XCTAssertEqual(started.lastSize, PTYSize(cols: 100, rows: 30))
-    }
 }

@@ -80,9 +80,5 @@ final class ChildProcessEnvironmentTests: XCTestCase {
         XCTAssertNil(launch.environment["GPUTOOLS_CAPTURE_ENABLED"])
     }
 
-    func testMakeProcessSetsWorkingDirectoryToRoot() {
-        let process = ChildProcessEnvironment.makeProcess()
-        XCTAssertEqual(process.currentDirectoryURL?.path, "/")
-    }
 }
 

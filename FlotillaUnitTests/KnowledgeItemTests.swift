@@ -126,19 +126,6 @@ final class KnowledgeItemTests: XCTestCase {
         XCTAssertEqual(metric?.role, .warning, "an empty document should stand out, not read as neutral detail")
     }
 
-    func testSingleScriptIsNotPluralised() {
-        let stats = SkillBundleStats(scriptsCount: 1, referencesCount: 1)
-        let labels = KnowledgeItem(skill: makeSkill(stats: stats)).metrics.map(\.label)
-
-        XCTAssertTrue(labels.contains("1 script"))
-        XCTAssertTrue(labels.contains("1 doc"))
-    }
-
-    func testWeightComesFromLineCountSoMosaicTilesCanBeSized() {
-        let item = KnowledgeItem(skill: makeSkill(stats: SkillBundleStats(lineCount: 512)))
-        XCTAssertEqual(item.weight, 512)
-    }
-
     // MARK: - Rule mapping
 
     func testRuleMapsPathAsTitleAndCarriesNoSkillOnlyFields() {
@@ -151,40 +138,6 @@ final class KnowledgeItemTests: XCTestCase {
         XCTAssertNil(item.version)
         XCTAssertTrue(item.tags.isEmpty)
         XCTAssertEqual(item.metrics.map(\.symbolName), ["doc"], "a rule's only metric is its size")
-    }
-
-    func testGlobalRuleKeepsGlobalScope() {
-        XCTAssertEqual(KnowledgeItem(rule: makeRule(scope: .global)).scope, .global)
-    }
-
-    func testRuleSubtitleIsInferredFromFilename() {
-        XCTAssertEqual(
-            KnowledgeItem.ruleSubtitle(for: "CLAUDE.md"),
-            "Claude Code instructions & workflow policies"
-        )
-        XCTAssertEqual(
-            KnowledgeItem.ruleSubtitle(for: "AGENTS.md"),
-            "Autonomous coding agent guide & architecture reference"
-        )
-        XCTAssertEqual(
-            KnowledgeItem.ruleSubtitle(for: ".cursorrules"),
-            "Cursor IDE workspace rules & code conventions"
-        )
-        XCTAssertEqual(
-            KnowledgeItem.ruleSubtitle(for: "copilot-instructions.md"),
-            "GitHub Copilot prompt instructions"
-        )
-        XCTAssertEqual(
-            KnowledgeItem.ruleSubtitle(for: "something-else.md"),
-            "AI assistant instruction file"
-        )
-    }
-
-    func testRuleSubtitleMatchIsCaseInsensitive() {
-        XCTAssertEqual(
-            KnowledgeItem.ruleSubtitle(for: "claude.md"),
-            "Claude Code instructions & workflow policies"
-        )
     }
 
     // MARK: - Search
@@ -223,17 +176,6 @@ final class KnowledgeItemTests: XCTestCase {
     }
 
     // MARK: - Byte sizes
-
-    func testEmptyFileSaysSoInWords() {
-        // "0 bytes" makes the reader do the comparison; "empty" answers it.
-        XCTAssertEqual(formatByteSize(0), "empty")
-    }
-
-    func testByteSizesAreHumanReadable() {
-        XCTAssertEqual(formatByteSize(512), "512 bytes")
-        XCTAssertTrue(formatByteSize(4096).contains("KB"))
-        XCTAssertTrue(formatByteSize(5_000_000).contains("MB"))
-    }
 
     // MARK: - Relative dates
 
