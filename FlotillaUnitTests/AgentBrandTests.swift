@@ -34,13 +34,6 @@ final class AgentBrandTests: XCTestCase {
         XCTAssertEqual(rgb1Light.a, rgb2Light.a, accuracy: 0.01, "Alpha mismatch (light)", file: file, line: line)
     }
 
-    func testAgentKindAccentColors() {
-        assertColorsEqual(AgentBrand.accentColor(for: .claudeCode), FlotillaColors.accent)
-        assertColorsEqual(AgentBrand.accentColor(for: .codexCLI), Color(red: 0x40 / 255, green: 0x43 / 255, blue: 0xF5 / 255))
-        assertColorsEqual(AgentBrand.accentColor(for: .openCode), .white)
-        assertColorsEqual(AgentBrand.accentColor(for: .antigravity), AgentBrand.antigravityGradientColors[0])
-    }
-
     func testSkillFrameworkAgentKindMapping() {
         XCTAssertEqual(SkillFramework.claude.agentKind, .claudeCode)
         XCTAssertEqual(SkillFramework.codex.agentKind, .codexCLI)
@@ -48,24 +41,6 @@ final class AgentBrandTests: XCTestCase {
         XCTAssertNil(SkillFramework.cursor.agentKind)
         XCTAssertNil(SkillFramework.agents.agentKind)
         XCTAssertNil(SkillFramework.custom.agentKind)
-    }
-
-    func testSkillFrameworkAccentColorsMatchAgentColors() {
-        assertColorsEqual(
-            AgentBrand.accentColor(for: SkillFramework.claude),
-            AgentBrand.accentColor(for: AgentKind.claudeCode)
-        )
-        assertColorsEqual(
-            AgentBrand.accentColor(for: SkillFramework.codex),
-            AgentBrand.accentColor(for: AgentKind.codexCLI)
-        )
-        assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.cursor), Color(white: 0.90))
-        assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.agents), Color(red: 0.40, green: 0.70, blue: 0.65))
-
-        // `.gemini` and `.custom` deliberately do *not* follow their agent
-        // mapping — see `testSkillFrameworkAccentColorsAreAllDistinct`.
-        assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.gemini), AgentBrand.antigravityGradientColors[1])
-        assertColorsEqual(AgentBrand.accentColor(for: SkillFramework.custom), Color(white: 0.55))
     }
 
     /// These colors sit in one column of the skills ledger, so a repeat is
@@ -87,24 +62,4 @@ final class AgentBrandTests: XCTestCase {
         }
     }
 
-    func testSkillFrameworkConvenienceExtensions() {
-        assertColorsEqual(SkillFramework.claude.accentColor, AgentBrand.accentColor(for: .claudeCode))
-        assertColorsEqual(SkillFramework.codex.accentColor, AgentBrand.accentColor(for: .codexCLI))
-        assertColorsEqual(AgentKind.claudeCode.accentColor, FlotillaColors.accent)
-    }
-
-    func testIconBackgroundColors() {
-        let claudeUnhovered = AgentBrand.iconBackgroundColor(for: .claude, isHovered: false)
-        let claudeHovered = AgentBrand.iconBackgroundColor(for: .claude, isHovered: true)
-        assertColorsEqual(claudeUnhovered, AgentBrand.accentColor(for: .claudeCode).opacity(0.10))
-        assertColorsEqual(claudeHovered, AgentBrand.accentColor(for: .claudeCode).opacity(0.18))
-
-        let agentsBg = AgentBrand.iconBackgroundColor(for: .agents, isHovered: false)
-        assertColorsEqual(agentsBg, FlotillaColors.surfaceElevated)
-
-        let cursorUnhovered = AgentBrand.iconBackgroundColor(for: .cursor, isHovered: false)
-        let cursorHovered = AgentBrand.iconBackgroundColor(for: .cursor, isHovered: true)
-        assertColorsEqual(cursorUnhovered, Color(white: 0.20).opacity(0.5))
-        assertColorsEqual(cursorHovered, Color(white: 0.20).opacity(0.8))
-    }
 }

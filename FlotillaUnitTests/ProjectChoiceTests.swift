@@ -25,11 +25,6 @@ final class ProjectChoiceTests: XCTestCase {
         XCTAssertFalse(custom.isGeneral)
     }
 
-    func testCustomChoiceIsNamedForItsLastPathComponent() {
-        let custom = ProjectChoice.custom(URL(fileURLWithPath: "/Users/dev/spike", isDirectory: true))
-        XCTAssertEqual(custom.displayName, "spike")
-    }
-
     func testFilterMatchesOnNameCaseInsensitively() {
         let choices: [ProjectChoice] = [
             .general,

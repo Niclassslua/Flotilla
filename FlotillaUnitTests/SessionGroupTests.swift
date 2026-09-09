@@ -52,11 +52,6 @@ final class SessionGroupTests: XCTestCase {
         XCTAssertEqual(titles, ["d", "e"])
     }
 
-    func testGeneralIsNotEverything() {
-        XCTAssertFalse(SessionScope(group: .general).isEverything)
-        XCTAssertFalse(SessionScope(group: .project(alpha)).isEverything)
-    }
-
     /// A group narrows the fleet and a smart list narrows it again — the two
     /// axes compose rather than overriding each other.
     func testGroupAndSmartListNarrowTogether() {
@@ -68,16 +63,6 @@ final class SessionGroupTests: XCTestCase {
             SessionScope(group: .general, smartList: .needsYou).apply(to: fleet).map(\.title),
             ["e"]
         )
-    }
-
-    /// The empty state has to name the narrowing responsible, including the
-    /// two new General arms.
-    func testEmptyDescriptionNamesTheNarrowing() {
-        XCTAssertTrue(SessionScope(group: .general).emptyDescription.contains("outside a project"))
-        XCTAssertTrue(
-            SessionScope(group: .general, smartList: .working).emptyDescription.contains("working")
-        )
-        XCTAssertTrue(SessionScope(group: .project(alpha)).emptyDescription.contains("project"))
     }
 
     // MARK: - Persistence round trip

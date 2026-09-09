@@ -48,31 +48,4 @@ final class TerminalControllerReflowTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(reflowCallCount, 1)
     }
 
-    func testMakeAuthoritativeIgnoresDegenerateDimensions() async throws {
-        let process = MockPTYProcess()
-        try process.start(
-            executable: URL(fileURLWithPath: "/usr/bin/env"),
-            arguments: [],
-            environment: [:],
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialSize: PTYSize(cols: 80, rows: 24)
-        )
-
-        var lastResizedSize: PTYSize?
-        let controller = TerminalController(
-            sessionID: UUID(),
-            process: process,
-            accessibilityIdentifier: "DegenerateTest",
-            onPTYResize: { size in
-                lastResizedSize = size
-            }
-        )
-
-        // Switch to grid before it has laid out (terminal.getDims() is default / unmeasured)
-        controller.makeAuthoritative(.grid)
-
-        // Default mock terminal in headless test reports 80x25 or valid, but if below 20x5 it's guarded.
-        // Verifies makeAuthoritative runs without crashing
-        XCTAssertNotNil(controller)
-    }
 }

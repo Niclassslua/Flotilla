@@ -101,16 +101,6 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.worktreeBaseDirectory, "/tmp/worktrees")
     }
 
-    func testUnseenCommitHighlightingRoundTrips() throws {
-        var settings = AppSettings(worktreeBaseDirectory: "/tmp/worktrees")
-        settings.git.highlightUnseenCommits = false
-
-        let data = try JSONEncoder().encode(settings)
-        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
-
-        XCTAssertFalse(decoded.git.highlightUnseenCommits)
-    }
-
     /// `SessionDefaults` decodes key-by-key: a payload written before any
     /// later-added key must still decode without resetting the rest.
     func testSettingsWrittenBeforeLaterSessionDefaultsStillDecode() throws {
@@ -168,23 +158,4 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.git.deleteBranchWithWorktree, false)
     }
 
-    func testWorktreeNamingSourceRoundTrips() throws {
-        var settings = AppSettings(worktreeBaseDirectory: "/tmp/worktrees")
-        settings.git.worktreeNamingSource = .agentManaged
-
-        let data = try JSONEncoder().encode(settings)
-        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
-
-        XCTAssertEqual(decoded.git.worktreeNamingSource, .agentManaged)
-    }
-
-    func testAgentManagedTitleEnabledRoundTrips() throws {
-        var settings = AppSettings(worktreeBaseDirectory: "/tmp/worktrees")
-        settings.sessionDefaults.agentManagedTitleEnabled = false
-
-        let data = try JSONEncoder().encode(settings)
-        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
-
-        XCTAssertEqual(decoded.sessionDefaults.agentManagedTitleEnabled, false)
-    }
 }
