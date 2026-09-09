@@ -234,23 +234,67 @@ struct DetailColumn: View {
             .accessibilityIdentifier("TerminalView-\(session.title)")
             .background(FlotillaColors.terminalCanvas)
         } else {
-            ContentUnavailableView {
-                Label(
-                    session.status == .crashed ? "Agent Stopped" : "Session Not Running",
-                    systemImage: session.status == .crashed ? "exclamationmark.triangle" : "terminal"
+            terminalUnavailableState(for: session)
+        }
+    }
+
+    private func terminalUnavailableState(for session: Session) -> some View {
+        let hasCrashed = session.status == .crashed
+        let tint = hasCrashed ? FlotillaColors.statusCrashed : FlotillaColors.textTertiary
+
+        return VStack(spacing: FlotillaSpacing.xLarge) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.10))
+                Circle()
+                    .strokeBorder(tint.opacity(0.28), lineWidth: FlotillaBorderWidth.thin)
+                Image(systemName: hasCrashed ? "exclamationmark.triangle.fill" : "terminal.fill")
+                    .font(.system(size: FlotillaIconSize.xLarge, weight: .medium))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 72, height: 72)
+            .accessibilityHidden(true)
+
+            VStack(spacing: FlotillaSpacing.small) {
+                Text(hasCrashed ? "Agent Stopped" : "Session Not Running")
+                    .font(FlotillaTypography.title)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                    .accessibilityIdentifier("TerminalPlaceholder")
+
+                Text(
+                    hasCrashed
+                        ? "The \(session.agent.displayName) process exited unexpectedly. Review its configuration or restart the session."
+                        : "No \(session.agent.displayName) process is attached. Check its executable in Settings, then restart the session."
                 )
-            } description: {
-                Text("Check the agent executable in Settings, then restart this interactive session.")
-            } actions: {
-                Button("Restart Session") {
+                .font(FlotillaTypography.body)
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 440)
+            }
+
+            HStack(spacing: FlotillaSpacing.small) {
+                Button {
+                    openSettings()
+                } label: {
+                    Label("Open Settings", systemImage: "gearshape")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("TerminalPlaceholder.OpenSettings")
+
+                Button {
                     store.restartSession(sessionID: session.id)
+                } label: {
+                    Label("Restart Session", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(FlotillaColors.accent)
                 .accessibilityIdentifier("Restart Session")
             }
-            .accessibilityIdentifier("TerminalPlaceholder")
+            .controlSize(.large)
         }
+        .padding(FlotillaSpacing.xxLarge)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .background(FlotillaColors.terminalCanvas)
     }
 
     @ViewBuilder
@@ -372,9 +416,8 @@ struct EmptyWorkspaceView: View {
         .background(FlotillaColors.canvas)
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 10)
-        .onAppear {
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { appeared = true }
-        }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.5), value: appeared)
+        .onAppear { appeared = true }
     }
 
     // MARK: First run
@@ -464,30 +507,53 @@ struct EmptyWorkspaceView: View {
 /// life to read as "live fleet" without becoming a distraction.
 private struct FormationMark: View {
     let reduceMotion: Bool
-    @State private var pulse = false
 
     var body: some View {
         ZStack {
             Circle()
                 .fill(FlotillaColors.accent.opacity(0.10))
                 .frame(width: 96, height: 96)
-            Circle()
-                .strokeBorder(FlotillaColors.accent.opacity(0.4), lineWidth: 1)
-                .frame(width: 96, height: 96)
-                .scaleEffect(pulse ? 1.3 : 1)
-                .opacity(pulse ? 0 : 0.6)
-            Image(systemName: "point.3.connected.trianglepath.dotted")
+            sonarRing
+            Image(systemName: "sailboat")
                 .font(.system(size: 40, weight: .light))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(FlotillaColors.accent)
         }
         .accessibilityHidden(true)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeOut(duration: 2.4).repeatForever(autoreverses: false)) {
-                pulse = true
+    }
+
+    /// Read off the clock rather than driven by `.repeatForever`. A repeating
+    /// animation never closes its transaction, so every geometry change made
+    /// while it runs joins it and stays interpolating — the same trap
+    /// `StatusBadge` documents, here with the whole screen caught in it: the
+    /// panel's labels froze part-way through the entrance and the detail
+    /// column laid out at a stale size. Binding the repeat to one property on
+    /// the ring (the `SessionRow` beacon's fix) is not enough on this screen,
+    /// because the ring's own position moves during the entrance and that
+    /// move joins the endless transaction too — it leaves the ring stranded
+    /// off the mark. A timeline sets each frame outright, which keeps the
+    /// motion out of the layout system entirely.
+    @ViewBuilder
+    private var sonarRing: some View {
+        if reduceMotion {
+            ring.opacity(0.6)
+        } else {
+            TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+                let cycle = context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: 2.4) / 2.4
+                // Ease out, so the ring leaves the mark quickly and fades slowly.
+                let progress = 1 - pow(1 - cycle, 3)
+                ring
+                    .scaleEffect(1 + 0.3 * progress)
+                    .opacity(0.6 * (1 - progress))
             }
         }
+    }
+
+    private var ring: some View {
+        Circle()
+            .strokeBorder(FlotillaColors.accent.opacity(0.4), lineWidth: 1)
+            .frame(width: 96, height: 96)
     }
 }
 
@@ -512,10 +578,16 @@ private struct WorkflowRow<Accessory: View>: View {
                     .font(FlotillaTypography.callout.weight(.semibold))
                     .foregroundStyle(FlotillaColors.textPrimary)
                 if let detail {
+                    // No `.fixedSize(horizontal: false, vertical: true)` here.
+                    // It ties the row's height to a width this centred column
+                    // never resolves definitely, and AppKit then throws out of
+                    // the window's layout pass — the geometry SwiftUI lands on
+                    // asks for a constraint update while that pass is still
+                    // running, which crashes the app the moment the empty
+                    // workspace appears. The text wraps without it.
                     Text(detail)
                         .font(FlotillaTypography.caption)
                         .foregroundStyle(FlotillaColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 accessory()
             }

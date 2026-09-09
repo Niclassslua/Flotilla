@@ -95,6 +95,8 @@ struct StreamProjectWorkspace: View {
                     Text(project.name)
                         .font(.system(size: 30, weight: .bold))
                         .foregroundStyle(FlotillaColors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Text(project.rootPath.path)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(FlotillaColors.textTertiary)
