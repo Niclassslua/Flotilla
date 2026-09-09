@@ -20,6 +20,22 @@ final class GridViewUITests: XCTestCase {
         gridButton.click()
     }
 
+    /// The Grid button is a toggle: pressing it while the grid is already on
+    /// screen drops back to the single-session Focus view. Before this there
+    /// was no way out of the grid from the same control that entered it.
+    func testGridButtonTogglesGridOff() {
+        let app = launchedApp()
+        switchToGrid(app)
+
+        let gridContainer = app.descendants(matching: .any)["GridView"].firstMatch
+        XCTAssertTrue(fastWait(gridContainer, timeout: 5), "first press should show the grid")
+
+        let gridButton = app.descendants(matching: .any)["Toolbar.ShowGrid"].firstMatch
+        gridButton.click()
+
+        XCTAssertTrue(gridContainer.waitForNonExistence(timeout: 5), "second press should leave the grid")
+    }
+
     func testGridInteractionAndTileFocus() {
         let app = launchedApp()
         switchToGrid(app)

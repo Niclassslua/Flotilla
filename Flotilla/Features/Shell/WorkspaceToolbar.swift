@@ -33,6 +33,17 @@ struct WorkspaceToolbar: ToolbarContent {
         navigator.presentation = mode
     }
 
+    /// Pressing a lit presentation button again turns it off, dropping back to
+    /// the single-session Focus view. Without this, entering Grid or Board from
+    /// the toolbar left no way back out from the same control.
+    private func toggle(_ mode: WorkspacePresentation) {
+        if isPresenting(mode) {
+            navigator.presentation = .focus
+        } else {
+            show(mode)
+        }
+    }
+
     var body: some ToolbarContent {
         // Leading Flotilla brand mark. `.navigation` pins it to the true
         // leading edge so it never reflows when principal/trailing items
@@ -97,8 +108,8 @@ struct WorkspaceToolbar: ToolbarContent {
         // there meant a detour through the navigator. Keeping all four global
         // actions in one group anchors them together.
         ToolbarItemGroup(placement: .automatic) {
-            presentationButton(.grid, help: "Session grid", identifier: .toolbarShowGrid)
-            presentationButton(.board, help: "Kanban board", identifier: .toolbarShowBoard)
+            presentationButton(.grid, help: "Session grid", activeHelp: "Exit session grid", identifier: .toolbarShowGrid)
+            presentationButton(.board, help: "Kanban board", activeHelp: "Exit Kanban board", identifier: .toolbarShowBoard)
 
             Button(action: onCommandPalette) {
                 Image(systemName: "command")
@@ -117,18 +128,19 @@ struct WorkspaceToolbar: ToolbarContent {
     private func presentationButton(
         _ mode: WorkspacePresentation,
         help: String,
+        activeHelp: String,
         identifier: AXID
     ) -> some View {
         let isActive = isPresenting(mode)
         return Button {
-            show(mode)
+            toggle(mode)
         } label: {
             Image(systemName: mode.systemImage)
                 .font(.system(size: 15, weight: .medium))
         }
         .controlSize(.large)
         .foregroundStyle(isActive ? FlotillaColors.accent : FlotillaColors.textPrimary)
-        .help(help)
+        .help(isActive ? activeHelp : help)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
         .accessibilityIdentifier(identifier.rawValue)
     }
