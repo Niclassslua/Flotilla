@@ -178,6 +178,32 @@ final class SessionReviewViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.comments.isEmpty)
     }
 
+    func testFailedCommentPersistenceKeepsTheReviewUnchangedAndShowsTheError() async throws {
+        let git = MockGitService()
+        git.defaultBranchToReturn = "main"
+        git.comparisonChangesToReturn = [change("A.swift", lines: ["+a"])]
+
+        let repository = try GRDBSessionRepository()
+        let session = makeSession()
+        try repository.save(session)
+        let viewModel = makeViewModel(git: git, repository: repository, session: session)
+        await viewModel.load()
+        let file = try XCTUnwrap(viewModel.files.first)
+
+        // Removing the owning session makes both review writes violate their
+        // foreign key, exercising the production repository failure path.
+        try repository.delete(sessionID: session.id)
+
+        XCTAssertNil(viewModel.addComment(path: file.path, anchor: .file, body: "Must persist"))
+        XCTAssertTrue(viewModel.comments.isEmpty)
+        XCTAssertEqual(viewModel.files.first?.commentCount, 0)
+        XCTAssertTrue(viewModel.errorMessage?.contains("could not be saved") == true)
+
+        viewModel.toggleViewed(file)
+        XCTAssertFalse(try XCTUnwrap(viewModel.files.first).isViewed)
+        XCTAssertTrue(viewModel.errorMessage?.contains("viewed state") == true)
+    }
+
     /// Sending must not re-send. A comment already delivered stays on screen
     /// for reference but stops counting as owed.
     func testOnlyUnsentCommentsAreOwedToTheAgent() async throws {
@@ -194,7 +220,7 @@ final class SessionReviewViewModelTests: XCTestCase {
         let first = try XCTUnwrap(viewModel.addComment(path: "A.swift", anchor: .file, body: "First pass."))
         XCTAssertTrue(viewModel.canSend)
 
-        viewModel.markSent([first])
+        try viewModel.markSent([first])
 
         XCTAssertTrue(viewModel.unsentComments.isEmpty)
         XCTAssertFalse(viewModel.canSend)
@@ -203,6 +229,25 @@ final class SessionReviewViewModelTests: XCTestCase {
 
         viewModel.addComment(path: "A.swift", anchor: .file, body: "Second pass.")
         XCTAssertEqual(viewModel.unsentComments.map(\.body), ["Second pass."])
+    }
+
+    func testEditingASentCommentMakesTheChangedTextUnsent() async throws {
+        let git = MockGitService()
+        git.defaultBranchToReturn = "main"
+        git.comparisonChangesToReturn = [change("A.swift", lines: ["+a"])]
+
+        let repository = try GRDBSessionRepository()
+        let session = makeSession()
+        try repository.save(session)
+        let viewModel = makeViewModel(git: git, repository: repository, session: session)
+        await viewModel.load()
+
+        let comment = try XCTUnwrap(viewModel.addComment(path: "A.swift", anchor: .file, body: "First pass."))
+        try viewModel.markSent([comment])
+        viewModel.updateComment(comment, body: "Changed after delivery.")
+
+        XCTAssertEqual(viewModel.unsentComments.map(\.body), ["Changed after delivery."])
+        XCTAssertNil(try XCTUnwrap(repository.loadReviewComments(sessionID: session.id).first).sentAt)
     }
 
     func testDeletingACommentRemovesItFromTheFileCount() async throws {

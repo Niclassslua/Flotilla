@@ -91,7 +91,7 @@ final class ReviewPromptFormatterTests: XCTestCase {
 
     /// Whole-file remarks set up the specific ones, so they have to come
     /// first regardless of the order they were written in.
-    func testFileCommentsPrecedeLineCommentsAndLinesAreOrdered() {
+    func testFileCommentsPrecedeLineCommentsAndLinesAreOrdered() throws {
         let target = file(
             path: "A.swift",
             hunk: FileDiffHunk(header: "@@ -1,3 +1,3 @@", lines: ["+one", "+two", "+three"])
@@ -108,14 +108,11 @@ final class ReviewPromptFormatterTests: XCTestCase {
             files: [target]
         )
 
-        let overall = try? XCTUnwrap(prompt.range(of: "overall"))
-        let first = try? XCTUnwrap(prompt.range(of: "first"))
-        let third = try? XCTUnwrap(prompt.range(of: "third"))
-        XCTAssertNotNil(overall)
-        XCTAssertNotNil(first)
-        XCTAssertNotNil(third)
-        XCTAssertTrue(overall!.lowerBound < first!.lowerBound, "whole-file comment should lead")
-        XCTAssertTrue(first!.lowerBound < third!.lowerBound, "line comments should be in line order")
+        let overall = try XCTUnwrap(prompt.range(of: "overall"))
+        let first = try XCTUnwrap(prompt.range(of: "first"))
+        let third = try XCTUnwrap(prompt.range(of: "third"))
+        XCTAssertTrue(overall.lowerBound < first.lowerBound, "whole-file comment should lead")
+        XCTAssertTrue(first.lowerBound < third.lowerBound, "line comments should be in line order")
     }
 
     func testGroupsCommentsByFileAndCountsThemInTheHeading() {

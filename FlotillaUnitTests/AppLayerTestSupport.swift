@@ -123,3 +123,19 @@ final class MockTmuxSessionTerminator: TmuxSessionTerminating, @unchecked Sendab
         stubbedSessions
     }
 }
+
+final class RecordingTmuxGoalDeliverer: TmuxGoalDelivering, @unchecked Sendable {
+    enum Failure: LocalizedError {
+        case rejected
+
+        var errorDescription: String? { "tmux rejected the message" }
+    }
+
+    var shouldFail = false
+    private(set) var deliveries: [(goal: String, sessionName: String, executable: URL)] = []
+
+    func deliverGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) throws {
+        if shouldFail { throw Failure.rejected }
+        deliveries.append((goal, name, tmuxExecutable))
+    }
+}

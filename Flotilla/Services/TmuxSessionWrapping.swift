@@ -379,11 +379,11 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
 /// the pane to actually be ready, running `send-keys` synchronously) —
 /// callers must invoke this off the main actor.
 protocol TmuxGoalDelivering: Sendable {
-    func deliverGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL)
+    func deliverGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) throws
 }
 
 struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
-    func deliverGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) {
+    func deliverGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) throws {
         // The agent CLI takes a real moment to boot (auth checks, MCP
         // server discovery, etc.) before it's actually listening for
         // input — send-keys arriving before then is silently dropped, not
@@ -393,17 +393,17 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         // needless latency to a fast one.
         waitForPaneToStabilize(sessionName: name, tmuxExecutable: tmuxExecutable)
         if goal.contains("\n") || goal.contains("\r") {
-            pasteGoal(goal, toSessionNamed: name, tmuxExecutable: tmuxExecutable)
+            try pasteGoal(goal, toSessionNamed: name, tmuxExecutable: tmuxExecutable)
         } else {
             // Two separate invocations, matching the verified-working manual
             // sequence: the literal text lands in the composer, then Enter — as
             // its own distinct injection — is what actually submits it.
-            runSendKeys(["-t", name, "-l", goal], tmuxExecutable: tmuxExecutable)
+            try runSendKeys(["-t", name, "-l", goal], tmuxExecutable: tmuxExecutable)
         }
-        runSendKeys(["-t", name, "Enter"], tmuxExecutable: tmuxExecutable)
+        try runSendKeys(["-t", name, "Enter"], tmuxExecutable: tmuxExecutable)
     }
 
-    private func pasteGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) {
+    private func pasteGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) throws {
         let bufferName = "flotilla-paste-\(UUID().uuidString)"
         let loadProcess = ChildProcessEnvironment.makeProcess()
         loadProcess.executableURL = tmuxExecutable
@@ -412,14 +412,12 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         loadProcess.standardInput = inPipe
         loadProcess.standardOutput = FileHandle.nullDevice
         loadProcess.standardError = FileHandle.nullDevice
-        do {
-            try loadProcess.run()
-            inPipe.fileHandleForWriting.write(Data(goal.utf8))
-            try? inPipe.fileHandleForWriting.close()
-            loadProcess.waitUntilExit()
-        } catch {
-            runSendKeys(["-t", name, "-l", goal], tmuxExecutable: tmuxExecutable)
-            return
+        try loadProcess.run()
+        inPipe.fileHandleForWriting.write(Data(goal.utf8))
+        try? inPipe.fileHandleForWriting.close()
+        loadProcess.waitUntilExit()
+        guard loadProcess.terminationStatus == 0 else {
+            throw TmuxGoalDeliveryError.commandFailed("load-buffer", loadProcess.terminationStatus)
         }
 
         let pasteProcess = ChildProcessEnvironment.makeProcess()
@@ -428,8 +426,11 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
             + ["paste-buffer", "-p", "-d", "-b", bufferName, "-t", name]
         pasteProcess.standardOutput = FileHandle.nullDevice
         pasteProcess.standardError = FileHandle.nullDevice
-        try? pasteProcess.run()
+        try pasteProcess.run()
         pasteProcess.waitUntilExit()
+        guard pasteProcess.terminationStatus == 0 else {
+            throw TmuxGoalDeliveryError.commandFailed("paste-buffer", pasteProcess.terminationStatus)
+        }
     }
 
     private func waitForPaneToStabilize(sessionName: String, tmuxExecutable: URL) {
@@ -489,19 +490,27 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         return String(decoding: data, as: UTF8.self)
     }
 
-    private func runSendKeys(_ arguments: [String], tmuxExecutable: URL) {
+    private func runSendKeys(_ arguments: [String], tmuxExecutable: URL) throws {
         let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = tmuxExecutable
         process.arguments = TmuxSessionWrapping.socketArguments() + ["send-keys"] + arguments
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            // Best-effort: worst case the goal is left sitting typed but
-            // unsubmitted, matching today's known behavior rather than
-            // silently losing it.
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw TmuxGoalDeliveryError.commandFailed("send-keys", process.terminationStatus)
+        }
+    }
+}
+
+private enum TmuxGoalDeliveryError: LocalizedError {
+    case commandFailed(String, Int32)
+
+    var errorDescription: String? {
+        switch self {
+        case let .commandFailed(command, status):
+            "tmux \(command) exited with code \(status)."
         }
     }
 }

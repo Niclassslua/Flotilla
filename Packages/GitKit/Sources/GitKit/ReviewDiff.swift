@@ -267,7 +267,11 @@ public enum ReviewDiff {
     ///
     /// Covers headers as well as line content: a hunk that moved without its
     /// text changing is still a different diff to review.
-    public static func fingerprint(for hunks: [FileDiffHunk]) -> String {
+    public static func fingerprint(
+        for hunks: [FileDiffHunk],
+        fallbackContent: Data? = nil,
+        fileMode: Int? = nil
+    ) -> String {
         var hasher = SHA256()
         for hunk in hunks {
             hasher.update(data: Data(hunk.header.utf8))
@@ -276,6 +280,17 @@ public enum ReviewDiff {
                 hasher.update(data: Data(line.utf8))
                 hasher.update(data: Data([0]))
             }
+        }
+        // Binary and mode-only diffs have no textual hunk lines. Include the
+        // current bytes and mode supplied by the caller so editing one after it
+        // was marked viewed invalidates the mark just like a text edit does.
+        if let fallbackContent {
+            hasher.update(data: Data("file-content".utf8))
+            hasher.update(data: Data([0]))
+            hasher.update(data: fallbackContent)
+        }
+        if let fileMode {
+            hasher.update(data: Data("file-mode:\(fileMode)".utf8))
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }

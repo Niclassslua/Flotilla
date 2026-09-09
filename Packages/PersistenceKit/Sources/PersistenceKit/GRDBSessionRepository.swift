@@ -366,6 +366,22 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
         }
     }
 
+    public func markReviewCommentsSent(sessionID: UUID, commentIDs: Set<UUID>, at date: Date) throws {
+        guard !commentIDs.isEmpty else { return }
+        try dbQueue.write { db in
+            for commentID in commentIDs {
+                guard var record = try ReviewCommentRecord.fetchOne(db, key: commentID.uuidString),
+                      record.sessionID == sessionID.uuidString
+                else {
+                    throw ReviewPersistenceError.commentNotFound(commentID)
+                }
+                record.sentAt = date
+                record.updatedAt = date
+                try record.update(db)
+            }
+        }
+    }
+
     public func deleteReviewComment(id: UUID) throws {
         _ = try dbQueue.write { db in
             try ReviewCommentRecord.deleteOne(db, key: id.uuidString)
@@ -402,6 +418,17 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 .filter(Column("scope") == scope.rawValue)
                 .filter(Column("filePath") == filePath)
                 .deleteAll(db)
+        }
+    }
+}
+
+private enum ReviewPersistenceError: LocalizedError {
+    case commentNotFound(UUID)
+
+    var errorDescription: String? {
+        switch self {
+        case let .commentNotFound(id):
+            "Review comment \(id.uuidString) no longer exists."
         }
     }
 }

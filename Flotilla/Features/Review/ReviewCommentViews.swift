@@ -13,6 +13,12 @@ struct ReviewCommentBubble: View {
     let onDelete: () -> Void
 
     @State private var isHovering = false
+    @FocusState private var focusedAction: Action?
+
+    private enum Action: Hashable {
+        case edit
+        case delete
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: FlotillaSpacing.small) {
@@ -37,9 +43,8 @@ struct ReviewCommentBubble: View {
                 }
             }
 
-            if isHovering {
-                actions
-            }
+            actions
+                .opacity(isHovering || focusedAction != nil ? 1 : 0)
         }
         .padding(.horizontal, FlotillaSpacing.small)
         .padding(.vertical, FlotillaSpacing.small)
@@ -63,12 +68,14 @@ struct ReviewCommentBubble: View {
             Button(action: onEdit) {
                 Image(systemName: "pencil")
             }
+            .focused($focusedAction, equals: .edit)
             .help("Edit comment")
             .accessibilityLabel("Edit comment")
 
             Button(action: onDelete) {
                 Image(systemName: "trash")
             }
+            .focused($focusedAction, equals: .delete)
             .help("Delete comment")
             .accessibilityLabel("Delete comment")
         }

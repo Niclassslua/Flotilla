@@ -198,7 +198,7 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 | **Diff line** | One rendered line: number gutter, marker, source text. The shared primitive behind both layouts. | `ReviewDiffLineView` |
 | **Comment thread** | Comments attached to a line or to a whole file, drawn under what they refer to. | `ReviewCommentBubble`, `ReviewCommentEditor` |
 | **Viewed tick** | The per-file checkbox. Clears itself when the file's diff changes after being ticked. | `ReviewedFile` — SessionKit |
-| **Send sheet** | Picks where a finished review goes: a running session, or a new session with any agent. | `ReviewSendSheet`, `ReviewDestination` |
+| **Send sheet** | Picks which running session receives a finished review. | `ReviewSendSheet` |
 
 ---
 

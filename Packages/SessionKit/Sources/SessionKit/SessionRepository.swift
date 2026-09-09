@@ -30,6 +30,8 @@ public protocol SessionRepository: Sendable {
     /// Every comment left on a session's work, in creation order.
     func loadReviewComments(sessionID: UUID) throws -> [ReviewComment]
     func saveReviewComment(_ comment: ReviewComment) throws
+    /// Atomically records successful delivery for the supplied comments.
+    func markReviewCommentsSent(sessionID: UUID, commentIDs: Set<UUID>, at date: Date) throws
     func deleteReviewComment(id: UUID) throws
     /// Clears a session's whole review — used when the reviewer discards it.
     func deleteReviewComments(sessionID: UUID) throws

@@ -34,22 +34,11 @@ final class AppEnvironment {
     /// with a fleet covering every status, waiting reason, and agent. Used to
     /// review board/card designs without touching the real session store.
     let isBoardDemo: Bool
-    /// `FLOTILLA_REVIEW_DEMO=1`: a hands-on demo of the review window, run
-    /// against `Scripts/make-review-demo.sh`'s repository.
-    let isReviewDemo: Bool
-    /// Whether agent processes should be faked.
-    ///
-    /// True for UI tests, and for the review demo — a demo whose seeded
-    /// session launched a real agent would have that agent editing the very
-    /// diff being reviewed, and would move the session straight out of Ready
-    /// for Review, which is the one state the review opens from.
-    var usesMockProcesses: Bool { isUITesting || isReviewDemo }
     let startupWarning: String?
 
     init() {
         isUITesting = ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
         isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
-        isReviewDemo = Self.isReviewDemo
         let supportDirectory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Flotilla", isDirectory: true)
@@ -67,26 +56,20 @@ final class AppEnvironment {
             BoardDemoFixtures.seed(into: repository)
             sessionRepository = repository
             startupWarning = nil
-        } else if isReviewDemo {
-            // On disk, but its own database beside the demo repository rather
-            // than the user's: a review is worth keeping across a relaunch,
-            // and a demo session is not worth putting in their real fleet.
-            let repository = Self.makeReviewDemoRepository()
-            Self.seedReviewDemo(into: repository)
-            sessionRepository = repository
-            startupWarning = Self.reviewDemoRepoExists
-                ? nil
-                : "The review demo repository is missing. Run Scripts/make-review-demo.sh, then relaunch."
         } else if isUITesting {
             let repository = (try? GRDBSessionRepository()) ?? Self.makeInMemoryRepositoryOrCrash()
             Self.seedFixtures(into: repository)
             sessionRepository = repository
             startupWarning = nil
-            Self.resetUITestWorktreeDirectories()
-            Self.resetGitFixtureRepo()
-            if Self.isSimulatingReviewSession {
-                Self.resetReviewFixtureRepo()
-                Self.seedReviewFixture(into: repository)
+            do {
+                Self.resetUITestWorktreeDirectories()
+                try Self.resetGitFixtureRepo()
+                if Self.isSimulatingReviewSession {
+                    try Self.resetReviewFixtureRepo()
+                    Self.seedReviewFixture(into: repository)
+                }
+            } catch {
+                preconditionFailure("UI test fixture setup failed: \(error.localizedDescription)")
             }
         } else {
             let dbPath = supportDirectory.appendingPathComponent("flotilla.sqlite")
@@ -114,50 +97,6 @@ final class AppEnvironment {
         }
     }
 
-    // MARK: - Review demo
-
-    /// `FLOTILLA_REVIEW_DEMO=1`: run against the demo repository built by
-    /// `Scripts/make-review-demo.sh`, with a Ready-for-Review session over it.
-    ///
-    /// Kept apart from the UI-test fixture below because the two want opposite
-    /// things: a test wants a small repository rebuilt identically on every
-    /// launch, and this wants a substantial one whose review survives being
-    /// quit and reopened.
-    static let reviewDemoRepoPath = URL(fileURLWithPath: "/tmp/flotilla-review-demo/uploader")
-    static let reviewDemoSessionTitle = "Retry failed uploads"
-
-    private static var isReviewDemo: Bool {
-        ProcessInfo.processInfo.environment["FLOTILLA_REVIEW_DEMO"] == "1"
-    }
-
-    private static var reviewDemoRepoExists: Bool {
-        FileManager.default.fileExists(atPath: reviewDemoRepoPath.appendingPathComponent(".git").path)
-    }
-
-    private static func makeReviewDemoRepository() -> GRDBSessionRepository {
-        let path = reviewDemoRepoPath
-            .deletingLastPathComponent()
-            .appendingPathComponent("demo.sqlite")
-        return (try? GRDBSessionRepository(path: path)) ?? makeInMemoryRepositoryOrCrash()
-    }
-
-    /// Seeds once. A relaunch finds the session already there and leaves it —
-    /// along with whatever review has been written against it — alone.
-    private static func seedReviewDemo(into repository: SessionRepository) {
-        guard let existing = try? repository.loadAll(), existing.sessions.isEmpty else { return }
-
-        let project = Project(name: "Uploader", rootPath: reviewDemoRepoPath)
-        try? repository.save(project)
-        try? repository.save(Session(
-            title: reviewDemoSessionTitle,
-            goal: "Uploads fail on flaky networks. Retry 5xx and timeouts with backoff.",
-            agent: .claudeCode,
-            projectID: project.id,
-            workingDirectory: reviewDemoRepoPath,
-            status: .readyForReview
-        ))
-    }
-
     /// `UI_TESTING_SIMULATE_REVIEW_SESSION=1`: seed a Ready-for-Review session
     /// over a repository that already has changes to look at.
     ///
@@ -175,19 +114,21 @@ final class AppEnvironment {
     /// rename is a compile error there rather than a silent miss.
     static let uiTestReviewSessionTitle = "Retry the uploader"
 
-    private static func resetReviewFixtureRepo() {
+    private static func resetReviewFixtureRepo() throws {
         let path = uiTestReviewProjectPath
         let fileManager = FileManager.default
-        try? fileManager.removeItem(at: path)
-        try? fileManager.createDirectory(at: path, withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: path.path) {
+            try fileManager.removeItem(at: path)
+        }
+        try fileManager.createDirectory(at: path, withIntermediateDirectories: true)
 
         let uploader = path.appendingPathComponent("Uploader.swift")
         let notes = path.appendingPathComponent("NOTES.md")
 
-        runGit(["init", "-b", "main"], at: path)
-        try? "func upload() {\n    legacyUpload()\n}\n".write(to: uploader, atomically: true, encoding: .utf8)
-        runGit(["add", "Uploader.swift"], at: path)
-        runGit(
+        try runGit(["init", "-b", "main"], at: path)
+        try "func upload() {\n    legacyUpload()\n}\n".write(to: uploader, atomically: true, encoding: .utf8)
+        try runGit(["add", "Uploader.swift"], at: path)
+        try runGit(
             ["-c", "user.name=Flotilla UITests", "-c", "user.email=uitests@example.com", "commit", "-m", "init"],
             at: path
         )
@@ -195,12 +136,12 @@ final class AppEnvironment {
         // Modified-and-uncommitted, so both review scopes have something in
         // them: the branch scope diffs the working tree against the merge
         // base, the uncommitted scope against HEAD.
-        try? "func upload() {\n    try await session.upload(chunk)\n}\n".write(
+        try "func upload() {\n    try await session.upload(chunk)\n}\n".write(
             to: uploader,
             atomically: true,
             encoding: .utf8
         )
-        try? "Untracked notes\n".write(to: notes, atomically: true, encoding: .utf8)
+        try "Untracked notes\n".write(to: notes, atomically: true, encoding: .utf8)
     }
 
     private static func seedReviewFixture(into repository: SessionRepository) {
@@ -216,28 +157,49 @@ final class AppEnvironment {
         ))
     }
 
-    private static func resetGitFixtureRepo() {
+    private static func resetGitFixtureRepo() throws {
         let path = uiTestFixtureProjectPath
         let fileManager = FileManager.default
-        try? fileManager.removeItem(at: path)
-        try? fileManager.createDirectory(at: path, withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: path.path) {
+            try fileManager.removeItem(at: path)
+        }
+        try fileManager.createDirectory(at: path, withIntermediateDirectories: true)
 
-        runGit(["init", "-b", "main"], at: path)
-        try? "# Fixture\n".write(to: path.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
-        try? "# Fixture Rules\n\nBe concise.\n".write(to: path.appendingPathComponent("CLAUDE.md"), atomically: true, encoding: .utf8)
-        runGit(["add", "README.md", "CLAUDE.md"], at: path)
-        runGit(["-c", "user.name=Flotilla UITests", "-c", "user.email=uitests@example.com", "commit", "-m", "init"], at: path)
+        try runGit(["init", "-b", "main"], at: path)
+        try "# Fixture\n".write(to: path.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try "# Fixture Rules\n\nBe concise.\n".write(to: path.appendingPathComponent("CLAUDE.md"), atomically: true, encoding: .utf8)
+        try runGit(["add", "README.md", "CLAUDE.md"], at: path)
+        try runGit(["-c", "user.name=Flotilla UITests", "-c", "user.email=uitests@example.com", "commit", "-m", "init"], at: path)
     }
 
-    private static func runGit(_ arguments: [String], at path: URL) {
+    private static func runGit(_ arguments: [String], at path: URL) throws {
         let process = ChildProcessEnvironment.makeProcess()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + arguments
         process.currentDirectoryURL = path
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try? process.run()
+        process.standardOutput = FileHandle.nullDevice
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        try process.run()
         process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderr = String(decoding: data, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw UITestFixtureError.gitFailed(arguments: arguments, status: process.terminationStatus, stderr: stderr)
+        }
+    }
+
+    private enum UITestFixtureError: LocalizedError {
+        case gitFailed(arguments: [String], status: Int32, stderr: String)
+
+        var errorDescription: String? {
+            switch self {
+            case let .gitFailed(arguments, status, stderr):
+                let detail = stderr.isEmpty ? "no error output" : stderr
+                return "git \(arguments.joined(separator: " ")) exited with code \(status): \(detail)"
+            }
+        }
     }
 
     private static func makeInMemoryRepositoryOrCrash() -> GRDBSessionRepository {

@@ -64,10 +64,10 @@ struct FlotillaApp: App {
 #endif
         let settingsViewModel = SettingsViewModel(store: settingsStore)
         _settingsViewModel = State(initialValue: settingsViewModel)
-        let locator: any ExecutableLocating = environment.usesMockProcesses
+        let locator: any ExecutableLocating = environment.isUITesting
             ? UITestExecutableLocator()
             : PATHExecutableLocator()
-        let processFactory: any PTYProcessCreating = environment.usesMockProcesses
+        let processFactory: any PTYProcessCreating = environment.isUITesting
             ? MockPTYProcessFactory(echoesInput: true)
             : SystemPTYProcessFactory()
 

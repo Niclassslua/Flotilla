@@ -53,6 +53,7 @@ struct ReviewDiffLineView: View {
     let onAddComment: ((ReviewSide, Int) -> Void)?
 
     @State private var isHovering = false
+    @FocusState private var isCommentButtonFocused: Bool
 
     enum Gutter {
         case both
@@ -103,8 +104,10 @@ struct ReviewDiffLineView: View {
     private func leadingGutterCell(_ number: Int?) -> some View {
         gutterCell(number)
             .overlay {
-                if isHovering, commentTarget != nil {
+                if commentTarget != nil {
                     addCommentButton
+                        .focused($isCommentButtonFocused)
+                        .opacity(isHovering || isCommentButtonFocused ? 1 : 0)
                 }
             }
     }

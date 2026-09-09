@@ -121,7 +121,7 @@ final class SessionReviewViewModel {
             case .uncommitted: try await gitService.uncommittedChanges(at: repoPath)
             }
 
-            loadReviewState()
+            try loadReviewState()
             apply(changes)
             errorMessage = nil
             isStale = false
@@ -139,9 +139,11 @@ final class SessionReviewViewModel {
         return try await gitService.changesCompared(to: base, at: repoPath)
     }
 
-    private func loadReviewState() {
-        comments = (try? repository.loadReviewComments(sessionID: session.id)) ?? []
-        viewedFiles = (try? repository.loadReviewedFiles(sessionID: session.id)) ?? []
+    private func loadReviewState() throws {
+        let loadedComments = try repository.loadReviewComments(sessionID: session.id)
+        let loadedViewedFiles = try repository.loadReviewedFiles(sessionID: session.id)
+        comments = loadedComments
+        viewedFiles = loadedViewedFiles
     }
 
     private func apply(_ changes: [GitCommitFileChange]) {
@@ -149,7 +151,7 @@ final class SessionReviewViewModel {
         files = changes
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
             .map { change in
-                let fingerprint = ReviewDiff.fingerprint(for: change.hunks)
+                let fingerprint = fingerprint(for: change)
                 return ReviewFile(
                     change: change,
                     hunks: ReviewDiff.review(change.hunks),
@@ -166,6 +168,23 @@ final class SessionReviewViewModel {
         } else {
             selectedPath = files.first?.path
         }
+    }
+
+    private func fingerprint(for change: GitCommitFileChange) -> String {
+        let hasTextualDiff = change.hunks.contains { !$0.lines.isEmpty }
+        guard !hasTextualDiff else {
+            return ReviewDiff.fingerprint(for: change.hunks)
+        }
+
+        let fileURL = repoPath.appendingPathComponent(change.path)
+        let content = try? Data(contentsOf: fileURL, options: .mappedIfSafe)
+        let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let mode = (attributes?[.posixPermissions] as? NSNumber)?.intValue
+        return ReviewDiff.fingerprint(
+            for: change.hunks,
+            fallbackContent: content,
+            fileMode: mode
+        )
     }
 
     /// A tick counts only while it still refers to the diff on screen. The
@@ -186,21 +205,26 @@ final class SessionReviewViewModel {
     // MARK: - Viewed marks
 
     func toggleViewed(_ file: ReviewFile) {
-        if file.isViewed {
-            try? repository.deleteReviewedFile(sessionID: session.id, scope: scope, filePath: file.path)
-            viewedFiles.removeAll { $0.filePath == file.path && $0.scope == scope }
-        } else {
-            let mark = ReviewedFile(
-                sessionID: session.id,
-                scope: scope,
-                filePath: file.path,
-                diffFingerprint: file.fingerprint
-            )
-            try? repository.saveReviewedFile(mark)
-            viewedFiles.removeAll { $0.filePath == file.path && $0.scope == scope }
-            viewedFiles.append(mark)
+        do {
+            if file.isViewed {
+                try repository.deleteReviewedFile(sessionID: session.id, scope: scope, filePath: file.path)
+                viewedFiles.removeAll { $0.filePath == file.path && $0.scope == scope }
+            } else {
+                let mark = ReviewedFile(
+                    sessionID: session.id,
+                    scope: scope,
+                    filePath: file.path,
+                    diffFingerprint: file.fingerprint
+                )
+                try repository.saveReviewedFile(mark)
+                viewedFiles.removeAll { $0.filePath == file.path && $0.scope == scope }
+                viewedFiles.append(mark)
+            }
+            errorMessage = nil
+            refreshFileState()
+        } catch {
+            errorMessage = "The viewed state could not be saved: \(error.localizedDescription)"
         }
-        refreshFileState()
     }
 
     // MARK: - Comments
@@ -216,10 +240,16 @@ final class SessionReviewViewModel {
             anchor: anchor,
             body: trimmed
         )
-        try? repository.saveReviewComment(comment)
-        comments.append(comment)
-        refreshFileState()
-        return comment
+        do {
+            try repository.saveReviewComment(comment)
+            comments.append(comment)
+            errorMessage = nil
+            refreshFileState()
+            return comment
+        } catch {
+            errorMessage = "The comment could not be saved: \(error.localizedDescription)"
+            return nil
+        }
     }
 
     func updateComment(_ comment: ReviewComment, body: String) {
@@ -229,26 +259,42 @@ final class SessionReviewViewModel {
             return
         }
         guard let index = comments.firstIndex(where: { $0.id == comment.id }) else { return }
-        comments[index].body = trimmed
-        comments[index].updatedAt = Date()
-        try? repository.saveReviewComment(comments[index])
+        var updated = comments[index]
+        guard updated.body != trimmed else { return }
+        updated.body = trimmed
+        updated.updatedAt = Date()
+        updated.sentAt = nil
+        do {
+            try repository.saveReviewComment(updated)
+            comments[index] = updated
+            errorMessage = nil
+        } catch {
+            errorMessage = "The comment could not be updated: \(error.localizedDescription)"
+        }
     }
 
     func deleteComment(_ comment: ReviewComment) {
-        try? repository.deleteReviewComment(id: comment.id)
-        comments.removeAll { $0.id == comment.id }
-        refreshFileState()
+        do {
+            try repository.deleteReviewComment(id: comment.id)
+            comments.removeAll { $0.id == comment.id }
+            errorMessage = nil
+            refreshFileState()
+        } catch {
+            errorMessage = "The comment could not be deleted: \(error.localizedDescription)"
+        }
     }
 
     /// Stamps every comment in `delivered` as sent. They stay on screen —
     /// greyed rather than gone — so a second pass can see what was already
     /// asked for.
-    func markSent(_ delivered: [ReviewComment], at date: Date = Date()) {
+    func markSent(_ delivered: [ReviewComment], at date: Date = Date()) throws {
         let ids = Set(delivered.map(\.id))
+        try repository.markReviewCommentsSent(sessionID: session.id, commentIDs: ids, at: date)
         for index in comments.indices where ids.contains(comments[index].id) {
             comments[index].sentAt = date
-            try? repository.saveReviewComment(comments[index])
+            comments[index].updatedAt = date
         }
+        errorMessage = nil
     }
 
     /// Recomputes only the per-file review state, leaving the diff alone —

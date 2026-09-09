@@ -227,4 +227,75 @@ final class SessionProcessManagerTests: XCTestCase {
         XCTAssertFalse(first === replacement)
         XCTAssertTrue(replacement.sentInput.isEmpty, "restart must not replay potentially destructive goals")
     }
+
+    func testReviewDeliveryReturnsOnlyAfterTmuxAcceptsTheMessage() async throws {
+        let factory = RecordingProcessFactory()
+        let deliverer = RecordingTmuxGoalDeliverer()
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/local/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxGoalDeliverer: deliverer,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: true)
+        )
+        let model = session()
+        _ = try manager.start(session: model, deliverGoal: false)
+
+        try await manager.deliverMessage("Review feedback", to: model.id)
+
+        XCTAssertEqual(deliverer.deliveries.map(\.goal), ["Review feedback"])
+        XCTAssertEqual(
+            deliverer.deliveries.map(\.sessionName),
+            [TmuxSessionWrapping.sessionName(for: model.id)]
+        )
+    }
+
+    func testReviewDeliveryFailurePropagatesWithoutWritingToRawPTY() async throws {
+        let factory = RecordingProcessFactory()
+        let deliverer = RecordingTmuxGoalDeliverer()
+        deliverer.shouldFail = true
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/local/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxGoalDeliverer: deliverer,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: true)
+        )
+        let model = session()
+        let process = try XCTUnwrap(try manager.start(session: model, deliverGoal: false) as? MockPTYProcess)
+
+        do {
+            try await manager.deliverMessage("Review feedback", to: model.id)
+            XCTFail("delivery should propagate the tmux failure")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "tmux rejected the message")
+        }
+        XCTAssertTrue(process.sentInput.isEmpty, "failed tmux delivery must not pretend a raw PTY write was submitted")
+    }
+
+    func testReviewDeliveryRefusesANonTmuxSession() async throws {
+        let factory = RecordingProcessFactory()
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(executable: URL(fileURLWithPath: "/usr/bin/env")),
+            processFactory: factory,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: false)
+        )
+        let model = session()
+        let process = try XCTUnwrap(try manager.start(session: model, deliverGoal: false) as? MockPTYProcess)
+
+        do {
+            try await manager.deliverMessage("Review feedback", to: model.id)
+            XCTFail("raw PTY delivery is not a reliable submission path")
+        } catch {
+            XCTAssertEqual(
+                error as? SessionProcessManager.MessageDeliveryError,
+                .reliableTransportUnavailable
+            )
+        }
+        XCTAssertTrue(process.sentInput.isEmpty)
+    }
 }

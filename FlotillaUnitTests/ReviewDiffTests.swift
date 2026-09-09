@@ -173,4 +173,23 @@ final class ReviewDiffTests: XCTestCase {
 
         XCTAssertNotEqual(ReviewDiff.fingerprint(for: split), ReviewDiff.fingerprint(for: joined))
     }
+
+    func testFingerprintDistinguishesBinaryContentAndFileModeWithoutTextHunks() {
+        let binary = [FileDiffHunk(header: "@@ binary file @@", lines: [])]
+
+        let original = ReviewDiff.fingerprint(
+            for: binary,
+            fallbackContent: Data([0x00, 0x01]),
+            fileMode: 0o644
+        )
+
+        XCTAssertNotEqual(
+            original,
+            ReviewDiff.fingerprint(for: binary, fallbackContent: Data([0x00, 0x02]), fileMode: 0o644)
+        )
+        XCTAssertNotEqual(
+            original,
+            ReviewDiff.fingerprint(for: binary, fallbackContent: Data([0x00, 0x01]), fileMode: 0o755)
+        )
+    }
 }

@@ -6,27 +6,15 @@ import DesignSystem
 /// Where a comment is being composed. One at a time across the whole review:
 /// two open editors would make it ambiguous which one ⌘↩ submits.
 struct ReviewCommentDraft: Equatable, Identifiable {
-    enum Target: Equatable {
-        case file
-        case line(side: ReviewSide, number: Int)
-    }
-
     let path: String
-    let target: Target
+    let anchor: ReviewCommentAnchor
     /// Set when editing an existing comment rather than writing a new one.
     var editing: UUID?
 
     var id: String {
-        switch target {
+        switch anchor {
         case .file: "\(path)#file"
         case let .line(side, number): "\(path)#\(side.rawValue):\(number)"
-        }
-    }
-
-    var anchor: ReviewCommentAnchor {
-        switch target {
-        case .file: .file
-        case let .line(side, number): .line(side: side, number: number)
         }
     }
 }
@@ -144,7 +132,7 @@ struct ReviewFileSection: View {
             DiffStatBadge(stat: file.change.stat)
 
             Button {
-                beginDraft(target: .file)
+                beginDraft(anchor: .file)
             } label: {
                 Image(systemName: "text.bubble")
                     .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
@@ -242,7 +230,7 @@ struct ReviewFileSection: View {
                         gutter: .both,
                         path: file.path,
                         onAddComment: { side, number in
-                            beginDraft(target: .line(side: side, number: number))
+                            beginDraft(anchor: .line(side: side, number: number))
                         }
                     )
                     threads(under: line)
@@ -267,7 +255,7 @@ struct ReviewFileSection: View {
                             gutter: .one(.old),
                             path: file.path,
                             onAddComment: { side, number in
-                                beginDraft(target: .line(side: side, number: number))
+                                beginDraft(anchor: .line(side: side, number: number))
                             }
                         )
                         .frame(width: columnWidth, alignment: .leading)
@@ -280,7 +268,7 @@ struct ReviewFileSection: View {
                             gutter: .one(.new),
                             path: file.path,
                             onAddComment: { side, number in
-                                beginDraft(target: .line(side: side, number: number))
+                                beginDraft(anchor: .line(side: side, number: number))
                             }
                         )
                         .frame(width: columnWidth, alignment: .leading)
@@ -352,7 +340,7 @@ struct ReviewFileSection: View {
                 draftText = comment.body
                 draft = ReviewCommentDraft(
                     path: comment.filePath,
-                    target: target(for: comment.anchor),
+                    anchor: comment.anchor,
                     editing: comment.id
                 )
             },
@@ -372,13 +360,13 @@ struct ReviewFileSection: View {
 
     // MARK: - Draft handling
 
-    private func isDrafting(_ target: ReviewCommentDraft.Target) -> Bool {
-        draft?.path == file.path && draft?.target == target
+    private func isDrafting(_ anchor: ReviewCommentAnchor) -> Bool {
+        draft?.path == file.path && draft?.anchor == anchor
     }
 
-    private func beginDraft(target: ReviewCommentDraft.Target) {
+    private func beginDraft(anchor: ReviewCommentAnchor) {
         draftText = ""
-        draft = ReviewCommentDraft(path: file.path, target: target)
+        draft = ReviewCommentDraft(path: file.path, anchor: anchor)
     }
 
     private func submitDraft() {
@@ -397,10 +385,4 @@ struct ReviewFileSection: View {
         draftText = ""
     }
 
-    private func target(for anchor: ReviewCommentAnchor) -> ReviewCommentDraft.Target {
-        switch anchor {
-        case .file: .file
-        case let .line(side, number): .line(side: side, number: number)
-        }
-    }
 }

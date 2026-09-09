@@ -50,6 +50,9 @@ struct SessionReviewWindow: View {
             viewModel = model
             branch = try? await gitService.currentBranch(at: model.repoPath)
             await model.load()
+            if self.session?.status != .readyForReview {
+                model.markStale()
+            }
         }
         // The window is entered from Ready for Review, but the agent can
         // resume behind it. Nothing reloads on its own — the reader is told,
@@ -111,8 +114,8 @@ struct SessionReviewWindow: View {
                 candidates: sendCandidates(for: session),
                 prompt: prompt(for: session, viewModel: viewModel),
                 commentCount: viewModel.unsentComments.count,
-                onSend: { destination in
-                    send(destination, session: session, viewModel: viewModel)
+                onSend: { target in
+                    send(to: target, session: session, viewModel: viewModel)
                 },
                 onCancel: { isPresentingSend = false }
             )
@@ -173,7 +176,7 @@ struct SessionReviewWindow: View {
     }
 
     private func send(
-        _ destination: ReviewDestination,
+        to target: Session,
         session: Session,
         viewModel: SessionReviewViewModel
     ) {
@@ -182,35 +185,19 @@ struct SessionReviewWindow: View {
         let text = prompt(for: session, viewModel: viewModel)
         isPresentingSend = false
 
-        switch destination {
-        case let .runningSession(target):
-            guard store.deliverMessage(text, to: target.id) else {
-                sendResult = "\(target.title) has no running agent to send to."
+        Task {
+            do {
+                try await store.deliverMessage(text, to: target.id)
+            } catch {
+                sendResult = "The review could not be sent to \(target.title): \(error.localizedDescription)"
                 return
             }
-            viewModel.markSent(delivered)
-            sendResult = "Sent \(delivered.count) comment\(delivered.count == 1 ? "" : "s") to \(target.title)."
 
-        case let .newSession(agent):
-            // The same checkout, not a new worktree: review feedback applies
-            // to the code that was just reviewed, so branching away from it
-            // would be the wrong place to act on it.
-            Task {
-                let created = await store.createSession(
-                    title: "Review: \(session.title)",
-                    goal: text,
-                    agent: agent,
-                    projectFolder: viewModel.repoPath,
-                    checkoutMode: .mainCheckout,
-                    deliverGoal: true,
-                    selectAfterCreating: false
-                )
-                guard created != nil else {
-                    sendResult = store.lastCreationError ?? "The new session could not be started."
-                    return
-                }
-                viewModel.markSent(delivered)
-                sendResult = "Started a \(agent.displayName) session with \(delivered.count) comment\(delivered.count == 1 ? "" : "s")."
+            do {
+                try viewModel.markSent(delivered)
+                sendResult = "Sent \(delivered.count) comment\(delivered.count == 1 ? "" : "s") to \(target.title)."
+            } catch {
+                sendResult = "The review was delivered, but its sent state could not be saved: \(error.localizedDescription)"
             }
         }
     }

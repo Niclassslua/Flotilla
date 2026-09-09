@@ -34,6 +34,7 @@ struct PreviewSessionRepository: SessionRepository {
 
     func loadReviewComments(sessionID: UUID) throws -> [ReviewComment] { [] }
     func saveReviewComment(_ comment: ReviewComment) throws {}
+    func markReviewCommentsSent(sessionID: UUID, commentIDs: Set<UUID>, at date: Date) throws {}
     func deleteReviewComment(id: UUID) throws {}
     func deleteReviewComments(sessionID: UUID) throws {}
     func loadReviewedFiles(sessionID: UUID) throws -> [ReviewedFile] { [] }

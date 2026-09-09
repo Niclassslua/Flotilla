@@ -96,6 +96,17 @@ final class ReviewPersistenceTests: XCTestCase {
 
     func testDeletingASessionTakesItsReviewWithIt() throws {
         let (repo, session) = try repositoryWithSession()
+        let unrelatedSession = Session(
+            title: "Keep this review",
+            goal: "Verify deletion isolation",
+            agent: .codexCLI,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp/unrelated"),
+            status: .readyForReview,
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        )
+        try repo.save(unrelatedSession)
         try repo.saveReviewComment(
             ReviewComment(
                 sessionID: session.id,
@@ -115,11 +126,84 @@ final class ReviewPersistenceTests: XCTestCase {
                 viewedAt: Self.fixedDate
             )
         )
+        let unrelatedComment = ReviewComment(
+            sessionID: unrelatedSession.id,
+            filePath: "Keep.swift",
+            anchor: .file,
+            body: "This must survive.",
+            createdAt: Self.fixedDate,
+            updatedAt: Self.fixedDate
+        )
+        try repo.saveReviewComment(unrelatedComment)
+        let unrelatedViewedFile = ReviewedFile(
+            sessionID: unrelatedSession.id,
+            scope: .branch,
+            filePath: "Keep.swift",
+            diffFingerprint: "keep",
+            viewedAt: Self.fixedDate
+        )
+        try repo.saveReviewedFile(unrelatedViewedFile)
 
         try repo.delete(sessionID: session.id)
 
         XCTAssertEqual(try repo.loadReviewComments(sessionID: session.id), [])
         XCTAssertEqual(try repo.loadReviewedFiles(sessionID: session.id), [])
+        XCTAssertEqual(try repo.loadReviewComments(sessionID: unrelatedSession.id), [unrelatedComment])
+        XCTAssertEqual(try repo.loadReviewedFiles(sessionID: unrelatedSession.id), [unrelatedViewedFile])
+    }
+
+    func testMarkingCommentsSentIsAtomicAndSessionScoped() throws {
+        let (repo, session) = try repositoryWithSession()
+        let first = ReviewComment(
+            sessionID: session.id,
+            filePath: "A.swift",
+            anchor: .file,
+            body: "First",
+            createdAt: Self.fixedDate,
+            updatedAt: Self.fixedDate
+        )
+        let second = ReviewComment(
+            sessionID: session.id,
+            filePath: "B.swift",
+            anchor: .file,
+            body: "Second",
+            createdAt: Self.fixedDate.addingTimeInterval(1),
+            updatedAt: Self.fixedDate.addingTimeInterval(1)
+        )
+        try repo.saveReviewComment(first)
+        try repo.saveReviewComment(second)
+
+        let sentAt = Self.fixedDate.addingTimeInterval(30)
+        try repo.markReviewCommentsSent(sessionID: session.id, commentIDs: [first.id, second.id], at: sentAt)
+
+        let loaded = try repo.loadReviewComments(sessionID: session.id)
+        XCTAssertEqual(loaded.map(\.sentAt), [sentAt, sentAt])
+        XCTAssertEqual(loaded.map(\.updatedAt), [sentAt, sentAt])
+    }
+
+    func testMarkingCommentsSentRollsBackWhenAnyCommentIsMissing() throws {
+        let (repo, session) = try repositoryWithSession()
+        let comment = ReviewComment(
+            sessionID: session.id,
+            filePath: "A.swift",
+            anchor: .file,
+            body: "Keep pending on failure",
+            createdAt: Self.fixedDate,
+            updatedAt: Self.fixedDate
+        )
+        try repo.saveReviewComment(comment)
+
+        XCTAssertThrowsError(
+            try repo.markReviewCommentsSent(
+                sessionID: session.id,
+                commentIDs: [comment.id, UUID()],
+                at: Self.fixedDate.addingTimeInterval(30)
+            )
+        )
+
+        let loaded = try XCTUnwrap(repo.loadReviewComments(sessionID: session.id).first)
+        XCTAssertNil(loaded.sentAt)
+        XCTAssertEqual(loaded.updatedAt, Self.fixedDate)
     }
 
     // MARK: - Viewed files

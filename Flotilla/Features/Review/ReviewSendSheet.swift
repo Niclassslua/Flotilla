@@ -2,29 +2,6 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 
-/// Where a finished review is sent.
-enum ReviewDestination: Identifiable, Equatable {
-    /// A session that is already running: the review goes into its live agent,
-    /// which keeps the conversation that produced the code.
-    case runningSession(Session)
-    /// A fresh session with the chosen agent, started from the review.
-    case newSession(AgentKind)
-
-    var id: String {
-        switch self {
-        case let .runningSession(session): "session-\(session.id.uuidString)"
-        case let .newSession(agent): "agent-\(agent.rawValue)"
-        }
-    }
-
-    var label: String {
-        switch self {
-        case let .runningSession(session): session.title
-        case let .newSession(agent): agent.displayName
-        }
-    }
-}
-
 /// Picks a destination for the review and shows what will be sent.
 ///
 /// Follows the handoff menu's shape — sectioned, one row per target, a brand
@@ -35,7 +12,7 @@ struct ReviewSendSheet: View {
     let candidates: [Session]
     let prompt: String
     let commentCount: Int
-    let onSend: (ReviewDestination) -> Void
+    let onSend: (Session) -> Void
     let onCancel: () -> Void
 
     var body: some View {
@@ -73,17 +50,17 @@ struct ReviewSendSheet: View {
     private var destinations: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
-                if !candidates.isEmpty {
+                if candidates.isEmpty {
+                    Text("No running agent is available to receive this review.")
+                        .font(FlotillaTypography.caption)
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(FlotillaSpacing.small)
+                } else {
                     section("Continue in a running session") {
                         ForEach(candidates) { session in
-                            row(.runningSession(session), agent: session.agent, detail: detail(for: session))
+                            row(session, detail: detail(for: session))
                         }
-                    }
-                }
-
-                section("Start a new session") {
-                    ForEach(AgentKind.allCases) { agent in
-                        row(.newSession(agent), agent: agent, detail: "New session in this worktree")
                     }
                 }
             }
@@ -106,14 +83,14 @@ struct ReviewSendSheet: View {
         }
     }
 
-    private func row(_ destination: ReviewDestination, agent: AgentKind, detail: String) -> some View {
+    private func row(_ session: Session, detail: String) -> some View {
         Button {
-            onSend(destination)
+            onSend(session)
         } label: {
             HStack(spacing: FlotillaSpacing.small) {
-                ProviderLogo.fixedSize(for: agent, size: 16)
+                ProviderLogo.fixedSize(for: session.agent, size: 16)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(destination.label)
+                    Text(session.title)
                         .font(FlotillaTypography.caption.weight(.medium))
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .lineLimit(1)
@@ -134,7 +111,7 @@ struct ReviewSendSheet: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier(AXID.reviewSendDestination(destination.label))
+        .accessibilityIdentifier(AXID.reviewSendDestination(session.title))
     }
 
     private func detail(for session: Session) -> String {
