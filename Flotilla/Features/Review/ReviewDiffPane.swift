@@ -24,6 +24,9 @@ struct ReviewDiffPane: View {
     @Bindable var viewModel: SessionReviewViewModel
     @Binding var draft: ReviewCommentDraft?
     @Binding var draftText: String
+    /// Container styling turned by the active ``ReviewDesign``. The diff
+    /// rendering itself is unaffected — only the frame around it.
+    var style: ReviewDiffStyle = .standard
 
     /// Measured, not guessed: the two side-by-side columns are each half of
     /// it, which is what makes the diff fill the window instead of sitting in
@@ -33,22 +36,27 @@ struct ReviewDiffPane: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: FlotillaSpacing.large, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(
+                    alignment: .leading,
+                    spacing: style.sectionSpacing,
+                    pinnedViews: style.stickyHeaders ? [.sectionHeaders] : []
+                ) {
                     ForEach(viewModel.visibleFiles) { file in
                         ReviewFileSection(
                             file: file,
                             viewModel: viewModel,
                             availableWidth: contentWidth,
+                            style: style,
                             draft: $draft,
                             draftText: $draftText
                         )
                         .id(file.path)
                     }
                 }
-                .padding(FlotillaSpacing.large)
+                .padding(style.outerPadding)
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paneWidth = $0 }
-            .background(FlotillaColors.canvas)
+            .background(style.canvas)
             // In All Files the file list scrolls this pane rather than
             // swapping its contents; in Single File the pane is already just
             // that file, so the scroll is a no-op and harmless.
@@ -64,7 +72,7 @@ struct ReviewDiffPane: View {
 
     /// The pane minus the padding and the file card's own border.
     private var contentWidth: CGFloat {
-        max(0, paneWidth - FlotillaSpacing.large * 2)
+        max(0, paneWidth - style.outerPadding * 2)
     }
 }
 
@@ -73,35 +81,65 @@ struct ReviewFileSection: View {
     let file: ReviewFile
     @Bindable var viewModel: SessionReviewViewModel
     let availableWidth: CGFloat
+    var style: ReviewDiffStyle = .standard
     @Binding var draft: ReviewCommentDraft?
     @Binding var draftText: String
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 0) {
-                fileComments
-
-                if file.hasNoRenderableDiff {
-                    Text(file.emptyDiffExplanation)
-                        .font(FlotillaTypography.caption)
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                        .padding(FlotillaSpacing.medium)
-                } else {
-                    ForEach(Array(file.hunks.enumerated()), id: \.offset) { _, hunk in
-                        hunkView(hunk)
-                    }
-                }
-            }
-            .background(FlotillaColors.surface)
-            .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                    .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-            }
+            body(for: styledContent)
         } header: {
             header
         }
         .accessibilityIdentifier(AXID.reviewFileSection(file.path))
+    }
+
+    private var styledContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            fileComments
+
+            if file.hasNoRenderableDiff {
+                Text(file.emptyDiffExplanation)
+                    .font(FlotillaTypography.caption)
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .padding(FlotillaSpacing.medium)
+            } else {
+                ForEach(Array(file.hunks.enumerated()), id: \.offset) { _, hunk in
+                    hunkView(hunk)
+                }
+            }
+        }
+    }
+
+    /// The frame around a file's hunks, per the active design.
+    @ViewBuilder
+    private func body(for content: some View) -> some View {
+        switch style.fileContainer {
+        case .card:
+            content
+                .background(FlotillaColors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
+                        .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+                }
+        case .floating:
+            content
+                .background(FlotillaColors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
+                .shadow(color: .black.opacity(0.22), radius: 16, x: 0, y: 8)
+        case .plain:
+            content
+                .background(FlotillaColors.surface)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(FlotillaColors.separator)
+                        .frame(height: FlotillaBorderWidth.hairline)
+                }
+        case .fullBleed:
+            content
+                .background(FlotillaColors.surface)
+        }
     }
 
     // MARK: - Header
@@ -185,7 +223,9 @@ struct ReviewFileSection: View {
     @ViewBuilder
     private func hunkView(_ hunk: ReviewHunk) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            hunkHeader(hunk)
+            if style.showHunkHeaders {
+                hunkHeader(hunk)
+            }
 
             switch viewModel.diffMode {
             case .inline:

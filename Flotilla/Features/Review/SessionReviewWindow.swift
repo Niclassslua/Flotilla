@@ -25,6 +25,17 @@ struct SessionReviewWindow: View {
     @State private var branch: String?
     @State private var sendResult: String?
 
+    /// Which candidate design is on screen. Persisted so switching sticks
+    /// across window opens while the four are being compared.
+    @AppStorage(ReviewDesign.storageKey) private var designRaw = ReviewDesign.default.rawValue
+
+    private var design: Binding<ReviewDesign> {
+        Binding(
+            get: { ReviewDesign(rawValue: designRaw) ?? .default },
+            set: { designRaw = $0.rawValue }
+        )
+    }
+
     private var session: Session? {
         store.sessions.first { $0.id == sessionID }
     }
@@ -66,47 +77,8 @@ struct SessionReviewWindow: View {
 
     private func content(session: Session, viewModel: SessionReviewViewModel) -> some View {
         VStack(spacing: 0) {
-            ReviewHeaderBar(
-                viewModel: viewModel,
-                branch: branch,
-                onRefresh: { Task { await viewModel.load() } },
-                onSend: { isPresentingSend = true }
-            )
-            Divider()
-
-            if viewModel.isStale {
-                banner(
-                    "The agent resumed work — this diff may be stale.",
-                    systemImage: "exclamationmark.triangle",
-                    tint: FlotillaColors.warning
-                ) {
-                    Button("Refresh") { Task { await viewModel.load() } }
-                        .font(FlotillaTypography.caption2)
-                }
-                .accessibilityIdentifier(AXID.reviewStaleBanner.rawValue)
-                Divider()
-            }
-
-            if let errorMessage = viewModel.errorMessage {
-                banner(errorMessage, systemImage: "exclamationmark.octagon", tint: FlotillaColors.danger) {
-                    EmptyView()
-                }
-                Divider()
-            }
-
-            if let sendResult {
-                banner(sendResult, systemImage: "paperplane", tint: FlotillaColors.statusReady) {
-                    Button("Dismiss") { self.sendResult = nil }
-                        .font(FlotillaTypography.caption2)
-                }
-                Divider()
-            }
-
-            HStack(spacing: 0) {
-                ReviewFileList(viewModel: viewModel)
-                Divider()
-                ReviewDiffPane(viewModel: viewModel, draft: $draft, draftText: $draftText)
-            }
+            banners(viewModel: viewModel)
+            designBody(session: session, viewModel: viewModel)
         }
         .sheet(isPresented: $isPresentingSend) {
             ReviewSendSheet(
@@ -119,6 +91,73 @@ struct SessionReviewWindow: View {
                 },
                 onCancel: { isPresentingSend = false }
             )
+        }
+    }
+
+    /// Routes to whichever candidate design is selected. Each design owns its
+    /// own header (with the live ``ReviewDesignMenu``) and body; the shared
+    /// callbacks and comment-draft bindings are threaded through unchanged.
+    @ViewBuilder
+    private func designBody(session: Session, viewModel: SessionReviewViewModel) -> some View {
+        let onRefresh: () -> Void = { Task { await viewModel.load() } }
+        let onSend: () -> Void = { isPresentingSend = true }
+
+        switch design.wrappedValue {
+        case .editorial:
+            ReviewEditorialLayout(
+                viewModel: viewModel, branch: branch, design: design,
+                draft: $draft, draftText: $draftText,
+                onRefresh: onRefresh, onSend: onSend
+            )
+        case .workbench:
+            ReviewWorkbenchLayout(
+                viewModel: viewModel, branch: branch, design: design,
+                draft: $draft, draftText: $draftText,
+                onRefresh: onRefresh, onSend: onSend
+            )
+        case .timeline:
+            ReviewTimelineLayout(
+                viewModel: viewModel, branch: branch, design: design,
+                draft: $draft, draftText: $draftText,
+                onRefresh: onRefresh, onSend: onSend
+            )
+        case .commandDeck:
+            ReviewCommandDeckLayout(
+                viewModel: viewModel, branch: branch, design: design,
+                draft: $draft, draftText: $draftText,
+                onRefresh: onRefresh, onSend: onSend
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func banners(viewModel: SessionReviewViewModel) -> some View {
+        if viewModel.isStale {
+            banner(
+                "The agent resumed work — this diff may be stale.",
+                systemImage: "exclamationmark.triangle",
+                tint: FlotillaColors.warning
+            ) {
+                Button("Refresh") { Task { await viewModel.load() } }
+                    .font(FlotillaTypography.caption2)
+            }
+            .accessibilityIdentifier(AXID.reviewStaleBanner.rawValue)
+            Divider()
+        }
+
+        if let errorMessage = viewModel.errorMessage {
+            banner(errorMessage, systemImage: "exclamationmark.octagon", tint: FlotillaColors.danger) {
+                EmptyView()
+            }
+            Divider()
+        }
+
+        if let sendResult {
+            banner(sendResult, systemImage: "paperplane", tint: FlotillaColors.statusReady) {
+                Button("Dismiss") { self.sendResult = nil }
+                    .font(FlotillaTypography.caption2)
+            }
+            Divider()
         }
     }
 
@@ -204,11 +243,26 @@ struct SessionReviewWindow: View {
 }
 
 /// The review's control strip.
-struct ReviewHeaderBar: View {
+struct ReviewHeaderBar<Trailing: View>: View {
     @Bindable var viewModel: SessionReviewViewModel
     let branch: String?
     let onRefresh: () -> Void
     let onSend: () -> Void
+    @ViewBuilder var trailing: () -> Trailing
+
+    init(
+        viewModel: SessionReviewViewModel,
+        branch: String?,
+        onRefresh: @escaping () -> Void,
+        onSend: @escaping () -> Void,
+        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
+    ) {
+        self.viewModel = viewModel
+        self.branch = branch
+        self.onRefresh = onRefresh
+        self.onSend = onSend
+        self.trailing = trailing
+    }
 
     var body: some View {
         HStack(spacing: FlotillaSpacing.medium) {
@@ -219,6 +273,7 @@ struct ReviewHeaderBar: View {
             displayPicker
             refreshButton
             sendButton
+            trailing()
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .padding(.vertical, FlotillaSpacing.small)
