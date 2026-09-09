@@ -49,7 +49,7 @@ Flotilla/
 │   ├── Components/                # StatusBadge, MaterialFileIcon, ProviderLogo, AgentBrand, pickers
 │   └── Resources/                 # Assets.xcassets, MaterialIcons SVG catalog
 ├── docs/                          # Long-form references (provider hooks, UI vocabulary)
-├── FlotillaUnitTests/             # Unit tests (77 suites, named after the subsystem they cover)
+├── FlotillaUnitTests/             # Unit and local integration tests, grouped by subsystem
 ├── FlotillaUITests/               # UI tests
 ├── Packages/                      # 10 local Swift packages
 ├── project.yml                    # XcodeGen specification
@@ -65,6 +65,8 @@ Flotilla/
 | `docs/ui-vocabulary.md` | Canonical names for every UI region and component — use these terms in prompts, issues, and review comments |
 | `docs/provider-hooks.md` | Per-provider hook wiring and the status-transition matrix |
 | `docs/session-handoff.md` | Moving a live session between agents: the codec layer, the transaction, every agent's transcript format, and how to add a fifth agent |
+| `docs/testing.md` | Testing policy: behavioral contracts, assertion quality, isolation, and choosing the right test layer |
+| `docs/test-suite-audit.md` | Dated test-value findings, cleanup priorities, and complete inventory link |
 | `.impeccable.md` | Brand and visual design guidelines |
 
 ## Architecture
@@ -312,6 +314,14 @@ See `docs/provider-hooks.md` → "Debugging a status change" for the line format
 
 ## Testing
 
+### Test value policy
+
+Follow [docs/testing.md](docs/testing.md) when adding or changing tests. Every test should name a plausible user consequence and an assertion that detects it. Exercise production behavior, establish the relevant precondition, and verify the result after the action. Required interactions must not be hidden behind conditional assertions.
+
+Do not add constructor/non-nil checks, copied test-local algorithms, or exact styling/copy snapshots. Preserve protocol, persistence, lifecycle, terminal, and meaningful accessibility contracts. Use distinguishing fixtures, bounded waits, isolated resources, and failure-safe cleanup. Additional test layers must catch a different failure; consolidate duplicate coverage instead of increasing test count for its own sake.
+
+Use manual visual inspection for appearance, and keep documentation captures, live-provider compatibility, and performance diagnostics separate from ordinary regression coverage. The current execution gaps and method-level recommendations are documented in [the audit](docs/test-suite-audit.md); this policy does not imply those follow-up changes have already been made.
+
 ### Unit Tests (`FlotillaUnitTests`)
 
 - Framework: `XCTest` (no third-party test libraries)
@@ -339,7 +349,7 @@ func testWorktreeCreationFailureDoesNotCreateSession() { ... }
 
 ### UI Tests (`FlotillaUITests`)
 
-> **⚠️ Slow — run only when needed.** The full UI test suite takes ~5 minutes (12 test classes, 12 app launches) and launches the actual app repeatedly. Do **not** run it as a routine verification step (e.g., after every change). Only run UI tests when:
+> **⚠️ Slow — run only when needed.** The full UI test suite launches the actual app repeatedly. Do **not** run it as a routine verification step (e.g., after every change). Only run UI tests when:
 > - The change affects UI structure, navigation, or accessibility identifiers
 > - The change touches session lifecycle, terminal, or process handling
 > - You are explicitly asked to run or verify UI tests
@@ -460,7 +470,7 @@ xcodebuild -project Flotilla.xcodeproj -scheme Flotilla -configuration Debug \
 
 Pipeline at `.github/workflows/build.yml`:
 1. Checkout → Xcode selection → XcodeGen install
-2. Generate project → Build (Debug) → Unit tests → Build (Release)
+2. Generate project → Build (Debug) → Unit tests → UI tests → Build (Release)
 3. Upload `.app` artifact
 4. On `main` push: Archive with `developer-id` export → Upload zip
 
@@ -580,4 +590,4 @@ Import only what you need. Package modules are imported by product name.
 | `Packages/SessionKit/Sources/SessionKit/Models.swift` | Core domain types — Session, Project, AgentKind, SessionStatus |
 | `Packages/ProcessKit/Sources/ProcessKit/PTYProcessProtocol.swift` | Core process abstraction — read to understand PTY protocol |
 | `Packages/PersistenceKit/Sources/PersistenceKit/GRDBSessionRepository.swift` | Database layer — migrations, CRUD operations |
-| `make test` | Run unit test suite (537 tests) |
+| `make test` | Run the app unit/local integration test target; package test targets require explicit selection |
