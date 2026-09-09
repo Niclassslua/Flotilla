@@ -265,6 +265,33 @@ final class VocabularyScreenshotUITests: XCTestCase {
         Self.note("NAVFAIL   no presentation button '\(title)'")
     }
 
+    /// The grid always launches empty — membership is explicit and nothing is
+    /// a member on a fresh launch. Fill it from the lit group; if the toolbar
+    /// control is still animating in, fall back to the documented sidebar
+    /// gesture (a single click toggles grid membership while the grid is up).
+    private func fillGrid(_ app: XCUIApplication) {
+        if let addAll = largestMatch(app, "Grid.AddAllButton", timeout: 8) {
+            addAll.click()
+            settle(0.8)
+        }
+        if largestMatch(app, "GridView", timeout: 2) == nil {
+            for title in ["Fix login bug", "Refactor sidebar", "Autonomous workflow loop"] {
+                _ = click(app, "SessionRow-\(title)", timeout: 2)
+            }
+            settle(0.8)
+        }
+    }
+
+    /// Opening a surface (Git / Files / Skills / Rules) swaps the masthead —
+    /// and the surface links it carries — for the return breadcrumb, so the
+    /// next surface has to be reached back through Overview. Silent when the
+    /// workspace is already on Overview.
+    private func returnToProjectOverview(_ app: XCUIApplication) {
+        guard let bar = largestMatch(app, "Project.ReturnToOverview", timeout: 2) else { return }
+        bar.click()
+        settle(0.6)
+    }
+
     private func assertCaptured(_ names: [String]) {
         let missing = names.filter { !Self.capturedNames.contains($0) }
         XCTAssertTrue(missing.isEmpty, "Missing documentation captures: \(missing.joined(separator: ", "))")
@@ -292,7 +319,7 @@ final class VocabularyScreenshotUITests: XCTestCase {
         shootElement(app, id: "SessionRow-Fix login bug", "09-session-sidebar-row", "Session row")
 
         choosePresentation(app, "Grid")
-        click(app, "Grid.AddAllButton")
+        fillGrid(app)
         settle(1.0)
         shootWindow(app, "10-presentation-grid", "Grid presentation")
         shootElement(app, id: "GridView", "11-grid-view", "Mission control grid")
@@ -381,14 +408,17 @@ final class VocabularyScreenshotUITests: XCTestCase {
             }
         }
 
+        returnToProjectOverview(app)
         if clickButton(app, title: "Files", identifier: "ProjectDetail.ModeTab-Files") {
             settle(1.0)
             shootWindow(app, "37-project-files", "File tree and editor pane")
         }
+        returnToProjectOverview(app)
         if clickButton(app, title: "Skills", identifier: "ProjectDetail.ModeTab-Skills") {
             settle(1.0)
             shootWindow(app, "39-project-skills", "Knowledge catalog ledger")
         }
+        returnToProjectOverview(app)
         if clickButton(app, title: "Rules", identifier: "ProjectDetail.ModeTab-Rules") {
             settle(1.0)
             shootWindow(app, "40-project-rules", "Rules knowledge catalog")
