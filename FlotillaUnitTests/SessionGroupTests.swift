@@ -142,6 +142,22 @@ final class SessionGroupTests: XCTestCase {
 /// share — it had been copied twice with the same boundaries.
 final class SessionElapsedTests: XCTestCase {
 
+    func testDetailedAgeRetainsMinutesAcrossHoursAndDays() {
+        let start = Date(timeIntervalSince1970: 0)
+        let cases: [(TimeInterval, String)] = [
+            (-30, "0s"), (0, "0s"), (59, "59s"), (60, "1m"),
+            (3599, "59m"), (3600, "1h 0m"), (7140, "1h 59m"),
+            (86_399, "23h 59m"), (86_400, "1d 0h 0m"),
+            (101_520, "1d 4h 12m")
+        ]
+        for (seconds, expected) in cases {
+            XCTAssertEqual(
+                SessionElapsed.detailedSince(start, now: start.addingTimeInterval(seconds)),
+                expected
+            )
+        }
+    }
+
     private func text(_ seconds: TimeInterval) -> String {
         let now = Date()
         return SessionElapsed.since(now.addingTimeInterval(-seconds), now: now)

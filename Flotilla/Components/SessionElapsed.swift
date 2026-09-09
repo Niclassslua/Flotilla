@@ -1,16 +1,24 @@
 import Foundation
 
-/// How long a session has been alive, in the single-unit shorthand the grid
-/// tiles, session bar and cards all use: `45s`, `12m`, `3h`, `2d`.
+/// Elapsed-time shorthand: compact units for cards and history, and minute
+/// precision for the focused session bar.
 ///
 /// Deliberately not a `RelativeDateTimeFormatter`: this reads as a running
 /// clock beside a branch name and a diff stat, not as prose. "2d" belongs in
 /// a 28pt tile bar; "2 days ago" does not.
 ///
-/// Shared because it had been copied twice — `TileMetaRow.elapsed(since:)`
-/// and `SessionCard.elapsedTime` were the same switch with the same
-/// boundaries, and a third caller (the session bar) would have made three.
 enum SessionElapsed {
+    /// Minute precision for the focused session's running clock.
+    static func detailedSince(_ start: Date, now: Date = Date()) -> String {
+        let seconds = Int(max(0, now.timeIntervalSince(start)))
+        let minutes = seconds / 60
+        let hours = minutes / 60
+        if seconds < 60 { return "\(seconds)s" }
+        if minutes < 60 { return "\(minutes)m" }
+        if hours < 24 { return "\(hours)h \(minutes % 60)m" }
+        return "\(hours / 24)d \(hours % 24)h \(minutes % 60)m"
+    }
+
     static func since(_ start: Date, now: Date = Date()) -> String {
         let interval = now.timeIntervalSince(start)
         switch interval {

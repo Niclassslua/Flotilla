@@ -254,12 +254,16 @@ struct SessionBar: View {
 
     private var focusActions: some View {
         HStack(spacing: FlotillaSpacing.small) {
-            Text(SessionElapsed.since(session.createdAt))
+            TimelineView(.periodic(from: session.createdAt, by: 1)) { context in
+                let elapsed = SessionElapsed.detailedSince(session.createdAt, now: context.date)
+                Text(elapsed)
+                    .accessibilityLabel("Session age")
+                    .accessibilityValue(elapsed)
+            }
                 .font(.system(size: 11, design: .monospaced))
                 .monospacedDigit()
                 .foregroundStyle(FlotillaColors.textTertiary)
-                .help("Session age")
-                .accessibilityLabel("Session age")
+                .help("Started \(session.createdAt.formatted(date: .complete, time: .standard))")
                 .accessibilityIdentifier(AXID.sessionBarAge(session.title))
 
             // The two icons are one cluster, at the same 2pt as the tile's
