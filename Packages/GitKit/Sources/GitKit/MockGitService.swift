@@ -11,6 +11,7 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public var unstagedDiffToReturn: [FileDiff]?
     public var diffStatToReturn = GitDiffStat(additions: 0, deletions: 0)
     public var comparisonChangesToReturn: [GitCommitFileChange] = []
+    public var uncommittedChangesToReturn: [GitCommitFileChange] = []
     public var worktreesToReturn: [GitWorktree] = []
     public var logToReturn: [GitCommit] = []
     public var graphLogToReturn: [GitCommit] = []
@@ -41,6 +42,7 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public private(set) var commitDetailCalls: [(sha: String, repoPath: URL)] = []
     public private(set) var commitsOnBranchCalls: [(branch: String, base: String, repoPath: URL)] = []
     public private(set) var comparisonCalls: [(base: String, repoPath: URL)] = []
+    public private(set) var uncommittedChangeCalls: [URL] = []
     public private(set) var checkoutCalls: [(branch: String, repoPath: URL)] = []
     public private(set) var createBranchCalls: [(branch: String, repoPath: URL)] = []
     public private(set) var deleteBranchCalls: [(branch: String, force: Bool, repoPath: URL)] = []
@@ -178,6 +180,12 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
         comparisonCalls.append((base, repoPath))
         if let errorToThrow { throw errorToThrow }
         return comparisonChangesToReturn
+    }
+
+    public func uncommittedChanges(at repoPath: URL) async throws -> [GitCommitFileChange] {
+        uncommittedChangeCalls.append(repoPath)
+        if let errorToThrow { throw errorToThrow }
+        return uncommittedChangesToReturn
     }
 
     public func checkout(branch: String, at repoPath: URL) async throws {

@@ -24,6 +24,18 @@ public protocol SessionRepository: Sendable {
     func saveKanbanBoard(_ board: KanbanBoard) throws
     func deleteKanbanBoard(id: UUID) throws
     func getOrCreateDefaultKanbanBoard(forProject projectID: UUID?, name: String) throws -> KanbanBoard
+
+    // MARK: - Review
+
+    /// Every comment left on a session's work, in creation order.
+    func loadReviewComments(sessionID: UUID) throws -> [ReviewComment]
+    func saveReviewComment(_ comment: ReviewComment) throws
+    func deleteReviewComment(id: UUID) throws
+    /// Clears a session's whole review — used when the reviewer discards it.
+    func deleteReviewComments(sessionID: UUID) throws
+    func loadReviewedFiles(sessionID: UUID) throws -> [ReviewedFile]
+    func saveReviewedFile(_ file: ReviewedFile) throws
+    func deleteReviewedFile(sessionID: UUID, scope: ReviewScope, filePath: String) throws
 }
 
 public extension SessionRepository {

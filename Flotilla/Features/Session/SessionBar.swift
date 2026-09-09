@@ -15,6 +15,10 @@ struct SessionBarActions {
     /// mid-move, has nothing to offer.
     var handoffTargets: [AgentKind] = []
     var onHandoff: (AgentKind) -> Void = { _ in }
+    /// Opens the review window. Enabled only while the session is Ready for
+    /// Review — reviewing a diff the agent is still writing shows work that
+    /// has already moved on.
+    var onReview: () -> Void = {}
 }
 
 /// The bar that states what one session *is*, and what you can do to it.
@@ -95,6 +99,11 @@ struct SessionBar: View {
     /// session has none, which is ordinary rather than exceptional — saying
     /// why beats a button that accepts the click and does nothing.
     private var hasProject: Bool { session.projectID != nil }
+
+    /// Gated on status rather than on `hasProject`, the way Files and the Git
+    /// sidebar are: a session can have changes worth reviewing in a plain
+    /// working directory with no project attached.
+    private var isReviewable: Bool { session.status == .readyForReview }
 
     var body: some View {
         // Spacing 0 on purpose: the `Spacer` is the only gap between the
@@ -273,6 +282,17 @@ struct SessionBar: View {
             // The sidebar toggle sits last, against the bar's trailing edge,
             // because that is the edge the sidebar itself opens from.
             HStack(spacing: 2) {
+                barButton(
+                    "text.page.badge.magnifyingglass",
+                    help: isReviewable
+                        ? "Review this session's changes"
+                        : "Reviewing opens when the agent is Ready for Review.",
+                    action: actions.onReview
+                )
+                .disabled(!isReviewable)
+                .accessibilityLabel("Review changes")
+                .accessibilityIdentifier(AXID.sessionBarReview(session.title))
+
                 barButton(
                     "folder",
                     help: hasProject

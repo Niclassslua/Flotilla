@@ -380,6 +380,31 @@ final class SessionProcessManager {
         tmuxWrappedSessions[sessionID] != nil
     }
 
+    /// Sends a message to a running agent so that it is *submitted*, not
+    /// merely typed.
+    ///
+    /// The same fork as initial-goal delivery above, and for the same reason:
+    /// a raw PTY write leaves the text sitting in the agent's composer, so a
+    /// tmux-wrapped session has to go through `send-keys`/`paste-buffer`,
+    /// which is the sequence confirmed to actually submit. Returns `false`
+    /// when the session has no live process to send to.
+    @discardableResult
+    func deliverMessage(_ text: String, to sessionID: UUID) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let process = processes[sessionID] else { return false }
+
+        if let tmuxExecutable = tmuxWrappedSessions[sessionID] {
+            let deliverer = tmuxGoalDeliverer
+            let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)
+            Task.detached(priority: .userInitiated) {
+                deliverer.deliverGoal(trimmed, toSessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
+            }
+        } else {
+            process.send(input: Data((trimmed + "\n").utf8))
+        }
+        return true
+    }
+
     func refreshTmuxClient(for sessionID: UUID) {
         guard let tmuxExecutable = tmuxWrappedSessions[sessionID] else { return }
         let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)

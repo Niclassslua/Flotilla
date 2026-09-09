@@ -294,6 +294,13 @@ final class AppStore {
     func process(for sessionID: UUID) -> PTYProcessProtocol? {
         processManager.process(for: sessionID)
     }
+
+    /// Delivers a message to a running session's agent, submitted rather than
+    /// typed. Returns `false` when that session has no live process.
+    @discardableResult
+    func deliverMessage(_ text: String, to sessionID: UUID) -> Bool {
+        processManager.deliverMessage(text, to: sessionID)
+    }
     // ... rest of the file
 
     /// Seeds the same permission-prompt state the observation pipeline would

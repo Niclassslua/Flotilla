@@ -1,7 +1,9 @@
 import SwiftUI
 import AppKit
 import UserNotifications
+import GitKit
 import ProcessKit
+import SessionKit
 import SettingsKit
 import DesignSystem
 import HooksKit
@@ -15,6 +17,12 @@ struct FlotillaApp: App {
     @State private var startupCheck: StartupCheckViewModel
     @State private var navigator: WorkspaceNavigator
     @State private var notificationDelegate: FlotillaNotificationDelegate
+    @Environment(\.openWindow) private var openWindow
+
+    /// Held so the review scene — which is not a descendant of the shell and
+    /// therefore inherits nothing from it — can build its own view model.
+    private let gitService: any GitServiceProtocol
+    private let sessionRepository: any SessionRepository
 
     private static let isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
 
@@ -56,10 +64,10 @@ struct FlotillaApp: App {
 #endif
         let settingsViewModel = SettingsViewModel(store: settingsStore)
         _settingsViewModel = State(initialValue: settingsViewModel)
-        let locator: any ExecutableLocating = environment.isUITesting
+        let locator: any ExecutableLocating = environment.usesMockProcesses
             ? UITestExecutableLocator()
             : PATHExecutableLocator()
-        let processFactory: any PTYProcessCreating = environment.isUITesting
+        let processFactory: any PTYProcessCreating = environment.usesMockProcesses
             ? MockPTYProcessFactory(echoesInput: true)
             : SystemPTYProcessFactory()
 
@@ -110,6 +118,9 @@ struct FlotillaApp: App {
         )
         UNUserNotificationCenter.current().delegate = notificationDelegate
         _notificationDelegate = State(initialValue: notificationDelegate)
+
+        gitService = environment.gitService
+        sessionRepository = environment.sessionRepository
 
         appStore.onSessionFinished = { session in
             guard settingsViewModel.settings.notifications.finishedEnabled else { return }
@@ -201,6 +212,13 @@ struct FlotillaApp: App {
                 }
                 .keyboardShortcut("3", modifiers: [.command, .control])
                 Divider()
+                Button("Review\u{2026}") {
+                    if let session = store.selectedSession {
+                        openWindow(id: SessionReviewWindow.sceneID, value: session.id)
+                    }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(store.selectedSession?.status != .readyForReview)
                 Button("Changes") {
                     navigator.openProjectPanel(.git, scopedTo: store.selectedSession)
                 }
@@ -266,6 +284,26 @@ struct FlotillaApp: App {
         }
         .defaultSize(width: 1_280, height: 820)
         .windowResizability(.contentMinSize)
+
+        // A second window, not a panel in the shell: reviewing a diff is a
+        // whole-screen activity, and a review outlives navigating the fleet.
+        // Keyed by session ID so re-opening a session under review raises the
+        // window it already has rather than making another.
+        WindowGroup(id: SessionReviewWindow.sceneID, for: UUID.self) { $reviewedSessionID in
+            if let reviewedSessionID {
+                SessionReviewWindow(
+                    sessionID: reviewedSessionID,
+                    store: store,
+                    gitService: gitService,
+                    repository: sessionRepository
+                )
+                .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
+            }
+        }
+        .defaultSize(width: 1280, height: 860)
+#if FLOTILLA_EPHEMERAL
+        .restorationBehavior(.disabled)
+#endif
 
         Settings {
             SettingsView(viewModel: settingsViewModel)

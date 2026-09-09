@@ -21,6 +21,7 @@ enum RecordDecodingError: LocalizedError {
     case invalidProjectID(String)
     case invalidSession(id: String, field: String, value: String)
     case invalidKanbanBoard(id: String, field: String, value: String)
+    case invalidReviewComment(id: String, field: String, value: String)
 
     var errorDescription: String? {
         switch self {
@@ -30,6 +31,8 @@ enum RecordDecodingError: LocalizedError {
             "Stored session \(id) has an invalid \(field): \(value)"
         case let .invalidKanbanBoard(id, field, value):
             "Stored kanban board \(id) has an invalid \(field): \(value)"
+        case let .invalidReviewComment(id, field, value):
+            "Stored review comment \(id) has an invalid \(field): \(value)"
         }
     }
 }
@@ -319,6 +322,121 @@ struct KanbanBoardRecord: Codable, FetchableRecord, PersistableRecord {
             customColumns: customColumns,
             cardOrder: cardOrder,
             updatedAt: updatedAt
+        )
+    }
+}
+
+// MARK: - Review
+
+struct ReviewCommentRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "review_comment"
+
+    var id: String
+    var sessionID: String
+    var filePath: String
+    /// `nil` for a whole-file comment; otherwise the `ReviewSide` raw value.
+    /// Stored as two nullable columns rather than an encoded blob so a line
+    /// comment stays queryable by file and line.
+    var anchorSide: String?
+    var anchorLine: Int?
+    var body: String
+    var createdAt: Date
+    var updatedAt: Date
+    var sentAt: Date?
+
+    init(comment: ReviewComment) {
+        id = comment.id.uuidString
+        sessionID = comment.sessionID.uuidString
+        filePath = comment.filePath
+        switch comment.anchor {
+        case .file:
+            anchorSide = nil
+            anchorLine = nil
+        case let .line(side, number):
+            anchorSide = side.rawValue
+            anchorLine = number
+        }
+        body = comment.body
+        createdAt = comment.createdAt
+        updatedAt = comment.updatedAt
+        sentAt = comment.sentAt
+    }
+
+    func toDomain() throws -> ReviewComment {
+        guard let uuid = UUID(uuidString: id) else {
+            throw RecordDecodingError.invalidReviewComment(id: id, field: "identifier", value: id)
+        }
+        guard let session = UUID(uuidString: sessionID) else {
+            throw RecordDecodingError.invalidReviewComment(id: id, field: "sessionID", value: sessionID)
+        }
+
+        let anchor: ReviewCommentAnchor
+        switch (anchorSide, anchorLine) {
+        case (nil, nil):
+            anchor = .file
+        case let (rawSide?, line?):
+            guard let side = ReviewSide(rawValue: rawSide) else {
+                throw RecordDecodingError.invalidReviewComment(id: id, field: "anchorSide", value: rawSide)
+            }
+            anchor = .line(side: side, number: line)
+        default:
+            // Half an anchor is not an anchor: one column set without the
+            // other means the row was written by something that did not
+            // understand the pair.
+            throw RecordDecodingError.invalidReviewComment(
+                id: id,
+                field: "anchor",
+                value: "side=\(anchorSide ?? "nil") line=\(anchorLine.map(String.init) ?? "nil")"
+            )
+        }
+
+        return ReviewComment(
+            id: uuid,
+            sessionID: session,
+            filePath: filePath,
+            anchor: anchor,
+            body: body,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            sentAt: sentAt
+        )
+    }
+}
+
+struct ReviewedFileRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "review_viewed_file"
+
+    /// Keyed on `(sessionID, scope, filePath)`, so re-viewing a file replaces
+    /// its fingerprint instead of adding a second row.
+    static let persistenceConflictPolicy = PersistenceConflictPolicy(insert: .replace, update: .replace)
+
+    var sessionID: String
+    var scope: String
+    var filePath: String
+    var diffFingerprint: String
+    var viewedAt: Date
+
+    init(file: ReviewedFile) {
+        sessionID = file.sessionID.uuidString
+        scope = file.scope.rawValue
+        filePath = file.filePath
+        diffFingerprint = file.diffFingerprint
+        viewedAt = file.viewedAt
+    }
+
+    /// Returns `nil` for a row whose session or scope no longer parses, rather
+    /// than throwing: a viewed-mark is an optimisation, and losing one must
+    /// not fail the whole review load.
+    func toDomain() -> ReviewedFile? {
+        guard let session = UUID(uuidString: sessionID),
+              let scope = ReviewScope(rawValue: scope)
+        else { return nil }
+        return ReviewedFile(
+            sessionID: session,
+            scope: scope,
+            filePath: filePath,
+            diffFingerprint: diffFingerprint,
+            viewedAt: viewedAt
         )
     }
 }

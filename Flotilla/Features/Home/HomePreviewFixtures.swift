@@ -32,6 +32,14 @@ struct PreviewSessionRepository: SessionRepository {
     func saveKanbanBoard(_ board: KanbanBoard) throws {}
     func deleteKanbanBoard(id: UUID) throws {}
 
+    func loadReviewComments(sessionID: UUID) throws -> [ReviewComment] { [] }
+    func saveReviewComment(_ comment: ReviewComment) throws {}
+    func deleteReviewComment(id: UUID) throws {}
+    func deleteReviewComments(sessionID: UUID) throws {}
+    func loadReviewedFiles(sessionID: UUID) throws -> [ReviewedFile] { [] }
+    func saveReviewedFile(_ file: ReviewedFile) throws {}
+    func deleteReviewedFile(sessionID: UUID, scope: ReviewScope, filePath: String) throws {}
+
     func getOrCreateDefaultKanbanBoard(forProject projectID: UUID?, name: String) throws -> KanbanBoard {
         KanbanBoard(
             id: UUID(),
@@ -109,6 +117,7 @@ struct PreviewGitService: GitServiceProtocol {
     func changesCompared(to base: String, at repoPath: URL) async throws -> [GitCommitFileChange] {
         Self.previewFiles
     }
+    func uncommittedChanges(at repoPath: URL) async throws -> [GitCommitFileChange] { [] }
 
     func checkout(branch: String, at repoPath: URL) async throws {}
     func createAndCheckoutBranch(named branch: String, at repoPath: URL) async throws {}

@@ -34,11 +34,22 @@ final class AppEnvironment {
     /// with a fleet covering every status, waiting reason, and agent. Used to
     /// review board/card designs without touching the real session store.
     let isBoardDemo: Bool
+    /// `FLOTILLA_REVIEW_DEMO=1`: a hands-on demo of the review window, run
+    /// against `Scripts/make-review-demo.sh`'s repository.
+    let isReviewDemo: Bool
+    /// Whether agent processes should be faked.
+    ///
+    /// True for UI tests, and for the review demo — a demo whose seeded
+    /// session launched a real agent would have that agent editing the very
+    /// diff being reviewed, and would move the session straight out of Ready
+    /// for Review, which is the one state the review opens from.
+    var usesMockProcesses: Bool { isUITesting || isReviewDemo }
     let startupWarning: String?
 
     init() {
         isUITesting = ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
         isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
+        isReviewDemo = Self.isReviewDemo
         let supportDirectory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Flotilla", isDirectory: true)
@@ -56,6 +67,16 @@ final class AppEnvironment {
             BoardDemoFixtures.seed(into: repository)
             sessionRepository = repository
             startupWarning = nil
+        } else if isReviewDemo {
+            // On disk, but its own database beside the demo repository rather
+            // than the user's: a review is worth keeping across a relaunch,
+            // and a demo session is not worth putting in their real fleet.
+            let repository = Self.makeReviewDemoRepository()
+            Self.seedReviewDemo(into: repository)
+            sessionRepository = repository
+            startupWarning = Self.reviewDemoRepoExists
+                ? nil
+                : "The review demo repository is missing. Run Scripts/make-review-demo.sh, then relaunch."
         } else if isUITesting {
             let repository = (try? GRDBSessionRepository()) ?? Self.makeInMemoryRepositoryOrCrash()
             Self.seedFixtures(into: repository)
@@ -63,6 +84,10 @@ final class AppEnvironment {
             startupWarning = nil
             Self.resetUITestWorktreeDirectories()
             Self.resetGitFixtureRepo()
+            if Self.isSimulatingReviewSession {
+                Self.resetReviewFixtureRepo()
+                Self.seedReviewFixture(into: repository)
+            }
         } else {
             let dbPath = supportDirectory.appendingPathComponent("flotilla.sqlite")
             do {
@@ -87,6 +112,108 @@ final class AppEnvironment {
             try? fileManager.removeItem(at: path)
             try? fileManager.createDirectory(at: path, withIntermediateDirectories: true)
         }
+    }
+
+    // MARK: - Review demo
+
+    /// `FLOTILLA_REVIEW_DEMO=1`: run against the demo repository built by
+    /// `Scripts/make-review-demo.sh`, with a Ready-for-Review session over it.
+    ///
+    /// Kept apart from the UI-test fixture below because the two want opposite
+    /// things: a test wants a small repository rebuilt identically on every
+    /// launch, and this wants a substantial one whose review survives being
+    /// quit and reopened.
+    static let reviewDemoRepoPath = URL(fileURLWithPath: "/tmp/flotilla-review-demo/uploader")
+    static let reviewDemoSessionTitle = "Retry failed uploads"
+
+    private static var isReviewDemo: Bool {
+        ProcessInfo.processInfo.environment["FLOTILLA_REVIEW_DEMO"] == "1"
+    }
+
+    private static var reviewDemoRepoExists: Bool {
+        FileManager.default.fileExists(atPath: reviewDemoRepoPath.appendingPathComponent(".git").path)
+    }
+
+    private static func makeReviewDemoRepository() -> GRDBSessionRepository {
+        let path = reviewDemoRepoPath
+            .deletingLastPathComponent()
+            .appendingPathComponent("demo.sqlite")
+        return (try? GRDBSessionRepository(path: path)) ?? makeInMemoryRepositoryOrCrash()
+    }
+
+    /// Seeds once. A relaunch finds the session already there and leaves it —
+    /// along with whatever review has been written against it — alone.
+    private static func seedReviewDemo(into repository: SessionRepository) {
+        guard let existing = try? repository.loadAll(), existing.sessions.isEmpty else { return }
+
+        let project = Project(name: "Uploader", rootPath: reviewDemoRepoPath)
+        try? repository.save(project)
+        try? repository.save(Session(
+            title: reviewDemoSessionTitle,
+            goal: "Uploads fail on flaky networks. Retry 5xx and timeouts with backoff.",
+            agent: .claudeCode,
+            projectID: project.id,
+            workingDirectory: reviewDemoRepoPath,
+            status: .readyForReview
+        ))
+    }
+
+    /// `UI_TESTING_SIMULATE_REVIEW_SESSION=1`: seed a Ready-for-Review session
+    /// over a repository that already has changes to look at.
+    ///
+    /// Its own checkout rather than an addition to the shared fixture repo:
+    /// the diff panel and file-browser tests assert against that repo's
+    /// contents, and a review needs uncommitted edits, a committed change, and
+    /// an untracked file, all of which would move those assertions.
+    static let uiTestReviewProjectPath = URL(fileURLWithPath: "/tmp/flotilla-uitest-review")
+
+    private static var isSimulatingReviewSession: Bool {
+        ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_REVIEW_SESSION"] == "1"
+    }
+
+    /// The review fixture's session title, shared with the UI tests so a
+    /// rename is a compile error there rather than a silent miss.
+    static let uiTestReviewSessionTitle = "Retry the uploader"
+
+    private static func resetReviewFixtureRepo() {
+        let path = uiTestReviewProjectPath
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: path)
+        try? fileManager.createDirectory(at: path, withIntermediateDirectories: true)
+
+        let uploader = path.appendingPathComponent("Uploader.swift")
+        let notes = path.appendingPathComponent("NOTES.md")
+
+        runGit(["init", "-b", "main"], at: path)
+        try? "func upload() {\n    legacyUpload()\n}\n".write(to: uploader, atomically: true, encoding: .utf8)
+        runGit(["add", "Uploader.swift"], at: path)
+        runGit(
+            ["-c", "user.name=Flotilla UITests", "-c", "user.email=uitests@example.com", "commit", "-m", "init"],
+            at: path
+        )
+
+        // Modified-and-uncommitted, so both review scopes have something in
+        // them: the branch scope diffs the working tree against the merge
+        // base, the uncommitted scope against HEAD.
+        try? "func upload() {\n    try await session.upload(chunk)\n}\n".write(
+            to: uploader,
+            atomically: true,
+            encoding: .utf8
+        )
+        try? "Untracked notes\n".write(to: notes, atomically: true, encoding: .utf8)
+    }
+
+    private static func seedReviewFixture(into repository: SessionRepository) {
+        let project = Project(name: "Uploader", rootPath: uiTestReviewProjectPath)
+        try? repository.save(project)
+        try? repository.save(Session(
+            title: uiTestReviewSessionTitle,
+            goal: "Retry failed uploads on flaky networks",
+            agent: .claudeCode,
+            projectID: project.id,
+            workingDirectory: project.rootPath,
+            status: .readyForReview
+        ))
     }
 
     private static func resetGitFixtureRepo() {

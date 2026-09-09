@@ -178,6 +178,35 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 table.add(column: "handoffSourceEffort", .text)
             }
         }
+        migrator.registerMigration("v11_addReviewCommentsAndViewedFiles") { db in
+            try db.create(table: "review_comment") { t in
+                t.column("id", .text).primaryKey()
+                t.column("sessionID", .text)
+                    .notNull()
+                    .indexed()
+                    .references("session", onDelete: .cascade)
+                t.column("filePath", .text).notNull()
+                // "file" for a whole-file comment, otherwise "old"/"new".
+                t.column("anchorSide", .text)
+                t.column("anchorLine", .integer)
+                t.column("body", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.column("sentAt", .datetime)
+            }
+            try db.create(table: "review_viewed_file") { t in
+                t.column("sessionID", .text)
+                    .notNull()
+                    .references("session", onDelete: .cascade)
+                t.column("scope", .text).notNull()
+                t.column("filePath", .text).notNull()
+                t.column("diffFingerprint", .text).notNull()
+                t.column("viewedAt", .datetime).notNull()
+                // One mark per file per scope: re-viewing replaces the
+                // fingerprint rather than accumulating rows.
+                t.primaryKey(["sessionID", "scope", "filePath"])
+            }
+        }
         return migrator
     }
 
@@ -317,5 +346,62 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
         )
         try saveKanbanBoard(board)
         return board
+    }
+
+    // MARK: - Review
+
+    public func loadReviewComments(sessionID: UUID) throws -> [ReviewComment] {
+        try dbQueue.read { db in
+            try ReviewCommentRecord
+                .filter(Column("sessionID") == sessionID.uuidString)
+                .order(Column("createdAt"))
+                .fetchAll(db)
+                .map { try $0.toDomain() }
+        }
+    }
+
+    public func saveReviewComment(_ comment: ReviewComment) throws {
+        _ = try dbQueue.write { db in
+            try ReviewCommentRecord(comment: comment).save(db)
+        }
+    }
+
+    public func deleteReviewComment(id: UUID) throws {
+        _ = try dbQueue.write { db in
+            try ReviewCommentRecord.deleteOne(db, key: id.uuidString)
+        }
+    }
+
+    public func deleteReviewComments(sessionID: UUID) throws {
+        _ = try dbQueue.write { db in
+            try ReviewCommentRecord
+                .filter(Column("sessionID") == sessionID.uuidString)
+                .deleteAll(db)
+        }
+    }
+
+    public func loadReviewedFiles(sessionID: UUID) throws -> [ReviewedFile] {
+        try dbQueue.read { db in
+            try ReviewedFileRecord
+                .filter(Column("sessionID") == sessionID.uuidString)
+                .fetchAll(db)
+                .compactMap { $0.toDomain() }
+        }
+    }
+
+    public func saveReviewedFile(_ file: ReviewedFile) throws {
+        _ = try dbQueue.write { db in
+            try ReviewedFileRecord(file: file).insert(db)
+        }
+    }
+
+    public func deleteReviewedFile(sessionID: UUID, scope: ReviewScope, filePath: String) throws {
+        _ = try dbQueue.write { db in
+            try ReviewedFileRecord
+                .filter(Column("sessionID") == sessionID.uuidString)
+                .filter(Column("scope") == scope.rawValue)
+                .filter(Column("filePath") == filePath)
+                .deleteAll(db)
+        }
     }
 }

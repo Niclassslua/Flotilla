@@ -254,6 +254,10 @@ public protocol GitServiceProtocol: Sendable {
     /// Includes committed, staged, unstaged, and untracked files.
     func changesCompared(to base: String, at repoPath: URL) async throws -> [GitCommitFileChange]
 
+    /// Working tree versus `HEAD`: everything uncommitted, in the same shape
+    /// as `changesCompared(to:at:)` so both review scopes render identically.
+    func uncommittedChanges(at repoPath: URL) async throws -> [GitCommitFileChange]
+
     /// Safe branch mutations used by the session Git sidebar. Callers are
     /// responsible for refusing a checkout while the working tree is dirty.
     func checkout(branch: String, at repoPath: URL) async throws
@@ -685,13 +689,39 @@ public struct GitService: GitServiceProtocol {
             .stdout
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !mergeBase.isEmpty else { return [] }
+        return try await changes(against: mergeBase, at: repoPath)
+    }
 
+    /// Working tree versus `HEAD` — everything not yet committed, staged or
+    /// not, plus untracked files.
+    ///
+    /// The same shape as `changesCompared(to:at:)` rather than
+    /// `changes(at:)`'s `GitChangesSnapshot`, so a caller that offers both
+    /// "all branch work" and "uncommitted" has one type to render. A snapshot
+    /// splits by staging area and reports a part-staged file twice, which is
+    /// the right answer for a staging UI and the wrong one for reviewing a
+    /// file's current state.
+    ///
+    /// In a repository with no commits there is no `HEAD` to diff against, so
+    /// every file is reported as untracked and therefore added.
+    public func uncommittedChanges(at repoPath: URL) async throws -> [GitCommitFileChange] {
+        let head = try? await run(["rev-parse", "--verify", "HEAD"], at: repoPath)
+        guard head != nil else {
+            return try await untrackedChanges(at: repoPath, excluding: [])
+        }
+        return try await changes(against: "HEAD", at: repoPath)
+    }
+
+    /// The shared body behind `changesCompared(to:at:)` and
+    /// `uncommittedChanges(at:)`: the working tree diffed against `ref`, with
+    /// untracked files appended as whole-file additions.
+    private func changes(against ref: String, at repoPath: URL) async throws -> [GitCommitFileChange] {
         async let patchRequest = run(
-            ["diff", "--no-color", "--find-renames", mergeBase, "--"],
+            ["diff", "--no-color", "--find-renames", ref, "--"],
             at: repoPath
         )
         async let nameStatusRequest = run(
-            ["diff", "--no-color", "--name-status", "--find-renames", mergeBase, "--"],
+            ["diff", "--no-color", "--name-status", "--find-renames", ref, "--"],
             at: repoPath
         )
         async let statusRequest = status(at: repoPath)
@@ -712,7 +742,25 @@ public struct GitService: GitServiceProtocol {
         }
 
         let knownPaths = Set(changes.map(\.path))
-        for entry in workingStatus.entries where entry.isUntracked && !knownPaths.contains(entry.path) {
+        changes.append(contentsOf: try await untrackedChanges(at: repoPath, excluding: knownPaths, status: workingStatus))
+        return changes
+    }
+
+    /// Untracked files rendered as whole-file additions, since git emits no
+    /// patch for a file it does not track.
+    private func untrackedChanges(
+        at repoPath: URL,
+        excluding knownPaths: Set<String>,
+        status workingStatus: GitStatus? = nil
+    ) async throws -> [GitCommitFileChange] {
+        let resolved: GitStatus
+        if let workingStatus {
+            resolved = workingStatus
+        } else {
+            resolved = try await status(at: repoPath)
+        }
+        var changes: [GitCommitFileChange] = []
+        for entry in resolved.entries where entry.isUntracked && !knownPaths.contains(entry.path) {
             let fileURL = repoPath.appendingPathComponent(entry.path)
             let hunks: [FileDiffHunk]
             if let data = try? Data(contentsOf: fileURL), !data.contains(0) {

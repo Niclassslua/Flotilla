@@ -1,0 +1,119 @@
+import XCTest
+
+/// Two contracts a human cannot check by glancing at the window: that
+/// selecting a layout actually re-renders the diff (rather than only lighting
+/// up a button), and that a comment written against one scope is still there
+/// after switching scopes. Both fail silently — the review still looks right.
+@MainActor
+final class SessionReviewUITests: XCTestCase {
+    private static let sessionTitle = "Retry the uploader"
+    private static let reviewedFile = "Uploader.swift"
+
+    private func launchedApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
+        app.launchEnvironment["UI_TESTING"] = "1"
+        app.launchEnvironment["UI_TESTING_SIMULATE_REVIEW_SESSION"] = "1"
+        app.launch()
+        return app
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
+    /// Opens the review window for the seeded Ready-for-Review session.
+    private func openReview(_ app: XCUIApplication) -> XCUIElement {
+        let sessions = app.radioButtons["Sessions"].firstMatch
+        if sessions.waitForExistence(timeout: 2) {
+            sessions.click()
+        } else {
+            let allSessions = element(app, "Sidebar.AllSessions")
+            XCTAssertTrue(fastWait(allSessions, timeout: 5))
+            allSessions.click()
+        }
+
+        let row = element(app, "SessionRow-\(Self.sessionTitle)")
+        XCTAssertTrue(fastWait(row, timeout: 5), "seeded review session should be listed")
+        row.click()
+
+        let reviewButton = element(app, "SessionBar.Review.\(Self.sessionTitle)")
+        XCTAssertTrue(fastWait(reviewButton, timeout: 5), "Ready for Review sessions should offer Review")
+        reviewButton.click()
+
+        let window = element(app, "Review.Window")
+        XCTAssertTrue(fastWait(window, timeout: 10), "the review window should open")
+        return window
+    }
+
+    func testSideBySideAndInlineButtonsSwapTheRenderedLayout() {
+        let app = launchedApp()
+        _ = openReview(app)
+
+        let fileRow = element(app, "Review.FileRow-\(Self.reviewedFile)")
+        XCTAssertTrue(fastWait(fileRow, timeout: 10), "the changed file should be listed")
+
+        // Side by Side is the default, so its layout must already be on screen.
+        XCTAssertTrue(
+            fastWait(element(app, "Review.Hunk.SideBySide"), timeout: 5),
+            "the review should open in Side by Side"
+        )
+
+        element(app, "Review.Mode.Inline").click()
+        XCTAssertTrue(
+            fastWait(element(app, "Review.Hunk.Inline"), timeout: 5),
+            "choosing Inline should render the inline layout"
+        )
+        XCTAssertFalse(
+            element(app, "Review.Hunk.SideBySide").exists,
+            "the two-column layout should be gone, not merely covered"
+        )
+
+        element(app, "Review.Mode.SideBySide").click()
+        XCTAssertTrue(
+            fastWait(element(app, "Review.Hunk.SideBySide"), timeout: 5),
+            "choosing Side by Side should bring the two-column layout back"
+        )
+        XCTAssertFalse(element(app, "Review.Hunk.Inline").exists)
+    }
+
+    func testACommentSurvivesSwitchingScope() {
+        let app = launchedApp()
+        _ = openReview(app)
+
+        let commentButton = element(app, "Review.CommentOnFile-\(Self.reviewedFile)")
+        XCTAssertTrue(fastWait(commentButton, timeout: 10), "the file section should offer a file comment")
+        commentButton.click()
+
+        let editor = element(app, "Review.CommentEditor")
+        XCTAssertTrue(fastWait(editor, timeout: 5))
+        editor.click()
+        let body = "Only retry 5xx"
+        editor.typeText(body)
+
+        let submit = element(app, "Review.CommentSubmit")
+        XCTAssertTrue(fastWait(submit, timeout: 3))
+        submit.click()
+
+        let comment = app.staticTexts[body].firstMatch
+        XCTAssertTrue(fastWait(comment, timeout: 5), "the comment should be recorded")
+
+        // The same file carries a different diff under each scope; the comment
+        // belongs to the file, so it has to survive the switch and the reload.
+        element(app, "Review.Scope.Uncommitted").click()
+        XCTAssertTrue(
+            fastWait(element(app, "Review.FileRow-\(Self.reviewedFile)"), timeout: 10),
+            "the file should still be listed under the uncommitted scope"
+        )
+        XCTAssertTrue(
+            fastWait(app.staticTexts[body].firstMatch, timeout: 5),
+            "the comment should survive the scope switch"
+        )
+
+        element(app, "Review.Scope.Branch").click()
+        XCTAssertTrue(
+            fastWait(app.staticTexts[body].firstMatch, timeout: 10),
+            "the comment should still be there on the way back"
+        )
+    }
+}

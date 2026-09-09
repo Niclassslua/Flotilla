@@ -212,6 +212,33 @@ public enum AXID: String, Sendable {
     case globalProjects = "Global.Projects"
     case globalKanban = "Global.Kanban"
 
+    // MARK: - Review
+    case reviewWindow = "Review.Window"
+    case reviewEmpty = "Review.Empty"
+    case reviewFileList = "Review.FileList"
+    case reviewDiffPane = "Review.DiffPane"
+    case reviewStaleBanner = "Review.StaleBanner"
+    case reviewRefresh = "Review.Refresh"
+    case reviewProgress = "Review.Progress"
+    case reviewScopeBranch = "Review.Scope.Branch"
+    case reviewScopeUncommitted = "Review.Scope.Uncommitted"
+    /// The two layout buttons the review is specified around. UI tests assert
+    /// on which one is selected and that the diff rendering follows.
+    case reviewModeSideBySide = "Review.Mode.SideBySide"
+    case reviewModeInline = "Review.Mode.Inline"
+    /// On the rendered hunk, not the button — so a test can tell that
+    /// selecting a mode actually changed the layout, rather than only that
+    /// the button looked selected.
+    case reviewHunkInline = "Review.Hunk.Inline"
+    case reviewHunkSideBySide = "Review.Hunk.SideBySide"
+    case reviewDisplayAllFiles = "Review.Display.AllFiles"
+    case reviewDisplaySingleFile = "Review.Display.SingleFile"
+    case reviewSend = "Review.Send"
+    case reviewSendSheet = "Review.SendSheet"
+    case reviewCommentEditor = "Review.CommentEditor"
+    case reviewCommentSubmit = "Review.CommentSubmit"
+    case reviewCommentCancel = "Review.CommentCancel"
+
     // MARK: - Helpers
     /// Creates a session row identifier from a title
     public static func sessionRow(_ title: String) -> String {
@@ -298,5 +325,43 @@ public enum AXID: String, Sendable {
     /// Creates a command palette result identifier
     public static func commandPaletteResult(_ index: Int) -> String {
         "CommandPalette.Result-\(index)"
+    }
+
+    /// Opens the review window for a session, from its session bar.
+    public static func sessionBarReview(_ title: String) -> String {
+        "SessionBar.Review.\(title)"
+    }
+
+    /// A row in the review's file list, keyed by repository-relative path —
+    /// unique per review, unlike the filename.
+    public static func reviewFileRow(_ path: String) -> String {
+        "Review.FileRow-\(path)"
+    }
+
+    /// The viewed tick on a review file row.
+    public static func reviewFileViewed(_ path: String) -> String {
+        "Review.FileViewed-\(path)"
+    }
+
+    /// A file's section header in the diff pane, which is also the scroll
+    /// anchor the file list jumps to.
+    public static func reviewFileSection(_ path: String) -> String {
+        "Review.FileSection-\(path)"
+    }
+
+    /// One rendered diff line. `side` is `old` or `new`, matching
+    /// `ReviewSide`; a side-by-side row exposes both halves separately.
+    public static func reviewDiffLine(_ path: String, side: String, line: Int) -> String {
+        "Review.DiffLine-\(path)-\(side)-\(line)"
+    }
+
+    /// The "comment on this file" button in a file's section header.
+    public static func reviewCommentOnFile(_ path: String) -> String {
+        "Review.CommentOnFile-\(path)"
+    }
+
+    /// A destination row in the send sheet.
+    public static func reviewSendDestination(_ label: String) -> String {
+        "Review.SendDestination-\(label)"
     }
 }

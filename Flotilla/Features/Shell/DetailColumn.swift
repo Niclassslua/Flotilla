@@ -5,6 +5,7 @@ import TerminalKit
 
 struct DetailColumn: View {
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @Bindable var store: AppStore
     @Bindable var navigator: WorkspaceNavigator
     @Bindable var settingsViewModel: SettingsViewModel
@@ -159,7 +160,8 @@ struct DetailColumn: View {
             },
             onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
             handoffTargets: store.handoffTargets(for: session),
-            onHandoff: { target in Task { await store.handoffSession(sessionID: session.id, to: target) } }
+            onHandoff: { target in Task { await store.handoffSession(sessionID: session.id, to: target) } },
+            onReview: { openWindow(id: SessionReviewWindow.sceneID, value: session.id) }
         )
     }
 

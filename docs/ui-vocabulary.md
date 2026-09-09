@@ -189,6 +189,16 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 | **Monaco host** | The web-backed code editor view. | `MonacoHostView` — `Features/Session/` |
 | **Markdown view** | Rendered Markdown (backed by the Textual package). | `MarkdownView` |
 | **Syntax editor** | The syntax-highlighted plain-text editor used for editing rules/skills. | `SyntaxHighlightedTextEditor` |
+| **Review window** | The separate window for reviewing a session's changes: file list, diff, comments, and the Send Review action. Opens only while a session is Ready for Review. | `SessionReviewWindow` — `Features/Review/` |
+| **Review header bar** | The review's control strip: scope switcher, the Side by Side / Inline buttons, All Files / Single File, viewed progress, Send Review. | `ReviewHeaderBar` |
+| **Review scope** *(All Branch Work / Uncommitted)* | Which changes are under review — everything since the merge-base with the default branch, or only what is uncommitted. | `ReviewScope` — SessionKit |
+| **Side by Side** / **Inline** *(diff modes)* | The two diff layouts: two columns (pre-image opposite post-image) or one column in git's own order. | `ReviewDiffMode` |
+| **Review file list** | The review's left rail — one row per changed file with its viewed tick and comment count. | `ReviewFileList`, `ReviewFileRow` |
+| **Diff pane** | The review's right half, hosting either layout. | `ReviewDiffPane`, `ReviewFileSection` |
+| **Diff line** | One rendered line: number gutter, marker, source text. The shared primitive behind both layouts. | `ReviewDiffLineView` |
+| **Comment thread** | Comments attached to a line or to a whole file, drawn under what they refer to. | `ReviewCommentBubble`, `ReviewCommentEditor` |
+| **Viewed tick** | The per-file checkbox. Clears itself when the file's diff changes after being ticked. | `ReviewedFile` — SessionKit |
+| **Send sheet** | Picks where a finished review goes: a running session, or a new session with any agent. | `ReviewSendSheet`, `ReviewDestination` |
 
 ---
 
