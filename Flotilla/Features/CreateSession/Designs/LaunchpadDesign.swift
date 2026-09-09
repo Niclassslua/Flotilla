@@ -44,41 +44,21 @@ struct LaunchpadDesign: View {
     /// fill, so the true Liquid Glass material behind it keeps showing
     /// through — the old modal had no glass of its own to preserve.
     ///
-    /// Antigravity's brand mark is a gradient, not a color, but its wash
-    /// still has to behave like the other three: a corner tint fading to
-    /// `.clear`, not a flat tint across the whole card. Compressing the
-    /// 5-color sweep into just the top-left corner (rather than running it
-    /// the full diagonal) keeps the color variety inside the region the
-    /// fade mask actually leaves visible.
-    @ViewBuilder
+    /// Antigravity's brand mark is a gradient, but its wash here is the flat
+    /// `AgentBrand.antigravityBackground` blue, so all four agents share one
+    /// corner-tint treatment.
+    private var washColor: Color {
+        draft.agent == .antigravity
+            ? AgentBrand.antigravityBackground
+            : AgentBrand.accentColor(for: draft.agent)
+    }
+
     private var backdrop: some View {
-        Group {
-            if draft.agent == .antigravity {
-                LinearGradient(
-                    colors: AgentBrand.antigravityGradientColors,
-                    startPoint: .topLeading,
-                    endPoint: UnitPoint(x: 0.55, y: 0.45)
-                )
-                .opacity(0.32)
-                .mask {
-                    LinearGradient(
-                        colors: [.black, .black.opacity(0.4), .clear],
-                        startPoint: .topLeading,
-                        endPoint: .center
-                    )
-                }
-            } else {
-                LinearGradient(
-                    colors: [
-                        AgentBrand.accentColor(for: draft.agent).opacity(0.16),
-                        AgentBrand.accentColor(for: draft.agent).opacity(0.05),
-                        .clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .center
-                )
-            }
-        }
+        LinearGradient(
+            colors: [washColor.opacity(0.16), washColor.opacity(0.05), .clear],
+            startPoint: .topLeading,
+            endPoint: .center
+        )
         .animation(reduceMotion ? nil : FlotillaMotion.slow.curve, value: draft.agent)
     }
 
