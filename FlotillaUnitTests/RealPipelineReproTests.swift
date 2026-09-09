@@ -140,7 +140,7 @@ final class RealPipelineReproTests: XCTestCase {
 
         XCTAssertNil(store.lastCreationError, "creation error: \(store.lastCreationError ?? "")")
         let created = try XCTUnwrap(store.sessions.first { $0.title == "Store repro" })
-        XCTAssertEqual(created.status, .working, "session must be .working, got \(created.status?.rawValue ?? "nil")")
+        XCTAssertNil(created.status, "a just-launched session has no status until the pipeline observes it")
         let process = try XCTUnwrap(store.process(for: created.id), "process must exist for created session")
         XCTAssertTrue(process.isRunning, "process must be running right after creation")
         try await Task.sleep(for: .seconds(1.5))

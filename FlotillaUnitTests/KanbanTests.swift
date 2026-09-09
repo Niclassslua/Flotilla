@@ -364,6 +364,9 @@ final class KanbanAppStoreTests: XCTestCase {
             checkoutMode: .mainCheckout
         )
         let session1 = store.sessions.first { $0.title == "Working Session" }!
+        // A freshly created session has no status yet, so put it in the
+        // working state explicitly.
+        store.moveSessionToStatus(sessionID: session1.id, status: .working)
 
         // Create another session that will be idle (need to manipulate status)
         await store.createSession(
@@ -434,6 +437,9 @@ final class KanbanAppStoreTests: XCTestCase {
             checkoutMode: .mainCheckout
         )
         let sessionInProject = store.sessions.first { $0.title == "In Project" }!
+        // Freshly created sessions have no status; this test filters the
+        // working column, so give it that status explicitly.
+        store.moveSessionToStatus(sessionID: sessionInProject.id, status: .working)
 
         await store.createSession(
             title: "General",

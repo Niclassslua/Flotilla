@@ -41,7 +41,10 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertNil(store.lastCreationError)
         XCTAssertEqual(store.sessions.count, 1)
         XCTAssertEqual(store.selectedSessionID, store.sessions.first?.id)
-        XCTAssertEqual(store.sessions.first?.status, .working)
+        // A freshly launched session has no status until the observation
+        // pipeline sees the agent do something — it must not be optimistically
+        // marked working (or, via a boot-screen misread, ready for review).
+        XCTAssertNil(store.sessions.first?.status)
         let createdSession = try XCTUnwrap(store.sessions.first)
         let startedArguments = try XCTUnwrap(factory.processes.first?.startedArguments)
         // `agentManagedTitleEnabled` defaults to true, so the setup-step
@@ -93,7 +96,7 @@ final class AppStoreLifecycleTests: XCTestCase {
 
         XCTAssertNil(store.lastCreationError)
         XCTAssertEqual(store.sessions.count, 1)
-        XCTAssertEqual(store.sessions.first?.status, .working)
+        XCTAssertNil(store.sessions.first?.status, "a just-launched session has no status yet")
         XCTAssertNil(store.selectedSessionID, "\"Launch & Stay Here\" must not change the current selection")
     }
 

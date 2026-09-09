@@ -27,7 +27,6 @@ struct SessionStatusOrigin: Sendable {
         Self("process exit code \(code)")
     }
 
-    static let launch = Self("session launched")
     static let restart = Self("session restarted by user")
     static let resumeRetry = Self("resume failed — relaunched with fresh context")
     static func handoff(from source: AgentKind, to target: AgentKind) -> Self {

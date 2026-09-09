@@ -628,6 +628,49 @@ final class SessionStatusObservationArbiterTests: XCTestCase {
             XCTAssertEqual(arbiter.accept(observation, from: .screen), observation)
         }
     }
+
+    /// A brand-new session (no persisted status) must not be promoted to
+    /// Ready for Review by the screen heuristic before it has been seen doing
+    /// anything — the agent's boot/welcome screen reads the same as a
+    /// finished turn.
+    func testScreenReadyForReviewIsHeldBackUntilTheSessionHasProgressed() {
+        var arbiter = SessionStatusObservationArbiter(sessionHasProgressed: false)
+        XCTAssertNil(arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen))
+
+        // Any working/waiting signal, from either source, opens the gate.
+        XCTAssertEqual(
+            arbiter.accept(SessionStatusObservation(.working), from: .screen),
+            SessionStatusObservation(.working)
+        )
+        XCTAssertEqual(
+            arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen),
+            SessionStatusObservation(.readyForReview)
+        )
+    }
+
+    /// A hook `Stop` is authoritative: it establishes Ready for Review even
+    /// on a session that has shown nothing else.
+    func testHookReadyForReviewBypassesTheProgressGate() {
+        var arbiter = SessionStatusObservationArbiter(sessionHasProgressed: false)
+        let ready = SessionStatusObservation(.readyForReview, cause: "hook: Stop")
+        XCTAssertEqual(arbiter.accept(ready, from: .hook), ready)
+        // And a confirming screen reading now passes too.
+        XCTAssertEqual(
+            arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen),
+            SessionStatusObservation(.readyForReview)
+        )
+    }
+
+    /// A restored session that was already Ready for Review keeps that status
+    /// from the screen — it has a history, so the boot-screen guard does not
+    /// apply.
+    func testRestoredProgressedSessionAcceptsScreenReadyForReviewImmediately() {
+        var arbiter = SessionStatusObservationArbiter(sessionHasProgressed: true)
+        XCTAssertEqual(
+            arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen),
+            SessionStatusObservation(.readyForReview)
+        )
+    }
 }
 
 final class HookConfigurationWriterTests: XCTestCase {

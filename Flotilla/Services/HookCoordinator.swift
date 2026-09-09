@@ -130,7 +130,13 @@ final class HookCoordinator {
         let gate = WaitingNotificationGate()
         monitors[sessionID] = monitor
         gates[sessionID] = gate
-        arbiters[sessionID] = SessionStatusObservationArbiter()
+        // A session that already carries a persisted status has a history —
+        // its screen-derived `.readyForReview` is not the boot-screen misread
+        // the arbiter guards against, so it starts un-gated. A brand-new
+        // session (`nil` status) must earn `.readyForReview`.
+        arbiters[sessionID] = SessionStatusObservationArbiter(
+            sessionHasProgressed: session.status != nil
+        )
 
         var hookReceiver: HookEventReceiver?
         if HookConfigurationWriter.supportsHooks(for: session.agent) {

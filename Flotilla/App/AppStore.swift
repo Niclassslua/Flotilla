@@ -1167,7 +1167,12 @@ final class AppStore {
             if case .assignable = agentDescriptor.resume {
                 session.agentSessionID = session.id.uuidString
             }
-            session = transition(session, to: .working, origin: .launch)
+            // No synthetic status here. A freshly launched session has done
+            // nothing yet, so it stays `nil` ("Unstarted", which renders no
+            // badge) until the observation pipeline sees the agent actually
+            // working or finishing. Optimistically marking it `.working` used
+            // to let a misread of the agent's boot screen immediately promote
+            // it to `.readyForReview`.
             do {
                 try repository.save(session)
             } catch {
