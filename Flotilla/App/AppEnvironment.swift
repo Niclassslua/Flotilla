@@ -122,26 +122,49 @@ final class AppEnvironment {
         }
         try fileManager.createDirectory(at: path, withIntermediateDirectories: true)
 
-        let uploader = path.appendingPathComponent("Uploader.swift")
-        let notes = path.appendingPathComponent("NOTES.md")
+        func write(_ contents: String, to relativePath: String) throws {
+            let fileURL = path.appendingPathComponent(relativePath)
+            try fileManager.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try contents.write(to: fileURL, atomically: true, encoding: .utf8)
+        }
 
         try runGit(["init", "-b", "main"], at: path)
-        try "func upload() {\n    legacyUpload()\n}\n".write(to: uploader, atomically: true, encoding: .utf8)
-        try runGit(["add", "Uploader.swift"], at: path)
+
+        // The committed baseline every working-tree change below is measured
+        // against.
+        try write(ReviewFixture.committedUploader, to: "Uploader.swift")
+        try write(ReviewFixture.committedHTTPClient, to: "Sources/Networking/HTTPClient.swift")
+        try write(ReviewFixture.committedUploadTask, to: "Sources/Models/UploadTask.swift")
+        try write(ReviewFixture.committedUploadChunk, to: "Sources/Models/UploadChunk.swift")
+        try write(ReviewFixture.committedTests, to: "Tests/UploaderTests.swift")
+        try write("# Uploader\n\nUploads session artefacts.\n", to: "README.md")
+        try write("{\n  \"maxChunkBytes\": 1048576,\n  \"maxRetries\": 3,\n  \"backoffSeconds\": 2\n}\n", to: "config/limits.json")
+        try runGit(["add", "."], at: path)
         try runGit(
             ["-c", "user.name=Flotilla UITests", "-c", "user.email=uitests@example.com", "commit", "-m", "init"],
             at: path
         )
 
-        // Modified-and-uncommitted, so both review scopes have something in
+        // Working-tree changes, left uncommitted so both review scopes show
         // them: the branch scope diffs the working tree against the merge
-        // base, the uncommitted scope against HEAD.
-        try "func upload() {\n    try await session.upload(chunk)\n}\n".write(
-            to: uploader,
-            atomically: true,
-            encoding: .utf8
-        )
-        try "Untracked notes\n".write(to: notes, atomically: true, encoding: .utf8)
+        // base, the uncommitted scope against HEAD. Deliberately a spread of
+        // change kinds — a multi-hunk rewrite carrying an over-long line (so
+        // Side by Side wrapping has something to wrap), a two-hunk modify, a
+        // delete, a rename, a new untracked file, and smaller doc/config
+        // edits.
+        try write(ReviewFixture.workingUploader, to: "Uploader.swift")
+        try write(ReviewFixture.workingHTTPClient, to: "Sources/Networking/HTTPClient.swift")
+        try fileManager.removeItem(at: path.appendingPathComponent("Sources/Models/UploadTask.swift"))
+        try fileManager.removeItem(at: path.appendingPathComponent("Sources/Models/UploadChunk.swift"))
+        try write(ReviewFixture.workingChunk, to: "Sources/Models/Chunk.swift")
+        try write(ReviewFixture.workingTests, to: "Tests/UploaderTests.swift")
+        try write(ReviewFixture.workingRetryPolicy, to: "Sources/Networking/RetryPolicy.swift")
+        try write("# Uploader\n\nUploads session artefacts, retrying automatically on flaky networks.\n", to: "README.md")
+        try write("{\n  \"maxChunkBytes\": 2097152,\n  \"maxRetries\": 6,\n  \"backoffSeconds\": 1\n}\n", to: "config/limits.json")
+        try write("Untracked notes\n\n- check the backoff jitter distribution\n- confirm the checksum header is lower-cased\n", to: "NOTES.md")
     }
 
     private static func seedReviewFixture(into repository: SessionRepository) {

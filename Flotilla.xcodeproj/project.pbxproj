@@ -287,6 +287,7 @@
 		C3FD248DBA8583AC3D6865FF /* WorkspaceFileDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BFFA35FF318BF4E181C0FE /* WorkspaceFileDiscovery.swift */; };
 		C4306E8FC990AC7BDF29E237 /* SessionBarsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5153FA2B72647A5FB0F9FD2A /* SessionBarsUITests.swift */; };
 		C62436F737B90F9AB7EC463A /* AgentBrandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49AA426B52688D2B81854409 /* AgentBrandTests.swift */; };
+		C7BAAD7331EA5A8385E1B6E8 /* ReviewFixtureContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6460C3400F65BAB84C0513A4 /* ReviewFixtureContent.swift */; };
 		C7F772DB0DC0620BA9347B66 /* KanbanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8007B7DFF42E35CB2C584727 /* KanbanTests.swift */; };
 		C8EB697F01CA679EF2319C7A /* MonacoLanguageMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7647E6E3F8217B4210D6634 /* MonacoLanguageMappingTests.swift */; };
 		C911E3A2A43F3D1E6475B7ED /* AgentConversationOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9E53144F55E554FC3CD0B5 /* AgentConversationOwnership.swift */; };
@@ -513,6 +514,7 @@
 		620CED7B87823AB08CD08B83 /* GridLayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridLayoutEngine.swift; sourceTree = "<group>"; };
 		6292DF639CCDD77BE62C3F62 /* SessionReviewWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReviewWindow.swift; sourceTree = "<group>"; };
 		63689F7E4DAECB7FD921AAB7 /* ProjectChoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectChoiceTests.swift; sourceTree = "<group>"; };
+		6460C3400F65BAB84C0513A4 /* ReviewFixtureContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewFixtureContent.swift; sourceTree = "<group>"; };
 		64771AE72BD38A0D7A5D3FAE /* GraphSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphSplitView.swift; sourceTree = "<group>"; };
 		64E9ED463505D508B071660E /* SettingsKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SettingsKit; path = Packages/SettingsKit; sourceTree = SOURCE_ROOT; };
 		6528103CB7970CCE342C6405 /* ProjectCommandCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandCard.swift; sourceTree = "<group>"; };
@@ -1235,6 +1237,7 @@
 				179ED2D6FC5AA9AEAF3BE74D /* FlotillaApp.swift */,
 				21B8F05E680043FBA0A1BDE3 /* FlotillaNotificationDelegate.swift */,
 				1BD0E51ECF35F3C9E7E50FB0 /* PerfLog.swift */,
+				6460C3400F65BAB84C0513A4 /* ReviewFixtureContent.swift */,
 				A311B269879399C20B86A4F2 /* UITestWindowPlacer.swift */,
 			);
 			path = App;
@@ -1708,6 +1711,7 @@
 				50F5D9CB70B312B4F43660D1 /* ReviewDiffPane.swift in Sources */,
 				D217C7A8BBDF71E49B44C93E /* ReviewDiffRow.swift in Sources */,
 				696B4ADB417698E2D2EDA741 /* ReviewFileList.swift in Sources */,
+				C7BAAD7331EA5A8385E1B6E8 /* ReviewFixtureContent.swift in Sources */,
 				7FFA9406C73CAE77D1FA7ED6 /* ReviewPromptFormatter.swift in Sources */,
 				5549B682E5E8383CB7ABDC50 /* ReviewSendSheet.swift in Sources */,
 				F518859ED7965B0C92067A88 /* RuleFileEntry.swift in Sources */,
