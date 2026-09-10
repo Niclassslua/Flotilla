@@ -86,6 +86,10 @@ struct ReviewCommentBubble: View {
 }
 
 /// Composes a new comment, or edits an existing one.
+///
+/// One card: a borderless field on top, a hairline, then an action row that
+/// also carries the context and the submit shortcut. The whole card's border
+/// tracks focus so it reads as the active element in a busy diff.
 struct ReviewCommentEditor: View {
     let title: String
     @Binding var text: String
@@ -94,46 +98,97 @@ struct ReviewCommentEditor: View {
 
     @FocusState private var isFocused: Bool
 
+    private var canSubmit: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-            Text(title)
-                .font(FlotillaTypography.caption2.weight(.medium))
-                .foregroundStyle(FlotillaColors.textTertiary)
+        VStack(spacing: 0) {
+            field
+            Divider()
+            actionRow
+        }
+        .background(FlotillaColors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
+                .strokeBorder(
+                    isFocused ? FlotillaColors.accent : FlotillaColors.separator,
+                    lineWidth: isFocused ? 1.5 : FlotillaBorderWidth.hairline
+                )
+        }
+        .animation(FlotillaMotion.fast.curve, value: isFocused)
+        .onAppear { isFocused = true }
+    }
+
+    // MARK: - Field
+
+    private var field: some View {
+        ZStack(alignment: .topLeading) {
+            if text.isEmpty {
+                Text("Leave a comment")
+                    .font(FlotillaTypography.caption)
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .padding(.leading, 5)
+                    .padding(.top, 8)
+                    .allowsHitTesting(false)
+            }
 
             TextEditor(text: $text)
                 .font(FlotillaTypography.caption)
+                .foregroundStyle(FlotillaColors.textPrimary)
                 .scrollContentBackground(.hidden)
                 .focused($isFocused)
-                .frame(minHeight: 56, maxHeight: 120)
-                .padding(FlotillaSpacing.xSmall)
-                .background(
-                    FlotillaColors.surface,
-                    in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                        .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-                }
                 .accessibilityIdentifier(AXID.reviewCommentEditor.rawValue)
-
-            HStack(spacing: FlotillaSpacing.small) {
-                Spacer(minLength: 0)
-                Button("Cancel", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier(AXID.reviewCommentCancel.rawValue)
-                Button("Add Comment", action: onSubmit)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier(AXID.reviewCommentSubmit.rawValue)
-            }
-            .font(FlotillaTypography.caption)
         }
-        .padding(FlotillaSpacing.small)
-        .background(
-            FlotillaColors.surfaceElevated,
-            in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-        )
-        .onAppear { isFocused = true }
+        .padding(.horizontal, FlotillaSpacing.small)
+        .padding(.vertical, FlotillaSpacing.xSmall)
+        .frame(minHeight: 62, maxHeight: 148)
+    }
+
+    // MARK: - Action row
+
+    private var actionRow: some View {
+        HStack(spacing: FlotillaSpacing.small) {
+            Label(title, systemImage: "text.bubble")
+                .labelStyle(.titleAndIcon)
+                .font(FlotillaTypography.caption2)
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: FlotillaSpacing.small)
+
+            Text("⌘↩")
+                .font(FlotillaTypography.caption2.monospaced())
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .opacity(canSubmit ? 1 : 0)
+
+            Button("Cancel", action: onCancel)
+                .buttonStyle(.plain)
+                .font(FlotillaTypography.caption.weight(.medium))
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier(AXID.reviewCommentCancel.rawValue)
+
+            Button(action: onSubmit) {
+                Text("Add comment")
+                    .font(FlotillaTypography.caption.weight(.semibold))
+                    .foregroundStyle(FlotillaColors.accentContent)
+                    .padding(.horizontal, FlotillaSpacing.medium)
+                    .padding(.vertical, 5)
+                    .background(
+                        canSubmit ? FlotillaColors.accent : FlotillaColors.accent.opacity(0.4),
+                        in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSubmit)
+            .keyboardShortcut(.return, modifiers: .command)
+            .accessibilityIdentifier(AXID.reviewCommentSubmit.rawValue)
+        }
+        .padding(.horizontal, FlotillaSpacing.medium)
+        .padding(.vertical, FlotillaSpacing.small)
+        .background(FlotillaColors.surfaceElevated)
     }
 }

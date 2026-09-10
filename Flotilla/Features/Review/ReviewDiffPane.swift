@@ -27,50 +27,49 @@ struct ReviewDiffPane: View {
 
     private static let outerPadding = FlotillaSpacing.large
 
-    /// Measured, not guessed: the two side-by-side columns are each half of
-    /// it, which is what makes the diff fill the window instead of sitting in
-    /// a fixed-width strip with dead space beside it.
-    @State private var paneWidth: CGFloat = 0
-
+    /// Measured with a `GeometryReader` rather than `.onGeometryChange` so the
+    /// content width is right on the *first* layout pass. Side by Side sizes
+    /// each column to exactly half of it with no content-based floor, so a
+    /// width that is briefly zero would collapse every line to one character;
+    /// a `GeometryReader` never hands us that transient zero.
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(
-                    alignment: .leading,
-                    spacing: FlotillaSpacing.large,
-                    pinnedViews: [.sectionHeaders]
-                ) {
-                    ForEach(viewModel.visibleFiles) { file in
-                        ReviewFileSection(
-                            file: file,
-                            viewModel: viewModel,
-                            availableWidth: contentWidth,
-                            draft: $draft,
-                            draftText: $draftText
-                        )
-                        .id(file.path)
+        GeometryReader { geometry in
+            let contentWidth = max(0, geometry.size.width - Self.outerPadding * 2)
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(
+                        alignment: .leading,
+                        spacing: FlotillaSpacing.large,
+                        pinnedViews: [.sectionHeaders]
+                    ) {
+                        ForEach(viewModel.visibleFiles) { file in
+                            ReviewFileSection(
+                                file: file,
+                                viewModel: viewModel,
+                                availableWidth: contentWidth,
+                                draft: $draft,
+                                draftText: $draftText
+                            )
+                            .id(file.path)
+                        }
                     }
+                    .padding(Self.outerPadding)
+                    .frame(width: geometry.size.width, alignment: .leading)
                 }
-                .padding(Self.outerPadding)
-            }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paneWidth = $0 }
-            .background(FlotillaColors.canvas)
-            // In All Files the file list scrolls this pane rather than
-            // swapping its contents; in Single File the pane is already just
-            // that file, so the scroll is a no-op and harmless.
-            .onChange(of: viewModel.selectedPath) { _, newValue in
-                guard let newValue else { return }
-                withAnimation(FlotillaMotion.fast.curve) {
-                    proxy.scrollTo(newValue, anchor: .top)
+                .background(FlotillaColors.canvas)
+                // In All Files the file list scrolls this pane rather than
+                // swapping its contents; in Single File the pane is already
+                // just that file, so the scroll is a no-op and harmless.
+                .onChange(of: viewModel.selectedPath) { _, newValue in
+                    guard let newValue else { return }
+                    withAnimation(FlotillaMotion.fast.curve) {
+                        proxy.scrollTo(newValue, anchor: .top)
+                    }
                 }
             }
         }
         .accessibilityIdentifier(AXID.reviewDiffPane.rawValue)
-    }
-
-    /// The pane minus the padding and the file card's own border.
-    private var contentWidth: CGFloat {
-        max(0, paneWidth - Self.outerPadding * 2)
     }
 }
 
