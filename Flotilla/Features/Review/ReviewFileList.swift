@@ -2,15 +2,16 @@ import SwiftUI
 import GitKit
 import DesignSystem
 
-/// The review's left rail: the changed files as a directory tree, with a
-/// search field above and a running total below.
+/// The review's left rail: the changed files as one flat, alphabetical list
+/// with a filter above and a viewed-progress footer below.
+///
+/// Flat rather than a directory tree: a review is a finite, already-scoped
+/// set of files you work through top to bottom, and a tree spends a column of
+/// indent and a row per folder to arrange a list you mostly read in order.
 struct ReviewFileList: View {
     @Bindable var viewModel: SessionReviewViewModel
 
     @State private var query = ""
-    /// Directories the reviewer has folded away. Absent means expanded, so a
-    /// newly appearing directory is open rather than hidden.
-    @State private var collapsed: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +21,7 @@ struct ReviewFileList: View {
             if matchingFiles.isEmpty {
                 emptyState
             } else {
-                tree
+                list
             }
 
             Divider()
@@ -35,10 +36,10 @@ struct ReviewFileList: View {
 
     private var searchField: some View {
         HStack(spacing: FlotillaSpacing.small) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: FlotillaIconSize.xSmall))
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
                 .foregroundStyle(FlotillaColors.textTertiary)
-            TextField("Search…", text: $query)
+            TextField("Filter files", text: $query)
                 .textFieldStyle(.plain)
                 .font(FlotillaTypography.caption)
                 .foregroundStyle(FlotillaColors.textPrimary)
@@ -51,7 +52,7 @@ struct ReviewFileList: View {
                         .foregroundStyle(FlotillaColors.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
+                .accessibilityLabel("Clear filter")
             }
         }
         .padding(.horizontal, FlotillaSpacing.small)
@@ -67,18 +68,19 @@ struct ReviewFileList: View {
         .padding(FlotillaSpacing.small)
     }
 
-    private var tree: some View {
+    private var list: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(nodes) { node in
-                    ReviewTreeRowGroup(
-                        node: node,
-                        depth: 0,
-                        viewModel: viewModel,
-                        collapsed: $collapsed
+            LazyVStack(spacing: 1) {
+                ForEach(matchingFiles) { file in
+                    ReviewFileRow(
+                        file: file,
+                        isSelected: viewModel.selectedPath == file.path,
+                        onSelect: { viewModel.selectedPath = file.path },
+                        onToggleViewed: { viewModel.toggleViewed(file) }
                     )
                 }
             }
+            .padding(.horizontal, FlotillaSpacing.xSmall)
             .padding(.vertical, FlotillaSpacing.xSmall)
         }
     }
@@ -100,25 +102,30 @@ struct ReviewFileList: View {
         .accessibilityIdentifier(AXID.reviewEmpty.rawValue)
     }
 
-    /// Mirrors the reference navigator's status line: how much is in front of
-    /// you, and how much of it you have already read.
+    /// How much is in front of you, how much of it you have read, and — as a
+    /// thin fill along the top edge — the same figure at a glance.
     private var footer: some View {
-        HStack(spacing: FlotillaSpacing.small) {
-            Text(matchingFiles.count == 1 ? "1 file" : "\(matchingFiles.count) files")
-                .font(FlotillaTypography.caption2)
-                .foregroundStyle(FlotillaColors.textSecondary)
+        VStack(spacing: 0) {
+            ReviewViewedProgressBar(viewed: viewModel.viewedCount, total: viewModel.files.count)
+                .frame(height: 2)
 
-            DiffStatBadge(stat: totalStat)
+            HStack(spacing: FlotillaSpacing.small) {
+                Text(matchingFiles.count == 1 ? "1 file" : "\(matchingFiles.count) files")
+                    .font(FlotillaTypography.caption2)
+                    .foregroundStyle(FlotillaColors.textSecondary)
 
-            Spacer(minLength: 0)
+                DiffStatBadge(stat: totalStat)
 
-            Text("\(viewModel.viewedCount)/\(viewModel.files.count) viewed")
-                .font(FlotillaTypography.caption2)
-                .foregroundStyle(FlotillaColors.textTertiary)
-                .accessibilityIdentifier(AXID.reviewProgress.rawValue)
+                Spacer(minLength: 0)
+
+                Text("\(viewModel.viewedCount)/\(viewModel.files.count) viewed")
+                    .font(FlotillaTypography.caption2)
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .accessibilityIdentifier(AXID.reviewProgress.rawValue)
+            }
+            .padding(.horizontal, FlotillaSpacing.medium)
+            .padding(.vertical, FlotillaSpacing.small)
         }
-        .padding(.horizontal, FlotillaSpacing.medium)
-        .padding(.vertical, FlotillaSpacing.small)
     }
 
     // MARK: - Derived
@@ -129,110 +136,15 @@ struct ReviewFileList: View {
         return viewModel.files.filter { $0.path.localizedCaseInsensitiveContains(trimmed) }
     }
 
-    private var nodes: [ReviewTreeNode] {
-        ReviewFileTreeBuilder.build(from: matchingFiles)
-    }
-
     private var totalStat: GitDiffStat {
         matchingFiles.reduce(GitDiffStat(additions: 0, deletions: 0)) { $0 + $1.change.stat }
     }
 }
 
-/// One node and, when it is an expanded directory, everything under it.
-private struct ReviewTreeRowGroup: View {
-    let node: ReviewTreeNode
-    let depth: Int
-    @Bindable var viewModel: SessionReviewViewModel
-    @Binding var collapsed: Set<String>
-
-    var body: some View {
-        if let file = node.file {
-            ReviewFileRow(
-                file: file,
-                name: node.name,
-                depth: depth,
-                isSelected: viewModel.selectedPath == file.path,
-                onSelect: { viewModel.selectedPath = file.path },
-                onToggleViewed: { viewModel.toggleViewed(file) }
-            )
-        } else {
-            ReviewDirectoryRow(
-                node: node,
-                depth: depth,
-                isExpanded: !collapsed.contains(node.path),
-                onToggle: {
-                    if collapsed.contains(node.path) {
-                        collapsed.remove(node.path)
-                    } else {
-                        collapsed.insert(node.path)
-                    }
-                }
-            )
-
-            if !collapsed.contains(node.path) {
-                ForEach(node.children) { child in
-                    ReviewTreeRowGroup(
-                        node: child,
-                        depth: depth + 1,
-                        viewModel: viewModel,
-                        collapsed: $collapsed
-                    )
-                }
-            }
-        }
-    }
-}
-
-private struct ReviewDirectoryRow: View {
-    let node: ReviewTreeNode
-    let depth: Int
-    let isExpanded: Bool
-    let onToggle: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: FlotillaSpacing.xSmall) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(FlotillaColors.textTertiary)
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .frame(width: 10)
-
-                Text(node.name)
-                    .font(FlotillaTypography.caption)
-                    .foregroundStyle(FlotillaColors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                Spacer(minLength: FlotillaSpacing.xSmall)
-
-                // A dot rather than a count: the folder's own status is not a
-                // thing you act on, and a number here competes with the file
-                // rows' change markers.
-                Circle()
-                    .fill(FlotillaColors.textTertiary.opacity(0.55))
-                    .frame(width: 4, height: 4)
-            }
-            .padding(.leading, ReviewTreeMetrics.indent(depth))
-            .padding(.trailing, FlotillaSpacing.medium)
-            .padding(.vertical, 3)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isHovering ? Color.white.opacity(FlotillaStateOpacity.hover) : .clear)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .accessibilityLabel("\(node.name) folder")
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-    }
-}
-
+/// One file in the flat list: change-kind square, filename over its folder,
+/// then per-file signal — line counts, comments, and a viewed tick.
 struct ReviewFileRow: View {
     let file: ReviewFile
-    let name: String
-    let depth: Int
     let isSelected: Bool
     let onSelect: () -> Void
     let onToggleViewed: () -> Void
@@ -241,41 +153,43 @@ struct ReviewFileRow: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: FlotillaSpacing.xSmall) {
-                MaterialFileIcon(url: URL(fileURLWithPath: file.path), size: 14)
-                    .accessibilityHidden(true)
+            HStack(spacing: FlotillaSpacing.small) {
+                FileChangeKindBadge(kind: file.change.kind, size: 16)
+                    .opacity(dimmed ? 0.55 : 1)
 
-                Text(name)
-                    .font(FlotillaTypography.caption)
-                    .foregroundStyle(nameColor)
-                    .strikethrough(file.change.kind == .deleted, color: nameColor.opacity(0.7))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(file.filename)
+                        .font(FlotillaTypography.caption.weight(.medium))
+                        .foregroundStyle(nameColor)
+                        .strikethrough(file.change.kind == .deleted, color: nameColor.opacity(0.6))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let directory = file.directory {
+                        Text(directory)
+                            .font(FlotillaTypography.caption3)
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                    }
+                }
 
                 Spacer(minLength: FlotillaSpacing.xSmall)
 
-                if file.commentCount > 0 {
-                    commentBadge
-                }
-
-                viewedTick
-
-                Text(file.change.kind.marker)
-                    .font(FlotillaTypography.caption2.weight(.bold).monospaced())
-                    .foregroundStyle(file.change.kind.color)
-                    .frame(width: 10, alignment: .trailing)
-                    .accessibilityLabel(file.change.kind.label)
+                trailingSignal
             }
-            .padding(.leading, ReviewTreeMetrics.indent(depth))
-            .padding(.trailing, FlotillaSpacing.medium)
-            .padding(.vertical, 3)
+            .padding(.horizontal, FlotillaSpacing.small)
+            .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(rowBackground)
+            .background(
+                rowBackground,
+                in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+            )
             .overlay(alignment: .leading) {
                 if isSelected {
-                    Rectangle()
+                    Capsule()
                         .fill(FlotillaColors.accent)
                         .frame(width: FlotillaBorderWidth.thick)
+                        .padding(.vertical, 4)
                 }
             }
             .contentShape(.rect)
@@ -285,52 +199,94 @@ struct ReviewFileRow: View {
         .accessibilityIdentifier(AXID.reviewFileRow(file.path))
     }
 
-    /// Shown once ticked, and on hover so an unticked file advertises that it
-    /// can be ticked. Otherwise the rail stays as quiet as the reference.
-    @ViewBuilder
-    private var viewedTick: some View {
-        if file.isViewed || isHovering {
+    // MARK: - Trailing
+
+    private var trailingSignal: some View {
+        HStack(spacing: FlotillaSpacing.xSmall) {
+            if file.commentCount > 0 {
+                HStack(spacing: 1) {
+                    Image(systemName: "bubble.left.fill").font(.system(size: 7))
+                    Text("\(file.commentCount)").font(FlotillaTypography.caption3.weight(.semibold))
+                }
+                .foregroundStyle(FlotillaColors.accent)
+                .accessibilityLabel("\(file.commentCount) comment\(file.commentCount == 1 ? "" : "s")")
+            }
+
+            if !isHovering && !isSelected {
+                ReviewMiniStat(stat: file.change.stat)
+            }
+
             Button(action: onToggleViewed) {
                 Image(systemName: file.isViewed ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(file.isViewed ? FlotillaColors.statusReady : FlotillaColors.textTertiary)
             }
             .buttonStyle(.plain)
+            .opacity(file.isViewed || isHovering || isSelected ? 1 : 0)
             .help(file.isViewed ? "Mark as not viewed" : "Mark as viewed")
             .accessibilityLabel(file.isViewed ? "Viewed" : "Not viewed")
             .accessibilityIdentifier(AXID.reviewFileViewed(file.path))
         }
     }
 
-    private var commentBadge: some View {
-        HStack(spacing: 1) {
-            Image(systemName: "bubble.left.fill")
-                .font(.system(size: 7))
-            Text("\(file.commentCount)")
-                .font(FlotillaTypography.caption3.weight(.semibold))
-        }
-        .foregroundStyle(FlotillaColors.accent)
-        .accessibilityLabel("\(file.commentCount) comment\(file.commentCount == 1 ? "" : "s")")
-    }
+    // MARK: - Derived
 
-    /// Colour carries the change kind, matching the marker on the right, and
-    /// a read file recedes.
+    private var dimmed: Bool { file.isViewed && !isSelected }
+
     private var nameColor: Color {
-        if file.isViewed && !isSelected { return FlotillaColors.textTertiary }
-        return file.change.kind.color
+        dimmed ? FlotillaColors.textTertiary : FlotillaColors.textPrimary
     }
 
     private var rowBackground: Color {
         if isSelected { return FlotillaColors.accent.opacity(FlotillaStateOpacity.selected) }
-        if isHovering { return Color.white.opacity(FlotillaStateOpacity.hover) }
+        if isHovering { return FlotillaColors.textPrimary.opacity(FlotillaStateOpacity.hover) }
         return .clear
     }
 }
 
-enum ReviewTreeMetrics {
-    /// Indent per level, plus the room the root rows need so their icons line
-    /// up under a directory chevron.
-    static func indent(_ depth: Int) -> CGFloat {
-        FlotillaSpacing.small + CGFloat(depth) * 12
+/// A very compact two-number line-count readout: `+12 −4` in the diff
+/// colours, no chips — quieter than ``DiffStatBadge`` for a dense list row.
+struct ReviewMiniStat: View {
+    let stat: GitDiffStat
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if stat.additions > 0 {
+                Text("+\(stat.additions)")
+                    .foregroundStyle(FlotillaColors.diffAdded)
+            }
+            if stat.deletions > 0 {
+                Text("−\(stat.deletions)")
+                    .foregroundStyle(FlotillaColors.diffRemoved)
+            }
+        }
+        .font(.system(size: 10, weight: .medium, design: .monospaced))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(stat.additions) added, \(stat.deletions) removed")
+    }
+}
+
+/// The thin viewed-progress fill shared by the file-list footer and the
+/// header bar's bottom edge.
+struct ReviewViewedProgressBar: View {
+    let viewed: Int
+    let total: Int
+
+    private var fraction: Double {
+        guard total > 0 else { return 0 }
+        return min(1, Double(viewed) / Double(total))
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(FlotillaColors.separator.opacity(0.5))
+                Rectangle()
+                    .fill(FlotillaColors.statusReady)
+                    .frame(width: geo.size.width * fraction)
+            }
+        }
+        .animation(FlotillaMotion.normal.curve, value: fraction)
+        .accessibilityHidden(true)
     }
 }

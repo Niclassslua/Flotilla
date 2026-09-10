@@ -25,17 +25,6 @@ struct SessionReviewWindow: View {
     @State private var branch: String?
     @State private var sendResult: String?
 
-    /// Which candidate design is on screen. Persisted so switching sticks
-    /// across window opens while the four are being compared.
-    @AppStorage(ReviewDesign.storageKey) private var designRaw = ReviewDesign.default.rawValue
-
-    private var design: Binding<ReviewDesign> {
-        Binding(
-            get: { ReviewDesign(rawValue: designRaw) ?? .default },
-            set: { designRaw = $0.rawValue }
-        )
-    }
-
     private var session: Session? {
         store.sessions.first { $0.id == sessionID }
     }
@@ -77,8 +66,21 @@ struct SessionReviewWindow: View {
 
     private func content(session: Session, viewModel: SessionReviewViewModel) -> some View {
         VStack(spacing: 0) {
+            ReviewHeaderBar(
+                viewModel: viewModel,
+                branch: branch,
+                onRefresh: { Task { await viewModel.load() } },
+                onSend: { isPresentingSend = true }
+            )
+            Divider()
+
             banners(viewModel: viewModel)
-            designBody(session: session, viewModel: viewModel)
+
+            HStack(spacing: 0) {
+                ReviewFileList(viewModel: viewModel)
+                Divider()
+                ReviewDiffPane(viewModel: viewModel, draft: $draft, draftText: $draftText)
+            }
         }
         .sheet(isPresented: $isPresentingSend) {
             ReviewSendSheet(
@@ -90,42 +92,6 @@ struct SessionReviewWindow: View {
                     send(to: target, session: session, viewModel: viewModel)
                 },
                 onCancel: { isPresentingSend = false }
-            )
-        }
-    }
-
-    /// Routes to whichever candidate design is selected. Each design owns its
-    /// own header (with the live ``ReviewDesignMenu``) and body; the shared
-    /// callbacks and comment-draft bindings are threaded through unchanged.
-    @ViewBuilder
-    private func designBody(session: Session, viewModel: SessionReviewViewModel) -> some View {
-        let onRefresh: () -> Void = { Task { await viewModel.load() } }
-        let onSend: () -> Void = { isPresentingSend = true }
-
-        switch design.wrappedValue {
-        case .editorial:
-            ReviewEditorialLayout(
-                viewModel: viewModel, branch: branch, design: design,
-                draft: $draft, draftText: $draftText,
-                onRefresh: onRefresh, onSend: onSend
-            )
-        case .workbench:
-            ReviewWorkbenchLayout(
-                viewModel: viewModel, branch: branch, design: design,
-                draft: $draft, draftText: $draftText,
-                onRefresh: onRefresh, onSend: onSend
-            )
-        case .timeline:
-            ReviewTimelineLayout(
-                viewModel: viewModel, branch: branch, design: design,
-                draft: $draft, draftText: $draftText,
-                onRefresh: onRefresh, onSend: onSend
-            )
-        case .commandDeck:
-            ReviewCommandDeckLayout(
-                viewModel: viewModel, branch: branch, design: design,
-                draft: $draft, draftText: $draftText,
-                onRefresh: onRefresh, onSend: onSend
             )
         }
     }
@@ -242,109 +208,117 @@ struct SessionReviewWindow: View {
     }
 }
 
-/// The review's control strip.
-struct ReviewHeaderBar<Trailing: View>: View {
+/// The review's control strip: what you are reviewing on the left, how it is
+/// shown and what to do with it on the right, and — along the bottom edge —
+/// how far through the files you are.
+struct ReviewHeaderBar: View {
     @Bindable var viewModel: SessionReviewViewModel
     let branch: String?
     let onRefresh: () -> Void
     let onSend: () -> Void
-    @ViewBuilder var trailing: () -> Trailing
-
-    init(
-        viewModel: SessionReviewViewModel,
-        branch: String?,
-        onRefresh: @escaping () -> Void,
-        onSend: @escaping () -> Void,
-        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
-    ) {
-        self.viewModel = viewModel
-        self.branch = branch
-        self.onRefresh = onRefresh
-        self.onSend = onSend
-        self.trailing = trailing
-    }
 
     var body: some View {
-        HStack(spacing: FlotillaSpacing.medium) {
+        HStack(spacing: FlotillaSpacing.large) {
             identity
             Spacer(minLength: FlotillaSpacing.small)
-            scopePicker
-            modePicker
-            displayPicker
+            scopeTrack
+            displayTrack
             refreshButton
             sendButton
-            trailing()
         }
-        .padding(.horizontal, FlotillaSpacing.medium)
+        .padding(.horizontal, FlotillaSpacing.large)
         .padding(.vertical, FlotillaSpacing.small)
         .background(FlotillaColors.sidebar)
+        .overlay(alignment: .bottom) {
+            if viewModel.files.count > 0 {
+                ReviewViewedProgressBar(viewed: viewModel.viewedCount, total: viewModel.files.count)
+                    .frame(height: 2)
+            }
+        }
     }
 
+    // MARK: - Identity
+
     private var identity: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(viewModel.session.title)
-                .font(FlotillaTypography.callout.weight(.semibold))
+                .font(FlotillaTypography.headline)
                 .foregroundStyle(FlotillaColors.textPrimary)
                 .lineLimit(1)
+
             if let branch {
-                Text(branch)
-                    .font(FlotillaTypography.caption2.monospaced())
-                    .foregroundStyle(FlotillaColors.textTertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: FlotillaSpacing.xSmall) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(branch)
+                        .font(FlotillaTypography.caption2.monospaced())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .padding(.horizontal, FlotillaSpacing.small)
+                .padding(.vertical, 2)
+                .background(FlotillaColors.surface, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+                }
             }
         }
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var scopePicker: some View {
-        segmented(ReviewScope.allCases.map { scope in
-            SegmentSpec(
-                title: scope.displayName,
-                systemImage: nil,
-                identifier: scope == .branch
-                    ? AXID.reviewScopeBranch.rawValue
-                    : AXID.reviewScopeUncommitted.rawValue,
-                isSelected: viewModel.scope == scope,
-                action: { Task { await viewModel.setScope(scope) } }
-            )
-        })
+    // MARK: - Tracks
+
+    /// Which changes to show — branch work or just the working tree.
+    private var scopeTrack: some View {
+        segmentedTrack([
+            ReviewScope.allCases.map { scope in
+                SegmentSpec(
+                    title: scope.displayName,
+                    systemImage: scope == .branch ? "arrow.triangle.branch" : "pencil.line",
+                    identifier: scope == .branch
+                        ? AXID.reviewScopeBranch.rawValue
+                        : AXID.reviewScopeUncommitted.rawValue,
+                    isSelected: viewModel.scope == scope,
+                    action: { Task { await viewModel.setScope(scope) } }
+                )
+            }
+        ])
     }
 
-    /// The two layout buttons, as specified: one for each mode rather than a
-    /// single toggle, so the current mode is legible without reading a label.
-    private var modePicker: some View {
-        segmented(ReviewDiffMode.allCases.map { mode in
-            SegmentSpec(
-                title: mode.title,
-                systemImage: mode.systemImage,
-                identifier: mode == .sideBySide
-                    ? AXID.reviewModeSideBySide.rawValue
-                    : AXID.reviewModeInline.rawValue,
-                isSelected: viewModel.diffMode == mode,
-                action: { viewModel.diffMode = mode }
-            )
-        })
-    }
-
-    private var displayPicker: some View {
-        segmented(ReviewFileDisplay.allCases.map { display in
-            SegmentSpec(
-                title: display.title,
-                systemImage: display.systemImage,
-                identifier: display == .allFiles
-                    ? AXID.reviewDisplayAllFiles.rawValue
-                    : AXID.reviewDisplaySingleFile.rawValue,
-                isSelected: viewModel.fileDisplay == display,
-                action: { viewModel.fileDisplay = display }
-            )
-        })
+    /// How the diff is shown: layout (inline / side by side) and how many
+    /// files at once — two related choices in one track, split by a rule.
+    private var displayTrack: some View {
+        segmentedTrack([
+            ReviewDiffMode.allCases.map { mode in
+                SegmentSpec(
+                    title: mode.title,
+                    systemImage: mode.systemImage,
+                    identifier: mode == .sideBySide
+                        ? AXID.reviewModeSideBySide.rawValue
+                        : AXID.reviewModeInline.rawValue,
+                    isSelected: viewModel.diffMode == mode,
+                    action: { viewModel.diffMode = mode }
+                )
+            },
+            ReviewFileDisplay.allCases.map { display in
+                SegmentSpec(
+                    title: display.title,
+                    systemImage: display.systemImage,
+                    identifier: display == .allFiles
+                        ? AXID.reviewDisplayAllFiles.rawValue
+                        : AXID.reviewDisplaySingleFile.rawValue,
+                    isSelected: viewModel.fileDisplay == display,
+                    action: { viewModel.fileDisplay = display }
+                )
+            }
+        ])
     }
 
     private var refreshButton: some View {
         Button(action: onRefresh) {
             Image(systemName: "arrow.clockwise")
-                .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
+                .font(.system(size: FlotillaIconSize.small, weight: .semibold))
         }
         .buttonStyle(.plain)
         .foregroundStyle(FlotillaColors.textSecondary)
@@ -371,6 +345,7 @@ struct ReviewHeaderBar<Trailing: View>: View {
             .font(FlotillaTypography.caption.weight(.medium))
         }
         .buttonStyle(.borderedProminent)
+        .tint(FlotillaColors.accent)
         .disabled(!viewModel.canSend)
         .help(viewModel.canSend ? "Send comments to an agent" : "No unsent comments")
         .accessibilityIdentifier(AXID.reviewSend.rawValue)
@@ -388,37 +363,58 @@ struct ReviewHeaderBar<Trailing: View>: View {
         var id: String { identifier }
     }
 
-    private func segmented(_ segments: [SegmentSpec]) -> some View {
+    /// One inset track that may hold several groups of segments, each group
+    /// separated from the next by a hairline rule.
+    private func segmentedTrack(_ groups: [[SegmentSpec]]) -> some View {
         HStack(spacing: 2) {
-            ForEach(segments) { segment in
-                let isSelected = segment.isSelected
-                Button(action: segment.action) {
-                    HStack(spacing: FlotillaSpacing.xSmall) {
-                        if let systemImage = segment.systemImage {
-                            Image(systemName: systemImage)
-                                .font(.system(size: FlotillaIconSize.xSmall))
-                        }
-                        Text(segment.title)
-                            .font(FlotillaTypography.caption2.weight(isSelected ? .semibold : .regular))
-                    }
-                    .foregroundStyle(isSelected ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
-                    .padding(.horizontal, FlotillaSpacing.small)
-                    .padding(.vertical, 5)
-                    .background(
-                        isSelected ? FlotillaColors.accent.opacity(FlotillaStateOpacity.selected) : .clear,
-                        in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                    )
-                    .contentShape(.rect)
+            ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                if index > 0 {
+                    Rectangle()
+                        .fill(FlotillaColors.separator)
+                        .frame(width: FlotillaBorderWidth.hairline, height: 16)
+                        .padding(.horizontal, 2)
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-                .accessibilityIdentifier(segment.identifier)
+                ForEach(group) { segment in
+                    segmentButton(segment)
+                }
             }
         }
         .padding(2)
         .background(
-            FlotillaColors.surface,
+            FlotillaColors.canvas,
             in: RoundedRectangle(cornerRadius: FlotillaRadius.control + 2, style: .continuous)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: FlotillaRadius.control + 2, style: .continuous)
+                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+        }
+    }
+
+    private func segmentButton(_ segment: SegmentSpec) -> some View {
+        let isSelected = segment.isSelected
+        return Button(action: segment.action) {
+            HStack(spacing: FlotillaSpacing.xSmall) {
+                if let systemImage = segment.systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: FlotillaIconSize.xSmall))
+                }
+                Text(segment.title)
+                    .font(FlotillaTypography.caption2.weight(isSelected ? .semibold : .regular))
+            }
+            .foregroundStyle(isSelected ? FlotillaColors.textPrimary : FlotillaColors.textTertiary)
+            .padding(.horizontal, FlotillaSpacing.small)
+            .padding(.vertical, 5)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                        .fill(FlotillaColors.surface)
+                        .shadow(color: .black.opacity(0.25), radius: 1, x: 0, y: 1)
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityIdentifier(segment.identifier)
     }
 }

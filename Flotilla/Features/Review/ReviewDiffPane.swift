@@ -24,9 +24,8 @@ struct ReviewDiffPane: View {
     @Bindable var viewModel: SessionReviewViewModel
     @Binding var draft: ReviewCommentDraft?
     @Binding var draftText: String
-    /// Container styling turned by the active ``ReviewDesign``. The diff
-    /// rendering itself is unaffected — only the frame around it.
-    var style: ReviewDiffStyle = .standard
+
+    private static let outerPadding = FlotillaSpacing.large
 
     /// Measured, not guessed: the two side-by-side columns are each half of
     /// it, which is what makes the diff fill the window instead of sitting in
@@ -38,25 +37,24 @@ struct ReviewDiffPane: View {
             ScrollView {
                 LazyVStack(
                     alignment: .leading,
-                    spacing: style.sectionSpacing,
-                    pinnedViews: style.stickyHeaders ? [.sectionHeaders] : []
+                    spacing: FlotillaSpacing.large,
+                    pinnedViews: [.sectionHeaders]
                 ) {
                     ForEach(viewModel.visibleFiles) { file in
                         ReviewFileSection(
                             file: file,
                             viewModel: viewModel,
                             availableWidth: contentWidth,
-                            style: style,
                             draft: $draft,
                             draftText: $draftText
                         )
                         .id(file.path)
                     }
                 }
-                .padding(style.outerPadding)
+                .padding(Self.outerPadding)
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paneWidth = $0 }
-            .background(style.canvas)
+            .background(FlotillaColors.canvas)
             // In All Files the file list scrolls this pane rather than
             // swapping its contents; in Single File the pane is already just
             // that file, so the scroll is a no-op and harmless.
@@ -72,7 +70,7 @@ struct ReviewDiffPane: View {
 
     /// The pane minus the padding and the file card's own border.
     private var contentWidth: CGFloat {
-        max(0, paneWidth - style.outerPadding * 2)
+        max(0, paneWidth - Self.outerPadding * 2)
     }
 }
 
@@ -81,81 +79,72 @@ struct ReviewFileSection: View {
     let file: ReviewFile
     @Bindable var viewModel: SessionReviewViewModel
     let availableWidth: CGFloat
-    var style: ReviewDiffStyle = .standard
     @Binding var draft: ReviewCommentDraft?
     @Binding var draftText: String
 
     var body: some View {
         Section {
-            body(for: styledContent)
+            content
         } header: {
             header
         }
         .accessibilityIdentifier(AXID.reviewFileSection(file.path))
     }
 
-    private var styledContent: some View {
+    private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             fileComments
 
             if file.hasNoRenderableDiff {
-                Text(file.emptyDiffExplanation)
+                Label(file.emptyDiffExplanation, systemImage: "doc.plaintext")
                     .font(FlotillaTypography.caption)
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .padding(FlotillaSpacing.medium)
             } else {
-                ForEach(Array(file.hunks.enumerated()), id: \.offset) { _, hunk in
+                ForEach(Array(file.hunks.enumerated()), id: \.offset) { index, hunk in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(FlotillaColors.separator)
+                            .frame(height: FlotillaBorderWidth.hairline)
+                    }
                     hunkView(hunk)
                 }
             }
         }
-    }
-
-    /// The frame around a file's hunks, per the active design.
-    @ViewBuilder
-    private func body(for content: some View) -> some View {
-        switch style.fileContainer {
-        case .card:
-            content
-                .background(FlotillaColors.surface)
-                .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                        .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-                }
-        case .floating:
-            content
-                .background(FlotillaColors.surface)
-                .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
-                .shadow(color: .black.opacity(0.22), radius: 16, x: 0, y: 8)
-        case .plain:
-            content
-                .background(FlotillaColors.surface)
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(FlotillaColors.separator)
-                        .frame(height: FlotillaBorderWidth.hairline)
-                }
-        case .fullBleed:
-            content
-                .background(FlotillaColors.surface)
+        .background(FlotillaColors.surface)
+        .clipShape(
+            .rect(
+                bottomLeadingRadius: FlotillaRadius.card,
+                bottomTrailingRadius: FlotillaRadius.card
+            )
+        )
+        .overlay {
+            UnevenRoundedRectangle(bottomLeadingRadius: FlotillaRadius.card, bottomTrailingRadius: FlotillaRadius.card)
+                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
         }
     }
 
     // MARK: - Header
 
+    /// Sticky while its file scrolls: the change kind, the path with the
+    /// filename picked out, line counts, and per-file actions. Its lower
+    /// corners are square so it reads as the lid of the card below it.
     private var header: some View {
         HStack(spacing: FlotillaSpacing.small) {
-            Text(file.change.kind.marker)
-                .font(FlotillaTypography.caption2.weight(.bold).monospaced())
-                .foregroundStyle(file.change.kind.color)
-                .accessibilityLabel(file.change.kind.label)
+            FileChangeKindBadge(kind: file.change.kind, size: 15)
 
-            Text(file.path)
-                .font(FlotillaTypography.caption.weight(.medium).monospaced())
-                .foregroundStyle(FlotillaColors.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.head)
+            HStack(spacing: 0) {
+                if let directory = file.directory {
+                    Text(directory + "/")
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                        .layoutPriority(-1)
+                }
+                Text(file.filename)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+            }
+            .font(FlotillaTypography.caption.weight(.medium).monospaced())
+            .lineLimit(1)
+            .truncationMode(.head)
 
             if let previousPath = file.change.previousPath {
                 Text("← \(previousPath)")
@@ -163,6 +152,7 @@ struct ReviewFileSection: View {
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.head)
+                    .layoutPriority(-1)
             }
 
             Spacer(minLength: FlotillaSpacing.small)
@@ -173,7 +163,7 @@ struct ReviewFileSection: View {
                 beginDraft(anchor: .file)
             } label: {
                 Image(systemName: "text.bubble")
-                    .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
+                    .font(.system(size: FlotillaIconSize.small, weight: .semibold))
             }
             .buttonStyle(.plain)
             .foregroundStyle(FlotillaColors.textSecondary)
@@ -184,12 +174,12 @@ struct ReviewFileSection: View {
             Button {
                 viewModel.toggleViewed(file)
             } label: {
-                Label(
-                    file.isViewed ? "Viewed" : "Mark viewed",
-                    systemImage: file.isViewed ? "checkmark.square.fill" : "square"
-                )
-                .font(FlotillaTypography.caption2)
-                .labelStyle(.titleAndIcon)
+                HStack(spacing: FlotillaSpacing.xSmall) {
+                    Image(systemName: file.isViewed ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: FlotillaIconSize.small))
+                    Text(file.isViewed ? "Viewed" : "Mark viewed")
+                        .font(FlotillaTypography.caption2.weight(.medium))
+                }
             }
             .buttonStyle(.plain)
             .foregroundStyle(file.isViewed ? FlotillaColors.statusReady : FlotillaColors.textSecondary)
@@ -197,8 +187,14 @@ struct ReviewFileSection: View {
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .padding(.vertical, FlotillaSpacing.small)
-        .background(FlotillaColors.sidebar)
-        .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous))
+        .background(FlotillaColors.surfaceElevated)
+        .clipShape(
+            .rect(topLeadingRadius: FlotillaRadius.card, topTrailingRadius: FlotillaRadius.card)
+        )
+        .overlay(alignment: .top) {
+            UnevenRoundedRectangle(topLeadingRadius: FlotillaRadius.card, topTrailingRadius: FlotillaRadius.card)
+                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+        }
     }
 
     // MARK: - Body content
@@ -223,9 +219,7 @@ struct ReviewFileSection: View {
     @ViewBuilder
     private func hunkView(_ hunk: ReviewHunk) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if style.showHunkHeaders {
-                hunkHeader(hunk)
-            }
+            hunkHeader(hunk)
 
             switch viewModel.diffMode {
             case .inline:
@@ -238,22 +232,26 @@ struct ReviewFileSection: View {
         }
     }
 
+    /// Leads with the section context (usually the enclosing declaration),
+    /// which is what actually orients the reader; the raw `@@` line ranges
+    /// follow it, dimmed.
     private func hunkHeader(_ hunk: ReviewHunk) -> some View {
         HStack(spacing: FlotillaSpacing.small) {
-            Text("@@ −\(hunk.oldStart),\(hunk.oldCount) +\(hunk.newStart),\(hunk.newCount) @@")
-                .font(.system(size: 10, design: .monospaced))
             if !hunk.section.isEmpty {
                 Text(hunk.section)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(FlotillaColors.textSecondary)
                     .lineLimit(1)
             }
+            Text("−\(hunk.oldStart),\(hunk.oldCount)  +\(hunk.newStart),\(hunk.newCount)")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(FlotillaColors.textTertiary)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(FlotillaColors.textTertiary)
         .padding(.horizontal, FlotillaSpacing.medium)
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(FlotillaColors.surfaceElevated)
+        .background(FlotillaColors.canvas.opacity(0.35))
     }
 
     /// One column, in the order git wrote the hunk.
