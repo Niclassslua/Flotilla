@@ -87,42 +87,70 @@ struct ReviewCommentBubble: View {
 
 /// Composes a new comment, or edits an existing one.
 ///
-/// Currently an exploration: four candidate looks, switchable live from the
-/// brush menu in the top-right corner. Once one is picked this collapses to
-/// that single body and ``ReviewCommentEditorVariants`` goes away.
+/// Frameless "command bar": a caps context label, a single line that grows to
+/// a few, and just an underline that turns accent and glows on focus. The
+/// Cancel / Comment buttons stay hidden until there is focus or something to
+/// send.
 struct ReviewCommentEditor: View {
     let title: String
     @Binding var text: String
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
-    @AppStorage(ReviewCommentEditorVariant.storageKey)
-    private var variantRaw = ReviewCommentEditorVariant.default.rawValue
+    @FocusState private var isFocused: Bool
 
-    private var variant: Binding<ReviewCommentEditorVariant> {
-        Binding(
-            get: { ReviewCommentEditorVariant(rawValue: variantRaw) ?? .default },
-            set: { variantRaw = $0.rawValue }
-        )
+    private var canSubmit: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
-        Group {
-            switch variant.wrappedValue {
-            case .messenger:
-                ReviewCommentEditorMessenger(title: title, text: $text, onSubmit: onSubmit, onCancel: onCancel)
-            case .terminal:
-                ReviewCommentEditorTerminal(title: title, text: $text, onSubmit: onSubmit, onCancel: onCancel)
-            case .stickyNote:
-                ReviewCommentEditorStickyNote(title: title, text: $text, onSubmit: onSubmit, onCancel: onCancel)
-            case .commandBar:
-                ReviewCommentEditorCommandBar(title: title, text: $text, onSubmit: onSubmit, onCancel: onCancel)
+        VStack(alignment: .leading, spacing: FlotillaSpacing.xSmall) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(FlotillaTypography.Tracking.loose)
+                .foregroundStyle(FlotillaColors.textTertiary)
+
+            HStack(alignment: .center, spacing: FlotillaSpacing.small) {
+                Image(systemName: "text.append")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isFocused ? FlotillaColors.accent : FlotillaColors.textTertiary)
+
+                TextField("Add a comment — ⌘↩ to save, esc to dismiss", text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...6)
+                    .font(FlotillaTypography.caption)
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                    .focused($isFocused)
+                    .accessibilityIdentifier(AXID.reviewCommentEditor.rawValue)
             }
+            .padding(.vertical, FlotillaSpacing.small)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(isFocused ? FlotillaColors.accent : FlotillaColors.separator)
+                    .frame(height: isFocused ? 1.5 : FlotillaBorderWidth.hairline)
+                    .shadow(color: isFocused ? FlotillaColors.accent.opacity(0.55) : .clear, radius: 4, y: 1)
+            }
+
+            HStack(spacing: FlotillaSpacing.medium) {
+                Spacer(minLength: 0)
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.plain)
+                    .font(FlotillaTypography.caption2)
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier(AXID.reviewCommentCancel.rawValue)
+                Button("Comment", action: onSubmit)
+                    .buttonStyle(.plain)
+                    .font(FlotillaTypography.caption2.weight(.semibold))
+                    .foregroundStyle(canSubmit ? FlotillaColors.accent : FlotillaColors.textTertiary)
+                    .disabled(!canSubmit)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .accessibilityIdentifier(AXID.reviewCommentSubmit.rawValue)
+            }
+            .opacity(isFocused || canSubmit ? 1 : 0)
         }
-        .padding(.top, 24)
-        .overlay(alignment: .topTrailing) {
-            ReviewCommentVariantMenu(selection: variant)
-                .padding(.trailing, 2)
-        }
+        .animation(FlotillaMotion.fast.curve, value: isFocused)
+        .animation(FlotillaMotion.fast.curve, value: canSubmit)
+        .onAppear { isFocused = true }
     }
 }

@@ -314,10 +314,16 @@ struct ReviewFileSection: View {
                     .frame(width: columnWidth, alignment: .topLeading)
                 }
 
-                // A thread belongs to a line, not a column, so it spans
-                // the full row underneath both.
-                if let left = row.left { threads(under: left) }
-                if let right = row.right, row.right != row.left { threads(under: right) }
+                // A comment sits under the side it was left on: an old-side
+                // thread in the left column, a new-side thread in the right,
+                // each boxed to that column's width.
+                HStack(alignment: .top, spacing: 0) {
+                    threadColumn(for: row.left, on: .old)
+                        .frame(width: columnWidth, alignment: .topLeading)
+                    threadColumn(for: row.right, on: .new)
+                        .frame(width: columnWidth, alignment: .topLeading)
+                        .padding(.leading, ReviewFileSection.dividerWidth)
+                }
             }
         }
         .frame(width: availableWidth, alignment: .leading)
@@ -344,26 +350,44 @@ struct ReviewFileSection: View {
 
     // MARK: - Threads
 
+    /// Inline layout: one column, so a thread spans the full width under its
+    /// line. Side derives from the line itself.
     @ViewBuilder
     private func threads(under line: DiffLine) -> some View {
         let side: ReviewSide = line.commentSide == .old ? .old : .new
         if let number = line.number(on: line.commentSide) {
-            let comments = viewModel.comments(for: file.path, side: side, line: number)
-            let drafting = isDrafting(.line(side: side, number: number))
-            if !comments.isEmpty || drafting {
-                VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-                    ForEach(comments) { comment in
-                        bubble(comment)
-                    }
-                    if drafting {
-                        editor(title: "Comment on line \(number)")
-                    }
-                }
-                .padding(.vertical, FlotillaSpacing.small)
+            threadStack(side: side, number: number)
                 .padding(.leading, FlotillaSpacing.xxLarge)
-                .padding(.trailing, FlotillaSpacing.small)
                 .frame(maxWidth: 720, alignment: .leading)
+        }
+    }
+
+    /// Side by Side: a thread for whichever `DiffSide` this column represents,
+    /// so it renders in that column and nowhere else.
+    @ViewBuilder
+    private func threadColumn(for line: DiffLine?, on diffSide: DiffSide) -> some View {
+        let side: ReviewSide = diffSide == .old ? .old : .new
+        if let line, let number = line.number(on: diffSide) {
+            threadStack(side: side, number: number)
+                .padding(.leading, FlotillaSpacing.large)
+        }
+    }
+
+    @ViewBuilder
+    private func threadStack(side: ReviewSide, number: Int) -> some View {
+        let comments = viewModel.comments(for: file.path, side: side, line: number)
+        let drafting = isDrafting(.line(side: side, number: number))
+        if !comments.isEmpty || drafting {
+            VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
+                ForEach(comments) { comment in
+                    bubble(comment)
+                }
+                if drafting {
+                    editor(title: "Comment on line \(number)")
+                }
             }
+            .padding(.vertical, FlotillaSpacing.small)
+            .padding(.trailing, FlotillaSpacing.small)
         }
     }
 
