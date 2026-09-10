@@ -87,108 +87,42 @@ struct ReviewCommentBubble: View {
 
 /// Composes a new comment, or edits an existing one.
 ///
-/// One card: a borderless field on top, a hairline, then an action row that
-/// also carries the context and the submit shortcut. The whole card's border
-/// tracks focus so it reads as the active element in a busy diff.
+/// Currently an exploration: four candidate looks, switchable live from the
+/// brush menu in the top-right corner. Once one is picked this collapses to
+/// that single body and ``ReviewCommentEditorVariants`` goes away.
 struct ReviewCommentEditor: View {
     let title: String
     @Binding var text: String
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
-    @FocusState private var isFocused: Bool
+    @AppStorage(ReviewCommentEditorVariant.storageKey)
+    private var variantRaw = ReviewCommentEditorVariant.default.rawValue
 
-    private var canSubmit: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var variant: Binding<ReviewCommentEditorVariant> {
+        Binding(
+            get: { ReviewCommentEditorVariant(rawValue: variantRaw) ?? .default },
+            set: { variantRaw = $0.rawValue }
+        )
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            field
-            Divider()
-            actionRow
-        }
-        .background(FlotillaColors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                .strokeBorder(
-                    isFocused ? FlotillaColors.accent : FlotillaColors.separator,
-                    lineWidth: isFocused ? 1.5 : FlotillaBorderWidth.hairline
-                )
-        }
-        .animation(FlotillaMotion.fast.curve, value: isFocused)
-        .onAppear { isFocused = true }
-    }
-
-    // MARK: - Field
-
-    private var field: some View {
-        ZStack(alignment: .topLeading) {
-            if text.isEmpty {
-                Text("Leave a comment")
-                    .font(FlotillaTypography.caption)
-                    .foregroundStyle(FlotillaColors.textTertiary)
-                    .padding(.leading, 5)
-                    .padding(.top, 8)
-                    .allowsHitTesting(false)
+        Group {
+            switch variant.wrappedValue {
+            case .messenger:
+                ReviewCommentEditorMessenger(title: title, text: $text, onSubmit: onSubmit, onCancel: onCancel)
+            case .terminal:
+                ReviewCommentEditorTerminal(title: title, text: $text, onSubmit: onSubmit, onCancel: onCancel)
+            case .stickyNote:
+                ReviewCommentEditorStickyNote(title: title, text: $text, onSubmit: onSubmit, onCancel: onCancel)
+            case .commandBar:
+                ReviewCommentEditorCommandBar(title: title, text: $text, onSubmit: onSubmit, onCancel: onCancel)
             }
-
-            TextEditor(text: $text)
-                .font(FlotillaTypography.caption)
-                .foregroundStyle(FlotillaColors.textPrimary)
-                .scrollContentBackground(.hidden)
-                .focused($isFocused)
-                .accessibilityIdentifier(AXID.reviewCommentEditor.rawValue)
         }
-        .padding(.horizontal, FlotillaSpacing.small)
-        .padding(.vertical, FlotillaSpacing.xSmall)
-        .frame(minHeight: 62, maxHeight: 148)
-    }
-
-    // MARK: - Action row
-
-    private var actionRow: some View {
-        HStack(spacing: FlotillaSpacing.small) {
-            Label(title, systemImage: "text.bubble")
-                .labelStyle(.titleAndIcon)
-                .font(FlotillaTypography.caption2)
-                .foregroundStyle(FlotillaColors.textTertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer(minLength: FlotillaSpacing.small)
-
-            Text("⌘↩")
-                .font(FlotillaTypography.caption2.monospaced())
-                .foregroundStyle(FlotillaColors.textTertiary)
-                .opacity(canSubmit ? 1 : 0)
-
-            Button("Cancel", action: onCancel)
-                .buttonStyle(.plain)
-                .font(FlotillaTypography.caption.weight(.medium))
-                .foregroundStyle(FlotillaColors.textSecondary)
-                .keyboardShortcut(.cancelAction)
-                .accessibilityIdentifier(AXID.reviewCommentCancel.rawValue)
-
-            Button(action: onSubmit) {
-                Text("Add comment")
-                    .font(FlotillaTypography.caption.weight(.semibold))
-                    .foregroundStyle(FlotillaColors.accentContent)
-                    .padding(.horizontal, FlotillaSpacing.medium)
-                    .padding(.vertical, 5)
-                    .background(
-                        canSubmit ? FlotillaColors.accent : FlotillaColors.accent.opacity(0.4),
-                        in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSubmit)
-            .keyboardShortcut(.return, modifiers: .command)
-            .accessibilityIdentifier(AXID.reviewCommentSubmit.rawValue)
+        .padding(.top, 24)
+        .overlay(alignment: .topTrailing) {
+            ReviewCommentVariantMenu(selection: variant)
+                .padding(.trailing, 2)
         }
-        .padding(.horizontal, FlotillaSpacing.medium)
-        .padding(.vertical, FlotillaSpacing.small)
-        .background(FlotillaColors.surfaceElevated)
     }
 }
