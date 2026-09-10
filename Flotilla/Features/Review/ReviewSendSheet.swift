@@ -13,7 +13,7 @@ struct ReviewSendSheet: View {
     let prompt: String
     let commentCount: Int
     let onSend: (Session) -> Void
-    let onSendToNewAgent: () -> Void
+    let onSendToNewAgent: (AgentKind) -> Void
     let onCancel: () -> Void
 
     var body: some View {
@@ -65,8 +65,10 @@ struct ReviewSendSheet: View {
                     }
                 }
 
-                section("Start fresh") {
-                    newAgentRow
+                section("Start a new agent") {
+                    ForEach(orderedAgents) { kind in
+                        newAgentRow(kind)
+                    }
                 }
             }
             .padding(FlotillaSpacing.medium)
@@ -74,11 +76,20 @@ struct ReviewSendSheet: View {
         .frame(width: 320)
     }
 
-    private var newAgentRow: some View {
-        Button(action: onSendToNewAgent) {
+    /// The reviewed session's own agent first, then the rest in catalogue
+    /// order — same-agent is the common choice, but any agent is allowed.
+    private var orderedAgents: [AgentKind] {
+        let mine = reviewedSession.agent
+        return [mine] + AgentKind.allCases.filter { $0 != mine }
+    }
+
+    private func newAgentRow(_ kind: AgentKind) -> some View {
+        Button {
+            onSendToNewAgent(kind)
+        } label: {
             HStack(spacing: FlotillaSpacing.small) {
                 ZStack {
-                    ProviderLogo.fixedSize(for: reviewedSession.agent, size: 16)
+                    ProviderLogo.fixedSize(for: kind, size: 16)
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(FlotillaColors.accent)
@@ -88,11 +99,13 @@ struct ReviewSendSheet: View {
                 .frame(width: 16, height: 16)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("New \(reviewedSession.agent.displayName) agent")
+                    Text("New \(kind.displayName) agent")
                         .font(FlotillaTypography.caption.weight(.medium))
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .lineLimit(1)
-                    Text("Fresh session on this branch, review as its task")
+                    Text(kind == reviewedSession.agent
+                         ? "Same agent, fresh context — review as its task"
+                         : "Fresh session on this branch, review as its task")
                         .font(FlotillaTypography.caption3)
                         .foregroundStyle(FlotillaColors.textTertiary)
                         .lineLimit(1)
@@ -109,7 +122,7 @@ struct ReviewSendSheet: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier(AXID.reviewSendDestination("New Agent"))
+        .accessibilityIdentifier(AXID.reviewSendDestination("New \(kind.displayName)"))
     }
 
     private func section(

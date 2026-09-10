@@ -91,8 +91,8 @@ struct SessionReviewWindow: View {
                 onSend: { target in
                     send(to: target, session: session, viewModel: viewModel)
                 },
-                onSendToNewAgent: {
-                    sendToNewAgent(session: session, viewModel: viewModel)
+                onSendToNewAgent: { agent in
+                    sendToNewAgent(agent: agent, session: session, viewModel: viewModel)
                 },
                 onCancel: { isPresentingSend = false }
             )
@@ -210,22 +210,27 @@ struct SessionReviewWindow: View {
         }
     }
 
-    /// Spins up a brand-new session — same agent, same checkout as the
-    /// reviewed one — with the review as its opening task, for when no running
-    /// session should pick this up or a fresh context is wanted.
-    private func sendToNewAgent(session: Session, viewModel: SessionReviewViewModel) {
+    /// Spins up a brand-new session — the chosen agent, in the reviewed
+    /// session's checkout — with the review as its opening task, for when no
+    /// running session should pick this up or a fresh context is wanted.
+    ///
+    /// Model and effort carry over only when the agent is the same, since
+    /// those identifiers are agent-specific; a different agent starts on its
+    /// own defaults.
+    private func sendToNewAgent(agent: AgentKind, session: Session, viewModel: SessionReviewViewModel) {
         let delivered = viewModel.unsentComments
         guard !delivered.isEmpty else { return }
         let text = prompt(for: session, viewModel: viewModel)
+        let sameAgent = agent == session.agent
         isPresentingSend = false
 
         Task {
             let created = await store.createSession(
                 title: "Review — \(session.title)",
                 goal: text,
-                agent: session.agent,
-                model: session.model,
-                effort: session.effort,
+                agent: agent,
+                model: sameAgent ? session.model : nil,
+                effort: sameAgent ? session.effort : nil,
                 projectFolder: session.worktree?.worktreePath ?? session.workingDirectory,
                 checkoutMode: .mainCheckout,
                 deliverGoal: true,
@@ -239,7 +244,7 @@ struct SessionReviewWindow: View {
 
             do {
                 try viewModel.markSent(delivered)
-                sendResult = "Started a new \(session.agent.displayName) agent with \(delivered.count) comment\(delivered.count == 1 ? "" : "s")."
+                sendResult = "Started a new \(agent.displayName) agent with \(delivered.count) comment\(delivered.count == 1 ? "" : "s")."
             } catch {
                 sendResult = "The new agent was started, but the sent state could not be saved: \(error.localizedDescription)"
             }
