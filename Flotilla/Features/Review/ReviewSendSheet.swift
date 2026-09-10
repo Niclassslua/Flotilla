@@ -13,6 +13,7 @@ struct ReviewSendSheet: View {
     let prompt: String
     let commentCount: Int
     let onSend: (Session) -> Void
+    let onSendToNewAgent: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
@@ -51,7 +52,7 @@ struct ReviewSendSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
                 if candidates.isEmpty {
-                    Text("No running agent is available to receive this review.")
+                    Text("No running session is available — start a new agent instead.")
                         .font(FlotillaTypography.caption)
                         .foregroundStyle(FlotillaColors.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -63,10 +64,52 @@ struct ReviewSendSheet: View {
                         }
                     }
                 }
+
+                section("Start fresh") {
+                    newAgentRow
+                }
             }
             .padding(FlotillaSpacing.medium)
         }
         .frame(width: 320)
+    }
+
+    private var newAgentRow: some View {
+        Button(action: onSendToNewAgent) {
+            HStack(spacing: FlotillaSpacing.small) {
+                ZStack {
+                    ProviderLogo.fixedSize(for: reviewedSession.agent, size: 16)
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(FlotillaColors.accent)
+                        .background(FlotillaColors.canvas, in: Circle())
+                        .offset(x: 7, y: 7)
+                }
+                .frame(width: 16, height: 16)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("New \(reviewedSession.agent.displayName) agent")
+                        .font(FlotillaTypography.caption.weight(.medium))
+                        .foregroundStyle(FlotillaColors.textPrimary)
+                        .lineLimit(1)
+                    Text("Fresh session on this branch, review as its task")
+                        .font(FlotillaTypography.caption3)
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, FlotillaSpacing.small)
+            .padding(.vertical, FlotillaSpacing.small)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                FlotillaColors.surface,
+                in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+            )
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(AXID.reviewSendDestination("New Agent"))
     }
 
     private func section(

@@ -91,6 +91,9 @@ struct SessionReviewWindow: View {
                 onSend: { target in
                     send(to: target, session: session, viewModel: viewModel)
                 },
+                onSendToNewAgent: {
+                    sendToNewAgent(session: session, viewModel: viewModel)
+                },
                 onCancel: { isPresentingSend = false }
             )
         }
@@ -203,6 +206,42 @@ struct SessionReviewWindow: View {
                 sendResult = "Sent \(delivered.count) comment\(delivered.count == 1 ? "" : "s") to \(target.title)."
             } catch {
                 sendResult = "The review was delivered, but its sent state could not be saved: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Spins up a brand-new session — same agent, same checkout as the
+    /// reviewed one — with the review as its opening task, for when no running
+    /// session should pick this up or a fresh context is wanted.
+    private func sendToNewAgent(session: Session, viewModel: SessionReviewViewModel) {
+        let delivered = viewModel.unsentComments
+        guard !delivered.isEmpty else { return }
+        let text = prompt(for: session, viewModel: viewModel)
+        isPresentingSend = false
+
+        Task {
+            let created = await store.createSession(
+                title: "Review — \(session.title)",
+                goal: text,
+                agent: session.agent,
+                model: session.model,
+                effort: session.effort,
+                projectFolder: session.worktree?.worktreePath ?? session.workingDirectory,
+                checkoutMode: .mainCheckout,
+                deliverGoal: true,
+                selectAfterCreating: true
+            )
+
+            guard created != nil else {
+                sendResult = "A new agent could not be started: \(store.lastCreationError ?? "unknown error")."
+                return
+            }
+
+            do {
+                try viewModel.markSent(delivered)
+                sendResult = "Started a new \(session.agent.displayName) agent with \(delivered.count) comment\(delivered.count == 1 ? "" : "s")."
+            } catch {
+                sendResult = "The new agent was started, but the sent state could not be saved: \(error.localizedDescription)"
             }
         }
     }
