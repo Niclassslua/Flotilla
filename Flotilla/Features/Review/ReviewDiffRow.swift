@@ -72,7 +72,7 @@ struct ReviewDiffLineView: View {
     }
 
     var body: some View {
-        HStack(alignment: wrapsText ? .firstTextBaseline : .center, spacing: 0) {
+        HStack(alignment: wrapsText ? .top : .center, spacing: 0) {
             gutterCells
             marker
             text
@@ -138,20 +138,27 @@ struct ReviewDiffLineView: View {
     private var text: some View {
         // An empty line still needs height, or a blank line in the source
         // collapses the row and the two columns stop lining up.
-        let content = Text(line?.text.isEmpty == false ? line!.text : " ")
+        let string = line?.text.isEmpty == false ? line!.text : " "
+        let base = Text(string)
             .font(ReviewDiffMetrics.font)
             .foregroundStyle(line == nil ? FlotillaColors.textTertiary : foreground)
             .textSelection(.enabled)
             .multilineTextAlignment(.leading)
-            .padding(.leading, ReviewDiffMetrics.textLeading)
-            .padding(.vertical, 0.5)
 
         if wrapsText {
-            // Wrap to whatever the fixed half-column leaves; never push the
-            // row wider than that.
-            content.frame(maxWidth: .infinity, alignment: .leading)
+            // Respect the width the fixed half-column offers and take the
+            // vertical space the wrapped line needs, rather than pushing the
+            // row wider.
+            base
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, ReviewDiffMetrics.textLeading)
+                .padding(.vertical, 0.5)
         } else {
-            content.fixedSize(horizontal: true, vertical: false)
+            base
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.leading, ReviewDiffMetrics.textLeading)
+                .padding(.vertical, 0.5)
         }
     }
 
