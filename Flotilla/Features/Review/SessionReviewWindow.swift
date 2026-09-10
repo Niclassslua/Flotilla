@@ -37,7 +37,7 @@ struct SessionReviewWindow: View {
                 missingSession
             }
         }
-        .frame(minWidth: 900, minHeight: 560)
+        .frame(minWidth: 1_000, minHeight: 560)
         .background(FlotillaColors.canvas)
         .accessibilityIdentifier(AXID.reviewWindow.rawValue)
         .task(id: sessionID) {
@@ -218,11 +218,12 @@ struct ReviewHeaderBar: View {
     let onSend: () -> Void
 
     var body: some View {
-        HStack(spacing: FlotillaSpacing.large) {
+        HStack(spacing: FlotillaSpacing.medium) {
             identity
             Spacer(minLength: FlotillaSpacing.small)
             scopeTrack
             displayTrack
+            wrapTrack
             refreshButton
             sendButton
         }
@@ -313,6 +314,20 @@ struct ReviewHeaderBar: View {
                 )
             }
         ])
+    }
+
+    /// A one-segment inset toggle: raised means long lines wrap to the pane,
+    /// flat means they stay on one row and the diff scrolls sideways.
+    private var wrapTrack: some View {
+        segmentedTrack([[
+            SegmentSpec(
+                title: "Wrap",
+                systemImage: "arrow.turn.down.left",
+                identifier: AXID.reviewWrapLines.rawValue,
+                isSelected: viewModel.wrapLines,
+                action: { viewModel.wrapLines.toggle() }
+            )
+        ]])
     }
 
     private var refreshButton: some View {

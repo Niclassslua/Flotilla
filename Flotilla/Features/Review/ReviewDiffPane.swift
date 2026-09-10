@@ -238,12 +238,12 @@ struct ReviewFileSection: View {
         HStack(spacing: FlotillaSpacing.small) {
             if !hunk.section.isEmpty {
                 Text(hunk.section)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(FlotillaColors.textSecondary)
                     .lineLimit(1)
             }
             Text("−\(hunk.oldStart),\(hunk.oldCount)  +\(hunk.newStart),\(hunk.newCount)")
-                .font(.system(size: 10, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(FlotillaColors.textTertiary)
             Spacer(minLength: 0)
         }
@@ -258,35 +258,41 @@ struct ReviewFileSection: View {
     /// The content is forced to at least the pane's width so a short line's
     /// added/removed tint still spans the row; it grows past that only when a
     /// line genuinely needs the room, and then the whole hunk scrolls.
+    @ViewBuilder
     private func inlineLines(_ hunk: ReviewHunk) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
-                    ReviewDiffLineView(
-                        line: line,
-                        gutter: .both,
-                        path: file.path,
-                        onAddComment: { side, number in
-                            beginDraft(anchor: .line(side: side, number: number))
-                        }
-                    )
-                    threads(under: line)
-                }
+        let rows = VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
+                ReviewDiffLineView(
+                    line: line,
+                    gutter: .both,
+                    path: file.path,
+                    onAddComment: { side, number in
+                        beginDraft(anchor: .line(side: side, number: number))
+                    },
+                    wrapsText: viewModel.wrapLines
+                )
+                threads(under: line)
             }
-            .frame(width: max(availableWidth, inlineIntrinsicWidth), alignment: .leading)
+        }
+
+        if viewModel.wrapLines {
+            rows.frame(width: availableWidth, alignment: .leading)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                rows.frame(width: max(availableWidth, inlineIntrinsicWidth), alignment: .leading)
+            }
         }
     }
 
-    /// Two columns, the pre-image opposite the post-image, each locked to
-    /// exactly half the pane.
+    /// Two columns, the pre-image opposite the post-image.
     ///
-    /// Fixed halves rather than content-width columns: with content width, a
-    /// file whose longest line overflowed pushed its own centre divider
-    /// wherever that line ended, so stacked files' dividers no longer lined
-    /// up. Now the divider is on the same vertical for every file, and a line
-    /// too long for its half soft-wraps inside it (see ``ReviewDiffLineView``).
+    /// With Wrap on, each column is locked to exactly half the pane and a
+    /// long line soft-wraps inside it, so the centre divider is one unbroken
+    /// vertical for every file. With Wrap off, the columns grow to the file's
+    /// longest line and the whole pair scrolls sideways together.
+    @ViewBuilder
     private func sideBySideRows(_ hunk: ReviewHunk) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let rows = VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(ReviewDiff.sideBySideRows(for: hunk).enumerated()), id: \.offset) { _, row in
                 HStack(alignment: .top, spacing: 0) {
                     ReviewDiffLineView(
@@ -296,9 +302,10 @@ struct ReviewFileSection: View {
                         onAddComment: { side, number in
                             beginDraft(anchor: .line(side: side, number: number))
                         },
-                        wrapsText: true
+                        wrapsText: viewModel.wrapLines
                     )
                     .frame(width: columnWidth, alignment: .topLeading)
+                    .clipped()
 
                     Divider()
 
@@ -309,9 +316,10 @@ struct ReviewFileSection: View {
                         onAddComment: { side, number in
                             beginDraft(anchor: .line(side: side, number: number))
                         },
-                        wrapsText: true
+                        wrapsText: viewModel.wrapLines
                     )
                     .frame(width: columnWidth, alignment: .topLeading)
+                    .clipped()
                 }
 
                 // A comment sits under the side it was left on: an old-side
@@ -325,13 +333,21 @@ struct ReviewFileSection: View {
                 }
             }
         }
-        .frame(width: availableWidth, alignment: .leading)
+        .frame(width: columnWidth * 2 + ReviewFileSection.dividerWidth, alignment: .leading)
+
+        if viewModel.wrapLines {
+            rows
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) { rows }
+        }
     }
 
-    /// Exactly half the pane, less the centre divider — the same for every
-    /// hunk and every file, so the divider is one unbroken vertical line.
+    /// Half the pane with Wrap on; grown to the file's longest line with Wrap
+    /// off, so no line is clipped when the pair scrolls sideways.
     private var columnWidth: CGFloat {
-        max(0, availableWidth - ReviewFileSection.dividerWidth) / 2
+        let half = max(0, availableWidth - ReviewFileSection.dividerWidth) / 2
+        guard !viewModel.wrapLines else { return half }
+        return max(half, ReviewDiffMetrics.cellWidth(forCharacters: longestLineLength, gutters: 1))
     }
 
     private var inlineIntrinsicWidth: CGFloat {
@@ -400,6 +416,7 @@ struct ReviewFileSection: View {
             }
             .padding(.vertical, FlotillaSpacing.small)
             .padding(.trailing, FlotillaSpacing.small)
+            .frame(maxWidth: 640, alignment: .leading)
         }
     }
 

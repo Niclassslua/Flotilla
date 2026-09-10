@@ -233,6 +233,7 @@ public enum AXID: String, Sendable {
     case reviewHunkSideBySide = "Review.Hunk.SideBySide"
     case reviewDisplayAllFiles = "Review.Display.AllFiles"
     case reviewDisplaySingleFile = "Review.Display.SingleFile"
+    case reviewWrapLines = "Review.WrapLines"
     case reviewSend = "Review.Send"
     case reviewSendSheet = "Review.SendSheet"
     case reviewCommentEditor = "Review.CommentEditor"

@@ -11,10 +11,10 @@ import DesignSystem
 /// longest line without laying anything out — which is what lets the two
 /// side-by-side columns stay equal *and* fill the pane.
 enum ReviewDiffMetrics {
-    static let fontSize: CGFloat = 11
+    static let fontSize: CGFloat = 13
     static let font = Font.system(size: fontSize, design: .monospaced)
-    static let gutterWidth: CGFloat = 34
-    static let markerWidth: CGFloat = 12
+    static let gutterWidth: CGFloat = 40
+    static let markerWidth: CGFloat = 14
     static let textLeading: CGFloat = 4
     static let trailingPadding: CGFloat = FlotillaSpacing.medium
 

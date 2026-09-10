@@ -32,6 +32,9 @@ final class SessionReviewViewModel {
     var diffMode: ReviewDiffMode = .sideBySide
     var fileDisplay: ReviewFileDisplay = .allFiles
     var selectedPath: String?
+    /// Soft-wrap long lines to the pane (Side by Side: to each half). Off
+    /// keeps each line on one row and scrolls horizontally instead.
+    var wrapLines: Bool = true
 
     // MARK: Loaded state
 
