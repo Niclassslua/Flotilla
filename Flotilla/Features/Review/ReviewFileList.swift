@@ -36,18 +36,18 @@ struct ReviewFileList: View {
     private var searchField: some View {
         HStack(spacing: FlotillaSpacing.small) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: FlotillaIconSize.xSmall))
+                .font(.system(size: FlotillaIconSize.small))
                 .foregroundStyle(FlotillaColors.textTertiary)
             TextField("Search…", text: $query)
                 .textFieldStyle(.plain)
-                .font(FlotillaTypography.caption)
+                .font(FlotillaTypography.callout)
                 .foregroundStyle(FlotillaColors.textPrimary)
             if !query.isEmpty {
                 Button {
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: FlotillaIconSize.xSmall))
+                        .font(.system(size: FlotillaIconSize.small))
                         .foregroundStyle(FlotillaColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -55,7 +55,7 @@ struct ReviewFileList: View {
             }
         }
         .padding(.horizontal, FlotillaSpacing.small)
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .background(
             FlotillaColors.surface,
             in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
@@ -90,7 +90,7 @@ struct ReviewFileList: View {
                 .font(.system(size: FlotillaIconSize.large))
                 .foregroundStyle(FlotillaColors.textTertiary)
             Text(query.isEmpty ? "No changes in this scope" : "No files match “\(query)”")
-                .font(FlotillaTypography.caption)
+                .font(FlotillaTypography.callout)
                 .foregroundStyle(FlotillaColors.textTertiary)
                 .multilineTextAlignment(.center)
             Spacer()
@@ -110,7 +110,7 @@ struct ReviewFileList: View {
 
             HStack(spacing: FlotillaSpacing.small) {
                 Text(matchingFiles.count == 1 ? "1 file" : "\(matchingFiles.count) files")
-                    .font(FlotillaTypography.caption2)
+                    .font(FlotillaTypography.caption)
                     .foregroundStyle(FlotillaColors.textSecondary)
 
                 DiffStatBadge(stat: totalStat)
@@ -118,7 +118,7 @@ struct ReviewFileList: View {
                 Spacer(minLength: 0)
 
                 Text("\(viewModel.viewedCount)/\(viewModel.files.count) viewed")
-                    .font(FlotillaTypography.caption2)
+                    .font(FlotillaTypography.caption)
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .accessibilityIdentifier(AXID.reviewProgress.rawValue)
             }
@@ -201,13 +201,13 @@ private struct ReviewDirectoryRow: View {
         Button(action: onToggle) {
             HStack(spacing: FlotillaSpacing.xSmall) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .frame(width: 10)
+                    .frame(width: 12)
 
                 Text(node.name)
-                    .font(FlotillaTypography.caption)
+                    .font(FlotillaTypography.callout)
                     .foregroundStyle(FlotillaColors.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -219,11 +219,11 @@ private struct ReviewDirectoryRow: View {
                 // rows' change markers.
                 Circle()
                     .fill(FlotillaColors.textTertiary.opacity(0.55))
-                    .frame(width: 4, height: 4)
+                    .frame(width: 5, height: 5)
             }
             .padding(.leading, ReviewTreeMetrics.indent(depth))
             .padding(.trailing, FlotillaSpacing.medium)
-            .padding(.vertical, 3)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(isHovering ? Color.white.opacity(FlotillaStateOpacity.hover) : .clear)
             .contentShape(.rect)
@@ -247,12 +247,12 @@ struct ReviewFileRow: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: FlotillaSpacing.xSmall) {
-                MaterialFileIcon(url: URL(fileURLWithPath: file.path), size: 14)
+            HStack(spacing: FlotillaSpacing.small) {
+                MaterialFileIcon(url: URL(fileURLWithPath: file.path), size: 16)
                     .accessibilityHidden(true)
 
                 Text(name)
-                    .font(FlotillaTypography.caption)
+                    .font(FlotillaTypography.callout)
                     .foregroundStyle(nameColor)
                     .strikethrough(file.change.kind == .deleted, color: nameColor.opacity(0.7))
                     .lineLimit(1)
@@ -267,14 +267,14 @@ struct ReviewFileRow: View {
                 viewedTick
 
                 Text(file.change.kind.marker)
-                    .font(FlotillaTypography.caption2.weight(.bold).monospaced())
+                    .font(FlotillaTypography.caption.weight(.bold).monospaced())
                     .foregroundStyle(file.change.kind.color)
-                    .frame(width: 10, alignment: .trailing)
+                    .frame(width: 12, alignment: .trailing)
                     .accessibilityLabel(file.change.kind.label)
             }
             .padding(.leading, ReviewTreeMetrics.indent(depth))
             .padding(.trailing, FlotillaSpacing.medium)
-            .padding(.vertical, 3)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(rowBackground)
             .overlay(alignment: .leading) {
@@ -298,7 +298,7 @@ struct ReviewFileRow: View {
         if file.isViewed || isHovering {
             Button(action: onToggleViewed) {
                 Image(systemName: file.isViewed ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 11))
+                    .font(.system(size: 13))
                     .foregroundStyle(file.isViewed ? FlotillaColors.statusReady : FlotillaColors.textTertiary)
             }
             .buttonStyle(.plain)
@@ -309,11 +309,11 @@ struct ReviewFileRow: View {
     }
 
     private var commentBadge: some View {
-        HStack(spacing: 1) {
+        HStack(spacing: 2) {
             Image(systemName: "bubble.left.fill")
-                .font(.system(size: 7))
+                .font(.system(size: 9))
             Text("\(file.commentCount)")
-                .font(FlotillaTypography.caption3.weight(.semibold))
+                .font(FlotillaTypography.caption2.weight(.semibold))
         }
         .foregroundStyle(FlotillaColors.accent)
         .accessibilityLabel("\(file.commentCount) comment\(file.commentCount == 1 ? "" : "s")")
