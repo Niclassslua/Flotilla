@@ -51,6 +51,10 @@ struct ReviewDiffLineView: View {
     let gutter: Gutter
     let path: String
     let onAddComment: ((ReviewSide, Int) -> Void)?
+    /// Side by Side fixes each column at half the pane and soft-wraps a line
+    /// too long for it, so the centre divider stays on one vertical line for
+    /// every file. Inline keeps the line on one row and scrolls horizontally.
+    var wrapsText = false
 
     @State private var isHovering = false
     @FocusState private var isCommentButtonFocused: Bool
@@ -68,11 +72,13 @@ struct ReviewDiffLineView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(alignment: wrapsText ? .firstTextBaseline : .center, spacing: 0) {
             gutterCells
             marker
             text
-            Spacer(minLength: 0)
+            if !wrapsText {
+                Spacer(minLength: 0)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(background)
@@ -128,16 +134,25 @@ struct ReviewDiffLineView: View {
             .accessibilityHidden(true)
     }
 
+    @ViewBuilder
     private var text: some View {
         // An empty line still needs height, or a blank line in the source
         // collapses the row and the two columns stop lining up.
-        Text(line?.text.isEmpty == false ? line!.text : " ")
+        let content = Text(line?.text.isEmpty == false ? line!.text : " ")
             .font(ReviewDiffMetrics.font)
             .foregroundStyle(line == nil ? FlotillaColors.textTertiary : foreground)
             .textSelection(.enabled)
-            .fixedSize(horizontal: true, vertical: false)
+            .multilineTextAlignment(.leading)
             .padding(.leading, ReviewDiffMetrics.textLeading)
             .padding(.vertical, 0.5)
+
+        if wrapsText {
+            // Wrap to whatever the fixed half-column leaves; never push the
+            // row wider than that.
+            content.frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            content.fixedSize(horizontal: true, vertical: false)
+        }
     }
 
     private var addCommentButton: some View {

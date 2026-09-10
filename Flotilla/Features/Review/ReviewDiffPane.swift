@@ -278,59 +278,56 @@ struct ReviewFileSection: View {
         }
     }
 
-    /// Two columns, the pre-image opposite the post-image.
+    /// Two columns, the pre-image opposite the post-image, each locked to
+    /// exactly half the pane.
     ///
-    /// The columns scroll together in one horizontal `ScrollView` rather than
-    /// each having its own, so a long line on one side cannot slide the two
-    /// out of alignment.
+    /// Fixed halves rather than content-width columns: with content width, a
+    /// file whose longest line overflowed pushed its own centre divider
+    /// wherever that line ended, so stacked files' dividers no longer lined
+    /// up. Now the divider is on the same vertical for every file, and a line
+    /// too long for its half soft-wraps inside it (see ``ReviewDiffLineView``).
     private func sideBySideRows(_ hunk: ReviewHunk) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(ReviewDiff.sideBySideRows(for: hunk).enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: 0) {
-                        ReviewDiffLineView(
-                            line: row.left,
-                            gutter: .one(.old),
-                            path: file.path,
-                            onAddComment: { side, number in
-                                beginDraft(anchor: .line(side: side, number: number))
-                            }
-                        )
-                        .frame(width: columnWidth, alignment: .leading)
-                        .clipped()
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(ReviewDiff.sideBySideRows(for: hunk).enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .top, spacing: 0) {
+                    ReviewDiffLineView(
+                        line: row.left,
+                        gutter: .one(.old),
+                        path: file.path,
+                        onAddComment: { side, number in
+                            beginDraft(anchor: .line(side: side, number: number))
+                        },
+                        wrapsText: true
+                    )
+                    .frame(width: columnWidth, alignment: .topLeading)
 
-                        Divider()
+                    Divider()
 
-                        ReviewDiffLineView(
-                            line: row.right,
-                            gutter: .one(.new),
-                            path: file.path,
-                            onAddComment: { side, number in
-                                beginDraft(anchor: .line(side: side, number: number))
-                            }
-                        )
-                        .frame(width: columnWidth, alignment: .leading)
-                        .clipped()
-                    }
-
-                    // A thread belongs to a line, not a column, so it spans
-                    // the full row underneath both.
-                    if let left = row.left { threads(under: left) }
-                    if let right = row.right, row.right != row.left { threads(under: right) }
+                    ReviewDiffLineView(
+                        line: row.right,
+                        gutter: .one(.new),
+                        path: file.path,
+                        onAddComment: { side, number in
+                            beginDraft(anchor: .line(side: side, number: number))
+                        },
+                        wrapsText: true
+                    )
+                    .frame(width: columnWidth, alignment: .topLeading)
                 }
+
+                // A thread belongs to a line, not a column, so it spans
+                // the full row underneath both.
+                if let left = row.left { threads(under: left) }
+                if let right = row.right, row.right != row.left { threads(under: right) }
             }
         }
+        .frame(width: availableWidth, alignment: .leading)
     }
 
-    /// Half the pane each, unless the file's longest line needs more — in
-    /// which case both columns grow together and the pane scrolls, so the two
-    /// sides never fall out of alignment.
-    ///
-    /// Computed across the whole file rather than per hunk, so the divider
-    /// stays on one vertical line down the file.
+    /// Exactly half the pane, less the centre divider — the same for every
+    /// hunk and every file, so the divider is one unbroken vertical line.
     private var columnWidth: CGFloat {
-        let half = max(0, availableWidth - ReviewFileSection.dividerWidth) / 2
-        return max(half, ReviewDiffMetrics.cellWidth(forCharacters: longestLineLength, gutters: 1))
+        max(0, availableWidth - ReviewFileSection.dividerWidth) / 2
     }
 
     private var inlineIntrinsicWidth: CGFloat {
