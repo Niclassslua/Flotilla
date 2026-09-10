@@ -315,13 +315,12 @@ struct ReviewFileSection: View {
                 }
 
                 // A comment sits under the side it was left on: an old-side
-                // thread in the left column, a new-side thread in the right,
-                // each boxed to that column's width.
+                // thread in the left column, a new-side thread in the right.
+                // Each slot always occupies a full column so the right thread
+                // stays under the right column when the left one is empty.
                 HStack(alignment: .top, spacing: 0) {
                     threadColumn(for: row.left, on: .old)
-                        .frame(width: columnWidth, alignment: .topLeading)
                     threadColumn(for: row.right, on: .new)
-                        .frame(width: columnWidth, alignment: .topLeading)
                         .padding(.leading, ReviewFileSection.dividerWidth)
                 }
             }
@@ -363,14 +362,27 @@ struct ReviewFileSection: View {
     }
 
     /// Side by Side: a thread for whichever `DiffSide` this column represents,
-    /// so it renders in that column and nowhere else.
+    /// so it renders in that column and nowhere else. Always returns a
+    /// full-column-width view — a zero-height clear spacer when this side has
+    /// no thread — so the sibling column keeps its position.
     @ViewBuilder
     private func threadColumn(for line: DiffLine?, on diffSide: DiffSide) -> some View {
         let side: ReviewSide = diffSide == .old ? .old : .new
-        if let line, let number = line.number(on: diffSide) {
+        let number = line?.number(on: diffSide)
+        let present = number.map { hasThread(side: side, number: $0) } ?? false
+
+        if present, let number {
             threadStack(side: side, number: number)
                 .padding(.leading, FlotillaSpacing.large)
+                .frame(width: columnWidth, alignment: .topLeading)
+        } else {
+            Color.clear.frame(width: columnWidth, height: 0)
         }
+    }
+
+    private func hasThread(side: ReviewSide, number: Int) -> Bool {
+        !viewModel.comments(for: file.path, side: side, line: number).isEmpty
+            || isDrafting(.line(side: side, number: number))
     }
 
     @ViewBuilder
