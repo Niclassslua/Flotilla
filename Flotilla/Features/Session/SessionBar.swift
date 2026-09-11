@@ -103,7 +103,23 @@ struct SessionBar: View {
     /// Gated on status rather than on `hasProject`, the way Files and the Git
     /// sidebar are: a session can have changes worth reviewing in a plain
     /// working directory with no project attached.
-    private var isReviewable: Bool { session.status == .readyForReview }
+    ///
+    /// Status alone isn't enough — an agent can land back on `.readyForReview`
+    /// after undoing its own edits, or after a run that touched nothing.
+    /// Reviewing an empty diff opens a window with nothing to show, so this
+    /// also requires the diff stat to actually report changes.
+    private var isReviewable: Bool {
+        session.status == .readyForReview && hasChanges
+    }
+
+    private var repoPath: URL {
+        session.worktree?.worktreePath ?? session.workingDirectory
+    }
+
+    private var hasChanges: Bool {
+        guard let stat = store.diffStatStore.stat(for: session.id) else { return false }
+        return !stat.isEmpty
+    }
 
     var body: some View {
         // Spacing 0 on purpose: the `Spacer` is the only gap between the
@@ -124,6 +140,18 @@ struct SessionBar: View {
         .frame(height: variant.height)
         .background(FlotillaColors.surface)
         .accessibilityIdentifier(AXID.sessionBar(session.title))
+        // `SessionDiffStatView` only renders in `.tile`, but `isReviewable`
+        // needs a live diff stat in both variants — so the bar watches
+        // directly rather than depending on that view existing alongside it.
+        .onAppear {
+            store.diffStatStore.watch(sessionID: session.id, repoPath: repoPath)
+        }
+        .onChange(of: repoPath) { _, newPath in
+            store.diffStatStore.setRepoPath(newPath, sessionID: session.id)
+        }
+        .onDisappear {
+            store.diffStatStore.unwatch(sessionID: session.id)
+        }
     }
 
     // MARK: - Leading
@@ -286,7 +314,9 @@ struct SessionBar: View {
                     "text.page.badge.magnifyingglass",
                     help: isReviewable
                         ? "Review this session's changes"
-                        : "Reviewing opens when the agent is Ready for Review.",
+                        : session.status != .readyForReview
+                            ? "Reviewing opens when the agent is Ready for Review."
+                            : "There are no changes to review yet.",
                     action: actions.onReview
                 )
                 .disabled(!isReviewable)
