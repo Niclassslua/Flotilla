@@ -410,14 +410,13 @@ struct EmptyWorkspaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(alignment: .top) {
+        .background {
             RadialGradient(
                 colors: [FlotillaColors.accent.opacity(0.07), .clear],
                 center: .center,
                 startRadius: 0,
                 endRadius: 460
             )
-            .frame(height: 620)
             .allowsHitTesting(false)
         }
         .background(FlotillaColors.canvas)
