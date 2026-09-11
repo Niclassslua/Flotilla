@@ -14,12 +14,20 @@ import SessionKit
 /// level signal: the same screen always yields the same status, so a repaint
 /// that redraws identical content cannot change anything.
 public struct TerminalScreenHeuristic: Sendable {
-    /// Only the bottom of the screen is consulted. Agent CLIs draw their
-    /// status line, spinner, and composer there; everything above is the
-    /// conversation transcript, which is arbitrary text that will sooner or
-    /// later contain any word we look for — including "esc to interrupt",
-    /// quoted back by an agent discussing this very file.
+    /// General markers consult only the bottom of the screen. Agent CLIs draw
+    /// their status line, spinner, and composer there; everything above is
+    /// arbitrary transcript text that will sooner or later contain any word
+    /// we look for — including "esc to interrupt", quoted back by an agent
+    /// discussing this very file. The narrow Antigravity permission picker
+    /// has a stricter, extended-window signature below.
     public static let inspectedTailLines = 8
+
+    /// Antigravity's permission picker repeats a long command across several
+    /// choices. At narrow terminal widths that can push both its heading and
+    /// selected choice above the ordinary status-area tail. This larger
+    /// window is used only for the combined heading + live-choice signature,
+    /// not for broad marker matching against arbitrary transcript text.
+    private static let inspectedInteractiveTailLines = 24
 
     /// Drawn only while the agent is busy, and removed the moment it stops.
     /// These are hints to the user about how to *stop* the work in progress,
@@ -27,6 +35,8 @@ public struct TerminalScreenHeuristic: Sendable {
     private static let workingMarkers = [
         "esc to interrupt",
         "escape to interrupt",
+        "esc to cancel",
+        "escape to cancel",
         "ctrl+c to interrupt",
         "ctrl-c to interrupt",
         "ctrl+c to stop",
@@ -99,6 +109,17 @@ public struct TerminalScreenHeuristic: Sendable {
     public func observation(forScreen screen: String) -> SessionStatusObservation {
         let tail = Self.tail(of: screen)
         let lowered = tail.lowercased()
+
+        let interactiveTail = Self.tail(of: screen, maximumLines: Self.inspectedInteractiveTailLines)
+        let loweredInteractiveTail = interactiveTail.lowercased()
+        if loweredInteractiveTail.contains("requesting permission for:"),
+           Self.showsChoiceList(in: interactiveTail) {
+            return SessionStatusObservation(
+                .waitingForInput,
+                waitingReason: .permission,
+                cause: "screen: Antigravity permission heading with live choice list"
+            )
+        }
 
         if let marker = Self.planApprovalMarkers.first(where: lowered.contains) {
             return SessionStatusObservation(
@@ -177,12 +198,12 @@ public struct TerminalScreenHeuristic: Sendable {
 
     /// The bottom `inspectedTailLines` non-empty lines, which is where the
     /// status area lives regardless of how much transcript sits above it.
-    static func tail(of screen: String) -> String {
+    static func tail(of screen: String, maximumLines: Int = inspectedTailLines) -> String {
         let lines = screen
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return lines.suffix(inspectedTailLines).joined(separator: "\n")
+        return lines.suffix(maximumLines).joined(separator: "\n")
     }
 
     /// Detects a composer prompt (ready marker) with non-empty transcript above it.

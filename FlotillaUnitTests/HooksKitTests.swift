@@ -73,6 +73,23 @@ final class TerminalScreenHeuristicTests: XCTestCase {
         XCTAssertEqual(heuristic.status(forScreen: workingScreen), .working)
     }
 
+    func testAntigravityCancelHintMeansWorking() {
+        let screen = """
+        ● Bash(find /Users/test/Flotilla/hooks -name '*.jsonl' -empty | wc -l)
+        ⣯  Generating...
+        ──────────────────────────────────────────────────────────────
+        > Accept-edits mode: file edits auto-approved
+        ──────────────────────────────────────────────────────────────
+        esc to cancel                              Gemini 3.8 Flash · medium
+        """
+
+        XCTAssertEqual(
+            heuristic.status(forScreen: screen),
+            .working,
+            "Antigravity's live generation footer must not look review-ready"
+        )
+    }
+
     func testComposerWithProviderFooterMeansReady() {
         XCTAssertEqual(heuristic.status(forScreen: idleScreen), .readyForReview)
     }
@@ -81,6 +98,33 @@ final class TerminalScreenHeuristicTests: XCTestCase {
         XCTAssertEqual(
             heuristic.observation(forScreen: permissionScreen),
             SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+        )
+    }
+
+    func testAntigravityRequestingPermissionWordingMeansWaiting() {
+        let screen = """
+        ● Bash(find '/Users/test/Flotilla/hooks' -name '*.jsonl' -empty | wc -l)
+        Command
+        ──────────────────────────────────────────────────────────────
+        Requesting permission for:
+          find /Users/test/Flotilla/hooks -name '*.jsonl' -empty | wc -l
+
+        Run this command?
+        > 1. Yes, run command
+          2. Yes, and always allow in this conversation for commands that start with
+        'find /Users/test/Flotilla/hooks' -name '*.jsonl' -empty
+          3. Yes, and always allow for commands that start with 'find
+        /Users/test/Flotilla/hooks' -name '*.jsonl' -empty (Persist to settings.json)
+          4. No, cancel
+
+          ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+        esc to cancel                              Gemini 3.8 Flash · medium
+        """
+
+        XCTAssertEqual(
+            heuristic.observation(forScreen: screen),
+            SessionStatusObservation(.waitingForInput, waitingReason: .permission),
+            "Antigravity's permission picker must remain detectable when wrapping pushes it beyond the ordinary tail"
         )
     }
 
@@ -614,6 +658,30 @@ final class SessionStatusObservationArbiterTests: XCTestCase {
             arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen),
             SessionStatusObservation(.readyForReview)
         )
+    }
+
+    func testHookWorkingSurvivesAmbiguousAntigravityRedrawUntilStop() {
+        var arbiter = SessionStatusObservationArbiter(sessionHasProgressed: true)
+        let working = SessionStatusObservation(.working, cause: "hook: PostToolUse run_command")
+        XCTAssertEqual(arbiter.accept(working, from: .hook), working)
+
+        XCTAssertNil(
+            arbiter.accept(
+                SessionStatusObservation(.readyForReview, cause: "screen: no marker matched — default"),
+                from: .screen
+            ),
+            "a transient Antigravity redraw between tool calls must not end the working episode"
+        )
+
+        let permission = SessionStatusObservation(.waitingForInput, waitingReason: .permission)
+        XCTAssertEqual(arbiter.accept(permission, from: .screen), permission)
+        XCTAssertNil(
+            arbiter.accept(SessionStatusObservation(.readyForReview), from: .screen),
+            "a permission prompt repaint must not decay to Ready for Review while the turn is still active"
+        )
+
+        let stopped = SessionStatusObservation(.readyForReview, cause: "hook: Stop fullyIdle=true")
+        XCTAssertEqual(arbiter.accept(stopped, from: .hook), stopped)
     }
 
     /// With no structured hook to defer to, every screen observation passes

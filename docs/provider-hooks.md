@@ -111,16 +111,18 @@ shape instead of a new machine-path entry for every session.
 Two independent sources move a session between states: the provider hook
 stream (`HookEventReceiver`) and the rendered terminal
 (`SessionScreenMonitor` / `TerminalScreenHeuristic`). Either can reach any
-state below. `SessionStatusObservationArbiter` lets a structured hook
-waiting observation survive a contradictory screen fallback, and every
-accepted observation must still be a legal `SessionStatusMachine`
-transition.
+state below. `SessionStatusObservationArbiter` lets structured hook-reported
+work or waiting survive a contradictory screen fallback until the provider
+reports the terminal state. Every accepted observation must still be a legal
+`SessionStatusMachine` transition.
 
 Each cell lists the hook event(s) that map to that status for that provider.
 The **Terminal-screen fallback** row is shared by every provider and stays
-active even when hooks are wired; it inspects only the bottom
-`inspectedTailLines` (8) non-empty lines, case-insensitively. A dash means
-no hook event of that provider produces the status — it is reachable only
+active even when hooks are wired; its general markers inspect only the bottom
+`inspectedTailLines` (8) non-empty lines, case-insensitively. Antigravity's
+long permission picker additionally uses a 24-line window, but only when its
+exact `Requesting permission for:` heading and a live choice list both appear.
+A dash means no hook event of that provider produces the status — it is reachable only
 through the screen fallback (or, for `crashed`, only through an
 authoritative process exit). In the **Waiting** column, `→ reason` is the
 `SessionWaitingReason` persisted with the status: `permission` → **Needs
@@ -136,7 +138,7 @@ created with, before its process has been observed doing anything.
 | **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — |
 | **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — |
 | **Antigravity** | `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval` | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation) | — |
-| **Terminal-screen fallback** (every provider) | an interrupt hint — `esc to interrupt`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; or shows a numbered choice list with a selection caret; or the prompt heuristic reads the prompt as waiting | anything else: a composer prompt with transcript above it, a dead-pane marker (`agent exited`, `pane is dead`, `process finished`), or an otherwise unremarkable screen | — |
+| **Terminal-screen fallback** (every provider) | an interrupt/cancel hint — `esc to interrupt`, `esc to cancel`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; shows a numbered choice list with a selection caret; matches Antigravity's extended permission-picker signature; or the prompt heuristic reads the prompt as waiting | anything else: a composer prompt with transcript above it, a dead-pane marker (`agent exited`, `pane is dead`, `process finished`), or an otherwise unremarkable screen | — |
 | **Process exit** | — | — | exit status code 0 (also fires `onSessionFinished`) | any non-zero exit code, or a launch/relaunch failure |
 
 `SessionStatusMachine` shapes which of these are reachable when:
@@ -148,10 +150,11 @@ created with, before its process has been observed doing anything.
 - A session with no status yet (`nil`) accepts any first value.
 
 A screen `readyForReview` is dropped by `SessionStatusObservationArbiter`
-while the most recent hook observation was `waitingForInput`, so a
-recognised Plan Ready / permission event is not undone by an unrecognised
-prompt style. Visible work (a `working` observation) starts a new episode
-and clears that hold.
+while the most recent hook observation was `working` or `waitingForInput`, so
+an in-flight tool sequence or recognised Plan Ready / permission event is not
+undone by an intermediate, unrecognised redraw. A provider hook reporting the
+terminal state ends that hold; visible screen work also starts a new episode
+after a prior hook-reported waiting state.
 
 ## Components
 

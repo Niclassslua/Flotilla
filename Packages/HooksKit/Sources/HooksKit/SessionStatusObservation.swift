@@ -41,9 +41,9 @@ public struct SessionStatusObservation: Equatable, Sendable {
 }
 
 /// Structured hook events outrank an ambiguous terminal fallback. This keeps
-/// a hook-reported Plan Ready / waiting state from immediately decaying to a
-/// bare Ready for Review merely because the provider's prompt styling was
-/// not recognized.
+/// hook-reported work or waiting from immediately decaying to a bare Ready
+/// for Review merely because a provider briefly redraws without a recognized
+/// status marker. The provider's terminal hook ends that episode explicitly.
 public struct SessionStatusObservationArbiter: Sendable {
     public enum Source: Equatable, Sendable {
         case hook
@@ -101,8 +101,9 @@ public struct SessionStatusObservationArbiter: Sendable {
         }
 
         if let hook = latestHookObservation {
-            if hook.status == .waitingForInput, observation.status == .readyForReview {
-                lastRejectionCause = "screen readyForReview outranked by pending hook waitingForInput"
+            if (hook.status == .working || hook.status == .waitingForInput),
+               observation.status == .readyForReview {
+                lastRejectionCause = "screen readyForReview outranked by pending hook \(hook.status.rawValue)"
                     + (hook.waitingReason.map { "/\($0.rawValue)" } ?? "")
                 return nil
             }
@@ -117,11 +118,12 @@ public struct SessionStatusObservationArbiter: Sendable {
             }
         }
 
-        // A visibly active or interactive screen belongs to a newer episode
-        // than the last terminal hook edge. Let future screen states stand on
-        // their own until another structured hook arrives.
-        if observation.status == .working || observation.status == .crashed ||
-            (observation.status == .waitingForInput && latestHookObservation?.status != .waitingForInput) {
+        // Visible work starts a newer episode after a prior terminal/waiting
+        // hook. A confirming working screen deliberately retains a hook's
+        // working hold: transient redraws can hide its marker, and only the
+        // provider's terminal hook authoritatively ends that episode.
+        if (observation.status == .working && latestHookObservation?.status != .working) ||
+            observation.status == .crashed {
             latestHookObservation = nil
         }
         return observation
