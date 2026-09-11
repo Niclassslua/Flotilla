@@ -763,6 +763,101 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertTrue(contents.isEmpty)
     }
 
+    func testConfigureHooksCleansLegacyFixedPathClaudeHookGroups() throws {
+        let writer = HookConfigurationWriter()
+        let claudeDir = workingDirectory.appendingPathComponent(".claude", isDirectory: true)
+        try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+        let settingsFile = claudeDir.appendingPathComponent("settings.json", isDirectory: false)
+
+        let legacyID = UUID()
+        let legacyCommand = #"cat >> "/Users/test/Library/Application Support/Flotilla/hooks/\#(legacyID.uuidString).jsonl" && printf '\n' >> "/Users/test/Library/Application Support/Flotilla/hooks/\#(legacyID.uuidString).jsonl""#
+        let modernCommand = #"event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; cat >> "$event_file" && printf '\n' >> "$event_file""#
+
+        let initialSettings: [String: Any] = [
+            "theme": "dark",
+            "autoUpdaterStatus": "disabled",
+            "hooks": [
+                "Notification": [
+                    ["hooks": [["type": "command", "command": legacyCommand]]],
+                    ["hooks": [["type": "command", "command": modernCommand]]]
+                ],
+                "Stop": [
+                    ["hooks": [["type": "command", "command": legacyCommand]]]
+                ],
+                "PostToolUse": [
+                    ["hooks": [["type": "command", "command": "echo user-custom-hook"]]]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: initialSettings, options: [.prettyPrinted])
+        try data.write(to: settingsFile)
+
+        let sessionID = UUID()
+        let succeeded = writer.configureHooks(
+            for: .claudeCode,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+        XCTAssertTrue(succeeded)
+
+        // Verify the file was cleaned
+        let updatedData = try Data(contentsOf: settingsFile)
+        let updatedSettings = try XCTUnwrap(JSONSerialization.jsonObject(with: updatedData) as? [String: Any])
+
+        XCTAssertEqual(updatedSettings["theme"] as? String, "dark")
+        XCTAssertEqual(updatedSettings["autoUpdaterStatus"] as? String, "disabled")
+
+        let updatedHooks = try XCTUnwrap(updatedSettings["hooks"] as? [String: Any])
+        // Notification should have only the modern hook
+        let notificationGroups = try XCTUnwrap(updatedHooks["Notification"] as? [[String: Any]])
+        XCTAssertEqual(notificationGroups.count, 1)
+        let notifCmd = ((notificationGroups.first?["hooks"] as? [[String: Any]])?.first)?["command"] as? String
+        XCTAssertEqual(notifCmd, modernCommand)
+
+        // Stop had only the legacy hook, so Stop should be removed
+        XCTAssertNil(updatedHooks["Stop"])
+
+        // PostToolUse had user custom hook, so it should remain
+        let postToolGroups = try XCTUnwrap(updatedHooks["PostToolUse"] as? [[String: Any]])
+        XCTAssertEqual(postToolGroups.count, 1)
+        let postToolCmd = ((postToolGroups.first?["hooks"] as? [[String: Any]])?.first)?["command"] as? String
+        XCTAssertEqual(postToolCmd, "echo user-custom-hook")
+    }
+
+    func testConfigureHooksRemovesEmptyHooksObjectWhenAllLegacy() throws {
+        let writer = HookConfigurationWriter()
+        let claudeDir = workingDirectory.appendingPathComponent(".claude", isDirectory: true)
+        try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+        let settingsFile = claudeDir.appendingPathComponent("settings.json", isDirectory: false)
+
+        let legacyID = UUID()
+        let legacyCommand = #"cat >> "/Users/test/Library/Application Support/Flotilla/hooks/\#(legacyID.uuidString).jsonl" && printf '\n' >> "/Users/test/Library/Application Support/Flotilla/hooks/\#(legacyID.uuidString).jsonl""#
+
+        let initialSettings: [String: Any] = [
+            "hooks": [
+                "Notification": [
+                    ["hooks": [["type": "command", "command": legacyCommand]]]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: initialSettings, options: [.prettyPrinted])
+        try data.write(to: settingsFile)
+
+        let sessionID = UUID()
+        let succeeded = writer.configureHooks(
+            for: .claudeCode,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        )
+        XCTAssertTrue(succeeded)
+
+        let updatedData = try Data(contentsOf: settingsFile)
+        let updatedSettings = try XCTUnwrap(JSONSerialization.jsonObject(with: updatedData) as? [String: Any])
+        XCTAssertNil(updatedSettings["hooks"])
+    }
+
     func testLaunchArgumentsCarryOnlyThisSessionsHookGroups() throws {
         let arguments = HookConfigurationWriter.launchArguments(
             for: .claudeCode,

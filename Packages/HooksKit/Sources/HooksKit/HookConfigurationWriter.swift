@@ -141,6 +141,7 @@ public struct HookConfigurationWriter: HookConfiguring {
 
         switch kind {
         case .claudeCode:
+            Self.removeLegacyClaudeHookGroups(in: workingDirectory)
             return true
         case .antigravity:
             return Self.configureAntigravityHooks(
@@ -498,6 +499,87 @@ public struct HookConfigurationWriter: HookConfiguring {
             // Concurrent launches can both discover the same legacy file.
             // Whichever removes it first wins; absence is already success.
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        }
+    }
+
+    // MARK: - Legacy Claude Cleanup
+
+    /// Checks if a shell command string matches the pre-cf38d57 Flotilla hook command
+    /// that pointed directly to a fixed `<supportDirectory>/hooks/<UUID>.jsonl` file.
+    public static func isLegacyClaudeHookCommand(_ command: String) -> Bool {
+        guard !command.contains(eventFileEnvironmentKey) else { return false }
+        guard command.contains("cat >>") else { return false }
+        guard command.contains("/hooks/") else { return false }
+        let uuidPattern = #"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\.jsonl"#
+        return command.range(of: uuidPattern, options: .regularExpression) != nil
+    }
+
+    /// Filters out legacy Flotilla hook commands from a single hook group.
+    /// Returns `nil` if all hook entries in the group were legacy commands and the group is now empty.
+    public static func cleanedClaudeHookGroup(_ group: [String: Any]) -> [String: Any]? {
+        guard let entries = group["hooks"] as? [[String: Any]] else { return group }
+        let remaining = entries.filter { entry in
+            guard let command = entry["command"] as? String else { return true }
+            return !isLegacyClaudeHookCommand(command)
+        }
+        if remaining.isEmpty {
+            return nil
+        }
+        var updated = group
+        updated["hooks"] = remaining
+        return updated
+    }
+
+    /// Removes fixed-path Flotilla hook groups from `<workingDirectory>/.claude/settings.json`.
+    ///
+    /// Preserves any other settings keys, any hook for other events, and any hook using `FLOTILLA_HOOK_EVENT_FILE`.
+    /// Returns `true` if any legacy hook groups were removed and the settings file was updated.
+    @discardableResult
+    public static func removeLegacyClaudeHookGroups(in workingDirectory: URL) -> Bool {
+        let settingsFile = workingDirectory
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("settings.json", isDirectory: false)
+        guard FileManager.default.fileExists(atPath: settingsFile.path) else { return false }
+
+        sharedConfigFileLock.lock()
+        defer { sharedConfigFileLock.unlock() }
+
+        guard let data = try? Data(contentsOf: settingsFile),
+              var settings = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let hooks = settings["hooks"] as? [String: Any] else {
+            return false
+        }
+
+        var changed = false
+        var updatedHooks = hooks
+
+        for (event, value) in hooks {
+            guard let groups = value as? [[String: Any]] else { continue }
+            let filteredGroups = groups.compactMap(cleanedClaudeHookGroup)
+            if filteredGroups.count != groups.count {
+                changed = true
+                if filteredGroups.isEmpty {
+                    updatedHooks.removeValue(forKey: event)
+                } else {
+                    updatedHooks[event] = filteredGroups
+                }
+            }
+        }
+
+        guard changed else { return false }
+
+        if updatedHooks.isEmpty {
+            settings.removeValue(forKey: "hooks")
+        } else {
+            settings["hooks"] = updatedHooks
+        }
+
+        do {
+            let updatedData = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
+            try updatedData.write(to: settingsFile, options: .atomic)
+            return true
+        } catch {
+            return false
         }
     }
 }

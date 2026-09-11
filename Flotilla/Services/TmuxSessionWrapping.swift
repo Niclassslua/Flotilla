@@ -85,7 +85,14 @@ enum TmuxSessionWrapping {
     }
 
     static func defaultSupportDirectory() -> URL {
-        FileManager.default
+        if let custom = ProcessInfo.processInfo.environment["FLOTILLA_SUPPORT_DIR"] {
+            return URL(fileURLWithPath: custom, isDirectory: true)
+        }
+        if NSClassFromString("XCTestCase") != nil {
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent("flotilla-test-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        }
+        return FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Flotilla", isDirectory: true)
     }

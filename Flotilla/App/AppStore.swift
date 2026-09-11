@@ -6,6 +6,7 @@ import ProcessKit
 import TerminalKit
 import AgentKit
 import SettingsKit
+import HooksKit
 
 @Observable
 @MainActor
@@ -48,6 +49,7 @@ final class AppStore {
     /// agent-managed session titles). Same closure-not-frozen-value rationale
     /// as `worktreeBaseDirectoryProvider`.
     private let settingsProvider: () -> AppSettings
+    private let supportDirectory: URL
     private let worktreePlanner = WorktreePlanner()
     private let statusMachine = SessionStatusMachine()
     private let scrollbackStore = SessionScrollbackStore()
@@ -69,7 +71,8 @@ final class AppStore {
         worktreeBaseDirectoryProvider: @escaping () -> URL,
         settingsProvider: @escaping () -> AppSettings = { AppSettings() },
         metadataMonitor: SessionMetadataMonitor = SessionMetadataMonitor(),
-        handoffService: HandoffService? = nil
+        handoffService: HandoffService? = nil,
+        supportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory()
     ) {
         self.metadataMonitor = metadataMonitor
         self.handoffService = handoffService ?? HandoffService(processManager: processManager)
@@ -81,6 +84,7 @@ final class AppStore {
         self.processManager = processManager
         self.worktreeBaseDirectoryProvider = worktreeBaseDirectoryProvider
         self.settingsProvider = settingsProvider
+        self.supportDirectory = supportDirectory
         processManager.eventHandler = { [weak self] event in
             self?.handleProcessEvent(event)
         }
@@ -1022,6 +1026,9 @@ final class AppStore {
             return
         }
 
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        try? FileManager.default.removeItem(at: eventFile)
+
         scrollbackStore.remove(sessionID)
 
         if selectedSessionID == sessionID {
@@ -1147,7 +1154,7 @@ final class AppStore {
             // Mint the session ID up front so the descriptor path is
             // deterministic before the Session struct exists.
             let sessionID = UUID()
-            let supportDirectory = TmuxSessionWrapping.defaultSupportDirectory()
+            let supportDirectory = self.supportDirectory
 
             // Build self-report instructions + descriptor path when either
             // agent-managed feature is active.

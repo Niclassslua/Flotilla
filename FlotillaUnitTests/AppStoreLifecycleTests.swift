@@ -10,13 +10,17 @@ import HooksKit
 
 @MainActor
 final class AppStoreLifecycleTests: XCTestCase {
-    private func manager(factory: RecordingProcessFactory) -> SessionProcessManager {
+    private func manager(
+        factory: RecordingProcessFactory,
+        hookSupportDirectory: URL? = nil
+    ) -> SessionProcessManager {
         SessionProcessManager(
             locator: AppLayerExecutableLocator(
                 executable: URL(fileURLWithPath: "/usr/bin/env")
             ),
             processFactory: factory,
-            tmuxServerProbe: AppLayerTmuxServerProbe(usable: false)
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: false),
+            hookSupportDirectory: hookSupportDirectory ?? TmuxSessionWrapping.defaultSupportDirectory()
         )
     }
 
@@ -224,6 +228,38 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(loadedSessions.isEmpty, "Session must be deleted from repository")
         XCTAssertNotNil(store.lastOperationError, "Worktree cleanup warning must be surfaced")
         XCTAssertEqual(factory.processes.count, 1, "Process must not be resurrected")
+    }
+
+    func testDeleteSessionRemovesEventFile() async throws {
+        let repository = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let supportDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flotilla-test-appstore-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: supportDir) }
+
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: factory, hookSupportDirectory: supportDir),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            supportDirectory: supportDir
+        )
+
+        await store.createSession(
+            title: "Delete event file test",
+            goal: "Verify event file cleanup",
+            agent: .claudeCode,
+            projectFolder: nil,
+            checkoutMode: .mainCheckout
+        )
+
+        let session = try XCTUnwrap(store.sessions.first)
+        let eventFile = HookConfigurationWriter.eventFilePath(for: session.id, supportDirectory: supportDir)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: eventFile.path), "Event file must be created on session launch")
+
+        await store.deleteSession(sessionID: session.id, deleteWorktree: false)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile.path), "Event file must be removed when session is deleted")
     }
 
     func testUnexpectedProcessCrashPersistsCrashedStateAndCanRestart() async throws {
