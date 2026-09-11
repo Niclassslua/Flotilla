@@ -140,8 +140,13 @@ final class AppStore {
         }
 
         // A session with no status yet (never observed) is restarted like any
-        // other live session; only a crashed one is left alone.
-        for index in sessions.indices where sessions[index].status?.isTerminal != true {
+        // other live session. A crashed one is left alone, and so is a
+        // Ready for Review one: its agent's turn already ended cleanly, there
+        // is nothing to resume, and silently starting a fresh process out
+        // from under a diff someone may be mid-review of would be exactly
+        // the surprise `SessionReviewViewModel.isStale` exists to avoid —
+        // the agent resuming is meant to be a visible, deliberate event.
+        for index in sessions.indices where Self.shouldAutoRestore(sessions[index].status) {
             do {
                 if sessions[index].agentSessionID != nil {
                     sessionResumeStarts[sessions[index].id] = Date()
@@ -177,6 +182,18 @@ final class AppStore {
                 }
                 lastOperationError = error.localizedDescription
             }
+        }
+    }
+
+    /// Whether a restored session's process should be started back up
+    /// automatically on launch. Only a session that could still be mid-turn —
+    /// unobserved, working, or blocked on input — qualifies; `.crashed` is
+    /// already known dead, and `.readyForReview` has already finished its
+    /// turn cleanly and is parked for a human, not for the agent.
+    private static func shouldAutoRestore(_ status: SessionStatus?) -> Bool {
+        switch status {
+        case nil, .working, .waitingForInput: true
+        case .readyForReview, .crashed: false
         }
     }
 
@@ -1273,11 +1290,5 @@ final class AppStore {
         case .launchedWithoutTmux:
             lastOperationError = "tmux is running but not answering clients, so the session was started without it. It will work normally, but will not survive quitting Flotilla."
         }
-    }
-}
-
-private extension SessionStatus {
-    var isTerminal: Bool {
-        self == .crashed
     }
 }

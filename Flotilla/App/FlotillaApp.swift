@@ -141,6 +141,17 @@ struct FlotillaApp: App {
            let sessionTitle = ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_CRASHED_SESSION"] {
             appStore.simulateCrashedSessionForUITesting(sessionTitle: sessionTitle)
         }
+
+        // The review fixture has no live agent process, so its focused
+        // surface is otherwise just a session bar over "Session Not
+        // Running" — real, but easy to mistake for "there's nothing here"
+        // when the Review action is a small icon in that bar. Land there
+        // directly rather than making a manual run hunt through the sidebar.
+        if environment.isUITesting,
+           ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_REVIEW_SESSION"] == "1",
+           let reviewSession = appStore.sessions.first(where: { $0.title == AppEnvironment.uiTestReviewSessionTitle }) {
+            navigator.selection = .session(reviewSession.id)
+        }
     }
 
     var body: some Scene {
