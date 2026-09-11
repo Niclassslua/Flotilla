@@ -7,6 +7,7 @@ import SessionKit
 import SettingsKit
 import DesignSystem
 import HooksKit
+import os
 
 @main
 struct FlotillaApp: App {
@@ -23,6 +24,7 @@ struct FlotillaApp: App {
     /// therefore inherits nothing from it — can build its own view model.
     private let gitService: any GitServiceProtocol
     private let sessionRepository: any SessionRepository
+    private let foregroundNotificationGate: OSAllocatedUnfairLock<Bool>
 
     private static let isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
 
@@ -101,8 +103,12 @@ struct FlotillaApp: App {
                 tmuxExecutable: locator.locate("tmux")
             ),
             requestsAuthorization: !environment.isUITesting,
+            isConfiguredToNotify: {
+                settingsViewModel.settings.notifications.isConfiguredToNotify
+            },
             notificationsEnabled: {
-                settingsViewModel.settings.notifications.waitingForInputEnabled
+                let isActive = NSApp?.isActive ?? true
+                return settingsViewModel.settings.notifications.shouldNotifyWaitingForInput(isActive: isActive)
             }
         )
         _hookCoordinator = State(initialValue: hookCoordinator)
@@ -110,10 +116,16 @@ struct FlotillaApp: App {
         let navigator = WorkspaceNavigator()
         _navigator = State(initialValue: navigator)
 
+        let foregroundGate = OSAllocatedUnfairLock(initialState: settingsViewModel.settings.notifications.delivery == .always)
+        foregroundNotificationGate = foregroundGate
+
         let notificationDelegate = FlotillaNotificationDelegate(
             navigator: navigator,
             onReply: { sessionID, text in
                 appStore.process(for: sessionID)?.send(input: Data((text + "\n").utf8))
+            },
+            shouldPresentInForeground: {
+                foregroundGate.withLock { $0 }
             }
         )
         UNUserNotificationCenter.current().delegate = notificationDelegate
@@ -123,7 +135,8 @@ struct FlotillaApp: App {
         sessionRepository = environment.sessionRepository
 
         appStore.onSessionFinished = { session in
-            guard settingsViewModel.settings.notifications.finishedEnabled else { return }
+            let isActive = NSApp?.isActive ?? true
+            guard settingsViewModel.settings.notifications.shouldNotifySessionFinished(isActive: isActive) else { return }
             Task {
                 await SystemNotificationDispatcher().notifySessionFinished(sessionTitle: session.title, sessionID: session.id)
             }
@@ -171,6 +184,9 @@ struct FlotillaApp: App {
                     : hookCoordinator.screenReader
             )
             .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
+            .onChange(of: settingsViewModel.settings.notifications.delivery) { _, delivery in
+                foregroundNotificationGate.withLock { $0 = (delivery == .always) }
+            }
         }
         .windowToolbarStyle(.unified(showsTitle: false))
 #if FLOTILLA_EPHEMERAL

@@ -16,10 +16,16 @@ final class FlotillaNotificationDelegate: NSObject, UNUserNotificationCenterDele
 
     private let navigator: WorkspaceNavigator
     private let onReply: @MainActor (UUID, String) -> Void
+    private let shouldPresentInForeground: @Sendable () -> Bool
 
-    init(navigator: WorkspaceNavigator, onReply: @escaping @MainActor (UUID, String) -> Void) {
+    init(
+        navigator: WorkspaceNavigator,
+        onReply: @escaping @MainActor (UUID, String) -> Void,
+        shouldPresentInForeground: @escaping @Sendable () -> Bool = { true }
+    ) {
         self.navigator = navigator
         self.onReply = onReply
+        self.shouldPresentInForeground = shouldPresentInForeground
         super.init()
         registerCategories()
     }
@@ -41,16 +47,19 @@ final class FlotillaNotificationDelegate: NSObject, UNUserNotificationCenterDele
         UNUserNotificationCenter.current().setNotificationCategories([category])
     }
 
-    /// Shows the banner even while Flotilla is the frontmost app — without
-    /// this, the system's default behavior for a foreground app is to
-    /// suppress the banner entirely, which is not what "Needs Your Input"
-    /// should ever do.
+    static func presentationOptions(shouldPresentInForeground: Bool) -> UNNotificationPresentationOptions {
+        shouldPresentInForeground ? [.banner, .sound] : []
+    }
+
+    /// Shows the banner when configured to present in the foreground (e.g. Always).
+    /// When set to Never or Only when not active, foreground presentation is suppressed
+    /// by passing empty presentation options.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        completionHandler(Self.presentationOptions(shouldPresentInForeground: shouldPresentInForeground()))
     }
 
     func userNotificationCenter(

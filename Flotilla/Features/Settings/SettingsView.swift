@@ -76,7 +76,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .sessions: "session defaults coding agent prompt worktree"
         case .terminal: "terminal editor font size scroll option meta"
         case .git: "git branch worktree delete lifecycle"
-        case .notifications: "notifications waiting input sound privacy"
+        case .notifications: "notifications waiting input sound privacy never active always delivery"
         case .agents: "claude codex opencode agy antigravity executable arguments authentication"
         // case .appearance: "appearance theme system light dark"
         case .projects: "projects paths rules skills local"
@@ -464,10 +464,19 @@ private struct NotificationSettingsPane: View {
     var body: some View {
         Form {
             Section {
+                Picker("Show notifications", selection: $viewModel.settings.notifications.delivery) {
+                    ForEach(NotificationDelivery.allCases) { delivery in
+                        Text(delivery.displayName).tag(delivery)
+                    }
+                }
+                .accessibilityIdentifier(AXID.settingsNotificationDeliveryPicker.rawValue)
+
                 Toggle("Agent is waiting for input", isOn: $viewModel.settings.notifications.waitingForInputEnabled)
                     .toggleStyle(.switch)
+                    .disabled(viewModel.settings.notifications.delivery == .never)
                 Toggle("Session finished", isOn: $viewModel.settings.notifications.finishedEnabled)
                     .toggleStyle(.switch)
+                    .disabled(viewModel.settings.notifications.delivery == .never)
                 Text("The system notification uses the Mac’s current notification sound and Focus settings.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

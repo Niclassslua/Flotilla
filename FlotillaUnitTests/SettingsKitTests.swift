@@ -158,4 +158,76 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.git.deleteBranchWithWorktree, false)
     }
 
+    func testNotificationDeliveryDefaultsAndDisplayName() {
+        let prefs = NotificationPreferences()
+        XCTAssertEqual(prefs.delivery, .always)
+        XCTAssertTrue(prefs.waitingForInputEnabled)
+        XCTAssertTrue(prefs.finishedEnabled)
+        XCTAssertTrue(prefs.isConfiguredToNotify)
+
+        XCTAssertEqual(NotificationDelivery.never.displayName, "Never")
+        XCTAssertEqual(NotificationDelivery.onlyWhenNotActive.displayName, "Only when not active")
+        XCTAssertEqual(NotificationDelivery.always.displayName, "Always")
+    }
+
+    func testNotificationDeliveryBehavior() {
+        var prefs = NotificationPreferences(delivery: .never)
+        XCTAssertFalse(prefs.shouldDeliver(isActive: true))
+        XCTAssertFalse(prefs.shouldDeliver(isActive: false))
+        XCTAssertFalse(prefs.shouldNotifyWaitingForInput(isActive: true))
+        XCTAssertFalse(prefs.shouldNotifyWaitingForInput(isActive: false))
+        XCTAssertFalse(prefs.shouldNotifySessionFinished(isActive: true))
+        XCTAssertFalse(prefs.shouldNotifySessionFinished(isActive: false))
+        XCTAssertFalse(prefs.isConfiguredToNotify)
+
+        prefs.delivery = .onlyWhenNotActive
+        XCTAssertFalse(prefs.shouldDeliver(isActive: true))
+        XCTAssertTrue(prefs.shouldDeliver(isActive: false))
+        XCTAssertFalse(prefs.shouldNotifyWaitingForInput(isActive: true))
+        XCTAssertTrue(prefs.shouldNotifyWaitingForInput(isActive: false))
+        XCTAssertFalse(prefs.shouldNotifySessionFinished(isActive: true))
+        XCTAssertTrue(prefs.shouldNotifySessionFinished(isActive: false))
+        XCTAssertTrue(prefs.isConfiguredToNotify)
+
+        prefs.delivery = .always
+        XCTAssertTrue(prefs.shouldDeliver(isActive: true))
+        XCTAssertTrue(prefs.shouldDeliver(isActive: false))
+        XCTAssertTrue(prefs.shouldNotifyWaitingForInput(isActive: true))
+        XCTAssertTrue(prefs.shouldNotifyWaitingForInput(isActive: false))
+        XCTAssertTrue(prefs.shouldNotifySessionFinished(isActive: true))
+        XCTAssertTrue(prefs.shouldNotifySessionFinished(isActive: false))
+        XCTAssertTrue(prefs.isConfiguredToNotify)
+
+        // Event toggle turned off suppresses even if delivery is always
+        prefs.waitingForInputEnabled = false
+        XCTAssertFalse(prefs.shouldNotifyWaitingForInput(isActive: true))
+        XCTAssertFalse(prefs.shouldNotifyWaitingForInput(isActive: false))
+        XCTAssertTrue(prefs.shouldNotifySessionFinished(isActive: false))
+
+        prefs.finishedEnabled = false
+        XCTAssertFalse(prefs.isConfiguredToNotify)
+    }
+
+    func testSettingsWrittenBeforeNotificationDeliveryStillDecode() throws {
+        let oldJSON = Data(
+            #"{"worktreeBaseDirectory":"/tmp/worktrees","notifications":{"waitingForInputEnabled":true,"finishedEnabled":false}}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
+
+        XCTAssertEqual(decoded.notifications.delivery, .always, "a missing delivery setting defaults to always")
+        XCTAssertTrue(decoded.notifications.waitingForInputEnabled)
+        XCTAssertFalse(decoded.notifications.finishedEnabled)
+        XCTAssertEqual(decoded.worktreeBaseDirectory, "/tmp/worktrees")
+    }
+
+    func testNotificationDeliveryRoundTrip() throws {
+        for delivery in NotificationDelivery.allCases {
+            var settings = AppSettings()
+            settings.notifications.delivery = delivery
+            let encoded = try JSONEncoder().encode(settings)
+            let decoded = try JSONDecoder().decode(AppSettings.self, from: encoded)
+            XCTAssertEqual(decoded.notifications.delivery, delivery)
+        }
+    }
 }

@@ -225,16 +225,93 @@ public struct TerminalPreferences: Codable, Equatable, Sendable {
     }
 }
 
+public enum NotificationDelivery: String, Codable, CaseIterable, Sendable, Identifiable {
+    case never
+    case onlyWhenNotActive
+    case always
+
+    public var id: Self { self }
+
+    public var displayName: String {
+        switch self {
+        case .never: "Never"
+        case .onlyWhenNotActive: "Only when not active"
+        case .always: "Always"
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        switch raw {
+        case "never":
+            self = .never
+        case "onlyWhenNotActive", "only_when_not_active", "whenNotActive":
+            self = .onlyWhenNotActive
+        case "always":
+            self = .always
+        default:
+            self = .always
+        }
+    }
+}
+
 public struct NotificationPreferences: Codable, Equatable, Sendable {
+    public var delivery: NotificationDelivery
     public var waitingForInputEnabled: Bool
     public var finishedEnabled: Bool
 
     public init(
+        delivery: NotificationDelivery = .always,
         waitingForInputEnabled: Bool = true,
         finishedEnabled: Bool = true
     ) {
+        self.delivery = delivery
         self.waitingForInputEnabled = waitingForInputEnabled
         self.finishedEnabled = finishedEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case delivery
+        case waitingForInputEnabled
+        case finishedEnabled
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        delivery = try container.decodeIfPresent(NotificationDelivery.self, forKey: .delivery) ?? .always
+        waitingForInputEnabled = try container.decodeIfPresent(Bool.self, forKey: .waitingForInputEnabled) ?? true
+        finishedEnabled = try container.decodeIfPresent(Bool.self, forKey: .finishedEnabled) ?? true
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(delivery, forKey: .delivery)
+        try container.encode(waitingForInputEnabled, forKey: .waitingForInputEnabled)
+        try container.encode(finishedEnabled, forKey: .finishedEnabled)
+    }
+
+    public func shouldDeliver(isActive: Bool) -> Bool {
+        switch delivery {
+        case .never:
+            return false
+        case .onlyWhenNotActive:
+            return !isActive
+        case .always:
+            return true
+        }
+    }
+
+    public func shouldNotifyWaitingForInput(isActive: Bool) -> Bool {
+        waitingForInputEnabled && shouldDeliver(isActive: isActive)
+    }
+
+    public func shouldNotifySessionFinished(isActive: Bool) -> Bool {
+        finishedEnabled && shouldDeliver(isActive: isActive)
+    }
+
+    public var isConfiguredToNotify: Bool {
+        delivery != .never && (waitingForInputEnabled || finishedEnabled)
     }
 }
 

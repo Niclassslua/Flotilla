@@ -22,4 +22,18 @@ final class FlotillaNotificationDelegateTests: XCTestCase {
         let userInfo: [AnyHashable: Any] = ["sessionID": 42]
         XCTAssertNil(FlotillaNotificationDelegate.sessionID(from: userInfo))
     }
+
+    func testPresentationOptionsSuppressedWhenForegroundPresentationDisabled() {
+        XCTAssertEqual(
+            FlotillaNotificationDelegate.presentationOptions(shouldPresentInForeground: false),
+            []
+        )
+    }
+
+    func testPresentationOptionsIncludesBannerAndSoundWhenForegroundPresentationEnabled() {
+        XCTAssertEqual(
+            FlotillaNotificationDelegate.presentationOptions(shouldPresentInForeground: true),
+            [.banner, .sound]
+        )
+    }
 }

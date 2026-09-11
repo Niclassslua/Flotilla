@@ -97,6 +97,7 @@ public enum AXID: String, Sendable {
     case settingsTerminalTab = "Settings.TerminalTab"
     case settingsAgentsTab = "Settings.AgentsTab"
     case settingsNotificationsTab = "Settings.NotificationsTab"
+    case settingsNotificationDeliveryPicker = "Settings.NotificationDeliveryPicker"
     case settingsGitTab = "Settings.GitTab"
     case settingsAdvancedTab = "Settings.AdvancedTab"
 

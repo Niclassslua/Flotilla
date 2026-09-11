@@ -45,6 +45,7 @@ final class HookCoordinator {
         screenReader: any SessionScreenReading,
         dispatcher: NotificationDispatching = SystemNotificationDispatcher(),
         requestsAuthorization: Bool = true,
+        isConfiguredToNotify: (@MainActor () -> Bool)? = nil,
         notificationsEnabled: @escaping @MainActor () -> Bool = { true },
         hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory()
     ) {
@@ -56,7 +57,8 @@ final class HookCoordinator {
         store.onAgentChanged = { [weak self] sessionID in
             self?.resync(sessionID: sessionID)
         }
-        if requestsAuthorization, notificationsEnabled(), ProcessInfo.processInfo.environment["UI_TESTING"] != "1" {
+        let shouldRequestAuth = isConfiguredToNotify?() ?? notificationsEnabled()
+        if requestsAuthorization, shouldRequestAuth, ProcessInfo.processInfo.environment["UI_TESTING"] != "1" {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
         if !ProcessInfo.processInfo.environment.keys.contains("UI_TESTING") || ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_WAITING_SESSION"] != nil {
