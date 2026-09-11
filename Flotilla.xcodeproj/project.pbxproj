@@ -28,6 +28,7 @@
 		10778EDAAEFD87E9DAD279CA /* SyntaxHighlightedTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22BC89FA739AB982526D7A98 /* SyntaxHighlightedTextEditor.swift */; };
 		10816D50FD5E62E3BB6295D2 /* CommandBarDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02405141455B879D8BF5C878 /* CommandBarDesign.swift */; };
 		10D65E7D1ABDBA7423577988 /* KanbanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18295747B6538E5931B709FE /* KanbanUITests.swift */; };
+		11051223165B6176B78E5401 /* CommitAttributionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D80A73E251FF9AE065547BC /* CommitAttributionService.swift */; };
 		111C1B53AC72AD0AE39970BA /* AgentSelfReportCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E32DCA022EAEDFF38BA2A93 /* AgentSelfReportCoordinatorTests.swift */; };
 		116BF380DC13FE82F215868A /* FlotillaUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFB40CA8CE1DD12C190C2FA /* FlotillaUITests.swift */; };
 		11B1B69B8A64FDBBEB5D47CE /* SessionStatusTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843F419F380054574BA3445D /* SessionStatusTrace.swift */; };
@@ -332,6 +333,7 @@
 		E8FF643C0DC5D0ACB17C5ED4 /* ProjectGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F1924AF9773A5CAB5DC34C4 /* ProjectGraphView.swift */; };
 		EA1357FDA10CE4036A1A92E1 /* AXID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1505FDEBF32FDDA8F3148254 /* AXID.swift */; };
 		EA85468D8235DB8708568180 /* AppStoreHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73062962B480C847FAB3C798 /* AppStoreHandoffTests.swift */; };
+		EAAF365A09C6168EB10D7A95 /* CommitAttributionHooksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5026FEB6A40EEEA9E60312CF /* CommitAttributionHooksTests.swift */; };
 		EAEB8C12F2DB24CAE6443071 /* GitLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8034B27D7FF60ED84FD5A58 /* GitLogTests.swift */; };
 		EC2068C211C3C5DEA31FC3C3 /* ReviewPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C5D2E8422180442E18D88D /* ReviewPersistenceTests.swift */; };
 		ED7C75D1C2A14B8A03A610C8 /* BoardDemoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9A3E0708ED932A88F04F39 /* BoardDemoFixtures.swift */; };
@@ -486,6 +488,7 @@
 		4E01AB73E2CA8A2FB78D074C /* HandoffServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffServiceTests.swift; sourceTree = "<group>"; };
 		4EAAAB3E707A7482A2AAE988 /* WorkspaceNavigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceNavigator.swift; sourceTree = "<group>"; };
 		4FC4FEA20212C4C0555E847B /* folder-base.svg */ = {isa = PBXFileReference; path = "folder-base.svg"; sourceTree = "<group>"; };
+		5026FEB6A40EEEA9E60312CF /* CommitAttributionHooksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitAttributionHooksTests.swift; sourceTree = "<group>"; };
 		5153FA2B72647A5FB0F9FD2A /* SessionBarsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionBarsUITests.swift; sourceTree = "<group>"; };
 		51EEFE8DDCE6D58053355B91 /* folder-test.svg */ = {isa = PBXFileReference; path = "folder-test.svg"; sourceTree = "<group>"; };
 		51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaUnitTests.swift; sourceTree = "<group>"; };
@@ -503,6 +506,7 @@
 		5A8B0B7570DC782018E724CE /* SessionProcessStarting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionProcessStarting.swift; sourceTree = "<group>"; };
 		5C2D50B6652163301BEF829D /* c.svg */ = {isa = PBXFileReference; path = c.svg; sourceTree = "<group>"; };
 		5CBF5FBD34E5BFF83E229BA2 /* SessionTileChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTileChrome.swift; sourceTree = "<group>"; };
+		5D80A73E251FF9AE065547BC /* CommitAttributionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitAttributionService.swift; sourceTree = "<group>"; };
 		5E1D5E06B90B0528533B4EC2 /* AgentManagedWorktreeAndTitleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManagedWorktreeAndTitleTests.swift; sourceTree = "<group>"; };
 		5E7CD7C066464B1F9AACF09A /* git-branch.svg */ = {isa = PBXFileReference; path = "git-branch.svg"; sourceTree = "<group>"; };
 		5EB51705DB89C9D2D870B82A /* LaunchpadDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadDesign.swift; sourceTree = "<group>"; };
@@ -917,6 +921,7 @@
 				EC9E53144F55E554FC3CD0B5 /* AgentConversationOwnership.swift */,
 				12C3E4FA609560CB29D08025 /* AgentSelfReportCoordinator.swift */,
 				473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */,
+				5D80A73E251FF9AE065547BC /* CommitAttributionService.swift */,
 				ABF06BC9BDDD6937B87072D7 /* HandoffService.swift */,
 				E560D5E9A15E6BEFD4593C51 /* HookCoordinator.swift */,
 				A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */,
@@ -1171,6 +1176,7 @@
 				AE12192DD4181FFD86FF5A16 /* ClaudeTranscriptCodecTests.swift */,
 				37EC38E339D91CDA4FA6A89F /* ClaudeTranscriptWriterTests.swift */,
 				C2EF3700AF5B4EB6E32DE2A9 /* CodexTranscriptCodecTests.swift */,
+				5026FEB6A40EEEA9E60312CF /* CommitAttributionHooksTests.swift */,
 				A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */,
 				935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */,
 				51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */,
@@ -1567,6 +1573,7 @@
 				B691C998936EA2217928477D /* ClaudeTranscriptCodecTests.swift in Sources */,
 				FACD487B4E260F3A8471FC27 /* ClaudeTranscriptWriterTests.swift in Sources */,
 				B1DD8833E0B230636BB4D7B7 /* CodexTranscriptCodecTests.swift in Sources */,
+				EAAF365A09C6168EB10D7A95 /* CommitAttributionHooksTests.swift in Sources */,
 				5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */,
 				7666CEF06B123CCB5B58E56A /* FlotillaNotificationDelegateTests.swift in Sources */,
 				723875E0AA69C129B1AA034F /* FlotillaUnitTests.swift in Sources */,
@@ -1640,6 +1647,7 @@
 				55AAD1951B5411C0C63CF6FE /* CommandPalettePanel.swift in Sources */,
 				8FB2743FFCFD5F9B3C6F8449 /* CommandPaletteView.swift in Sources */,
 				31E07A0E198EF987A1E9812C /* CommitAttribution.swift in Sources */,
+				11051223165B6176B78E5401 /* CommitAttributionService.swift in Sources */,
 				7709F004EF8D7FB5C7E9B4C8 /* CommitDetailView.swift in Sources */,
 				B0596CBD0B98B412C225502E /* CommitRefChip.swift in Sources */,
 				F57D75C3DE2EE1D3D2852C05 /* CreateSessionView.swift in Sources */,

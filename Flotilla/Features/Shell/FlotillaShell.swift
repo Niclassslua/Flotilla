@@ -487,6 +487,14 @@ private struct ShellLifecycleModifier: ViewModifier {
             .onChange(of: settingsViewModel.settings.terminal) {
                 applyTerminalPreferences()
             }
+            // Running agents read their attribution mode, title and prompt at
+            // commit time, so both kinds of change are pushed to them.
+            .onChange(of: settingsViewModel.settings.git) {
+                store.commitAttribution.refreshPayloads(for: store.sessions)
+            }
+            .onChange(of: store.sessions.map(\.title)) {
+                store.commitAttribution.refreshPayloads(for: store.sessions)
+            }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                 store.shutdown()
             }

@@ -13,17 +13,20 @@ struct ProjectGraphView: View {
     @Environment(\.workspaceNavigator) private var navigator
     let sessions: [Session]
     let highlightUnseenCommits: Bool
+    let attributionResolver: (any CommitAttributionResolving)?
 
     @Bindable var viewModel: ProjectGraphViewModel
 
     init(
         viewModel: ProjectGraphViewModel,
         sessions: [Session] = [],
-        highlightUnseenCommits: Bool = true
+        highlightUnseenCommits: Bool = true,
+        attributionResolver: (any CommitAttributionResolving)? = nil
     ) {
         self._viewModel = Bindable(wrappedValue: viewModel)
         self.sessions = sessions
         self.highlightUnseenCommits = highlightUnseenCommits
+        self.attributionResolver = attributionResolver
     }
 
     private var attributionSignature: String {
@@ -41,6 +44,7 @@ struct ProjectGraphView: View {
         }
         .task(id: viewModel.repoPath) {
             viewModel.sessions = sessions
+            viewModel.attributionResolver = attributionResolver
             viewModel.highlightUnseenCommits = highlightUnseenCommits
             await viewModel.loadIfNeeded()
         }

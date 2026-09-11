@@ -25,6 +25,9 @@ final class ProjectGraphViewModel {
 
     var sessions: [Session] = []
     private(set) var attributions: [String: CommitAttribution] = [:]
+    /// Attribution Flotilla recorded — on this Mac or in the repository —
+    /// which outranks everything inferred in `loadAttributions`.
+    var attributionResolver: (any CommitAttributionResolving)?
 
     var highlightUnseenCommits = true {
         didSet { if oldValue != highlightUnseenCommits { recomputeNewCommits() } }
@@ -214,6 +217,7 @@ final class ProjectGraphViewModel {
             )
             recomputeNewCommits()
             recomputeFilteredRows()
+            await loadAttributions()
         } catch {
             errorMessage = error.localizedDescription
             hasMore = false
@@ -259,8 +263,8 @@ final class ProjectGraphViewModel {
                 name: commit.authorName, email: commit.authorEmail
             ) else { continue }
             map[commit.sha] = CommitAttribution(
-                agent: agent, sessionID: nil, sessionTitle: nil,
-                sessionGoal: nil,
+                agent: agent, model: nil, sessionID: nil, sessionTitle: nil,
+                prompt: nil,
                 branchName: nil, source: .authorIdentity
             )
         }
@@ -270,8 +274,8 @@ final class ProjectGraphViewModel {
                 guard let branch = session.worktree?.branchName, branch != base else { continue }
                 guard let shas = try? await gitService.commitsOnBranch(branch, notOn: base, at: repoPath) else { continue }
                 let attribution = CommitAttribution(
-                    agent: session.agent, sessionID: session.id, sessionTitle: session.title,
-                    sessionGoal: session.goal,
+                    agent: session.agent, model: session.model, sessionID: session.id, sessionTitle: session.title,
+                    prompt: session.goal,
                     branchName: branch, source: .sessionBranch
                 )
                 for sha in shas { map[sha] = attribution }
@@ -285,12 +289,22 @@ final class ProjectGraphViewModel {
             let session = sessionID.flatMap { id in sessions.first { $0.id == id } }
             map[commit.sha] = CommitAttribution(
                 agent: agent,
+                model: nil,
                 sessionID: sessionID,
                 sessionTitle: session?.title,
-                sessionGoal: session?.goal,
+                prompt: session?.goal,
                 branchName: session?.worktree?.branchName,
                 source: .trailer
             )
+        }
+
+        if let attributionResolver {
+            let recorded = await attributionResolver.attributions(
+                forCommits: commits.map(\.sha),
+                repoPath: repoPath,
+                sessions: sessions
+            )
+            map.merge(recorded) { _, recorded in recorded }
         }
 
         attributions = map

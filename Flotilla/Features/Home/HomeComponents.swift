@@ -17,6 +17,8 @@ struct HomeContext {
     let defaultAgent: AgentKind
     let openProject: (UUID) -> Void
     let openSession: (UUID) -> Void
+    /// Sets a project's own commit attribution mode; `nil` follows the default.
+    var setCommitAttribution: (UUID, CommitAttributionMode?) -> Void = { _, _ in }
 }
 
 // MARK: - Fleet Statistics
@@ -616,6 +618,9 @@ struct HomeProjectsGallery: View {
                             sessions: context.store.sessions(for: project),
                             gitService: context.store.gitService,
                             diffStatStore: context.store.diffStatStore,
+                            commitAttribution: context.settings.git.projectCommitAttribution[project.id.uuidString],
+                            defaultCommitAttribution: context.settings.git.defaultCommitAttribution,
+                            onSetCommitAttribution: { context.setCommitAttribution(project.id, $0) },
                             onSelect: { onSelectProject(project.id) },
                             onQuickLaunch: { onSelectProject(project.id) },
                             onRemove: { context.store.removeProject(id: project.id) }

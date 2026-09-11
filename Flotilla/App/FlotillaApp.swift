@@ -89,6 +89,9 @@ struct FlotillaApp: App {
             settingsProvider: { settingsViewModel.settings }
         )
         appStore.lastOperationError = environment.startupWarning
+        settingsViewModel.deleteLocalAttributionRecords = { [appStore] in
+            appStore.commitAttribution.deleteLocalRecords()
+        }
         _store = State(initialValue: appStore)
         _startupCheck = State(initialValue: StartupCheckViewModel(
             settings: settingsViewModel.settings,

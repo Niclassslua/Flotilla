@@ -14,6 +14,10 @@ final class SettingsViewModel {
         }
     }
 
+    /// Deletes the commit attribution kept on this Mac. Set by the app once its
+    /// store exists; `nil` wherever there is no store.
+    @ObservationIgnored var deleteLocalAttributionRecords: (@MainActor () -> Void)?
+
     init(store: SettingsStoring) {
         self.store = store
         self.settings = store.load()

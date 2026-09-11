@@ -5,12 +5,18 @@ import SessionKit
 
 struct CommitAttribution: Equatable {
     enum Source: Equatable {
+        /// A marker committed with the change (Shared mode).
+        case repository
+        /// Recorded in Flotilla's database (On this Mac mode).
+        case thisMac
         case trailer
         case sessionBranch
         case authorIdentity
 
         var explanation: String {
             switch self {
+            case .repository: return "Recorded in the repository"
+            case .thisMac: return "Recorded on this Mac"
             case .trailer: return "Recorded in the commit by Flotilla"
             case .sessionBranch: return "Only on this session's branch"
             case .authorIdentity: return "Committed under the agent's git identity"
@@ -19,9 +25,13 @@ struct CommitAttribution: Equatable {
     }
 
     let agent: AgentKind
+    /// The model picked when the session launched; `nil` for the agent's
+    /// default or when it isn't known.
+    let model: String?
     let sessionID: UUID?
     let sessionTitle: String?
-    let sessionGoal: String?
+    /// The session's initial prompt.
+    let prompt: String?
     let branchName: String?
     let source: Source
 

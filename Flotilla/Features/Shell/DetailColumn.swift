@@ -194,7 +194,12 @@ struct DetailColumn: View {
             SessionGitSidebar(
                 viewModel: navigator.sessionGitSidebarViewModel(
                     for: session,
-                    gitService: store.gitService
+                    gitService: store.gitService,
+                    commitEnvironment: { [store] in
+                        store.sessions
+                            .first { $0.id == sessionID }
+                            .map { store.commitAttribution.commitEnvironment(for: $0) } ?? [:]
+                    }
                 ),
                 store: store,
                 session: session,

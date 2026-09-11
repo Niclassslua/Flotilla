@@ -243,14 +243,21 @@ final class WorkspaceNavigator {
     func diffPanelViewModel(
         for session: Session,
         gitService: any GitServiceProtocol,
-        ghService: (any GhServiceProtocol)?
+        ghService: (any GhServiceProtocol)?,
+        commitEnvironment: (@MainActor () -> [String: String])? = nil
     ) -> DiffPanelViewModel {
         let repoPath = (session.worktree?.worktreePath ?? session.workingDirectory).standardizedFileURL
         if let existing = diffPanelViewModels[repoPath] {
+            existing.commitEnvironment = commitEnvironment
             return existing
         }
 
-        let viewModel = DiffPanelViewModel(session: session, gitService: gitService, ghService: ghService)
+        let viewModel = DiffPanelViewModel(
+            session: session,
+            gitService: gitService,
+            ghService: ghService,
+            commitEnvironment: commitEnvironment
+        )
         diffPanelViewModels[repoPath] = viewModel
         return viewModel
     }
@@ -260,14 +267,20 @@ final class WorkspaceNavigator {
     /// branch filter, staging state, and commit draft.
     func sessionGitSidebarViewModel(
         for session: Session,
-        gitService: any GitServiceProtocol
+        gitService: any GitServiceProtocol,
+        commitEnvironment: (@MainActor () -> [String: String])? = nil
     ) -> SessionGitSidebarViewModel {
         let repoPath = (session.worktree?.worktreePath ?? session.workingDirectory).standardizedFileURL
         if let existing = sessionGitSidebarViewModels[repoPath] {
+            existing.commitEnvironment = commitEnvironment
             return existing
         }
 
-        let viewModel = SessionGitSidebarViewModel(session: session, gitService: gitService)
+        let viewModel = SessionGitSidebarViewModel(
+            session: session,
+            gitService: gitService,
+            commitEnvironment: commitEnvironment
+        )
         sessionGitSidebarViewModels[repoPath] = viewModel
         return viewModel
     }

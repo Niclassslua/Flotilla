@@ -20,9 +20,6 @@ final class SessionProcessManager {
     private var verifyResizeTasks: [UUID: Task<Void, Never>] = [:]
     private var goalDeliveryTasks: [UUID: Task<Void, Never>] = [:]
     private let gitService: any GitServiceProtocol
-    /// Repos the attribution hook has already been offered this launch, so a
-    /// burst of session starts doesn't re-stat the same hooks directory.
-    private var trailerHookInstalledRepos: Set<URL> = []
     private var hasConfiguredGlobalOptions = false
     private let locator: ExecutableLocating
     private let processFactory: any PTYProcessCreating
@@ -41,6 +38,10 @@ final class SessionProcessManager {
     private var tmuxProbeCache: (usable: Bool, probedAt: Date)?
     private static let tmuxProbeCacheLifetime: TimeInterval = 5
     var eventHandler: ((SessionProcessEvent) -> Void)?
+    /// Extends a launching agent's environment so its git records commit
+    /// attribution. Set by `AppStore`, which owns the attribution service;
+    /// `nil` leaves the environment unchanged.
+    var commitAttributionEnvironment: (@MainActor (Session, [String: String]) -> [String: String]?)?
 
     enum SessionProcessEvent: Equatable {
         case terminated(sessionID: UUID, exitCode: Int32)
@@ -218,8 +219,8 @@ final class SessionProcessManager {
         let settings = settingsProvider()
 
         // Scoped to the agent's own process tree, which is what makes the
-        // attribution hook safe to leave installed: without these variables it
-        // no-ops, so the user's own commits are never stamped.
+        // attribution hooks safe: git outside that tree never runs them, so
+        // the user's own commits are never recorded.
         let inheritedEnvironment = environmentProvider()
         let environmentKeysToUnset = ChildProcessEnvironment.blockedVariableNames(in: inheritedEnvironment)
         var baseEnvironment = ChildProcessEnvironment.sanitized(inheritedEnvironment)
@@ -230,8 +231,7 @@ final class SessionProcessManager {
                     supportDirectory: hookSupportDirectory
                 ).path
         }
-        if settings.git.stampAgentTrailer,
-           let attributionEnvironment = agentAttributionEnvironment(for: session, base: baseEnvironment) {
+        if let attributionEnvironment = commitAttributionEnvironment?(session, baseEnvironment) {
             baseEnvironment = attributionEnvironment
         }
         if let selfReportDescriptorPath {
@@ -609,39 +609,6 @@ final class SessionProcessManager {
         }
         // Do NOT remove processes[sessionID] here — the process's
         // terminationHandler will clear it once the exit callback fires.
-    }
-
-    /// Points the agent's git at Flotilla's own hooks directory so its commits
-    /// get an attribution trailer, without touching the repository or the
-    /// user's global git configuration.
-    ///
-    /// Returns `nil` when anything can't be resolved — attribution is a
-    /// convenience and must never be a reason a session fails to start.
-    private func agentAttributionEnvironment(
-        for session: Session,
-        base: [String: String]
-    ) -> [String: String]? {
-        let hooksDirectory = TmuxSessionWrapping.defaultSupportDirectory()
-            .appendingPathComponent("githooks", isDirectory: true)
-
-        do {
-            try AgentTrailerHooks().prepare(directory: hooksDirectory)
-        } catch {
-            Logger(subsystem: "com.niclassslua.flotilla", category: "GitAttribution")
-                .notice("Could not prepare the agent hooks directory: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-
-        // The hooks the repo would otherwise have run are resolved by the
-        // shims themselves at commit time, which keeps this synchronous and
-        // stays correct if the user's git config changes mid-session.
-        return AgentTrailerHooks.environment(
-            base: base,
-            agentRawValue: session.agent.rawValue,
-            sessionID: session.id.uuidString,
-            flotillaHooksDirectory: hooksDirectory,
-            originalHooksDirectory: nil
-        )
     }
 
 }

@@ -41,6 +41,14 @@ struct PreviewSessionRepository: SessionRepository {
     func saveReviewedFile(_ file: ReviewedFile) throws {}
     func deleteReviewedFile(sessionID: UUID, scope: ReviewScope, filePath: String) throws {}
 
+    func saveAttributionSession(_ snapshot: AttributionSessionSnapshot) throws {}
+    func loadAttributionSessions(repositoryKey: String) throws -> [AttributionSessionSnapshot] { [] }
+    func saveAttributedCommits(_ commits: [AttributedCommit], links: [AttributedCommitLink]) throws {}
+    func loadAttributedCommits(repositoryKey: String) throws -> [AttributedCommit] { [] }
+    func loadAttributedCommitLinks(repositoryKey: String) throws -> [AttributedCommitLink] { [] }
+    func saveAttributedCommitLinks(_ links: [AttributedCommitLink]) throws {}
+    func deleteAllCommitAttribution() throws {}
+
     func getOrCreateDefaultKanbanBoard(forProject projectID: UUID?, name: String) throws -> KanbanBoard {
         KanbanBoard(
             id: UUID(),

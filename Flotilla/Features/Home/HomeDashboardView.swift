@@ -65,7 +65,10 @@ struct HomeDashboardView: View {
             openCodeSubscription: openCodeSubscription,
             defaultAgent: defaultAgent,
             openProject: openProject,
-            openSession: openSession
+            openSession: openSession,
+            setCommitAttribution: { [settingsViewModel] projectID, mode in
+                settingsViewModel.settings.git.projectCommitAttribution[projectID.uuidString] = mode
+            }
         )
     }
 

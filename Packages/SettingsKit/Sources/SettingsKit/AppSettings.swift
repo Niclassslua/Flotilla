@@ -145,6 +145,27 @@ public enum WorktreeNamingSource: String, Codable, CaseIterable, Sendable, Ident
     }
 }
 
+/// Where Flotilla records which agent session made a commit.
+///
+/// `local` keeps the record in Flotilla's own database and never writes into
+/// the repository. `shared` commits a small marker with each agent commit, so
+/// the attribution travels with the history to every clone.
+public enum CommitAttributionMode: String, Codable, CaseIterable, Sendable, Identifiable {
+    case off
+    case local
+    case shared
+
+    public var id: Self { self }
+
+    public var displayName: String {
+        switch self {
+        case .off: "Off"
+        case .local: "On this Mac"
+        case .shared: "Shared in the repository"
+        }
+    }
+}
+
 public struct SessionDefaults: Codable, Equatable, Sendable {
     public var createWorktreeByDefault: Bool
     public var defaultAgentRawValue: String = "claudeCode"
@@ -321,32 +342,52 @@ public struct GitPreferences: Codable, Equatable, Sendable {
     /// Flags commits that landed since the last time a project's History view
     /// was opened. Off means the timeline treats every commit the same.
     public var highlightUnseenCommits: Bool
-    /// Adds `Flotilla-Agent` / `Flotilla-Session` trailers to commits made
-    /// inside an agent session, so history stays attributable after the
-    /// session's branch is merged away. Never changes commit authorship.
-    public var stampAgentTrailer: Bool
+    /// How commits made inside agent sessions are attributed in projects that
+    /// don't choose for themselves. Never changes commit authorship.
+    public var defaultCommitAttribution: CommitAttributionMode
+    /// Per-project choices, keyed by the project's UUID string. A project
+    /// without an entry follows `defaultCommitAttribution`.
+    public var projectCommitAttribution: [String: CommitAttributionMode]
     public var worktreeNamingSource: WorktreeNamingSource
 
     public init(
         deleteBranchWithWorktree: Bool = true,
         fetchBeforeCreatingWorktree: Bool = false,
         highlightUnseenCommits: Bool = true,
-        stampAgentTrailer: Bool = true,
+        defaultCommitAttribution: CommitAttributionMode = .local,
+        projectCommitAttribution: [String: CommitAttributionMode] = [:],
         worktreeNamingSource: WorktreeNamingSource = .promptDerived
     ) {
         self.deleteBranchWithWorktree = deleteBranchWithWorktree
         self.fetchBeforeCreatingWorktree = fetchBeforeCreatingWorktree
         self.highlightUnseenCommits = highlightUnseenCommits
-        self.stampAgentTrailer = stampAgentTrailer
+        self.defaultCommitAttribution = defaultCommitAttribution
+        self.projectCommitAttribution = projectCommitAttribution
         self.worktreeNamingSource = worktreeNamingSource
+    }
+
+    /// The mode that applies to a project: its own choice, else the default.
+    public func commitAttributionMode(forProject projectID: UUID?) -> CommitAttributionMode {
+        guard let projectID, let chosen = projectCommitAttribution[projectID.uuidString] else {
+            return defaultCommitAttribution
+        }
+        return chosen
     }
 
     private enum CodingKeys: String, CodingKey {
         case deleteBranchWithWorktree
         case fetchBeforeCreatingWorktree
         case highlightUnseenCommits
-        case stampAgentTrailer
+        case defaultCommitAttribution
+        case projectCommitAttribution
         case worktreeNamingSource
+    }
+
+    /// The on/off toggle that attribution modes replaced. Read only to seed
+    /// `defaultCommitAttribution`, so someone who had turned attribution off
+    /// doesn't find it switched back on.
+    private enum LegacyCodingKeys: String, CodingKey {
+        case stampAgentTrailer
     }
 
     /// Decoded key by key rather than by the synthesized initializer: a
@@ -359,7 +400,17 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         deleteBranchWithWorktree = try container.decodeIfPresent(Bool.self, forKey: .deleteBranchWithWorktree) ?? true
         fetchBeforeCreatingWorktree = try container.decodeIfPresent(Bool.self, forKey: .fetchBeforeCreatingWorktree) ?? false
         highlightUnseenCommits = try container.decodeIfPresent(Bool.self, forKey: .highlightUnseenCommits) ?? true
-        stampAgentTrailer = try container.decodeIfPresent(Bool.self, forKey: .stampAgentTrailer) ?? true
+        if let mode = try? container.decodeIfPresent(CommitAttributionMode.self, forKey: .defaultCommitAttribution) {
+            defaultCommitAttribution = mode
+        } else {
+            let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+            let stamped = (try? legacy.decodeIfPresent(Bool.self, forKey: .stampAgentTrailer)) ?? true
+            defaultCommitAttribution = stamped ? .local : .off
+        }
+        // Raw values, so one unknown mode from a newer build drops that entry
+        // instead of failing the whole settings file.
+        let rawProjectModes = (try? container.decodeIfPresent([String: String].self, forKey: .projectCommitAttribution)) ?? [:]
+        projectCommitAttribution = rawProjectModes.compactMapValues(CommitAttributionMode.init(rawValue:))
         worktreeNamingSource = try container.decodeIfPresent(WorktreeNamingSource.self, forKey: .worktreeNamingSource) ?? .promptDerived
     }
 }

@@ -176,8 +176,9 @@ struct CommitDetailView: View {
                         HStack(spacing: 4) {
                             ProviderLogo(agent: attribution.agent)
                                 .frame(width: 12, height: 12)
-                            Text(attribution.sessionTitle.map { "\(attribution.agent.displayName) · \($0)" }
-                                 ?? attribution.agent.displayName)
+                            Text([attribution.agent.displayName, attribution.model, attribution.sessionTitle]
+                                .compactMap { $0 }
+                                .joined(separator: " · "))
                                 .font(FlotillaTypography.caption2)
                                 .foregroundStyle(FlotillaColors.accent)
                                 .lineLimit(1)
@@ -198,7 +199,7 @@ struct CommitDetailView: View {
             }
 
             if let attribution = viewModel.attribution(for: commit),
-               let goal = attribution.sessionGoal,
+               let goal = attribution.prompt,
                !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 agentGoalView(goal: goal, agent: attribution.agent)
             }

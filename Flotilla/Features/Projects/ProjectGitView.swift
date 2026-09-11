@@ -53,7 +53,8 @@ struct ProjectGitView: View {
                             gitService: store.gitService
                         ),
                         sessions: sessions,
-                        highlightUnseenCommits: highlightUnseenCommits
+                        highlightUnseenCommits: highlightUnseenCommits,
+                        attributionResolver: store.commitAttribution
                     )
                     .id(selectedScopeURL)
                 }
@@ -179,11 +180,19 @@ struct ProjectGitView: View {
 
     private var changesPane: some View {
         let targetSession = matchingSession(for: selectedScopeURL) ?? dummySession(for: selectedScopeURL)
+        let scope = selectedScopeURL.standardizedFileURL
         return DiffPanelView(
             viewModel: navigator.diffPanelViewModel(
                 for: targetSession,
                 gitService: store.gitService,
-                ghService: store.ghService
+                ghService: store.ghService,
+                // Only a session's own worktree names one session: the main
+                // checkout can host several sessions, or none.
+                commitEnvironment: { [store] in
+                    store.sessions
+                        .first { $0.worktree?.worktreePath.standardizedFileURL == scope }
+                        .map { store.commitAttribution.commitEnvironment(for: $0) } ?? [:]
+                }
             )
         )
     }

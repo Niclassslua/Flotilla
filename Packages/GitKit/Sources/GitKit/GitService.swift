@@ -266,6 +266,68 @@ public protocol GitServiceProtocol: Sendable {
 
     /// Whether every commit on `branch` is already reachable from `base`.
     func isBranchMerged(_ branch: String, into base: String, at repoPath: URL) async throws -> Bool
+
+    // MARK: Commit attribution
+
+    /// `commit(message:at:)` with extra environment for the `git` process —
+    /// how Flotilla's commit buttons run the same attribution hooks as an
+    /// agent's own commits.
+    func commit(message: String, at repoPath: URL, environment: [String: String]) async throws
+
+    /// The attribution markers each commit *adds* under `.flotilla/sessions`,
+    /// keyed by SHA. Commits that add none are absent, and merges are skipped:
+    /// their markers belong to the commits they merge.
+    func addedAttributionMarkers(forCommits shas: [String], at repoPath: URL) async throws -> [String: [String]]
+
+    /// `git show <revision>:<path>`, or `nil` when the file isn't there.
+    func fileContents(at repoPath: URL, path: String, revision: String) async throws -> String?
+
+    /// Author identity of every non-merge commit reachable from any ref and
+    /// committed at or after `since`.
+    func commitIdentities(at repoPath: URL, since: Date) async throws -> [GitCommitIdentity]
+
+    /// `git patch-id --stable` of one commit's change; `nil` for an empty one.
+    func patchID(ofCommit sha: String, at repoPath: URL) async throws -> String?
+
+    /// `git patch-id --stable` of the combined change from `base` — the empty
+    /// tree when `nil` — to `tip`: what squashing that range produces.
+    func patchID(from base: String?, to tip: String, at repoPath: URL) async throws -> String?
+
+    /// The repository's shared git directory with symlinks resolved — the
+    /// same for every worktree of one repository, and spelled the way the
+    /// attribution hooks' `pwd -P` spells it.
+    func commonGitDirectory(at repoPath: URL) async throws -> String?
+}
+
+/// Defaults for test doubles and previews, which have no repository to ask.
+public extension GitServiceProtocol {
+    func commit(message: String, at repoPath: URL, environment: [String: String]) async throws {
+        try await commit(message: message, at: repoPath)
+    }
+
+    func addedAttributionMarkers(forCommits shas: [String], at repoPath: URL) async throws -> [String: [String]] {
+        [:]
+    }
+
+    func fileContents(at repoPath: URL, path: String, revision: String) async throws -> String? {
+        nil
+    }
+
+    func commitIdentities(at repoPath: URL, since: Date) async throws -> [GitCommitIdentity] {
+        []
+    }
+
+    func patchID(ofCommit sha: String, at repoPath: URL) async throws -> String? {
+        nil
+    }
+
+    func patchID(from base: String?, to tip: String, at repoPath: URL) async throws -> String? {
+        nil
+    }
+
+    func commonGitDirectory(at repoPath: URL) async throws -> String? {
+        nil
+    }
 }
 
 public extension GitServiceProtocol {
@@ -500,6 +562,15 @@ public struct GitService: GitServiceProtocol {
         // "nothing to commit" to *stdout*, not stderr, and the wrapper only
         // carries stderr into its thrown error.
         let result = try await runRaw(["commit", "-m", message], at: repoPath)
+        try Self.throwIfCommitFailed(result)
+    }
+
+    public func commit(message: String, at repoPath: URL, environment: [String: String]) async throws {
+        let result = try await runRaw(["commit", "-m", message], at: repoPath, environment: environment)
+        try Self.throwIfCommitFailed(result)
+    }
+
+    private static func throwIfCommitFailed(_ result: CommandResult) throws {
         guard result.exitCode == 0 else {
             if result.stdout.contains("nothing to commit") || result.stderr.contains("nothing to commit") {
                 throw GitServiceError.nothingToCommit
@@ -607,6 +678,119 @@ public struct GitService: GitServiceProtocol {
         let result = try await runRaw(["rev-list", "\(base)..\(branch)"], at: repoPath)
         guard result.exitCode == 0 else { return [] }
         return Set(result.stdout.split(separator: "\n").map(String.init))
+    }
+
+    public func addedAttributionMarkers(forCommits shas: [String], at repoPath: URL) async throws -> [String: [String]] {
+        guard !shas.isEmpty else { return [:] }
+        let args = [
+            "log", "--no-walk=unsorted", "--no-renames", "--diff-merges=off",
+            "--diff-filter=A", "--name-only", "--no-color", "--format=%x1e%H",
+        ] + shas + ["--", CommitAttributionHooks.sharedDirectory]
+        let result = try await runRaw(args, at: repoPath)
+        guard result.exitCode == 0 else { return [:] }
+        let parsed = Self.parseAddedMarkers(result.stdout)
+        var introduced: [String: [String]] = [:]
+        for (sha, paths) in parsed {
+            for path in paths {
+                // A revert may restore an old marker. Its presence is not a
+                // new contribution by the session that originally created it.
+                let earlier = try await runRaw([
+                    "log", "--max-count=1", "--format=%H", "--no-renames",
+                    "--diff-filter=A", "\(sha)^", "--", path,
+                ], at: repoPath)
+                if earlier.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    introduced[sha, default: []].append(path)
+                }
+            }
+        }
+        return introduced
+    }
+
+    /// Parses `addedAttributionMarkers`' output: a record separator, the SHA,
+    /// then one added path per line.
+    static func parseAddedMarkers(_ raw: String) -> [String: [String]] {
+        var markers: [String: [String]] = [:]
+        for record in raw.split(separator: "\u{1e}") {
+            let lines = record.split(separator: "\n").map(String.init)
+            guard let sha = lines.first?.trimmingCharacters(in: .whitespaces), !sha.isEmpty else { continue }
+            let added = lines.dropFirst().filter { CommitAttributionMarker(path: $0) != nil }
+            if !added.isEmpty {
+                markers[sha] = added
+            }
+        }
+        return markers
+    }
+
+    public func fileContents(at repoPath: URL, path: String, revision: String) async throws -> String? {
+        let result = try await runRaw(["show", "--no-color", "\(revision):\(path)"], at: repoPath)
+        guard result.exitCode == 0 else { return nil }
+        return result.stdout
+    }
+
+    public func commitIdentities(at repoPath: URL, since: Date) async throws -> [GitCommitIdentity] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss Z"
+        let result = try await runRaw([
+            "log", "--all", "--no-merges", "--no-color",
+            "--since=\(formatter.string(from: since))",
+            "--format=%H%x09%ae%x09%at",
+        ], at: repoPath)
+        guard result.exitCode == 0 else {
+            if Self.indicatesEmptyHistory(result.stderr) { return [] }
+            throw GitServiceError.commandFailed(exitCode: result.exitCode, stderr: result.stderr)
+        }
+        return result.stdout.split(separator: "\n").compactMap { line in
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard fields.count == 3, let time = Int(fields[2]) else { return nil }
+            return GitCommitIdentity(sha: String(fields[0]), authorEmail: String(fields[1]), authorTime: time)
+        }
+    }
+
+    public func patchID(ofCommit sha: String, at repoPath: URL) async throws -> String? {
+        try await patchID(of: ["show", "--no-color", "--format=", sha], at: repoPath)
+    }
+
+    public func patchID(from base: String?, to tip: String, at repoPath: URL) async throws -> String? {
+        try await patchID(of: ["diff", "--no-color", base ?? Self.emptyTreeSHA, tip], at: repoPath)
+    }
+
+    /// `git patch-id` reads its patch from stdin, which `CommandRunning` has
+    /// no way to feed, so `/bin/sh` joins the two commands. The git arguments
+    /// reach the shell as positional parameters, never spliced into the script.
+    private func patchID(of gitArguments: [String], at repoPath: URL) async throws -> String? {
+        let script = #"git="$1"; shift; "$git" "$@" | "$git" patch-id --stable"#
+        let result = try await runner.run(
+            ["-c", script, "sh", gitExecutable?.path ?? "git"] + gitArguments,
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            workingDirectory: repoPath
+        )
+        guard result.exitCode == 0,
+              let id = result.stdout.split(whereSeparator: \.isWhitespace).first
+        else { return nil }
+        return String(id)
+    }
+
+    /// Git's well-known empty tree, the base for a patch from nothing.
+    static let emptyTreeSHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+    public func commonGitDirectory(at repoPath: URL) async throws -> String? {
+        let result = try await runRaw(["rev-parse", "--git-common-dir"], at: repoPath)
+        guard result.exitCode == 0 else { return nil }
+        let raw = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        let url = raw.hasPrefix("/") ? URL(fileURLWithPath: raw) : repoPath.appendingPathComponent(raw)
+        return Self.canonicalPath(url.path)
+    }
+
+    /// `realpath(3)`, matching the hooks' `pwd -P`. Foundation's
+    /// `resolvingSymlinksInPath` strips `/private`, which on macOS would give
+    /// one repository two different keys.
+    static func canonicalPath(_ path: String) -> String {
+        guard let resolved = realpath(path, nil) else { return path }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     public func currentHooksPath(at repoPath: URL) async throws -> String {
@@ -847,6 +1031,19 @@ public struct GitService: GitServiceProtocol {
             return try await runner.run(arguments, executable: gitExecutable, workingDirectory: path)
         } else {
             return try await runner.run(["git"] + arguments, executable: URL(fileURLWithPath: "/usr/bin/env"), workingDirectory: path)
+        }
+    }
+
+    private func runRaw(_ arguments: [String], at path: URL, environment: [String: String]) async throws -> CommandResult {
+        if let gitExecutable {
+            return try await runner.run(arguments, executable: gitExecutable, workingDirectory: path, environment: environment)
+        } else {
+            return try await runner.run(
+                ["git"] + arguments,
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                workingDirectory: path,
+                environment: environment
+            )
         }
     }
 

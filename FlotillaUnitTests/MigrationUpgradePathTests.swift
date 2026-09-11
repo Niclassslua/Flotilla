@@ -13,6 +13,36 @@ import SessionKit
 /// own failed on insert. These tests step a database part of the way and then
 /// forward, which is the only shape that catches it.
 final class MigrationUpgradePathTests: XCTestCase {
+    func testAttributionUpgradePreservesPromptCommitsAndLinks() throws {
+        let queue = try DatabaseQueue()
+        let migrator = GRDBSessionRepository.migrator
+        try migrator.migrate(queue, upTo: "v12_addCommitAttribution")
+        try queue.write { db in
+            try db.execute(sql: """
+                INSERT INTO attribution_session
+                (sessionID, repositoryKey, agent, title, prompt, createdAt)
+                VALUES ('session', 'repo-a', 'claudeCode', 'Title', 'Original prompt', '2026-09-11');
+                INSERT INTO attributed_commit
+                (id, sessionID, repositoryKey, authorEmail, authorTime, originalSHA, agent, recordedAt)
+                VALUES ('commit', 'session', 'repo-a', 'a@example.com', 1, 'sha', 'claudeCode', '2026-09-11');
+                INSERT INTO attributed_commit_link VALUES ('commit', 'sha', 'recorded', '2026-09-11');
+                """)
+        }
+        try migrator.migrate(queue)
+        try queue.write { db in
+            XCTAssertEqual(try String.fetchOne(db, sql: "SELECT prompt FROM attribution_session"), "Original prompt")
+            XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM attributed_commit"), 1)
+            XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM attributed_commit_link"), 1)
+            // The upgraded key permits this same session in another repository.
+            try db.execute(sql: """
+                INSERT INTO attribution_session
+                (sessionID, repositoryKey, agent, title, prompt, createdAt)
+                VALUES ('session', 'repo-b', 'claudeCode', 'Other', 'Other prompt', '2026-09-11')
+                """)
+            XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM attribution_session"), 2)
+        }
+    }
+
     private func columns(of table: String, in db: Database) throws -> Set<String> {
         Set(try db.columns(in: table).map(\.name))
     }

@@ -39,6 +39,8 @@ final class AppStore {
     let gitService: GitServiceProtocol
     let ghService: GhServiceProtocol?
     let diffStatStore: DiffStatStore
+    /// Records and resolves which agent session made each commit.
+    let commitAttribution: CommitAttributionService
     private let processManager: SessionProcessManager
     /// A closure, not a frozen value, so a Settings change to the worktree
     /// base directory takes effect on the very next session creation
@@ -85,6 +87,17 @@ final class AppStore {
         self.worktreeBaseDirectoryProvider = worktreeBaseDirectoryProvider
         self.settingsProvider = settingsProvider
         self.supportDirectory = supportDirectory
+        let commitAttribution = CommitAttributionService(
+            repository: repository,
+            gitService: gitService,
+            settingsProvider: settingsProvider,
+            supportDirectory: Self.commitAttributionSupportDirectory()
+        )
+        self.commitAttribution = commitAttribution
+        commitAttribution.startIngesting()
+        processManager.commitAttributionEnvironment = { session, base in
+            commitAttribution.environment(for: session, base: base)
+        }
         processManager.eventHandler = { [weak self] event in
             self?.handleProcessEvent(event)
         }
@@ -102,6 +115,16 @@ final class AppStore {
     /// logging since the read happens inside the child process. A dedicated
     /// subdirectory keeps a "General Session" (no project folder) usable
     /// without ever exposing those folders to the CLI's own file walk.
+    /// UI and unit tests launch sessions against fixture data; their payloads
+    /// and spools must never mix with the real app's.
+    private static func commitAttributionSupportDirectory() -> URL {
+        if ProcessInfo.processInfo.environment["UI_TESTING"] == "1" || NSClassFromString("XCTestCase") != nil {
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent("flotilla-test-support-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        }
+        return TmuxSessionWrapping.defaultSupportDirectory()
+    }
+
     private static func generalSessionWorkingDirectory() -> URL {
         if ProcessInfo.processInfo.environment["UI_TESTING"] == "1" {
             let directory = URL(fileURLWithPath: "/tmp/flotilla-uitest-general-session")
@@ -1005,6 +1028,9 @@ final class AppStore {
         processManager.terminate(sessionID: sessionID)
         processManager.killServerSideSession(sessionID: sessionID)
 
+        // Capture patch evidence before removing the worktree or branch.
+        await commitAttribution.ingestPendingEvents(sessionID: sessionID)
+
         var worktreeCleanupWarning: String?
         if deleteWorktree, let worktree = session.worktree {
             do {
@@ -1018,6 +1044,8 @@ final class AppStore {
                 worktreeCleanupWarning = "The session was deleted, but its worktree could not be fully removed: \(error.localizedDescription)"
             }
         }
+
+        // Keep the payload available for retry if attribution persistence failed.
 
         do {
             try repository.delete(sessionID: sessionID)

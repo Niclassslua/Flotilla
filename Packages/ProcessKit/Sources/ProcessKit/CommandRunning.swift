@@ -16,6 +16,26 @@ public struct CommandResult: Equatable, Sendable {
 /// never shell out directly; only implementations of this protocol do.
 public protocol CommandRunning: Sendable {
     func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult
+    /// Runs with `environment` layered over the runner's own for this one
+    /// call — how a single git command gets hooks the rest don't.
+    func run(
+        _ arguments: [String],
+        executable: URL,
+        workingDirectory: URL,
+        environment: [String: String]
+    ) async throws -> CommandResult
+}
+
+public extension CommandRunning {
+    /// Runners with no environment of their own to extend run unchanged.
+    func run(
+        _ arguments: [String],
+        executable: URL,
+        workingDirectory: URL,
+        environment: [String: String]
+    ) async throws -> CommandResult {
+        try await run(arguments, executable: executable, workingDirectory: workingDirectory)
+    }
 }
 
 public struct ProcessCommandRunner: CommandRunning {
@@ -28,6 +48,24 @@ public struct ProcessCommandRunner: CommandRunning {
     }
 
     public func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult {
+        try await execute(arguments, executable: executable, workingDirectory: workingDirectory, extraEnvironment: [:])
+    }
+
+    public func run(
+        _ arguments: [String],
+        executable: URL,
+        workingDirectory: URL,
+        environment: [String: String]
+    ) async throws -> CommandResult {
+        try await execute(arguments, executable: executable, workingDirectory: workingDirectory, extraEnvironment: environment)
+    }
+
+    private func execute(
+        _ arguments: [String],
+        executable: URL,
+        workingDirectory: URL,
+        extraEnvironment: [String: String]
+    ) async throws -> CommandResult {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             process.executableURL = executable
@@ -37,7 +75,9 @@ public struct ProcessCommandRunner: CommandRunning {
             process.standardOutput = Pipe()
             process.standardError = Pipe()
 
-            process.environment = ProcessInfo.processInfo.environment.merging(environmentOverrides) { _, override in override }
+            process.environment = ProcessInfo.processInfo.environment
+                .merging(environmentOverrides) { _, override in override }
+                .merging(extraEnvironment) { _, override in override }
 
             let outPipe = process.standardOutput as! Pipe
             let errPipe = process.standardError as! Pipe

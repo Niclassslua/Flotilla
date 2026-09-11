@@ -11,6 +11,9 @@ final class DiffPanelViewModel {
     let session: Session
     private let gitService: any GitServiceProtocol
     private let ghService: (any GhServiceProtocol)?
+    /// Environment for commits made here, attributing them to the session
+    /// whose checkout this is; empty when there is no such session.
+    var commitEnvironment: (@MainActor () -> [String: String])?
 
     private(set) var snapshot = GitChangesSnapshot(
         status: GitStatus(entries: []),
@@ -40,10 +43,16 @@ final class DiffPanelViewModel {
         session.worktree?.worktreePath ?? session.workingDirectory
     }
 
-    init(session: Session, gitService: any GitServiceProtocol, ghService: (any GhServiceProtocol)? = nil) {
+    init(
+        session: Session,
+        gitService: any GitServiceProtocol,
+        ghService: (any GhServiceProtocol)? = nil,
+        commitEnvironment: (@MainActor () -> [String: String])? = nil
+    ) {
         self.session = session
         self.gitService = gitService
         self.ghService = ghService
+        self.commitEnvironment = commitEnvironment
     }
 
     func monitor() async {
@@ -105,7 +114,7 @@ final class DiffPanelViewModel {
         isCommitting = true
         defer { isCommitting = false }
         do {
-            try await gitService.commit(message: trimmed, at: repoPath)
+            try await gitService.commit(message: trimmed, at: repoPath, environment: commitEnvironment?() ?? [:])
             commitMessage = ""
             actionErrorMessage = nil
             await refresh(showsSpinner: false)

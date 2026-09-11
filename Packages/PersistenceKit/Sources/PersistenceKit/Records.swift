@@ -440,3 +440,125 @@ struct ReviewedFileRecord: Codable, FetchableRecord, PersistableRecord {
         )
     }
 }
+
+// MARK: - Commit attribution
+
+/// Attribution rows decode to `nil` rather than throwing when they no longer
+/// parse: attribution is informational, and one bad row must not hide every
+/// other commit's.
+struct AttributionSessionRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "attribution_session"
+
+    var sessionID: String
+    var projectID: String?
+    var repositoryKey: String
+    var agent: String
+    var model: String?
+    var title: String
+    var prompt: String
+    var combinedPatchID: String?
+    var createdAt: Date
+
+    init(snapshot: AttributionSessionSnapshot) {
+        sessionID = snapshot.sessionID.uuidString
+        projectID = snapshot.projectID?.uuidString
+        repositoryKey = snapshot.repositoryKey
+        agent = snapshot.agent.rawValue
+        model = snapshot.model
+        title = snapshot.title
+        prompt = snapshot.prompt
+        combinedPatchID = snapshot.combinedPatchID
+        createdAt = snapshot.createdAt
+    }
+
+    func toDomain() -> AttributionSessionSnapshot? {
+        guard let session = UUID(uuidString: sessionID),
+              let agentKind = AgentKind(rawValue: agent)
+        else { return nil }
+        return AttributionSessionSnapshot(
+            sessionID: session,
+            projectID: projectID.flatMap(UUID.init(uuidString:)),
+            repositoryKey: repositoryKey,
+            agent: agentKind,
+            model: model,
+            title: title,
+            prompt: prompt,
+            combinedPatchID: combinedPatchID,
+            createdAt: createdAt
+        )
+    }
+}
+
+struct AttributedCommitRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "attributed_commit"
+
+    var id: String
+    var sessionID: String
+    var repositoryKey: String
+    var authorEmail: String
+    var authorTime: Int
+    var patchID: String?
+    var originalSHA: String
+    var agent: String
+    var model: String?
+    var recordedAt: Date
+
+    init(commit: AttributedCommit) {
+        id = commit.id.uuidString
+        sessionID = commit.sessionID.uuidString
+        repositoryKey = commit.repositoryKey
+        authorEmail = commit.authorEmail
+        authorTime = commit.authorTime
+        patchID = commit.patchID
+        originalSHA = commit.originalSHA
+        agent = commit.agent.rawValue
+        model = commit.model
+        recordedAt = commit.recordedAt
+    }
+
+    func toDomain() -> AttributedCommit? {
+        guard let identifier = UUID(uuidString: id),
+              let session = UUID(uuidString: sessionID),
+              let agentKind = AgentKind(rawValue: agent)
+        else { return nil }
+        return AttributedCommit(
+            id: identifier,
+            sessionID: session,
+            repositoryKey: repositoryKey,
+            authorEmail: authorEmail,
+            authorTime: authorTime,
+            patchID: patchID,
+            originalSHA: originalSHA,
+            agent: agentKind,
+            model: model,
+            recordedAt: recordedAt
+        )
+    }
+}
+
+struct AttributedCommitLinkRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "attributed_commit_link"
+
+    /// Keyed on `(commitID, sha)`. A repeated link keeps the source it was
+    /// first found by, so a recorded commit never reads as a guessed one.
+    static let persistenceConflictPolicy = PersistenceConflictPolicy(insert: .ignore, update: .replace)
+
+    var commitID: String
+    var sha: String
+    var source: String
+    var verifiedAt: Date
+
+    init(link: AttributedCommitLink) {
+        commitID = link.commitID.uuidString
+        sha = link.sha
+        source = link.source.rawValue
+        verifiedAt = link.verifiedAt
+    }
+
+    func toDomain() -> AttributedCommitLink? {
+        guard let commit = UUID(uuidString: commitID),
+              let linkSource = AttributedCommitLinkSource(rawValue: source)
+        else { return nil }
+        return AttributedCommitLink(commitID: commit, sha: sha, source: linkSource, verifiedAt: verifiedAt)
+    }
+}

@@ -64,6 +64,7 @@ Flotilla/
 |------|--------|
 | `docs/ui-vocabulary.md` | Canonical names for every UI region and component — use these terms in prompts, issues, and review comments |
 | `docs/provider-hooks.md` | Per-provider hook wiring and the status-transition matrix |
+| `docs/commit-attribution.md` | Attribution modes, marker protocol, local persistence, rewrite matching, and limitations |
 | `docs/session-handoff.md` | Moving a live session between agents: the codec layer, the transaction, every agent's transcript format, and how to add a fifth agent |
 | `docs/testing.md` | Testing policy: behavioral contracts, assertion quality, isolation, and choosing the right test layer |
 | `docs/test-suite-audit.md` | Dated test-value findings, cleanup priorities, and complete inventory link |

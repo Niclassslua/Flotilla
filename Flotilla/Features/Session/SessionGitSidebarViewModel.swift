@@ -11,6 +11,8 @@ final class SessionGitSidebarViewModel {
     let repoPath: URL
 
     private let gitService: any GitServiceProtocol
+    /// Environment for commits made here, attributing them to the session.
+    var commitEnvironment: (@MainActor () -> [String: String])?
 
     var selectedTab: SessionGitSidebarTab = .changes
     var changeMode: SessionGitChangeMode = .uncommitted
@@ -31,9 +33,14 @@ final class SessionGitSidebarViewModel {
     private(set) var errorMessage: String?
     private(set) var actionErrorMessage: String?
 
-    init(session: Session, gitService: any GitServiceProtocol) {
+    init(
+        session: Session,
+        gitService: any GitServiceProtocol,
+        commitEnvironment: (@MainActor () -> [String: String])? = nil
+    ) {
         repoPath = (session.worktree?.worktreePath ?? session.workingDirectory).standardizedFileURL
         self.gitService = gitService
+        self.commitEnvironment = commitEnvironment
     }
 
     var monitorKey: String {
@@ -124,7 +131,7 @@ final class SessionGitSidebarViewModel {
         isCommitting = true
         defer { isCommitting = false }
         do {
-            try await gitService.commit(message: message, at: repoPath)
+            try await gitService.commit(message: message, at: repoPath, environment: commitEnvironment?() ?? [:])
             commitMessage = ""
             actionErrorMessage = nil
             try await loadChanges()

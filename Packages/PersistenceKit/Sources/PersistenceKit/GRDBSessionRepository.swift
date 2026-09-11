@@ -207,7 +207,77 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 t.primaryKey(["sessionID", "scope", "filePath"])
             }
         }
+        migrator.registerMigration("v12_addCommitAttribution") { db in
+            try Self.createAttributionTables(db, legacySessionKey: true)
+        }
+        migrator.registerMigration("v13_scopeAttributionSessionsToRepository") { db in
+            // Early development builds keyed snapshots only by session UUID.
+            // Preserve all three tables while upgrading that schema in place.
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(attribution_session)")
+            guard columns.filter({ (row: Row) in
+                let primaryKeyPosition: Int = row["pk"]
+                return primaryKeyPosition > 0
+            }).count == 1 else { return }
+            for table in ["attribution_session", "attributed_commit", "attributed_commit_link"] {
+                try db.execute(sql: "CREATE TEMP TABLE backup_\(table) AS SELECT * FROM \(table)")
+            }
+            for table in ["attributed_commit_link", "attributed_commit", "attribution_session"] {
+                try db.drop(table: table)
+            }
+            try Self.createAttributionTables(db)
+            for table in ["attribution_session", "attributed_commit", "attributed_commit_link"] {
+                try db.execute(sql: "INSERT INTO \(table) SELECT * FROM backup_\(table)")
+                try db.execute(sql: "DROP TABLE backup_\(table)")
+            }
+        }
         return migrator
+    }
+
+    private static func createAttributionTables(_ db: Database, legacySessionKey: Bool = false) throws {
+        try db.create(table: "attribution_session") { t in
+            if legacySessionKey { t.column("sessionID", .text).primaryKey() }
+            else { t.column("sessionID", .text).notNull() }
+            t.column("projectID", .text)
+            t.column("repositoryKey", .text).notNull().indexed()
+            t.column("agent", .text).notNull()
+            t.column("model", .text)
+            t.column("title", .text).notNull()
+            t.column("prompt", .text).notNull()
+            t.column("combinedPatchID", .text)
+            t.column("createdAt", .datetime).notNull()
+            if !legacySessionKey { t.primaryKey(["sessionID", "repositoryKey"]) }
+        }
+        // Deliberately no reference to `session`: deleting a session must
+        // keep its commits attributed.
+        try db.create(table: "attributed_commit") { t in
+            t.column("id", .text).primaryKey()
+            t.column("sessionID", .text)
+                .notNull()
+                .indexed()
+            t.column("repositoryKey", .text).notNull().indexed()
+            t.column("authorEmail", .text).notNull()
+            t.column("authorTime", .integer).notNull()
+            t.column("patchID", .text)
+            t.column("originalSHA", .text).notNull()
+            t.column("agent", .text).notNull()
+            t.column("model", .text)
+            t.column("recordedAt", .datetime).notNull()
+            if legacySessionKey {
+                t.foreignKey(["sessionID"], references: "attribution_session", columns: ["sessionID"], onDelete: .cascade)
+            } else {
+                t.foreignKey(["sessionID", "repositoryKey"], references: "attribution_session",
+                             columns: ["sessionID", "repositoryKey"], onDelete: .cascade)
+            }
+        }
+        try db.create(table: "attributed_commit_link") { t in
+            t.column("commitID", .text)
+                .notNull()
+                .references("attributed_commit", onDelete: .cascade)
+            t.column("sha", .text).notNull().indexed()
+            t.column("source", .text).notNull()
+            t.column("verifiedAt", .datetime).notNull()
+            t.primaryKey(["commitID", "sha"])
+        }
     }
 
     public func loadAll() throws -> (projects: [Project], sessions: [Session]) {
@@ -418,6 +488,79 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 .filter(Column("scope") == scope.rawValue)
                 .filter(Column("filePath") == filePath)
                 .deleteAll(db)
+        }
+    }
+
+    // MARK: - Commit attribution
+
+    public func saveAttributionSession(_ snapshot: AttributionSessionSnapshot) throws {
+        // `save` updates before it inserts. Insert-or-replace would delete the
+        // row first and cascade away every commit recorded under it.
+        try dbQueue.write { db in
+            try AttributionSessionRecord(snapshot: snapshot).save(db)
+        }
+    }
+
+    public func loadAttributionSessions(repositoryKey: String) throws -> [AttributionSessionSnapshot] {
+        try dbQueue.read { db in
+            try AttributionSessionRecord
+                .filter(Column("repositoryKey") == repositoryKey)
+                .fetchAll(db)
+                .compactMap { $0.toDomain() }
+        }
+    }
+
+    public func saveAttributedCommits(_ commits: [AttributedCommit], links: [AttributedCommitLink]) throws {
+        guard !commits.isEmpty || !links.isEmpty else { return }
+        try dbQueue.write { db in
+            for commit in commits {
+                try AttributedCommitRecord(commit: commit).save(db)
+            }
+            for link in links {
+                try AttributedCommitLinkRecord(link: link).insert(db)
+            }
+        }
+    }
+
+    public func loadAttributedCommits(repositoryKey: String) throws -> [AttributedCommit] {
+        try dbQueue.read { db in
+            try AttributedCommitRecord
+                .filter(Column("repositoryKey") == repositoryKey)
+                .order(Column("authorTime"))
+                .fetchAll(db)
+                .compactMap { $0.toDomain() }
+        }
+    }
+
+    public func loadAttributedCommitLinks(repositoryKey: String) throws -> [AttributedCommitLink] {
+        try dbQueue.read { db in
+            try AttributedCommitLinkRecord
+                .fetchAll(
+                    db,
+                    sql: """
+                        SELECT attributed_commit_link.* FROM attributed_commit_link
+                        JOIN attributed_commit ON attributed_commit.id = attributed_commit_link.commitID
+                        WHERE attributed_commit.repositoryKey = ?
+                        """,
+                    arguments: [repositoryKey]
+                )
+                .compactMap { $0.toDomain() }
+        }
+    }
+
+    public func saveAttributedCommitLinks(_ links: [AttributedCommitLink]) throws {
+        guard !links.isEmpty else { return }
+        try dbQueue.write { db in
+            for link in links {
+                try AttributedCommitLinkRecord(link: link).insert(db)
+            }
+        }
+    }
+
+    public func deleteAllCommitAttribution() throws {
+        // Commits and links cascade from their session snapshot.
+        _ = try dbQueue.write { db in
+            try AttributionSessionRecord.deleteAll(db)
         }
     }
 }

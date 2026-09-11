@@ -399,6 +399,7 @@ private struct TerminalSettingsPane: View {
 
 private struct GitSettingsPane: View {
     @Bindable var viewModel: SettingsViewModel
+    @State private var isConfirmingAttributionDeletion = false
 
     var body: some View {
         Form {
@@ -444,17 +445,49 @@ private struct GitSettingsPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle("Record which agent made each commit", isOn: $viewModel.settings.git.stampAgentTrailer)
-                    .toggleStyle(.switch)
-                    .accessibilityIdentifier("Settings.StampAgentTrailer")
-                Text("Adds a Flotilla-Agent trailer to commits made inside an agent session, so History can still attribute them after the branch is merged. Authorship is unchanged — the commit stays yours. Installs a prepare-commit-msg hook, and never replaces one you already have.")
+                Picker("Commit attribution", selection: $viewModel.settings.git.defaultCommitAttribution) {
+                    ForEach(CommitAttributionMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .accessibilityIdentifier("Settings.CommitAttribution")
+                Text(Self.commitAttributionExplanation(viewModel.settings.git.defaultCommitAttribution))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Button("Delete Records on This Mac…") {
+                    isConfirmingAttributionDeletion = true
+                }
+                .disabled(viewModel.deleteLocalAttributionRecords == nil)
+                .confirmationDialog(
+                    "Delete commit attribution recorded on this Mac?",
+                    isPresented: $isConfirmingAttributionDeletion,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete Records", role: .destructive) {
+                        viewModel.deleteLocalAttributionRecords?()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("History will no longer show which session, agent, model and prompt made the commits recorded on this Mac. Markers already committed to repositories are not affected.")
+                }
             } header: {
                 SettingsSectionHeader("Commit History", systemImage: "clock.arrow.circlepath")
             }
         }
         .flotillaSettingsFormLayout()
+    }
+
+    private static func commitAttributionExplanation(_ mode: CommitAttributionMode) -> String {
+        let override = " Each project can choose differently from its project menu."
+        switch mode {
+        case .off:
+            return "Commits made in agent sessions aren't recorded. History still shows attribution recorded earlier." + override
+        case .local:
+            return "Flotilla records the session, agent, model and prompt behind each commit in its database on this Mac. Nothing is written into your repositories. Flotilla follows rewrites reported by Git and reconnects unique matching patches when possible." + override
+        case .shared:
+            return "Agent commits using the attribution hook add an empty marker file under .flotilla/sessions, plus the session's prompt once, so attribution travels with the repository to every clone. The prompt stays in the repository's history." + override
+        }
     }
 }
 

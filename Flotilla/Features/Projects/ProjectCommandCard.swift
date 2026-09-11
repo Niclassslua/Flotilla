@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import SessionKit
+import SettingsKit
 import GitKit
 import DesignSystem
 
@@ -12,6 +13,10 @@ struct ProjectCommandCard: View {
     let sessions: [Session]
     let gitService: any GitServiceProtocol
     let diffStatStore: DiffStatStore
+    /// This project's own commit attribution mode; `nil` follows the default.
+    let commitAttribution: CommitAttributionMode?
+    let defaultCommitAttribution: CommitAttributionMode
+    let onSetCommitAttribution: (CommitAttributionMode?) -> Void
     let onSelect: () -> Void
     let onQuickLaunch: () -> Void
     let onRemove: () -> Void
@@ -200,6 +205,18 @@ struct ProjectCommandCard: View {
                     NSPasteboard.general.setString(branch, forType: .string)
                 }
             }
+            Divider()
+            Picker("Commit Attribution", selection: Binding(
+                get: { commitAttribution },
+                set: { onSetCommitAttribution($0) }
+            )) {
+                Text("Use Default (\(defaultCommitAttribution.displayName))")
+                    .tag(CommitAttributionMode?.none)
+                ForEach(CommitAttributionMode.allCases) { mode in
+                    Text(mode.displayName).tag(CommitAttributionMode?.some(mode))
+                }
+            }
+            .pickerStyle(.menu)
             Divider()
             Button("Remove Project from Library", role: .destructive) {
                 isConfirmingRemoval = true

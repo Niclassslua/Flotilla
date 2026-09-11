@@ -38,6 +38,22 @@ public protocol SessionRepository: Sendable {
     func loadReviewedFiles(sessionID: UUID) throws -> [ReviewedFile]
     func saveReviewedFile(_ file: ReviewedFile) throws
     func deleteReviewedFile(sessionID: UUID, scope: ReviewScope, filePath: String) throws
+
+    // MARK: - Commit attribution
+
+    /// Inserts or updates a session's attribution snapshot. Must not replace
+    /// the row: its recorded commits hang off it.
+    func saveAttributionSession(_ snapshot: AttributionSessionSnapshot) throws
+    func loadAttributionSessions(repositoryKey: String) throws -> [AttributionSessionSnapshot]
+    /// Records commits and their links in one transaction. A link that already
+    /// exists keeps its original source.
+    func saveAttributedCommits(_ commits: [AttributedCommit], links: [AttributedCommitLink]) throws
+    func loadAttributedCommits(repositoryKey: String) throws -> [AttributedCommit]
+    func loadAttributedCommitLinks(repositoryKey: String) throws -> [AttributedCommitLink]
+    /// Adds links to commits that are already recorded.
+    func saveAttributedCommitLinks(_ links: [AttributedCommitLink]) throws
+    /// Removes every attribution record kept on this Mac.
+    func deleteAllCommitAttribution() throws
 }
 
 public extension SessionRepository {
