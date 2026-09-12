@@ -88,6 +88,92 @@ final class ProcessCommandRunnerTests: XCTestCase {
         XCTAssertEqual(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "0|has-home")
     }
 
+    /// Timing out a *chatty* command used to close the read end of the pipe
+    /// while the collector thread was blocked inside `availableData`, which
+    /// raised `NSFileHandleOperationException` — an Objective-C exception
+    /// that no Swift frame can catch, so the whole app died. The older
+    /// timeout test above uses `sleep`, which writes nothing and therefore
+    /// never has a read in flight when the timeout fires. If this regresses,
+    /// the test process aborts rather than failing an assertion; that is the
+    /// only observable form the defect has.
+    func testTimingOutCommandsThatAreStillWritingDoesNotCrash() async throws {
+        await withTaskGroup(of: (any Error)?.self) { group in
+            for _ in 0..<40 {
+                group.addTask {
+                    do {
+                        _ = try await ProcessCommandRunner(timeout: 0.05).run(
+                            ["-c", "yes chatty-output | head -400000"],
+                            executable: URL(fileURLWithPath: "/bin/sh"),
+                            workingDirectory: URL(fileURLWithPath: "/tmp")
+                        )
+                        return nil
+                    } catch {
+                        return error
+                    }
+                }
+            }
+            for await error in group {
+                if let error, !(error is CommandTimeoutError) {
+                    XCTFail("expected a timeout or a completed run, got \(error)")
+                }
+            }
+        }
+    }
+
+    /// Cancelling a chatty command mid-stream closes the same descriptor from
+    /// the cancellation handler, so it hits the same race as the timeout path.
+    func testCancellingCommandsThatAreStillWritingDoesNotCrash() async throws {
+        for _ in 0..<20 {
+            let task = Task {
+                try await ProcessCommandRunner(timeout: 10).run(
+                    ["-c", "yes chatty-output | head -400000"],
+                    executable: URL(fileURLWithPath: "/bin/sh"),
+                    workingDirectory: URL(fileURLWithPath: "/tmp")
+                )
+            }
+            try await Task.sleep(for: .milliseconds(5))
+            task.cancel()
+            do {
+                _ = try await task.value
+            } catch is CancellationError {
+                // Success
+            } catch {
+                XCTFail("expected CancellationError, got \(error)")
+            }
+        }
+    }
+
+    /// A task cancelled before the runner's body executes must not launch the
+    /// command at all: the cancellation used to be dropped, so the command ran
+    /// to completion and resumed with a successful but empty result.
+    func testCancellationBeforeLaunchNeitherRunsTheCommandNorReportsSuccess() async throws {
+        let marker = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("flotilla-precancel-\(UUID().uuidString)")
+        let task = Task {
+            try await ProcessCommandRunner(timeout: 10).run(
+                ["-c", "touch \(marker.path)"],
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                workingDirectory: URL(fileURLWithPath: "/tmp")
+            )
+        }
+        task.cancel()
+
+        do {
+            let result = try await task.value
+            XCTFail("expected cancellation, got exit \(result.exitCode)")
+        } catch is CancellationError {
+            // Success
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: marker.path),
+            "a cancelled run must not have launched the command"
+        )
+    }
+
     func testCallerCancellationTerminatesProcessAndThrowsCancellationError() async throws {
         let task = Task {
             try await ProcessCommandRunner(timeout: 10.0).run(

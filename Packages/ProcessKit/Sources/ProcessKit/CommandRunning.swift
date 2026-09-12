@@ -91,7 +91,9 @@ public struct ProcessCommandRunner: CommandRunning {
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                state.continuation = continuation
+                // Already cancelled before the body ran: nothing to launch.
+                guard state.attach(continuation) else { return }
+
                 outCollector.start()
                 errCollector.start()
 
@@ -140,8 +142,14 @@ private final class ProcessRunnerState: @unchecked Sendable {
     let process: Process
     let outCollector: PipeCollector
     let errCollector: PipeCollector
-    var continuation: CheckedContinuation<CommandResult, any Error>?
     var timeoutTask: Task<Void, Never>?
+    private var continuation: CheckedContinuation<CommandResult, any Error>?
+    /// A result that arrived before the continuation existed — `onCancel`
+    /// runs immediately when the surrounding task is already cancelled, which
+    /// can beat the operation body. Without this, that cancellation was
+    /// dropped and the command ran to completion anyway, resuming with an
+    /// empty result because its collectors had already been cancelled.
+    private var pendingResult: Result<CommandResult, any Error>?
     private var isCompleted = false
 
     init(process: Process, outCollector: PipeCollector, errCollector: PipeCollector) {
@@ -150,10 +158,36 @@ private final class ProcessRunnerState: @unchecked Sendable {
         self.errCollector = errCollector
     }
 
+    /// Hands the continuation over. Returns `false` — after resuming it with
+    /// the result that already settled — when there is nothing left to launch.
+    func attach(_ continuation: CheckedContinuation<CommandResult, any Error>) -> Bool {
+        lock.lock()
+        if let pending = pendingResult {
+            pendingResult = nil
+            lock.unlock()
+            resume(continuation, with: pending)
+            return false
+        }
+        self.continuation = continuation
+        lock.unlock()
+        return true
+    }
+
     func complete(with result: Result<CommandResult, any Error>) {
         lock.lock()
-        guard !isCompleted, let cont = continuation else {
+        guard !isCompleted else {
             lock.unlock()
+            return
+        }
+        guard let cont = continuation else {
+            // Settled before `attach`; the continuation resumes with this.
+            isCompleted = true
+            pendingResult = result
+            let task = timeoutTask
+            timeoutTask = nil
+            process.terminationHandler = nil
+            lock.unlock()
+            task?.cancel()
             return
         }
         isCompleted = true
@@ -164,12 +198,18 @@ private final class ProcessRunnerState: @unchecked Sendable {
         lock.unlock()
 
         task?.cancel()
+        resume(cont, with: result)
+    }
 
+    private func resume(
+        _ continuation: CheckedContinuation<CommandResult, any Error>,
+        with result: Result<CommandResult, any Error>
+    ) {
         switch result {
         case .success(let value):
-            cont.resume(returning: value)
+            continuation.resume(returning: value)
         case .failure(let error):
-            cont.resume(throwing: error)
+            continuation.resume(throwing: error)
         }
     }
 
@@ -194,30 +234,42 @@ private final class ProcessRunnerState: @unchecked Sendable {
 /// Drains a pipe while the child is running. Waiting for termination before
 /// reading can deadlock once a chatty `git diff` fills the kernel pipe buffer.
 ///
-/// Only the `readabilityHandler` closure ever calls `handle.availableData` —
-/// `finish()` used to do its own racing read from the termination-handler
-/// thread, which could interleave with an in-flight `readabilityHandler`
-/// read on the same fd. For output that fit in one pipe read that race was
-/// harmless, but a large `git diff` (spanning multiple reads) could lose its
-/// final chunk to the race, making that poll observe a truncated/empty diff
-/// even though real changes existed — the Git Changes panel would flash
-/// "No Changes" and then recover on the next poll. `finish()` now just waits
-/// for the reader to observe EOF instead of reading itself.
+/// Reading is driven by a `DispatchSourceRead` on our own user-interactive
+/// queue, and the read end is closed **only** from the source's cancel
+/// handler. That ordering is the whole point: GCD guarantees the cancel
+/// handler runs after the last event handler has returned, so no read can
+/// ever be in flight while the descriptor is being closed.
 ///
-/// The draining runs on our own user-interactive queue rather than on
-/// `FileHandle.readabilityHandler`. `finish()` is called from the process
-/// termination handler, which inherits the QoS of whoever launched the
-/// command — user-interactive for anything driven by the UI — and it blocks
-/// on `eofSemaphore`. Foundation's readability handler runs at default QoS,
-/// so that wait was a textbook priority inversion, and Thread Performance
-/// Checker logged a backtrace for every single git command the app ran.
+/// The previous version drained with a blocking `handle.availableData` loop
+/// and let `cancel()` close the same descriptor from another thread — the
+/// timeout task, the task-cancellation handler, and the failed-`run()` path
+/// all do that. Closing an fd out from under a blocked `read(2)` makes
+/// `availableData` fail with `EBADF`, and `FileHandle` reports an errno it
+/// has no case for by raising `NSFileHandleOperationException`
+/// ("*** -[NSConcreteFileHandle availableData]: unknown error"), which is an
+/// Objective-C exception no Swift frame can catch — so every timed-out or
+/// cancelled command was a coin flip on crashing the app. The same race also
+/// risked reading from an unrelated fd that had reused the number.
+///
+/// Reads go through `read(2)` rather than `availableData` for the same
+/// reason: a descriptor error must come back as an errno we handle, never as
+/// an exception. The fd is put in non-blocking mode so the event handler
+/// drains what is buffered and returns instead of parking the queue.
+///
+/// The queue is user-interactive because `finish()` blocks on `eofSemaphore`
+/// from the process termination handler, which inherits the QoS of whoever
+/// launched the command — user-interactive for anything driven by the UI.
 /// Draining at the same QoS as the thread that waits on it removes the
-/// inversion (and the log spam) instead of hiding it.
+/// priority inversion (and the Thread Performance Checker backtrace it
+/// logged for every git command) instead of hiding it.
 private final class PipeCollector: @unchecked Sendable {
     private let handle: FileHandle
     private let lock = NSLock()
     private var data = Data()
     private var isEOF = false
+    private var didCancel = false
+    private var didStart = false
+    private var source: DispatchSourceRead?
     private let eofSemaphore = DispatchSemaphore(value: 0)
     private let queue = DispatchQueue(
         label: "com.niclassslua.flotilla.processkit.pipe-collector",
@@ -229,19 +281,36 @@ private final class PipeCollector: @unchecked Sendable {
     }
 
     func start() {
-        queue.async { [self] in
-            // `availableData` blocks until the child writes or closes its end,
-            // so this loop drains continuously — the pipe buffer never fills,
-            // which is the deadlock the old readability handler also avoided.
-            while true {
-                let chunk = handle.availableData
-                guard !chunk.isEmpty else {
-                    markEOF()
-                    return
-                }
-                append(chunk)
-            }
+        lock.lock()
+        // `onCancel` can fire before the operation body runs, so a collector
+        // can already be cancelled by the time it would have started.
+        guard !didCancel, !didStart else {
+            lock.unlock()
+            return
         }
+        didStart = true
+        let descriptor = handle.fileDescriptor
+        let flags = fcntl(descriptor, F_GETFL)
+        if flags != -1 {
+            _ = fcntl(descriptor, F_SETFL, flags | O_NONBLOCK)
+        }
+        let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
+        self.source = source
+        lock.unlock()
+
+        source.setEventHandler { [self] in
+            drain(descriptor: descriptor, source: source)
+        }
+        source.setCancelHandler { [self] in
+            // The only place the read end is closed. Nothing is reading it
+            // here: GCD runs this after the final event handler returns.
+            try? handle.close()
+            markEOF()
+            lock.lock()
+            self.source = nil
+            lock.unlock()
+        }
+        source.activate()
     }
 
     func finish() -> Data {
@@ -255,15 +324,57 @@ private final class PipeCollector: @unchecked Sendable {
         return snapshot
     }
 
+    func cancel() {
+        lock.lock()
+        didCancel = true
+        let source = self.source
+        lock.unlock()
+
+        guard let source else {
+            // Either never started or already finished — no reader exists, so
+            // closing here is safe (and a no-op if the handle is closed).
+            try? handle.close()
+            markEOF()
+            return
+        }
+        // Asynchronous by design: the cancel handler does the closing once
+        // the queue is clear of reads.
+        source.cancel()
+    }
+
+    private func drain(descriptor: Int32, source: DispatchSourceRead) {
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let count = buffer.withUnsafeMutableBytes { raw in
+                read(descriptor, raw.baseAddress, raw.count)
+            }
+            if count > 0 {
+                append(Data(buffer[0..<count]))
+                continue
+            }
+            if count == 0 {
+                // The child closed its end: EOF, and `finish()` can proceed.
+                source.cancel()
+                return
+            }
+            switch errno {
+            case EINTR:
+                continue
+            case EAGAIN:
+                // Everything buffered is drained; wait for the next event.
+                return
+            default:
+                // EBADF and friends: stop reading rather than spin or throw.
+                source.cancel()
+                return
+            }
+        }
+    }
+
     private func append(_ chunk: Data) {
         lock.lock()
         data.append(chunk)
         lock.unlock()
-    }
-
-    func cancel() {
-        try? handle.close()
-        markEOF()
     }
 
     private func markEOF() {
@@ -275,4 +386,3 @@ private final class PipeCollector: @unchecked Sendable {
         eofSemaphore.signal()
     }
 }
-
