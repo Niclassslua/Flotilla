@@ -117,7 +117,8 @@ enum TmuxSessionWrapping {
         sessionID: UUID,
         tmuxExecutable: URL?,
         configurationFile: URL? = nil,
-        environmentKeysToUnset: Set<String> = []
+        environmentKeysToUnset: Set<String> = [],
+        supportDirectory: URL = defaultSupportDirectory()
     ) -> (executable: URL, arguments: [String], environment: [String: String]) {
         let detectedKeysToUnset = ChildProcessEnvironment.blockedVariableNames(in: environment)
         let keysToUnset = environmentKeysToUnset.union(detectedKeysToUnset).sorted()
@@ -146,16 +147,56 @@ enum TmuxSessionWrapping {
             "-c", workingDirectory.path
         ] + envFlags + [
             "--"
-        ] + sanitizedAgentCommand(
+        ] + agentCommand(
             executable: agentExecutable,
             arguments: arguments,
-            keysToUnset: keysToUnset
+            keysToUnset: keysToUnset,
+            sessionID: sessionID,
+            supportDirectory: supportDirectory
         )
         var wrappedEnvironment = sanitizedEnvironment
         wrappedEnvironment.removeValue(forKey: "TMUX")
         wrappedEnvironment.removeValue(forKey: "TMUX_PANE")
         wrappedEnvironment["TERM"] = outerClientTERM
         return (tmuxExecutable, wrapped, wrappedEnvironment)
+    }
+
+    /// The command tmux runs in the new pane, preferring a tiny generated
+    /// launcher script over inlining the agent's argv directly into tmux's
+    /// own command line.
+    ///
+    /// tmux re-parses/re-serializes everything after `--` into its own
+    /// internal command representation, which has a hard ceiling around
+    /// 16 KB — far below the kernel's own `ARG_MAX` (roughly 1 MB). A goal
+    /// string past that ceiling (a large pasted prompt is easily this big)
+    /// makes `new-session` itself fail with "command too long" and exit
+    /// immediately, which looks to the rest of the app like the brand-new
+    /// session crashing on the spot. Routing through `/bin/sh <script>`
+    /// keeps tmux's own command line short and fixed-size regardless of
+    /// argument content, so the only length limit that remains is the
+    /// kernel's, which comfortably fits real-world prompts.
+    ///
+    /// Falls back to the old inline form if the script can't be written
+    /// (e.g. a read-only or full support directory) — that still works for
+    /// any prompt short enough to fit under tmux's ceiling, which is the
+    /// common case.
+    private static func agentCommand(
+        executable: URL,
+        arguments: [String],
+        keysToUnset: [String],
+        sessionID: UUID,
+        supportDirectory: URL
+    ) -> [String] {
+        if let script = writeLaunchScript(
+            executable: executable,
+            arguments: arguments,
+            keysToUnset: keysToUnset,
+            sessionID: sessionID,
+            in: supportDirectory
+        ) {
+            return ["/bin/sh", script.path]
+        }
+        return sanitizedAgentCommand(executable: executable, arguments: arguments, keysToUnset: keysToUnset)
     }
 
     /// A tmux server keeps the environment from the client that created it.
@@ -172,6 +213,43 @@ enum TmuxSessionWrapping {
         }
         let unsetArguments = keysToUnset.flatMap { ["-u", $0] }
         return ["/usr/bin/env"] + unsetArguments + [executable.path] + arguments
+    }
+
+    /// Writes a one-line POSIX shell script that `exec`s the agent directly
+    /// (so the pane's PID stays the agent's PID, exactly as it would running
+    /// the command inline), with every argument single-quote-escaped so
+    /// arbitrarily large or special-character-laden prompt text survives
+    /// intact. Reused per session ID rather than per-launch, matching
+    /// `writeConfigurationFile`'s treatment of `tmux.conf` — negligible size,
+    /// no accumulation of stale files to clean up.
+    private static func writeLaunchScript(
+        executable: URL,
+        arguments: [String],
+        keysToUnset: [String],
+        sessionID: UUID,
+        in supportDirectory: URL
+    ) -> URL? {
+        let command = keysToUnset.isEmpty
+            ? [executable.path] + arguments
+            : ["/usr/bin/env"] + keysToUnset.flatMap { ["-u", $0] } + [executable.path] + arguments
+        let script = "#!/bin/sh\nexec " + command.map(shellQuoted).joined(separator: " ") + "\n"
+        let file = supportDirectory.appendingPathComponent("launch-\(sessionID.uuidString).sh", isDirectory: false)
+        do {
+            try FileManager.default.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
+            try Data(script.utf8).write(to: file, options: .atomic)
+            return file
+        } catch {
+            return nil
+        }
+    }
+
+    /// POSIX single-quote escaping: wraps `string` in single quotes and
+    /// replaces any embedded single quote with `'\''` (close quote, escaped
+    /// literal quote, reopen quote) — the standard technique for making
+    /// arbitrary text, including newlines and shell metacharacters, safe
+    /// inside a single-quoted shell word.
+    private static func shellQuoted(_ string: String) -> String {
+        "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
 

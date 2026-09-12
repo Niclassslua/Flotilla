@@ -309,7 +309,8 @@ final class SessionProcessManager {
             sessionID: session.id,
             tmuxExecutable: tmuxExecutable,
             configurationFile: tmuxConfigurationFile,
-            environmentKeysToUnset: environmentKeysToUnset
+            environmentKeysToUnset: environmentKeysToUnset,
+            supportDirectory: hookSupportDirectory
         )
 
         let process = processFactory.makeProcess()

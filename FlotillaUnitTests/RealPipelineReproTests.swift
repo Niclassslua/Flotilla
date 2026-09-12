@@ -31,6 +31,63 @@ final class RealPipelineReproTests: XCTestCase {
         )
     }
 
+    /// The launcher script `wrap()` now generates must reproduce every
+    /// argument byte-for-byte when the shell actually runs it — this drives
+    /// the real `/bin/sh` on the generated script (bypassing tmux) with
+    /// arguments containing single quotes, backticks, `$()`, `;`/`|`/`&`,
+    /// and embedded newlines, and checks the executed command received them
+    /// unmangled and without executing anything they might otherwise inject.
+    func testGeneratedLaunchScriptPreservesTrickyArgumentsExactly() throws {
+        let trickyArguments = [
+            "plain",
+            "it's a 'quoted' value",
+            "`echo injected`",
+            "$(echo injected)",
+            "a; rm -rf /tmp/should-not-run; b",
+            "pipe | to | somewhere & background",
+            "multi\nline\nvalue",
+            String(repeating: "B", count: 20_000)
+        ]
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flotilla-quote-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let launch = TmuxSessionWrapping.wrap(
+            agentExecutable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: trickyArguments,
+            environment: [:],
+            workingDirectory: tempDirectory,
+            sessionID: UUID(),
+            tmuxExecutable: URL(fileURLWithPath: "/opt/homebrew/bin/tmux"),
+            supportDirectory: tempDirectory
+        )
+
+        // The generated command is the last two elements: ["/bin/sh", scriptPath].
+        XCTAssertEqual(launch.arguments.suffix(2).first, "/bin/sh")
+        let scriptPath = try XCTUnwrap(launch.arguments.last)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: scriptPath), "launcher script must be written to disk")
+
+        // Run the generated script directly — no tmux involved — to prove the
+        // shell reconstructs the exact same arguments /bin/echo was handed.
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [scriptPath]
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), trickyArguments.joined(separator: " ") + "\n")
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: "/tmp/should-not-run"),
+            "no argument content must ever be interpreted as a command to execute"
+        )
+    }
+
     /// Regression for the poisoned-server failure: every tmux invocation must
     /// target Flotilla's dedicated socket (`-L flotilla`) — never the shared
     /// default server, whose stale clients can pin new panes to a deleted
@@ -274,6 +331,55 @@ final class RealPipelineReproTests: XCTestCase {
         XCTAssertTrue(store.process(for: created.id)?.isRunning == true, "restart must stay running")
         let freshPID = try XCTUnwrap(waitForTmuxPanePID(sessionName), "restart must recreate the tmux session")
         XCTAssertNotEqual(freshPID, originalPID, "restart must run a fresh agent, not reuse the dead one")
+        await store.deleteSession(sessionID: created.id, deleteWorktree: false)
+    }
+
+    /// Regression for "large prompt instantly crashes the new session": the
+    /// goal is delivered as a bare argv element to the agent CLI
+    /// (`CLIAgentProvider.launchPlan`), which used to land inline inside
+    /// tmux's own `new-session -- <agent> <goal>` command. tmux has a hard
+    /// internal ceiling (~16KB) on that command's total serialized length,
+    /// far below the OS's own ARG_MAX — a goal past that ceiling made
+    /// `new-session` itself fail with "command too long" and exit
+    /// immediately, which the app observed as the brand-new session
+    /// crashing on the spot. `TmuxSessionWrapping` now routes the agent
+    /// launch through a generated `/bin/sh` script instead of inlining it
+    /// into tmux's own command line, so tmux's short ceiling no longer
+    /// applies — this asserts a 20 KB goal (well past the old ceiling)
+    /// launches and keeps running.
+    func testLargeGoalDoesNotCrashNewSession() async throws {
+        var settings = AppSettings()
+        settings.agentPaths.claudeCodePath = "/bin/sh"
+        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 30", "--"]
+        let store = AppStore(
+            repository: try GRDBSessionRepository(),
+            gitService: MockGitService(),
+            processManager: SessionProcessManager(
+                locator: Locator(tmuxURL: URL(fileURLWithPath: "/opt/homebrew/bin/tmux")),
+                processFactory: SystemPTYProcessFactory(),
+                settingsProvider: { settings }
+            ),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+
+        let largeGoal = String(repeating: "A", count: 20_000)
+        await store.createSession(
+            title: "Large goal repro",
+            goal: largeGoal,
+            agent: .claudeCode,
+            projectFolder: nil,
+            checkoutMode: .mainCheckout
+        )
+
+        let created = try XCTUnwrap(store.sessions.first { $0.title == "Large goal repro" })
+        let process = try XCTUnwrap(store.process(for: created.id), "process must exist right after creation")
+
+        // Give the pipeline a moment to observe a premature exit, if any.
+        try await Task.sleep(for: .seconds(1.5))
+
+        XCTAssertTrue(process.isRunning, "a 20KB goal must not make tmux's own command line too long to launch")
+        let refetched = try XCTUnwrap(store.sessions.first { $0.id == created.id })
+        XCTAssertNotEqual(refetched.status, .crashed, "session must not be marked crashed for an oversized goal")
         await store.deleteSession(sessionID: created.id, deleteWorktree: false)
     }
 
