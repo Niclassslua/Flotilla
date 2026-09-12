@@ -10,36 +10,44 @@ final class DeleteSessionUITests: XCTestCase {
         return app
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
     func testDeleteSessionBothPaths() {
         let app = launchedApp()
 
         // 1. Delete fixture session without worktree (main checkout)
-        let refactorRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
+        let refactorRow = element(app, AXID.sessionRow("Refactor sidebar"))
         XCTAssertTrue(fastWait(refactorRow, timeout: 8))
         refactorRow.rightClick()
 
-        let deleteRefactorItem = app.descendants(matching: .any)["SessionRow-Refactor sidebar-DeleteMenuItem"].firstMatch
+        let deleteRefactorItem = element(app, AXID.sessionRowDeleteMenuItem("Refactor sidebar"))
         XCTAssertTrue(fastWait(deleteRefactorItem, timeout: 3))
         deleteRefactorItem.click()
 
-        let deleteOnlyButton = app.descendants(matching: .any)["DeleteSessionDialog.DeleteSessionOnly"].firstMatch
+        let deleteOnlyButton = element(app, .deleteSessionDeleteOnly)
         XCTAssertTrue(fastWait(deleteOnlyButton, timeout: 3))
         deleteOnlyButton.click()
         XCTAssertTrue(refactorRow.waitForNonExistence(timeout: 3))
 
         // 2. Delete fixture session with worktree cleanup
-        let fixLoginRow = app.descendants(matching: .any)["SessionRow-Fix login bug"].firstMatch
+        let fixLoginRow = element(app, AXID.sessionRow("Fix login bug"))
         XCTAssertTrue(fastWait(fixLoginRow, timeout: 3))
 
         let worktreePath = "/tmp/flotilla-fixture-project-worktrees/fix-login-bug"
         XCTAssertTrue(FileManager.default.fileExists(atPath: worktreePath), "worktree should exist before deletion")
 
         fixLoginRow.rightClick()
-        let deleteFixLoginItem = app.descendants(matching: .any)["SessionRow-Fix login bug-DeleteMenuItem"].firstMatch
+        let deleteFixLoginItem = element(app, AXID.sessionRowDeleteMenuItem("Fix login bug"))
         XCTAssertTrue(deleteFixLoginItem.waitForExistence(timeout: 3))
         deleteFixLoginItem.click()
 
-        let deleteWithWorktreeButton = app.descendants(matching: .any)["DeleteSessionDialog.DeleteWithWorktree"].firstMatch
+        let deleteWithWorktreeButton = element(app, .deleteSessionDeleteWithWorktree)
         XCTAssertTrue(deleteWithWorktreeButton.waitForExistence(timeout: 3))
         deleteWithWorktreeButton.click()
 

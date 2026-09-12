@@ -10,14 +10,22 @@ final class TerminalUITests: XCTestCase {
         return app
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
     func testSendingInputRendersInTerminal() {
         let app = launchedApp()
 
-        let row = app.descendants(matching: .any)["SessionRow-Fix login bug"].firstMatch
+        let row = element(app, AXID.sessionRow("Fix login bug"))
         XCTAssertTrue(fastWait(row, timeout: 8))
         row.click()
 
-        let terminal = app.descendants(matching: .any)["TerminalView-Fix login bug"].firstMatch
+        let terminal = element(app, AXID.terminalView("Fix login bug"))
         XCTAssertTrue(fastWait(terminal, timeout: 3))
         terminal.click()
 

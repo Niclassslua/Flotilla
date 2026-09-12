@@ -26,11 +26,19 @@ final class FlotillaUITests: XCTestCase {
         return element.exists
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
     func testNavigationAndSessionSelection() {
         let app = launchedApp()
 
         // 1. Session selection updates the window title and detail
-        let firstRow = app.descendants(matching: .any)["SessionRow-Fix login bug"].firstMatch
+        let firstRow = element(app, AXID.sessionRow("Fix login bug"))
         XCTAssertTrue(fastWait(firstRow, timeout: 8))
         firstRow.click()
 
@@ -43,34 +51,34 @@ final class FlotillaUITests: XCTestCase {
         XCTAssertTrue(window.title.hasPrefix("Fix login bug"), "unexpected title: \(window.title)")
         XCTAssertTrue(window.title.contains("flotilla/fix-login-bug"), "branch missing from title: \(window.title)")
 
-        let secondRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
+        let secondRow = element(app, AXID.sessionRow("Refactor sidebar"))
         XCTAssertTrue(fastWait(secondRow, timeout: 3))
         secondRow.click()
         XCTAssertTrue(fastWait(window, timeout: 3))
         XCTAssertTrue(window.title.hasPrefix("Refactor sidebar"), "unexpected title: \(window.title)")
 
         // 2. Home is reachable from the navigator in every scope.
-        let homeButton = app.descendants(matching: .any)["Sidebar.Overview"].firstMatch
+        let homeButton = element(app, .sidebarOverview)
         XCTAssertTrue(fastWait(homeButton, timeout: 3))
         homeButton.click()
-        XCTAssertTrue(fastWait(app.descendants(matching: .any)["HomeDashboard"].firstMatch, timeout: 3))
+        XCTAssertTrue(fastWait(element(app, .homeDashboard), timeout: 3))
 
         // 3. So is a project's workspace — directly, with no mode switch and
         // without scrolling to the foot of Home to find a tile. Projects are
         // selectable navigator rows rather than inert section headers.
-        let projectRow = app.descendants(matching: .any)["Sidebar.ProjectRow-Flotilla"].firstMatch
+        let projectRow = element(app, AXID.sidebarProjectRow("Flotilla"))
         XCTAssertTrue(fastWait(projectRow, timeout: 3), "projects should be selectable in the navigator")
         projectRow.click()
 
         // The project's own tab strip confirms we landed in its workspace.
         // There is no in-page back control any more — the toolbar owns that.
-        let gitTab = app.descendants(matching: .any)["ProjectDetail.ModeTab-Git"].firstMatch
+        let gitTab = element(app, .projectTabGit)
         XCTAssertTrue(fastWait(gitTab, timeout: 3))
 
         // 4. Back returns to Home, the place we came from.
-        let back = app.descendants(matching: .any)["Toolbar.Back"].firstMatch
+        let back = element(app, .toolbarBack)
         XCTAssertTrue(fastWait(back, timeout: 3))
         back.click()
-        XCTAssertTrue(fastWait(app.descendants(matching: .any)["HomeDashboard"].firstMatch, timeout: 3))
+        XCTAssertTrue(fastWait(element(app, .homeDashboard), timeout: 3))
     }
 }

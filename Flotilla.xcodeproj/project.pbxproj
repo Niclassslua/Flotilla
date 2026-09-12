@@ -231,6 +231,7 @@
 		9969F2DD9ACA3ECB77E6DEF2 /* sass.svg in Resources */ = {isa = PBXBuildFile; fileRef = 740FDD2C6D955AC6EBFAE5C2 /* sass.svg */; };
 		999C3EE6A91C0AC74D3AEA6C /* folder-test-open.svg in Resources */ = {isa = PBXBuildFile; fileRef = 27E23A83A490E53614716B56 /* folder-test-open.svg */; };
 		99FD92EC6C777940FF6D3100 /* ChildProcessEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761DC27E7FA9F1BBA78CB09A /* ChildProcessEnvironmentTests.swift */; };
+		9AF38C37FAA9B6D8DAEC3794 /* AXID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1505FDEBF32FDDA8F3148254 /* AXID.swift */; };
 		9E05CD5CFFF4C8F27FF74AD6 /* SessionElapsed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F1832CC0C919E3FE365BA8 /* SessionElapsed.swift */; };
 		9E2CB349DC6DC2E3F62C72BE /* claude.svg in Resources */ = {isa = PBXBuildFile; fileRef = EC7571A04951B71A2187C320 /* claude.svg */; };
 		9EAE123B0B483377DAD2844A /* ProjectMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = A860A901CDAFC0E375DDC9BD /* ProjectMark.swift */; };
@@ -1777,6 +1778,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9AF38C37FAA9B6D8DAEC3794 /* AXID.swift in Sources */,
 				FA0AADD91E95FBC3347F792A /* CreateSessionUITests.swift in Sources */,
 				AB0B85DD8EEA104338115116 /* DeleteSessionUITests.swift in Sources */,
 				4FE684C14DD32C29DF7AEF73 /* DiffAndFilesUITests.swift in Sources */,

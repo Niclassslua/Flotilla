@@ -10,6 +10,14 @@ final class SettingsUITests: XCTestCase {
         return app
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
     func testWorktreeBaseDirectorySettingUpdate() {
         let app = launchedApp()
 
@@ -19,12 +27,12 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(fastWait(settingsMenuItem, timeout: 3))
         settingsMenuItem.click()
 
-        let generalRow = app.descendants(matching: .any)["settings.sidebar.general"].firstMatch
+        let generalRow = element(app, AXID.settingsSidebarTab("general"))
         if fastWait(generalRow, timeout: 3) {
             generalRow.click()
         }
 
-        let worktreeField = app.descendants(matching: .textField)["Settings.WorktreeBaseDirectory"].firstMatch
+        let worktreeField = app.descendants(matching: .textField)[AXID.settingsWorktreeBaseDirectory.rawValue].firstMatch
         XCTAssertTrue(fastWait(worktreeField, timeout: 3))
         worktreeField.click()
         app.typeKey("a", modifierFlags: [.command])

@@ -21,8 +21,12 @@ final class SessionBarsUITests: XCTestCase {
         app.descendants(matching: .any)[identifier].firstMatch
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
     private func showGrid(_ app: XCUIApplication) {
-        let grid = element(app, "Toolbar.ShowGrid")
+        let grid = element(app, .toolbarShowGrid)
         XCTAssertTrue(fastWait(grid, timeout: 5))
         grid.click()
     }
@@ -35,33 +39,33 @@ final class SessionBarsUITests: XCTestCase {
         let app = launchedApp()
         showGrid(app)
 
-        let all = element(app, "Sessions.Group-All")
+        let all = element(app, AXID.sessionsGroup("All"))
         XCTAssertTrue(fastWait(all, timeout: 5), "the group bar should be present in Sessions")
-        XCTAssertTrue(element(app, "Sessions.Group-Flotilla").exists)
-        XCTAssertTrue(element(app, "Sessions.Group-General").exists)
+        XCTAssertTrue(element(app, AXID.sessionsGroup("Flotilla")).exists)
+        XCTAssertTrue(element(app, AXID.sessionsGroup("General")).exists)
 
         // Add all inside General fills the grid from that group only.
-        element(app, "Sessions.Group-General").click()
-        let addAll = element(app, "Grid.AddAllButton")
+        element(app, AXID.sessionsGroup("General")).click()
+        let addAll = element(app, .gridAddAllButton)
         XCTAssertTrue(fastWait(addAll, timeout: 3))
         addAll.click()
 
-        let general = element(app, "GridTile-Code review assistant-Status")
+        let general = element(app, AXID.gridTileStatus("Code review assistant"))
         XCTAssertTrue(fastWait(general, timeout: 5), "a General session should be in the grid")
         XCTAssertFalse(
-            element(app, "GridTile-Fix login bug-Status").exists,
+            element(app, AXID.gridTileStatus("Fix login bug")).exists,
             "a project session must not render while the General group is lit"
         )
 
         // Presentation changes *how* the fleet is drawn, never *what* is in
         // it: the group has to survive a round trip through Board.
-        element(app, "Toolbar.ShowBoard").click()
-        XCTAssertTrue(fastWait(element(app, "KanbanBoard"), timeout: 8))
+        element(app, .toolbarShowBoard).click()
+        XCTAssertTrue(fastWait(element(app, .kanbanBoard), timeout: 8))
         showGrid(app)
 
-        XCTAssertTrue(fastWait(element(app, "GridTile-Code review assistant-Status"), timeout: 5))
+        XCTAssertTrue(fastWait(element(app, AXID.gridTileStatus("Code review assistant")), timeout: 5))
         XCTAssertFalse(
-            element(app, "GridTile-Fix login bug-Status").exists,
+            element(app, AXID.gridTileStatus("Fix login bug")).exists,
             "the group should still be General after switching presentation and back"
         )
     }
@@ -72,24 +76,24 @@ final class SessionBarsUITests: XCTestCase {
     func testRenamingFromTheSessionBarReachesTheStore() {
         let app = launchedApp()
 
-        let sessionRow = element(app, "Sidebar.SessionRow-Fix login bug")
-        if fastWait(sessionRow, timeout: 5) {
-            sessionRow.doubleClick()
-        }
+        let sessionRow = element(app, AXID.sessionRow("Fix login bug"))
+        XCTAssertTrue(fastWait(sessionRow, timeout: 5), "the session row should exist in the sidebar")
+        sessionRow.click()
 
-        let title = element(app, "SessionBar-Fix login bug-Title")
+        let title = element(app, AXID.sessionBarTitle("Fix login bug"))
         XCTAssertTrue(fastWait(title, timeout: 5), "the focused session should carry a session bar")
         title.click()
 
-        let field = element(app, "SessionBar-Fix login bug-TitleField")
+        let field = element(app, AXID.sessionBarTitleField("Fix login bug"))
         XCTAssertTrue(fastWait(field, timeout: 3), "clicking the title should open an inline field")
+        field.click()
         field.typeKey("a", modifierFlags: .command)
         field.typeText("Fix logout bug\r")
 
         // The sidebar row is rendered from the store, so its new title is
         // proof the edit was persisted rather than just redrawn in the bar.
         XCTAssertTrue(
-            fastWait(element(app, "Sidebar.SessionRow-Fix logout bug"), timeout: 5),
+            fastWait(element(app, AXID.sessionRow("Fix logout bug")), timeout: 5),
             "the renamed session should appear under its new title in the navigator"
         )
     }

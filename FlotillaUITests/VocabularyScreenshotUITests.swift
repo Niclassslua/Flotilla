@@ -118,6 +118,10 @@ final class VocabularyScreenshotUITests: XCTestCase {
         app.descendants(matching: .any)[identifier].firstMatch
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
     /// Lets SwiftUI's short selection and presentation transitions settle.
     private func settle(_ seconds: TimeInterval = 0.6) {
         RunLoop.current.run(until: Date().addingTimeInterval(seconds))
@@ -176,6 +180,10 @@ final class VocabularyScreenshotUITests: XCTestCase {
         save(target.screenshot(), named: name, note: "\(note) [element \(id)]")
     }
 
+    private func shootElement(_ app: XCUIApplication, id: AXID, _ name: String, _ note: String) {
+        shootElement(app, id: id.rawValue, name, note)
+    }
+
     /// SwiftUI can propagate an accessibility identifier to descendants. The
     /// largest match is generally the actual tappable container.
     private func largestMatch(
@@ -192,6 +200,14 @@ final class VocabularyScreenshotUITests: XCTestCase {
             }
     }
 
+    private func largestMatch(
+        _ app: XCUIApplication,
+        _ id: AXID,
+        timeout: TimeInterval
+    ) -> XCUIElement? {
+        largestMatch(app, id.rawValue, timeout: timeout)
+    }
+
     @discardableResult
     private func click(
         _ app: XCUIApplication,
@@ -205,6 +221,15 @@ final class VocabularyScreenshotUITests: XCTestCase {
         target.click()
         settle(0.5)
         return true
+    }
+
+    @discardableResult
+    private func click(
+        _ app: XCUIApplication,
+        _ id: AXID,
+        timeout: TimeInterval = 4
+    ) -> Bool {
+        click(app, id.rawValue, timeout: timeout)
     }
 
     /// Falls back to the visible button title because AppKit occasionally
@@ -233,6 +258,16 @@ final class VocabularyScreenshotUITests: XCTestCase {
         return false
     }
 
+    @discardableResult
+    private func clickButton(
+        _ app: XCUIApplication,
+        title: String,
+        id: AXID,
+        timeout: TimeInterval = 4
+    ) -> Bool {
+        clickButton(app, title: title, identifier: id.rawValue, timeout: timeout)
+    }
+
     private func goToOverview(_ app: XCUIApplication) {
         let radio = app.radioButtons["Projects"].firstMatch
         if fastWait(radio, timeout: 2) {
@@ -240,7 +275,7 @@ final class VocabularyScreenshotUITests: XCTestCase {
             settle(0.5)
             return
         }
-        click(app, "Sidebar.Overview")
+        click(app, .sidebarOverview)
     }
 
     private func goToSessions(_ app: XCUIApplication) {
@@ -250,13 +285,13 @@ final class VocabularyScreenshotUITests: XCTestCase {
             settle(0.5)
             return
         }
-        click(app, "Sidebar.AllSessions")
+        click(app, .sidebarAllSessions)
     }
 
     /// Grid and Board are their own always-present buttons in the global bar
     /// now, not segments of a picker that only appeared in some scopes.
     private func choosePresentation(_ app: XCUIApplication, _ title: String) {
-        let button = element(app, "Toolbar.Show\(title)")
+        let button = element(app, AXID.toolbarShow(title))
         if fastWait(button, timeout: 3) {
             button.click()
             settle(0.6)
@@ -270,13 +305,13 @@ final class VocabularyScreenshotUITests: XCTestCase {
     /// control is still animating in, fall back to the documented sidebar
     /// gesture (a single click toggles grid membership while the grid is up).
     private func fillGrid(_ app: XCUIApplication) {
-        if let addAll = largestMatch(app, "Grid.AddAllButton", timeout: 8) {
+        if let addAll = largestMatch(app, .gridAddAllButton, timeout: 8) {
             addAll.click()
             settle(0.8)
         }
-        if largestMatch(app, "GridView", timeout: 2) == nil {
+        if largestMatch(app, .gridView, timeout: 2) == nil {
             for title in ["Fix login bug", "Refactor sidebar", "Autonomous workflow loop"] {
-                _ = click(app, "SessionRow-\(title)", timeout: 2)
+                _ = click(app, AXID.sessionRow(title), timeout: 2)
             }
             settle(0.8)
         }
@@ -287,7 +322,7 @@ final class VocabularyScreenshotUITests: XCTestCase {
     /// next surface has to be reached back through Overview. Silent when the
     /// workspace is already on Overview.
     private func returnToProjectOverview(_ app: XCUIApplication) {
-        guard let bar = largestMatch(app, "Project.ReturnToOverview", timeout: 2) else { return }
+        guard let bar = largestMatch(app, .projectReturnToOverview, timeout: 2) else { return }
         bar.click()
         settle(0.6)
     }
@@ -302,34 +337,34 @@ final class VocabularyScreenshotUITests: XCTestCase {
     func testCaptureShellAndFleetSurfaces() {
         let app = launchedApp()
         XCTAssertTrue(
-            fastWait(element(app, "HomeDashboard"), timeout: 12),
+            fastWait(element(app, .homeDashboard), timeout: 12),
             "app never reached the home dashboard"
         )
 
         shootWindow(app, "01-home-dashboard", "Shell and Home dashboard")
-        shootElement(app, id: "HomeDashboard", "02-home-dashboard-element", "Home dashboard")
-        shootElement(app, id: "Home.AttentionQueue", "03-home-attention-queue", "Attention queue")
-        shootElement(app, id: "Home.RecentSessions", "04-home-recent-sessions", "Recent sessions")
-        shootElement(app, id: "Home.RecentProjects", "05-home-projects-gallery", "Projects gallery")
-        shootElement(app, id: "Home.LaunchSummary", "06-composer-summary-line", "Composer summary")
+        shootElement(app, id: .homeDashboard, "02-home-dashboard-element", "Home dashboard")
+        shootElement(app, id: .homeAttentionQueue, "03-home-attention-queue", "Attention queue")
+        shootElement(app, id: .homeRecentSessions, "04-home-recent-sessions", "Recent sessions")
+        shootElement(app, id: .homeRecentProjects, "05-home-projects-gallery", "Projects gallery")
+        shootElement(app, id: .homeLaunchSummary, "06-composer-summary-line", "Composer summary")
 
         goToSessions(app)
         shootWindow(app, "07-sessions-focus", "Sessions facet and Focus presentation")
-        shootElement(app, id: "SidebarList", "08-session-list", "Session list")
-        shootElement(app, id: "SessionRow-Fix login bug", "09-session-sidebar-row", "Session row")
+        shootElement(app, id: .sidebarList, "08-session-list", "Session list")
+        shootElement(app, id: AXID.sessionRow("Fix login bug"), "09-session-sidebar-row", "Session row")
 
         choosePresentation(app, "Grid")
         fillGrid(app)
         settle(1.0)
         shootWindow(app, "10-presentation-grid", "Grid presentation")
-        shootElement(app, id: "GridView", "11-grid-view", "Mission control grid")
+        shootElement(app, id: .gridView, "11-grid-view", "Mission control grid")
 
         choosePresentation(app, "Board")
         shootWindow(app, "13-presentation-board", "Board presentation")
-        shootElement(app, id: "KanbanBoard", "14-kanban-board", "Kanban board")
+        shootElement(app, id: .kanbanBoard, "14-kanban-board", "Kanban board")
 
         goToSessions(app)
-        click(app, "SessionRow-Fix login bug")
+        click(app, AXID.sessionRow("Fix login bug"))
         shootWindow(app, "15-presentation-focus", "Focused terminal presentation")
 
         assertCaptured([
@@ -342,14 +377,14 @@ final class VocabularyScreenshotUITests: XCTestCase {
 
     func testCaptureLaunchersAndModals() {
         let app = launchedApp()
-        XCTAssertTrue(fastWait(element(app, "HomeDashboard"), timeout: 12))
+        XCTAssertTrue(fastWait(element(app, .homeDashboard), timeout: 12))
 
         goToSessions(app)
-        if click(app, "SessionRow-Fix login bug") {
+        if click(app, AXID.sessionRow("Fix login bug")) {
             app.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: .command)
             settle(1.0)
             shootWindow(app, "22-delete-session-sheet", "Delete session sheet")
-            click(app, "DeleteSessionDialog.Cancel")
+            click(app, .deleteSessionCancel)
         }
 
         goToOverview(app)
@@ -366,17 +401,17 @@ final class VocabularyScreenshotUITests: XCTestCase {
         settle(1.0)
 
         app.typeKey(",", modifierFlags: .command)
-        XCTAssertTrue(fastWait(element(app, "SettingsView"), timeout: 6))
-        shootWindow(app, "23-settings-general", "Settings General pane", containing: "SettingsView")
+        XCTAssertTrue(fastWait(element(app, .settingsView), timeout: 6))
+        shootWindow(app, "23-settings-general", "Settings General pane", containing: AXID.settingsView.rawValue)
 
-        if clickButton(app, title: "Terminal & Editor", identifier: "settings.sidebar.terminal") {
-            shootWindow(app, "24-settings-terminal", "Settings Terminal & Editor pane", containing: "SettingsView")
+        if clickButton(app, title: "Terminal & Editor", identifier: AXID.settingsSidebarTab("terminal")) {
+            shootWindow(app, "24-settings-terminal", "Settings Terminal & Editor pane", containing: AXID.settingsView.rawValue)
         }
-        if clickButton(app, title: "Git & Worktrees", identifier: "settings.sidebar.git") {
-            shootWindow(app, "25-settings-git", "Settings Git & Worktrees pane", containing: "SettingsView")
+        if clickButton(app, title: "Git & Worktrees", identifier: AXID.settingsSidebarTab("git")) {
+            shootWindow(app, "25-settings-git", "Settings Git & Worktrees pane", containing: AXID.settingsView.rawValue)
         }
-        if clickButton(app, title: "Coding Agents", identifier: "settings.sidebar.agents") {
-            shootWindow(app, "26-settings-agents", "Settings Coding Agents pane", containing: "SettingsView")
+        if clickButton(app, title: "Coding Agents", identifier: AXID.settingsSidebarTab("agents")) {
+            shootWindow(app, "26-settings-agents", "Settings Coding Agents pane", containing: AXID.settingsView.rawValue)
         }
 
         assertCaptured([
@@ -389,40 +424,40 @@ final class VocabularyScreenshotUITests: XCTestCase {
 
     func testCaptureProjectWorkspace() {
         let app = launchedApp()
-        XCTAssertTrue(fastWait(element(app, "HomeDashboard"), timeout: 12))
+        XCTAssertTrue(fastWait(element(app, .homeDashboard), timeout: 12))
 
         goToOverview(app)
-        clickButton(app, title: "Flotilla", identifier: "ProjectRow-Flotilla")
+        clickButton(app, title: "Flotilla", identifier: AXID.projectRow("Flotilla"))
         settle(1.0)
         shootWindow(app, "30-project-overview", "Project Overview tab")
 
-        if clickButton(app, title: "Git", identifier: "ProjectDetail.ModeTab-Git") {
+        if clickButton(app, title: "Git", id: .projectTabGit) {
             shootWindow(app, "33-project-git-changes", "Git Changes sub-tab")
-            if clickButton(app, title: "Simulate Edit", identifier: "DiffPanel.SimulateEditButton") {
+            if clickButton(app, title: "Simulate Edit", id: .diffPanelSimulateEditButton) {
                 settle(1.0)
                 shootWindow(app, "34-diff-panel-populated", "Populated diff panel")
             }
-            if clickButton(app, title: "Commits", identifier: "ProjectGit.SubTab-Commits") {
+            if clickButton(app, title: "Commits", identifier: AXID.projectGitSubTab("Commits")) {
                 settle(1.0)
                 shootWindow(app, "36-project-git-commits", "Commit graph and history")
             }
         }
 
         returnToProjectOverview(app)
-        if clickButton(app, title: "Files", identifier: "ProjectDetail.ModeTab-Files") {
+        if clickButton(app, title: "Files", id: .projectTabFiles) {
             settle(1.0)
             shootWindow(app, "37-project-files", "File tree and editor pane")
         }
         returnToProjectOverview(app)
-        if clickButton(app, title: "Skills", identifier: "ProjectDetail.ModeTab-Skills") {
+        if clickButton(app, title: "Skills", id: .projectTabSkills) {
             settle(1.0)
             shootWindow(app, "39-project-skills", "Knowledge catalog ledger")
         }
         returnToProjectOverview(app)
-        if clickButton(app, title: "Rules", identifier: "ProjectDetail.ModeTab-Rules") {
+        if clickButton(app, title: "Rules", id: .projectTabRules) {
             settle(1.0)
             shootWindow(app, "40-project-rules", "Rules knowledge catalog")
-            if click(app, "Knowledge.Item-CLAUDE.md") {
+            if click(app, AXID.knowledgeItem("CLAUDE.md")) {
                 settle(0.8)
                 shootWindow(app, "41-knowledge-detail", "Knowledge detail pane")
             }

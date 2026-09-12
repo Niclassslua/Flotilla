@@ -2,6 +2,14 @@ import XCTest
 
 @MainActor
 final class GitSidebarUITests: XCTestCase {
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
     func testSidebarOpensAndSwitchesAcrossAllThreeViews() {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
@@ -12,27 +20,27 @@ final class GitSidebarUITests: XCTestCase {
         if sessions.waitForExistence(timeout: 2) {
             sessions.click()
         } else {
-            let allSessions = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
+            let allSessions = element(app, .sidebarAllSessions)
             XCTAssertTrue(allSessions.waitForExistence(timeout: 3))
             allSessions.click()
         }
 
-        let session = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
+        let session = element(app, AXID.sessionRow("Refactor sidebar"))
         XCTAssertTrue(session.waitForExistence(timeout: 5))
         session.click()
 
-        let toggle = app.descendants(matching: .any)["SessionBar.GitSidebarToggle"].firstMatch
+        let toggle = element(app, .sessionBarGitSidebarToggle)
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         toggle.click()
 
-        XCTAssertTrue(app.descendants(matching: .any)["GitSidebar"].firstMatch.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["GitSidebar.Changes.Mode"].firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(element(app, .gitSidebar).waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, .gitSidebarChangesMode).waitForExistence(timeout: 3))
 
-        app.descendants(matching: .any)["GitSidebar.Tab.Branches"].firstMatch.click()
-        XCTAssertTrue(app.descendants(matching: .any)["GitSidebar.Branches.New"].firstMatch.waitForExistence(timeout: 3))
+        element(app, AXID.gitSidebarTab("Branches")).click()
+        XCTAssertTrue(element(app, .gitSidebarBranchesNew).waitForExistence(timeout: 3))
 
-        app.descendants(matching: .any)["GitSidebar.Tab.Log"].firstMatch.click()
-        XCTAssertTrue(app.descendants(matching: .any)["GitSidebar.Log.Branch"].firstMatch.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.descendants(matching: .any)["GitSidebar.Log.List"].firstMatch.waitForExistence(timeout: 5))
+        element(app, AXID.gitSidebarTab("Log")).click()
+        XCTAssertTrue(element(app, .gitSidebarLogBranch).waitForExistence(timeout: 3))
+        XCTAssertTrue(element(app, .gitSidebarLogList).waitForExistence(timeout: 5))
     }
 }

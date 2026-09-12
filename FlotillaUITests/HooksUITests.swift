@@ -2,6 +2,14 @@ import XCTest
 
 @MainActor
 final class HooksUITests: XCTestCase {
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
     func testSimulatedPermissionPromptDisplaysActionableStatus() {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
@@ -11,11 +19,11 @@ final class HooksUITests: XCTestCase {
 
         // All Sessions is a navigator row now, not a toolbar segment — the
         // scope picker went with the facet split.
-        let allSessions = app.descendants(matching: .any)["Sidebar.AllSessions"].firstMatch
+        let allSessions = element(app, .sidebarAllSessions)
         XCTAssertTrue(allSessions.waitForExistence(timeout: 4))
         allSessions.click()
 
-        let sessionRow = app.descendants(matching: .any)["SessionRow-General chat"].firstMatch
+        let sessionRow = element(app, AXID.sessionRow("General chat"))
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 8))
 
         // The waiting reason has to reach the row as a word, not as a colour:

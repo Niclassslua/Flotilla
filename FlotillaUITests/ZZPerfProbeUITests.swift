@@ -9,7 +9,7 @@ final class ZZPerfProbeUITests: XCTestCase {
         app.launchEnvironment["UI_TESTING"] = "1"
         app.launch()
 
-        let row = app.descendants(matching: .any)["SessionRow-Fix login bug"].firstMatch
+        let row = app.descendants(matching: .any)[AXID.sessionRow("Fix login bug")].firstMatch
         _ = row.waitForExistence(timeout: 10)
 
         // Measure 10 repeated existence checks on a static element

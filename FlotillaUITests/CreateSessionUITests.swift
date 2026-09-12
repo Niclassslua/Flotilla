@@ -21,6 +21,10 @@ final class CreateSessionUITests: XCTestCase {
         app.descendants(matching: .any)[identifier].firstMatch
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
     @discardableResult
     private func tap(_ app: XCUIApplication, _ identifier: String, timeout: TimeInterval = 3) -> Bool {
         guard fastWait(element(app, identifier), timeout: timeout) else { return false }
@@ -28,16 +32,21 @@ final class CreateSessionUITests: XCTestCase {
         return true
     }
 
+    @discardableResult
+    private func tap(_ app: XCUIApplication, _ id: AXID, timeout: TimeInterval = 3) -> Bool {
+        tap(app, id.rawValue, timeout: timeout)
+    }
+
     private func openLauncher(_ app: XCUIApplication) {
-        XCTAssertTrue(fastWait(element(app, "NewSessionButton"), timeout: 8))
-        element(app, "NewSessionButton").click()
-        XCTAssertTrue(fastWait(element(app, "CreateSession.GoalField"), timeout: 3))
+        XCTAssertTrue(fastWait(element(app, .newSessionButton), timeout: 8))
+        element(app, .newSessionButton).click()
+        XCTAssertTrue(fastWait(element(app, .createSessionGoalField), timeout: 3))
     }
 
     private func typeGoal(_ app: XCUIApplication, _ text: String) {
-        XCTAssertTrue(fastWait(element(app, "CreateSession.GoalField"), timeout: 3))
-        element(app, "CreateSession.GoalField").click()
-        element(app, "CreateSession.GoalField").typeText(text)
+        XCTAssertTrue(fastWait(element(app, .createSessionGoalField), timeout: 3))
+        element(app, .createSessionGoalField).click()
+        element(app, .createSessionGoalField).typeText(text)
     }
 
     /// Drives the launcher purely through accessibility identifiers, not
@@ -52,11 +61,11 @@ final class CreateSessionUITests: XCTestCase {
 
         openLauncher(app)
         typeGoal(app, "Flaky CI")
-        XCTAssertTrue(tap(app, "CreateSession.Agent.codexCLI"))
-        XCTAssertTrue(tap(app, "CreateSession.CreateButton"))
-        XCTAssertTrue(element(app, "CreateSession.CreateButton").waitForNonExistence(timeout: 5))
+        XCTAssertTrue(tap(app, AXID.createSessionAgentOption("codexCLI")))
+        XCTAssertTrue(tap(app, .createSessionCreateButton))
+        XCTAssertTrue(element(app, .createSessionCreateButton).waitForNonExistence(timeout: 5))
 
-        XCTAssertTrue(fastWait(element(app, "SessionRow-Flaky CI"), timeout: 3))
+        XCTAssertTrue(fastWait(element(app, AXID.sessionRow("Flaky CI")), timeout: 3))
         // The agent is asserted on the window subtitle rather than the row.
         // Navigator rows carry status and churn only now — the agent is the
         // provider tile beside the title, and the branch would repeat what the
@@ -69,18 +78,18 @@ final class CreateSessionUITests: XCTestCase {
 
         // The project picker replaces the old "Project Folder" segment: it
         // reveals the known-project list, with the panel as a fallback.
-        XCTAssertTrue(tap(app, "CreateSession.ProjectPicker"))
-        XCTAssertTrue(tap(app, "CreateSession.ChooseFolderButton"))
+        XCTAssertTrue(tap(app, .createSessionProjectPicker))
+        XCTAssertTrue(tap(app, .createSessionChooseFolderButton))
 
         typeGoal(app, "Dark mode")
 
         // Isolation only appears once a folder is chosen — a general session
         // has nothing to isolate.
-        XCTAssertTrue(tap(app, "CreateSession.Checkout.Worktree"))
-        XCTAssertTrue(tap(app, "CreateSession.CreateButton"))
-        XCTAssertTrue(element(app, "CreateSession.CreateButton").waitForNonExistence(timeout: 5))
+        XCTAssertTrue(tap(app, .createSessionCheckoutWorktree))
+        XCTAssertTrue(tap(app, .createSessionCreateButton))
+        XCTAssertTrue(element(app, .createSessionCreateButton).waitForNonExistence(timeout: 5))
 
-        XCTAssertTrue(fastWait(element(app, "SessionRow-Dark mode"), timeout: 3))
+        XCTAssertTrue(fastWait(element(app, AXID.sessionRow("Dark mode")), timeout: 3))
         assertWindowIdentity(app, contains: "dark-mode")
     }
 
@@ -114,7 +123,7 @@ final class CreateSessionUITests: XCTestCase {
         let app = launchedApp()
         openLauncher(app)
 
-        XCTAssertTrue(fastWait(element(app, "CreateSession.CreateButton"), timeout: 3))
-        XCTAssertTrue(element(app, "CreateSession.CreateButton").isEnabled)
+        XCTAssertTrue(fastWait(element(app, .createSessionCreateButton), timeout: 3))
+        XCTAssertTrue(element(app, .createSessionCreateButton).isEnabled)
     }
 }

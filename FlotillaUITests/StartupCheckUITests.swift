@@ -10,12 +10,20 @@ final class StartupCheckUITests: XCTestCase {
         return app
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
     func testMissingDependencyShowsNonBlockingWarningBanner() {
         let app = launchedApp()
 
-        let banner = app.descendants(matching: .any)["StartupWarningBanner"].firstMatch
+        let banner = element(app, .startupWarningBanner)
         if banner.waitForExistence(timeout: 8) {
-            let dismissButton = app.descendants(matching: .any)["StartupWarningBanner.DismissButton"].firstMatch
+            let dismissButton = element(app, .startupWarningBannerDismissButton)
             if dismissButton.waitForExistence(timeout: 2) {
                 dismissButton.click()
                 XCTAssertTrue(banner.waitForNonExistence(timeout: 3))

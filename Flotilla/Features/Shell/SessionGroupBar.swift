@@ -40,6 +40,7 @@ struct SessionGroupBar: View {
         .padding(.horizontal, FlotillaSpacing.medium)
         .frame(height: 40)
         .background(FlotillaColors.surface)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.sessionsGroupBar.rawValue)
     }
 

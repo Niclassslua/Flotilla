@@ -10,9 +10,17 @@ final class RulesPanelUITests: XCTestCase {
         return app
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
     func testEditingRuleFilePersistsToDisk() throws {
         let app = launchedApp()
-        let sessionRow = app.descendants(matching: .any)["SessionRow-Refactor sidebar"].firstMatch
+        let sessionRow = element(app, AXID.sessionRow("Refactor sidebar"))
         XCTAssertTrue(fastWait(sessionRow, timeout: 8))
         sessionRow.click()
 
@@ -20,15 +28,15 @@ final class RulesPanelUITests: XCTestCase {
         // the Workspace menu's shortcut, which jumps to the project's Rules tab.
         app.typeKey("i", modifierFlags: [.command, .shift])
 
-        let claudeFile = app.descendants(matching: .any)["Knowledge.Item-CLAUDE.md"].firstMatch
+        let claudeFile = element(app, AXID.knowledgeItem("CLAUDE.md"))
         XCTAssertTrue(fastWait(claudeFile, timeout: 3))
         claudeFile.click()
 
-        let editButton = app.descendants(matching: .any)["Knowledge.Detail.Edit"].firstMatch
+        let editButton = element(app, .knowledgeEditButton)
         XCTAssertTrue(fastWait(editButton, timeout: 3))
         editButton.click()
 
-        let editor = app.descendants(matching: .any)["Knowledge.Detail.Editor"].firstMatch
+        let editor = element(app, .knowledgeDetailEditor)
         XCTAssertTrue(fastWait(editor, timeout: 3))
         editor.click()
 
@@ -36,11 +44,11 @@ final class RulesPanelUITests: XCTestCase {
         editor.typeKey(XCUIKeyboardKey.end.rawValue, modifierFlags: [.command])
         editor.typeText(marker)
 
-        let saveButton = app.descendants(matching: .any)["Knowledge.Detail.Save"].firstMatch
+        let saveButton = element(app, .knowledgeSaveButton)
         XCTAssertTrue(fastWait(saveButton, timeout: 3))
         saveButton.click()
 
-        let confirmation = app.descendants(matching: .any)["Knowledge.Detail.SaveStatus"].firstMatch
+        let confirmation = element(app, .knowledgeSaveStatus)
         XCTAssertTrue(fastWait(confirmation, timeout: 3))
         XCTAssertEqual(confirmation.label, "Saved")
 

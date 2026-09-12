@@ -139,6 +139,7 @@ struct SessionBar: View {
         .padding(.trailing, variant.trailingInset)
         .frame(height: variant.height)
         .background(FlotillaColors.surface)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.sessionBar(session.title))
         // `SessionDiffStatView` only renders in `.tile`, but `isReviewable`
         // needs a live diff stat in both variants — so the bar watches

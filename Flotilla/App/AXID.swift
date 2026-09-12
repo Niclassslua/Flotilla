@@ -10,7 +10,6 @@ public enum AXID: String, Sendable {
     case sidebarAllSessions = "Sidebar.AllSessions"
     case sidebarAllProjects = "Sidebar.AllProjects"
     case sidebarProjectRow = "Sidebar.ProjectRow-"
-    case sidebarSessionRow = "Sidebar.SessionRow-"
 
     // MARK: - Toolbar
     case toolbarNewSession = "Toolbar.NewSession"
@@ -44,9 +43,25 @@ public enum AXID: String, Sendable {
     /// one needs no title.
     case sessionBarGitSidebarToggle = "SessionBar.GitSidebarToggle"
 
+    // MARK: - Git Sidebar
+    case gitSidebar = "GitSidebar"
+    case gitSidebarClose = "GitSidebar.Close"
+    case gitSidebarChangesMode = "GitSidebar.Changes.Mode"
+    case gitSidebarChangesList = "GitSidebar.Changes.List"
+    case gitSidebarChangesCommitMessage = "GitSidebar.Changes.CommitMessage"
+    case gitSidebarChangesCommit = "GitSidebar.Changes.Commit"
+    case gitSidebarBranchesList = "GitSidebar.Branches.List"
+    case gitSidebarBranchesName = "GitSidebar.Branches.Name"
+    case gitSidebarBranchesCreate = "GitSidebar.Branches.Create"
+    case gitSidebarBranchesNew = "GitSidebar.Branches.New"
+    case gitSidebarLogList = "GitSidebar.Log.List"
+    case gitSidebarLogBranch = "GitSidebar.Log.Branch"
+    case gitSidebarActionError = "GitSidebar.ActionError"
+
     // MARK: - Command Palette
     case commandPaletteButton = "CommandPaletteButton"
     case commandPaletteInput = "CommandPalette.Input"
+    case commandPaletteSearch = "CommandPalette.Search"
     case commandPaletteResult = "CommandPalette.Result-"
 
     // MARK: - Create Session
@@ -76,6 +91,9 @@ public enum AXID: String, Sendable {
     case gridTileFocusButton = "GridTile-FocusButton-"
     case gridLayoutPicker = "GridLayout.Picker"
     case gridLayoutPickerCell = "GridLayout.Picker.Cell-"
+    case gridAddAllButton = "Grid.AddAllButton"
+    case gridEmptyButton = "Grid.EmptyButton"
+    case gridDimButton = "Grid.DimButton"
 
     // MARK: - Kanban
     case kanbanBoard = "KanbanBoard"
@@ -100,6 +118,8 @@ public enum AXID: String, Sendable {
     case settingsNotificationDeliveryPicker = "Settings.NotificationDeliveryPicker"
     case settingsGitTab = "Settings.GitTab"
     case settingsAdvancedTab = "Settings.AdvancedTab"
+    case settingsWorktreeBaseDirectory = "Settings.WorktreeBaseDirectory"
+    case settingsView = "SettingsView"
 
     // MARK: - Delete Session Dialog
     case deleteSessionCancel = "DeleteSessionDialog.Cancel"
@@ -110,22 +130,30 @@ public enum AXID: String, Sendable {
     // MARK: - Global / Misc
     case globalRestoreStopped = "Global.Restore stopped sessions"
     case startupWarningBanner = "StartupWarningBanner"
+    case startupWarningBannerDismissButton = "StartupWarningBanner.DismissButton"
     case lastNotifiedSession = "LastNotifiedSession"
     case detailPlaceholder = "DetailPlaceholder"
     case gridEmptyState = "GridEmptyState"
     case viewModePicker = "ViewModePicker"
     case restartSessionButton = "Restart Session"
+    case newSessionButton = "NewSessionButton"
+    case openSessionButton = "Open Session"
 
     // MARK: - Diff Panel
     case diffPanel = "DiffPanel"
     case diffPanelFile = "DiffPanel.File-"
     case diffPanelHunk = "DiffPanel.Hunk-"
+    case diffPanelEmpty = "DiffPanel.Empty"
+    case diffPanelList = "DiffPanel.List"
+    case diffPanelRefreshButton = "DiffPanel.RefreshButton"
+    case diffPanelSimulateEditButton = "DiffPanel.SimulateEditButton"
 
     // MARK: - File Browser
     case fileBrowser = "FileBrowser"
     case fileBrowserNavigator = "FileBrowser.Navigator"
     case fileBrowserEditor = "FileBrowser.Editor"
     case fileBrowserTree = "FileBrowser.Tree-"
+    case fileBrowserRow = "FileBrowser.Row-"
 
     // MARK: - Rules Panel
     case rulesPanel = "RulesPanel"
@@ -154,6 +182,7 @@ public enum AXID: String, Sendable {
     case worktreeTable = "Worktree.Table"
     case worktreePruneButton = "Worktree.PruneButton-"
     case worktreeMergeButton = "Worktree.MergeButton-"
+    case projectReturnToOverview = "Project.ReturnToOverview"
 
     // MARK: - Project Tabs
     case projectTabOverview = "ProjectDetail.ModeTab-Overview"
@@ -197,6 +226,7 @@ public enum AXID: String, Sendable {
     case homeEffortPicker = "Home.EffortPicker"
     case homeLaunchSummary = "Home.LaunchSummary"
     case homeLaunchButton = "Home.LaunchButton"
+    case homeBackgroundButton = "Home.BackgroundButton"
     case projectCompactCardEllipsis = "ProjectCompactCard.Ellipsis-"
 
     // MARK: - Session Row (Legacy - preserved for test compatibility)
@@ -365,5 +395,105 @@ public enum AXID: String, Sendable {
     /// A destination row in the send sheet.
     public static func reviewSendDestination(_ label: String) -> String {
         "Review.SendDestination-\(label)"
+    }
+
+    /// Creates a diff panel file row identifier from a path
+    public static func diffPanelFile(_ path: String) -> String {
+        "DiffPanel.File-\(path)"
+    }
+
+    /// Creates a file browser row identifier from a name
+    public static func fileBrowserRow(_ name: String) -> String {
+        "FileBrowser.Row-\(name)"
+    }
+
+    /// Creates a git sidebar tab identifier
+    public static func gitSidebarTab(_ title: String) -> String {
+        "GitSidebar.Tab.\(title)"
+    }
+
+    /// Creates a git sidebar commit row identifier
+    public static func gitSidebarLogCommit(_ shortSHA: String) -> String {
+        "GitSidebar.Log.Commit-\(shortSHA)"
+    }
+
+    /// Creates a git sidebar change file row identifier
+    public static func gitSidebarChangesFile(_ path: String) -> String {
+        "GitSidebar.Changes.File-\(path)"
+    }
+
+    /// Creates a git sidebar change stage button identifier
+    public static func gitSidebarChangesStage(_ path: String) -> String {
+        "GitSidebar.Changes.Stage-\(path)"
+    }
+
+    /// Creates a git sidebar branch row identifier
+    public static func gitSidebarBranchesRow(_ branch: String) -> String {
+        "GitSidebar.Branches.Row-\(branch)"
+    }
+
+    /// Creates a sidebar project row identifier
+    public static func sidebarProjectRow(_ name: String) -> String {
+        "Sidebar.ProjectRow-\(name)"
+    }
+
+    /// Creates a toolbar presentation show button identifier
+    public static func toolbarShow(_ title: String) -> String {
+        "Toolbar.Show\(title)"
+    }
+
+    /// Creates a knowledge catalog item identifier
+    public static func knowledgeItem(_ title: String) -> String {
+        "Knowledge.Item-\(title)"
+    }
+
+    /// Creates a kanban card identifier
+    public static func kanbanCard(_ title: String) -> String {
+        "KanbanCard-\(title)"
+    }
+
+    /// Creates a kanban column header identifier
+    public static func kanbanColumnHeader(_ title: String) -> String {
+        "KanbanColumn-\(title)-Header"
+    }
+
+    /// Creates a terminal view identifier
+    public static func terminalView(_ title: String) -> String {
+        "TerminalView-\(title)"
+    }
+
+    /// Creates a session row status identifier
+    public static func sessionRowStatus(_ title: String) -> String {
+        "SessionRow-\(title)-Status"
+    }
+
+    /// Creates a session row delete button identifier
+    public static func sessionRowDeleteButton(_ title: String) -> String {
+        "SessionRow-\(title)-DeleteButton"
+    }
+
+    /// Creates a session row delete context menu item identifier
+    public static func sessionRowDeleteMenuItem(_ title: String) -> String {
+        "SessionRow-\(title)-DeleteMenuItem"
+    }
+
+    /// Creates a settings sidebar tab identifier
+    public static func settingsSidebarTab(_ tab: String) -> String {
+        "settings.sidebar.\(tab)"
+    }
+
+    /// Creates a create session agent option identifier
+    public static func createSessionAgentOption(_ agent: String) -> String {
+        "CreateSession.Agent.\(agent)"
+    }
+
+    /// Creates a home agent option identifier
+    public static func homeAgentOption(_ agent: String) -> String {
+        "Home.Agent.\(agent)"
+    }
+
+    /// Creates a project git sub-tab identifier
+    public static func projectGitSubTab(_ title: String) -> String {
+        "ProjectGit.SubTab-\(title)"
     }
 }

@@ -22,6 +22,10 @@ final class HomeComposerUITests: XCTestCase {
         return app
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
     private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier].firstMatch
     }
@@ -29,7 +33,7 @@ final class HomeComposerUITests: XCTestCase {
     func testEmptyGoalDisablesLaunch() {
         let app = launchedApp()
 
-        let launchButton = element(app, "Home.LaunchButton")
+        let launchButton = element(app, .homeLaunchButton)
         XCTAssertTrue(fastWait(launchButton, timeout: 8))
         XCTAssertFalse(launchButton.isEnabled, "The home composer must require an objective before launching")
     }
@@ -37,34 +41,34 @@ final class HomeComposerUITests: XCTestCase {
     func testLaunchGeneralSessionFromHome() {
         let app = launchedApp()
 
-        let goalField = element(app, "Home.GoalField")
+        let goalField = element(app, .homeGoalField)
         XCTAssertTrue(fastWait(goalField, timeout: 8))
         goalField.click()
         goalField.typeText("Investigate the flaky teardown")
 
-        let launchButton = element(app, "Home.LaunchButton")
+        let launchButton = element(app, .homeLaunchButton)
         XCTAssertTrue(launchButton.isEnabled)
         launchButton.click()
 
-        XCTAssertTrue(fastWait(element(app, "SessionRow-Investigate the flaky teardown"), timeout: 5))
+        XCTAssertTrue(fastWait(element(app, AXID.sessionRow("Investigate the flaky teardown")), timeout: 5))
     }
 
     func testLaunchAndStayHereKeepsHomeOnScreen() {
         let app = launchedApp()
 
-        let goalField = element(app, "Home.GoalField")
+        let goalField = element(app, .homeGoalField)
         XCTAssertTrue(fastWait(goalField, timeout: 8))
         goalField.click()
         goalField.typeText("Draft the migration notes")
 
-        let stayButton = element(app, "Home.BackgroundButton")
+        let stayButton = element(app, .homeBackgroundButton)
         XCTAssertTrue(stayButton.isEnabled)
         stayButton.click()
 
         // The session is created...
-        XCTAssertTrue(fastWait(element(app, "SessionRow-Draft the migration notes"), timeout: 5))
+        XCTAssertTrue(fastWait(element(app, AXID.sessionRow("Draft the migration notes")), timeout: 5))
         // ...but the app stays on Home rather than following it into the detail column.
-        XCTAssertTrue(element(app, "Home.GoalField").exists,
+        XCTAssertTrue(element(app, .homeGoalField).exists,
                       "\"Launch & Stay Here\" must not navigate away from the Home dashboard")
     }
 }

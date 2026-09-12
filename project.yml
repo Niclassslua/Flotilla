@@ -116,6 +116,7 @@ targets:
     platform: macOS
     sources:
       - path: FlotillaUITests
+      - path: Flotilla/App/AXID.swift
     dependencies:
       - target: Flotilla
     settings:

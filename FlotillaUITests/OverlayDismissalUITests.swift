@@ -31,6 +31,10 @@ final class OverlayDismissalUITests: XCTestCase {
         return app
     }
 
+    private func element(_ app: XCUIApplication, _ id: AXID) -> XCUIElement {
+        element(app, id.rawValue)
+    }
+
     private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier].firstMatch
     }
@@ -39,17 +43,17 @@ final class OverlayDismissalUITests: XCTestCase {
     /// stable location — clicking it only succeeds if the scrim isn't actually
     /// intercepting hits.
     private func clickBehindOverlay(_ app: XCUIApplication) {
-        let homeLaunchButton = element(app, "Home.LaunchButton")
+        let homeLaunchButton = element(app, .homeLaunchButton)
         XCTAssertTrue(homeLaunchButton.exists)
         homeLaunchButton.click()
     }
 
     func testClickOutsideDismissesCreateSessionModal() {
         let app = launchedApp()
-        XCTAssertTrue(element(app, "NewSessionButton").waitForExistence(timeout: 8))
-        element(app, "NewSessionButton").click()
+        XCTAssertTrue(element(app, .newSessionButton).waitForExistence(timeout: 8))
+        element(app, .newSessionButton).click()
 
-        let goalField = element(app, "CreateSession.GoalField")
+        let goalField = element(app, .createSessionGoalField)
         XCTAssertTrue(goalField.waitForExistence(timeout: 3))
 
         clickBehindOverlay(app)
@@ -58,12 +62,12 @@ final class OverlayDismissalUITests: XCTestCase {
 
     func testClickOutsideDismissesCommandPalette() {
         let app = launchedApp()
-        XCTAssertTrue(element(app, "Toolbar.CommandPalette").waitForExistence(timeout: 8))
-        element(app, "Toolbar.CommandPalette").click()
+        XCTAssertTrue(element(app, .toolbarCommandPalette).waitForExistence(timeout: 8))
+        element(app, .toolbarCommandPalette).click()
 
         // Opening the palette is occasionally slow in this environment —
         // a longer budget than the toolbar button's own.
-        let search = element(app, "CommandPalette.Search")
+        let search = element(app, .commandPaletteSearch)
         XCTAssertTrue(search.waitForExistence(timeout: 15))
 
         clickBehindOverlay(app)
@@ -72,13 +76,13 @@ final class OverlayDismissalUITests: XCTestCase {
 
     func testClickInsideCreateSessionModalDoesNotDismiss() {
         let app = launchedApp()
-        XCTAssertTrue(element(app, "NewSessionButton").waitForExistence(timeout: 8))
-        element(app, "NewSessionButton").click()
+        XCTAssertTrue(element(app, .newSessionButton).waitForExistence(timeout: 8))
+        element(app, .newSessionButton).click()
 
-        let goalField = element(app, "CreateSession.GoalField")
+        let goalField = element(app, .createSessionGoalField)
         XCTAssertTrue(goalField.waitForExistence(timeout: 3))
 
-        let summary = element(app, "CreateSession.LaunchSummary")
+        let summary = element(app, .createSessionLaunchSummary)
         XCTAssertTrue(summary.waitForExistence(timeout: 3))
         summary.click()
 
