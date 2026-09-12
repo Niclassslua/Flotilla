@@ -88,6 +88,9 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         try FileManager.default.createDirectory(at: descPath.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         let chosenWorktreeURL = URL(fileURLWithPath: "/tmp/worktrees/agent-chosen-slug")
+        gitService.worktreesToReturn.append(
+            GitWorktree(branch: "flotilla/agent-chosen-slug", path: chosenWorktreeURL, isMainWorktree: false)
+        )
         let descriptor = AgentSelfReportDescriptor(
             title: "Agent Decided Title",
             branch: "flotilla/agent-chosen-slug",
@@ -170,6 +173,9 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         try FileManager.default.createDirectory(at: descPath.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         let chosenWorktreeURL = URL(fileURLWithPath: "/tmp/worktrees/agent-chosen-slug")
+        gitService.worktreesToReturn.append(
+            GitWorktree(branch: "flotilla/agent-chosen-slug", path: chosenWorktreeURL, isMainWorktree: false)
+        )
         let descriptor = AgentSelfReportDescriptor(
             title: "Agent Decided Title",
             branch: "flotilla/agent-chosen-slug",
@@ -229,5 +235,70 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         // find the goal by content rather than position.
         let goalArg = try XCTUnwrap(proc.startedArguments.first { $0.contains("Choose a concise 2–5 word noun-phrase title") })
         XCTAssertTrue(goalArg.contains("Choose a concise 2–5 word noun-phrase title"))
+    }
+
+    func testAppStoreRejectsSelfReportPointingToRootOrMainCheckout() async throws {
+        let repository = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let gitService = MockGitService()
+        var settings = AppSettings()
+        settings.sessionDefaults.agentManagedTitleEnabled = true
+        settings.git.worktreeNamingSource = .agentManaged
+
+        let projectFolder = URL(fileURLWithPath: "/tmp/safe-project")
+        // Main checkout is main worktree
+        gitService.worktreesToReturn = [
+            GitWorktree(branch: "main", path: projectFolder, isMainWorktree: true)
+        ]
+
+        let store = AppStore(
+            repository: repository,
+            gitService: gitService,
+            processManager: manager(factory: factory, settings: settings),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            settingsProvider: { settings },
+            metadataMonitor: SessionMetadataMonitor(timing: .init(fallbackAfter: .milliseconds(50), pollChunk: .milliseconds(50)))
+        )
+
+        let sessionID = await store.createSession(
+            title: "Dangerous Report Session",
+            goal: "Do task",
+            agent: .codexCLI,
+            projectFolder: projectFolder,
+            checkoutMode: .newWorktree
+        )
+        let unwrappedID = try XCTUnwrap(sessionID)
+
+        // Wait for fallback worktree to be created
+        for _ in 0..<40 {
+            if !gitService.createWorktreeCalls.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let fallbackWorktree = store.sessions.first(where: { $0.id == unwrappedID })?.worktree
+        XCTAssertNotNil(fallbackWorktree, "Fallback worktree should exist")
+
+        let supportDir = TmuxSessionWrapping.defaultSupportDirectory()
+        let descPath = AgentSelfReportCoordinator.descriptorPath(for: unwrappedID, supportDirectory: supportDir)
+        try FileManager.default.createDirectory(at: descPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        // Simulate malicious or buggy agent reporting root "/" or project folder
+        let maliciousDescriptor = AgentSelfReportDescriptor(
+            title: "Malicious Worktree Report",
+            branch: "main",
+            worktreePath: "/"
+        )
+        try JSONEncoder().encode(maliciousDescriptor).write(to: descPath)
+
+        try await Task.sleep(for: .milliseconds(200))
+
+        let currentSession = try XCTUnwrap(store.sessions.first(where: { $0.id == unwrappedID }))
+        // Worktree should NOT be updated to "/"
+        XCTAssertNotEqual(currentSession.worktree?.worktreePath.path, "/")
+        // The fallback worktree must remain intact
+        XCTAssertEqual(currentSession.worktree?.worktreePath, fallbackWorktree?.worktreePath)
+        // Fallback worktree should not have been removed
+        XCTAssertEqual(gitService.removeWorktreeCalls.count, 0)
+
+        AgentSelfReportCoordinator.clearDescriptor(for: unwrappedID, supportDirectory: supportDir)
     }
 }

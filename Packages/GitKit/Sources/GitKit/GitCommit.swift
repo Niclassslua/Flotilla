@@ -340,16 +340,16 @@ public extension GitService {
             guard fields.count >= 2, let marker = fields[0].first else { return nil }
 
             switch marker {
-            case "A": return GitCommitFileChange(path: fields[1], kind: .added)
-            case "D": return GitCommitFileChange(path: fields[1], kind: .deleted)
-            case "M": return GitCommitFileChange(path: fields[1], kind: .modified)
-            case "T": return GitCommitFileChange(path: fields[1], kind: .typeChanged)
-            case "U": return GitCommitFileChange(path: fields[1], kind: .unmerged)
+            case "A": return GitCommitFileChange(path: GitService.unquotePath(fields[1]), kind: .added)
+            case "D": return GitCommitFileChange(path: GitService.unquotePath(fields[1]), kind: .deleted)
+            case "M": return GitCommitFileChange(path: GitService.unquotePath(fields[1]), kind: .modified)
+            case "T": return GitCommitFileChange(path: GitService.unquotePath(fields[1]), kind: .typeChanged)
+            case "U": return GitCommitFileChange(path: GitService.unquotePath(fields[1]), kind: .unmerged)
             case "R", "C":
                 guard fields.count >= 3 else { return nil }
                 return GitCommitFileChange(
-                    path: fields[2],
-                    previousPath: fields[1],
+                    path: GitService.unquotePath(fields[2]),
+                    previousPath: GitService.unquotePath(fields[1]),
                     kind: marker == "R" ? .renamed : .copied
                 )
             default: return nil

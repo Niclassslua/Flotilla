@@ -302,6 +302,49 @@ final class GitServiceRealRepoTests: XCTestCase {
         XCTAssertTrue(branches.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
+    func testRemoveWorktreeRefusesMainWorktree() async throws {
+        do {
+            try await service.removeWorktree(at: repoPath, in: repoPath, branch: "main", deleteBranch: false)
+            XCTFail("Expected cannotRemoveMainWorktree error")
+        } catch GitServiceError.cannotRemoveMainWorktree(let url) {
+            XCTAssertEqual(url.path, repoPath.path)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repoPath.path))
+    }
+
+    func testRemoveWorktreeRefusesRootAndAncestorPaths() async throws {
+        let root = URL(fileURLWithPath: "/")
+        do {
+            try await service.removeWorktree(at: root, in: repoPath, branch: "main", deleteBranch: false)
+            XCTFail("Expected invalidWorktreePath error")
+        } catch GitServiceError.invalidWorktreePath(let url) {
+            XCTAssertEqual(url.path, root.path)
+        }
+
+        let ancestor = repoPath.deletingLastPathComponent()
+        do {
+            try await service.removeWorktree(at: ancestor, in: repoPath, branch: "main", deleteBranch: false)
+            XCTFail("Expected cannotRemoveMainWorktree error")
+        } catch GitServiceError.cannotRemoveMainWorktree(let url) {
+            XCTAssertEqual(url.path, ancestor.path)
+        }
+    }
+
+    func testRemoveWorktreeRefusesUnownedDirectory() async throws {
+        let unowned = worktreeBase.appendingPathComponent("unowned-folder")
+        try FileManager.default.createDirectory(at: unowned, withIntermediateDirectories: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unowned.path))
+
+        do {
+            try await service.removeWorktree(at: unowned, in: repoPath, branch: "unowned", deleteBranch: false)
+            XCTFail("Expected notAWorktree error")
+        } catch GitServiceError.notAWorktree(let url) {
+            XCTAssertEqual(url.path, unowned.path)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unowned.path))
+        try? FileManager.default.removeItem(at: unowned)
+    }
+
     // MARK: - Write path (stage / unstage / discard / commit / push / fetch)
 
     func testStageMovesFileIntoIndex() async throws {
@@ -575,6 +618,56 @@ final class GitServiceRealRepoTests: XCTestCase {
         try await git(["remote", "add", "origin", "git@github.com:Niclassslua/Flotilla.git"])
         let withOrigin = try await service.remoteURL(at: repoPath)
         XCTAssertEqual(withOrigin, "git@github.com:Niclassslua/Flotilla.git")
+    }
+
+    func testUnquotePathHandlesOctalAndEscapedCharacters() {
+        // Plain string without quotes is unchanged
+        XCTAssertEqual(GitService.unquotePath("simple/path.txt"), "simple/path.txt")
+
+        // Escaped quotes and spaces
+        XCTAssertEqual(GitService.unquotePath("\"path with \\\"quotes\\\" and spaces.txt\""), "path with \"quotes\" and spaces.txt")
+
+        // Standard escapes
+        XCTAssertEqual(GitService.unquotePath("\"folder\\tname/file\\n.txt\""), "folder\tname/file\n.txt")
+
+        // Octal escape sequences for UTF-8 bytes (e.g. \342\234\223 is ✓)
+        XCTAssertEqual(GitService.unquotePath("\"\\342\\234\\223.txt\""), "✓.txt")
+
+        // German umlauts (\303\244 = ä, \303\266 = ö)
+        XCTAssertEqual(GitService.unquotePath("\"m\\303\\244rz/sch\\303\\266n.txt\""), "märz/schön.txt")
+    }
+
+    func testParseUnifiedDiffWithQuotedAndNonASCIIPaths() {
+        let diff = """
+        diff --git "a/path with space.txt" "b/path with space.txt"
+        index 0000000..1111111 100644
+        --- "a/path with space.txt"
+        +++ "b/path with space.txt"
+        @@ -0,0 +1,1 @@
+        +hello
+        diff --git "a/\\342\\234\\223.txt" "b/\\342\\234\\223.txt"
+        index 0000000..2222222 100644
+        --- "a/\\342\\234\\223.txt"
+        +++ "b/\\342\\234\\223.txt"
+        @@ -0,0 +1,1 @@
+        +checkmark
+        """
+        let parsed = GitService.parseUnifiedDiff(diff)
+        XCTAssertEqual(parsed.count, 2)
+        XCTAssertEqual(parsed[0].path, "path with space.txt")
+        XCTAssertEqual(parsed[1].path, "✓.txt")
+    }
+
+    func testStatusWithNonASCIIAndSpacedFilenames() async throws {
+        let spaced = repoPath.appendingPathComponent("a file with spaces.txt")
+        let nonASCII = repoPath.appendingPathComponent("✓_check.txt")
+        try "content1\n".write(to: spaced, atomically: true, encoding: .utf8)
+        try "content2\n".write(to: nonASCII, atomically: true, encoding: .utf8)
+
+        let status = try await service.status(at: repoPath)
+        let paths = Set(status.entries.map(\.path))
+        XCTAssertTrue(paths.contains("a file with spaces.txt"))
+        XCTAssertTrue(paths.contains("✓_check.txt"))
     }
 }
 

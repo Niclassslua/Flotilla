@@ -6,7 +6,7 @@
 
 Flotilla is a **macOS-only** SwiftUI application that serves as a local command center for running multiple coding agent sessions simultaneously (Claude Code, Codex CLI, OpenCode). It provides integrated terminal emulation, git worktree management, session lifecycle tracking, and a dark, keyboard-first developer UI.
 
-- **Platform:** macOS 15.0+ (Sequoia)
+- **Platform:** macOS 26.0+
 - **Language:** Swift 6.0 (strict concurrency)
 - **Build system:** XcodeGen (`project.yml` → `Flotilla.xcodeproj`)
 - **Bundle ID:** `com.niclassslua.flotilla`
@@ -208,7 +208,7 @@ Flotilla (app) → all packages
 | **DesignSystem** | FlotillaPalette (colors), FlotillaSpacing, FlotillaRadius, FlotillaPanel modifier, StatusIndicator | None |
 | **SettingsKit** | AppSettings (Codable), SettingsStoring, UserDefaultsSettingsStore | None |
 | **AgentKit** | AgentProviding, CLIAgentProvider, AgentLaunchPlan, ModelCatalogFetcher | None |
-| **PersistenceKit** | GRDBSessionRepository (SQLite), versioned migrations (v1–v3) | GRDB.swift 6.29+ |
+| **PersistenceKit** | GRDBSessionRepository (SQLite), versioned migrations (v1–v13) | GRDB.swift 6.29+ |
 | **TerminalKit** | TerminalController, SwiftUI/AppKit bridge to SwiftTerm | SwiftTerm 1.2+ |
 | **HooksKit** | SessionStatusObserver, WaitingNotificationGate, TerminalOutputDigest | None |
 | **TranscriptKit** | CanonicalEntry, TranscriptReading/TranscriptWriting codecs, ToolCallPairing, TranscriptCodecRegistry — reads and writes agents' native transcripts so a session can move between agents | None |
@@ -420,7 +420,7 @@ xcodegen generate
 | Setting | Value |
 |---------|-------|
 | `SWIFT_VERSION` | 6.0 |
-| `MACOSX_DEPLOYMENT_TARGET` | 15.0 |
+| `MACOSX_DEPLOYMENT_TARGET` | 26.0 |
 | `CODE_SIGN_IDENTITY` | `-` (ad-hoc) |
 | `ENABLE_HARDENED_RUNTIME` | YES (app), NO (tests) |
 | `GENERATE_INFOPLIST_FILE` | YES |
@@ -492,7 +492,7 @@ Pipeline at `.github/workflows/build.yml`:
 | `subtleStroke` | `(50, 50, 58)/255` | Hairline borders |
 | `mutedText` | `white @ 0.52` | Secondary/muted text |
 
-**Always dark mode.** The app forces `.environment(\.colorScheme, .dark)`.
+**Appearance.** Configurable via Settings (Dark, Light, System) applying `FlotillaColors` semantic tokens.
 
 ### Spacing Scale (`FlotillaSpacing`)
 
@@ -551,7 +551,7 @@ Import only what you need. Package modules are imported by product name.
 - **Environment:** `@Environment(\.openSettings)`, `@Environment(\.accessibilityReduceMotion)`
 - **Animations:** `.snappy(duration:)` for quick transitions; explicit `Animation?` values
 - **Sheets:** `sheet(item:)` with `Identifiable` enums
-- **Navigation:** `NavigationSplitView` with manual `AppDestination` enum tracking (no `NavigationStack`)
+- **Navigation:** `NavigationSplitView` with `WorkspaceNavigator` observable navigator and `SidebarItem` selection tracking
 - **Notifications:** `NotificationCenter.default.publisher(for:)` for keyboard shortcuts and cross-view communication
 
 ### Access Control

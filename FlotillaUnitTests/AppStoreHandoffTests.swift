@@ -238,4 +238,42 @@ final class AppStoreHandoffTests: XCTestCase {
         XCTAssertNil(store.sessions.first?.pendingHandoff)
         XCTAssertNotNil(store.lastOperationError)
     }
+
+    func testHandoffRecoveryOnLaunchSettlesExpiredProbation() async throws {
+        let repo = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let procManager = manager(factory: factory)
+
+        let sessionID = UUID()
+        let sourceTranscriptURL = URL(fileURLWithPath: "/tmp/source-transcript.jsonl")
+        let pending = PendingHandoff(
+            sourceAgent: .claudeCode,
+            sourceSessionID: "claude-old-id",
+            sourceTranscriptPath: sourceTranscriptURL,
+            startedAt: Date().addingTimeInterval(-30) // 30 seconds ago (expired probation)
+        )
+        let session = Session(
+            id: sessionID,
+            title: "Handoff in flight",
+            goal: "Goal",
+            agent: .codexCLI,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .readyForReview,
+            pendingHandoff: pending
+        )
+        try repo.save(session)
+
+        let store = AppStore(
+            repository: repo,
+            gitService: MockGitService(),
+            processManager: procManager,
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            handoffService: handoffService(processManager: procManager)
+        )
+
+        // On launch restore, the expired probation should be settled
+        let restored = try XCTUnwrap(store.sessions.first(where: { $0.id == sessionID }))
+        XCTAssertNil(restored.pendingHandoff, "Probation must be settled when expired on launch")
+    }
 }

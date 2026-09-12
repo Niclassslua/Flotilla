@@ -231,6 +231,7 @@
 		9969F2DD9ACA3ECB77E6DEF2 /* sass.svg in Resources */ = {isa = PBXBuildFile; fileRef = 740FDD2C6D955AC6EBFAE5C2 /* sass.svg */; };
 		999C3EE6A91C0AC74D3AEA6C /* folder-test-open.svg in Resources */ = {isa = PBXBuildFile; fileRef = 27E23A83A490E53614716B56 /* folder-test-open.svg */; };
 		99FD92EC6C777940FF6D3100 /* ChildProcessEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761DC27E7FA9F1BBA78CB09A /* ChildProcessEnvironmentTests.swift */; };
+		9AC313AB32C1C13D4A4910FD /* FileBrowserViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B1DE75BEA1F78C332C6D8D /* FileBrowserViewModelTests.swift */; };
 		9AF38C37FAA9B6D8DAEC3794 /* AXID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1505FDEBF32FDDA8F3148254 /* AXID.swift */; };
 		9E05CD5CFFF4C8F27FF74AD6 /* SessionElapsed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F1832CC0C919E3FE365BA8 /* SessionElapsed.swift */; };
 		9E2CB349DC6DC2E3F62C72BE /* claude.svg in Resources */ = {isa = PBXBuildFile; fileRef = EC7571A04951B71A2187C320 /* claude.svg */; };
@@ -702,6 +703,7 @@
 		F04C9C1E3845B85576E537ED /* TranscriptHandoffRoundTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptHandoffRoundTripTests.swift; sourceTree = "<group>"; };
 		F0B5A35229B45629EA4F3B13 /* folder-rules.svg */ = {isa = PBXFileReference; path = "folder-rules.svg"; sourceTree = "<group>"; };
 		F0FC0E7A5D4334D57338B01E /* ModelCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogTests.swift; sourceTree = "<group>"; };
+		F3B1DE75BEA1F78C332C6D8D /* FileBrowserViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserViewModelTests.swift; sourceTree = "<group>"; };
 		F3C94752D73B04499C0033AB /* WorktreeSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeSnapshot.swift; sourceTree = "<group>"; };
 		F3EE463FBBFC4896AC114F88 /* DesignSystem */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DesignSystem; path = Packages/DesignSystem; sourceTree = SOURCE_ROOT; };
 		F43AD8E48B9A5959853AD088 /* FileBrowserViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserViewModel.swift; sourceTree = "<group>"; };
@@ -1179,6 +1181,7 @@
 				C2EF3700AF5B4EB6E32DE2A9 /* CodexTranscriptCodecTests.swift */,
 				5026FEB6A40EEEA9E60312CF /* CommitAttributionHooksTests.swift */,
 				A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */,
+				F3B1DE75BEA1F78C332C6D8D /* FileBrowserViewModelTests.swift */,
 				935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */,
 				51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */,
 				5EE363719E7D084B9B1D5B96 /* GitBranchIconTests.swift */,
@@ -1576,6 +1579,7 @@
 				B1DD8833E0B230636BB4D7B7 /* CodexTranscriptCodecTests.swift in Sources */,
 				EAAF365A09C6168EB10D7A95 /* CommitAttributionHooksTests.swift in Sources */,
 				5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */,
+				9AC313AB32C1C13D4A4910FD /* FileBrowserViewModelTests.swift in Sources */,
 				7666CEF06B123CCB5B58E56A /* FlotillaNotificationDelegateTests.swift in Sources */,
 				723875E0AA69C129B1AA034F /* FlotillaUnitTests.swift in Sources */,
 				DCD5AEE9F4FD4613A3AA8DE2 /* GitBranchIconTests.swift in Sources */,

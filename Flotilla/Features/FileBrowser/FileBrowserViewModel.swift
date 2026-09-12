@@ -73,18 +73,21 @@ final class FileBrowserViewModel {
         return nil
     }
 
+    private(set) var loadedContent: String?
+    var isDirty: Bool { !isBinaryOrUnopenable && loadedContent != nil && content != loadedContent }
+
     func select(_ node: FileNode) async {
         guard !node.isDirectory else { return }
-        
+
         // Check for unsaved changes before switching
-        if let currentNode = selectedNode, currentNode != node, !isBinaryOrUnopenable, content != "" {
-            let metadata = await service.metadata(at: currentNode.url)
-            if let modificationDate = metadata.modificationDate,
-               let savedAt,
-               modificationDate <= savedAt {
-                // Content appears unchanged, safe to switch
-            } else {
-                await save()
+        if let currentNode = selectedNode, currentNode != node, isDirty {
+            let outcome = await save()
+            switch outcome {
+            case .conflict, .failed:
+                // Preserve unsaved edits; do not switch away from file on conflict or error
+                return
+            case .saved, .noChanges:
+                break
             }
         }
 
@@ -109,21 +112,25 @@ final class FileBrowserViewModel {
 
         if binaryExtensions.contains(ext) {
             content = ""
+            loadedContent = nil
             selectedNode = node
             isBinaryOrUnopenable = true
             errorMessage = nil
             message = nil
             return
         }
-        
+
         do {
-            content = try await service.readText(at: node.url)
+            let text = try await service.readText(at: node.url)
+            content = text
+            loadedContent = text
             selectedNode = node
             isBinaryOrUnopenable = false
             errorMessage = nil
             message = nil
         } catch {
             content = ""
+            loadedContent = nil
             selectedNode = node
             isBinaryOrUnopenable = true
             errorMessage = nil
@@ -131,31 +138,47 @@ final class FileBrowserViewModel {
         }
     }
 
-    func save() async {
-        guard let selectedNode, !selectedNode.isDirectory else { return }
-        
+    enum SaveOutcome: Sendable {
+        case saved
+        case noChanges
+        case conflict(String)
+        case failed(String)
+    }
+
+    @discardableResult
+    func save() async -> SaveOutcome {
+        guard let selectedNode, !selectedNode.isDirectory else { return .noChanges }
+        guard !isBinaryOrUnopenable else { return .noChanges }
+        guard content != loadedContent else { return .noChanges }
+
         // Check for write conflict: if the file was modified since we opened it
         let metadata = await service.metadata(at: selectedNode.url)
         let currentModificationDate = metadata.modificationDate
-        
+
         if let savedAt, let currentModificationDate,
            currentModificationDate > savedAt
         {
-            message = "File was modified outside this app — changes may be lost"
+            let conflictMsg = "File was modified outside this app — changes may be lost"
+            message = conflictMsg
             isSaving = false
-            return
+            return .conflict(conflictMsg)
         }
-        
+
         isSaving = true
         defer { isSaving = false }
         do {
             try await service.writeText(content, to: selectedNode.url)
-            savedAt = Date()
+            let updatedMeta = await service.metadata(at: selectedNode.url)
+            savedAt = updatedMeta.modificationDate ?? Date()
+            loadedContent = content
             message = "Saved"
             errorMessage = nil
+            return .saved
         } catch {
             message = nil
-            errorMessage = "Could not save \(selectedNode.name): \(error.localizedDescription)"
+            let err = "Could not save \(selectedNode.name): \(error.localizedDescription)"
+            errorMessage = err
+            return .failed(err)
         }
     }
 }

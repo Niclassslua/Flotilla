@@ -16,6 +16,7 @@ public protocol SessionRepository: Sendable {
     func delete(sessionID: UUID) throws
     func delete(projectID: UUID) throws
     func loadScrollback(sessionID: UUID) -> Data?
+    func updateScrollback(sessionID: UUID, scrollback: Data) throws
     
     // MARK: - Kanban
     func loadKanbanBoards() throws -> [KanbanBoard]

@@ -87,4 +87,24 @@ final class ProcessCommandRunnerTests: XCTestCase {
 
         XCTAssertEqual(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "0|has-home")
     }
+
+    func testCallerCancellationTerminatesProcessAndThrowsCancellationError() async throws {
+        let task = Task {
+            try await ProcessCommandRunner(timeout: 10.0).run(
+                ["10"],
+                executable: URL(fileURLWithPath: "/bin/sleep"),
+                workingDirectory: URL(fileURLWithPath: "/tmp")
+            )
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("expected cancellation error")
+        } catch is CancellationError {
+            // Success
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+    }
 }

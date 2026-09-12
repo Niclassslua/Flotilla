@@ -152,6 +152,9 @@ public enum GitServiceError: Error, Equatable, LocalizedError {
     case ghNotFound
     case prCreationFailed(exitCode: Int32, stderr: String)
     case commitNotFound(String)
+    case cannotRemoveMainWorktree(URL)
+    case notAWorktree(URL)
+    case invalidWorktreePath(URL)
 
     public var errorDescription: String? {
         switch self {
@@ -176,6 +179,12 @@ public enum GitServiceError: Error, Equatable, LocalizedError {
             return detail.isEmpty ? "gh exited with code \(exitCode)" : "gh exited with code \(exitCode): \(detail)"
         case .commitNotFound(let sha):
             return "No commit found for '\(sha)'."
+        case .cannotRemoveMainWorktree(let url):
+            return "Cannot remove main worktree at \(url.path)."
+        case .notAWorktree(let url):
+            return "The path \(url.path) is not a registered secondary worktree."
+        case .invalidWorktreePath(let url):
+            return "The worktree path \(url.path) is invalid."
         }
     }
 }
@@ -382,19 +391,32 @@ public struct GitService: GitServiceProtocol {
     }
 
     public func status(at repoPath: URL) async throws -> GitStatus {
-        let result = try await run(["status", "--porcelain=v1"], at: repoPath)
+        let result = try await run(["status", "--porcelain=v1", "-z"], at: repoPath)
         var entries: [GitStatusEntry] = []
-        for rawLine in result.stdout.split(separator: "\n", omittingEmptySubsequences: true) {
-            let line = String(rawLine)
-            guard line.count > 3 else { continue }
-            let chars = Array(line)
+        let parts = result.stdout.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
+        var i = 0
+        while i < parts.count {
+            let part = parts[i]
+            if part.isEmpty {
+                i += 1
+                continue
+            }
+            guard part.count >= 3 else {
+                i += 1
+                continue
+            }
+            let chars = Array(part)
             let indexStatus = chars[0]
             let worktreeStatus = chars[1]
-            var path = String(line.dropFirst(3))
-            if let arrowRange = path.range(of: " -> ") {
-                path = String(path[arrowRange.upperBound...])
+            let path = String(part.dropFirst(3))
+
+            // For renames (R) or copies (C), git status -z emits:
+            // "XY path\0origPath\0"
+            if indexStatus == "R" || indexStatus == "C" || worktreeStatus == "R" || worktreeStatus == "C" {
+                i += 1 // skip origPath
             }
             entries.append(GitStatusEntry(path: path, indexStatus: indexStatus, worktreeStatus: worktreeStatus))
+            i += 1
         }
         return GitStatus(entries: entries)
     }
@@ -484,6 +506,45 @@ public struct GitService: GitServiceProtocol {
     }
 
     public func removeWorktree(at path: URL, in repoPath: URL, branch: String, deleteBranch: Bool) async throws {
+        let canonicalPath = path.standardized.resolvingSymlinksInPath()
+        let canonicalRepoPath = repoPath.standardized.resolvingSymlinksInPath()
+
+        // 1. Guard against root, empty paths, or non-directory
+        guard canonicalPath.path != "/", !canonicalPath.path.isEmpty else {
+            throw GitServiceError.invalidWorktreePath(path)
+        }
+
+        // 2. Guard against removing the main repository or an ancestor of the repository
+        if canonicalPath.path == canonicalRepoPath.path || canonicalRepoPath.path.hasPrefix(canonicalPath.path + "/") {
+            throw GitServiceError.cannotRemoveMainWorktree(path)
+        }
+
+        // 3. Verify against git's registered worktrees
+        let worktrees = try await listWorktrees(at: repoPath)
+        let matchingWorktree = worktrees.first {
+            $0.path.standardized.resolvingSymlinksInPath().path == canonicalPath.path
+        }
+
+        if let matching = matchingWorktree, matching.isMainWorktree {
+            throw GitServiceError.cannotRemoveMainWorktree(path)
+        }
+
+        if matchingWorktree == nil {
+            if FileManager.default.fileExists(atPath: canonicalPath.path) {
+                // Directory exists on disk but is NOT registered as a worktree of this repository.
+                // Refuse to delete it.
+                throw GitServiceError.notAWorktree(path)
+            } else {
+                // It is already gone from disk and not registered in git.
+                // Clean up branch if requested and finish.
+                if deleteBranch {
+                    _ = try? await run(["branch", "-D", branch], at: repoPath)
+                }
+                return
+            }
+        }
+
+        // 4. It is an owned secondary worktree. Attempt git worktree remove.
         var worktreeFailure: GitServiceError?
         do {
             _ = try await run(["worktree", "remove", path.path, "--force"], at: repoPath)
@@ -491,23 +552,14 @@ public struct GitService: GitServiceProtocol {
             worktreeFailure = .commandFailed(exitCode: exitCode, stderr: stderr)
         }
 
-        if worktreeFailure != nil {
-            // `worktree remove` fails when the directory is already gone or
-            // its metadata is stale (e.g. deleted manually or by a previous
-            // partial cleanup). Recover by removing any lingering directory
-            // and pruning the stale worktree record from git, so the session
-            // deletion still cleans up on disk.
-            //
-            // `FileManager.removeItem` used to do this recursively, but it
-            // aborts the whole recursive delete on the first item it can't
-            // remove — leaving everything *before* that item gone and
-            // everything after it (including the directory itself) behind.
-            // That's exactly how orphaned worktree directories with a
-            // leftover `.claude/` folder and no `.git` file were found on
-            // disk: git had already unregistered the worktree, but the
-            // directory removal choked partway through. `rm -rf` keeps
-            // going past an unremovable item instead of stopping the whole
-            // walk, so it clears everything it can rather than nothing.
+        if let failure = worktreeFailure {
+            // If git refused because the worktree is locked, do not bypass with rm -rf
+            if case .commandFailed(_, let stderr) = failure, stderr.lowercased().contains("locked") {
+                throw failure
+            }
+
+            // For confirmed secondary worktrees, recover from stale metadata / partial cleanup
+            // (e.g. leftover unremovable files or already unregistered worktree)
             if FileManager.default.fileExists(atPath: path.path) {
                 let cleanup = Process()
                 cleanup.executableURL = URL(fileURLWithPath: "/bin/rm")
@@ -1103,15 +1155,20 @@ public struct GitService: GitServiceProtocol {
             let text = String(line)
             if text.hasPrefix("diff --git ") {
                 flushFile()
-                let components = text.split(separator: " ")
-                if let destination = components.last {
-                    let rawPath = String(destination)
-                    currentPath = rawPath.hasPrefix("b/") ? String(rawPath.dropFirst(2)) : rawPath
+                let rest = String(text.dropFirst("diff --git ".count))
+                currentPath = extractDiffDestinationPath(rest)
+            } else if text.hasPrefix("+++ ") {
+                let remainder = String(text.dropFirst("+++ ".count)).trimmingCharacters(in: .whitespaces)
+                if remainder == "/dev/null" {
+                    if currentPath == nil { currentPath = nil }
+                } else if remainder.hasPrefix("\"b/") {
+                    let quoted = "\"" + remainder.dropFirst("\"b/".count)
+                    currentPath = unquotePath(quoted)
+                } else if remainder.hasPrefix("b/") {
+                    currentPath = unquotePath(String(remainder.dropFirst("b/".count)))
+                } else {
+                    currentPath = unquotePath(remainder)
                 }
-            } else if text.hasPrefix("+++ b/") {
-                currentPath = String(text.dropFirst("+++ b/".count))
-            } else if text.hasPrefix("+++ /dev/null"), currentPath == nil {
-                currentPath = nil
             } else if text.hasPrefix("@@ ") {
                 flushHunk()
                 currentHunkHeader = text
@@ -1121,5 +1178,110 @@ public struct GitService: GitServiceProtocol {
         }
         flushFile()
         return diffs
+    }
+
+    private static func extractDiffDestinationPath(_ rest: String) -> String? {
+        if let range = rest.range(of: "\" \"b/") {
+            let quotedDst = String(rest[rest.index(after: range.lowerBound)...])
+            if quotedDst.hasPrefix("\"b/") {
+                return unquotePath("\"" + quotedDst.dropFirst("\"b/".count))
+            }
+            return unquotePath(quotedDst)
+        }
+        if let range = rest.range(of: " \"b/") {
+            let quotedDst = String(rest[range.upperBound...])
+            return unquotePath("\"" + quotedDst)
+        }
+        if let range = rest.range(of: " b/") {
+            let rawDst = String(rest[range.upperBound...])
+            return unquotePath(rawDst)
+        }
+        let components = rest.split(separator: " ")
+        if let destination = components.last {
+            let rawPath = String(destination)
+            if rawPath.hasPrefix("b/") {
+                return unquotePath(String(rawPath.dropFirst(2)))
+            } else if rawPath.hasPrefix("\"b/") {
+                return unquotePath("\"" + rawPath.dropFirst(3))
+            }
+            return unquotePath(rawPath)
+        }
+        return nil
+    }
+
+    /// Unquotes a C-style quoted path as emitted by git in porcelain output or diffs.
+    /// Handles C escapes (\a, \b, \t, \n, \v, \f, \r, \", \\) and octal byte sequences (\OOO).
+    public static func unquotePath(_ input: String) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") && trimmed.count >= 2 else {
+            return input
+        }
+        let inner = trimmed.dropFirst().dropLast()
+        var bytes = [UInt8]()
+        var i = inner.startIndex
+        while i < inner.endIndex {
+            let ch = inner[i]
+            if ch == "\\" {
+                let nextIndex = inner.index(after: i)
+                guard nextIndex < inner.endIndex else {
+                    bytes.append(UInt8(ascii: "\\"))
+                    break
+                }
+                let nextCh = inner[nextIndex]
+                switch nextCh {
+                case "a":
+                    bytes.append(0x07)
+                    i = inner.index(after: nextIndex)
+                case "b":
+                    bytes.append(0x08)
+                    i = inner.index(after: nextIndex)
+                case "t":
+                    bytes.append(0x09)
+                    i = inner.index(after: nextIndex)
+                case "n":
+                    bytes.append(0x0A)
+                    i = inner.index(after: nextIndex)
+                case "v":
+                    bytes.append(0x0B)
+                    i = inner.index(after: nextIndex)
+                case "f":
+                    bytes.append(0x0C)
+                    i = inner.index(after: nextIndex)
+                case "r":
+                    bytes.append(0x0D)
+                    i = inner.index(after: nextIndex)
+                case "\"":
+                    bytes.append(UInt8(ascii: "\""))
+                    i = inner.index(after: nextIndex)
+                case "\\":
+                    bytes.append(UInt8(ascii: "\\"))
+                    i = inner.index(after: nextIndex)
+                case "0"..."7":
+                    var octalStr = String(nextCh)
+                    var cur = inner.index(after: nextIndex)
+                    while cur < inner.endIndex && octalStr.count < 3 {
+                        let c = inner[cur]
+                        if c >= "0" && c <= "7" {
+                            octalStr.append(c)
+                            cur = inner.index(after: cur)
+                        } else {
+                            break
+                        }
+                    }
+                    if let val = UInt8(octalStr, radix: 8) {
+                        bytes.append(val)
+                    }
+                    i = cur
+                default:
+                    bytes.append(UInt8(ascii: "\\"))
+                    bytes.append(contentsOf: String(nextCh).utf8)
+                    i = inner.index(after: nextIndex)
+                }
+            } else {
+                bytes.append(contentsOf: String(ch).utf8)
+                i = inner.index(after: i)
+            }
+        }
+        return String(bytes: bytes, encoding: .utf8) ?? String(decoding: bytes, as: UTF8.self)
     }
 }

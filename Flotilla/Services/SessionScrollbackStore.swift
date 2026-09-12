@@ -6,6 +6,7 @@ import SessionKit
 final class SessionScrollbackStore {
     private var buffers: [UUID: Data] = [:]
     private var saveTasks: [UUID: Task<Void, Never>] = [:]
+    private var versions: [UUID: Int] = [:]
     private let maximumBytes = 256 * 1_024
     private let trimSlack = 64 * 1_024
 
@@ -32,10 +33,12 @@ final class SessionScrollbackStore {
         if let buffer = buffers[id], buffer.count > maximumBytes + trimSlack {
             buffers[id] = Data(buffer.suffix(maximumBytes))
         }
+        versions[id, default: 0] += 1
+        let currentVersion = versions[id]!
         saveTasks[id]?.cancel()
         saveTasks[id] = Task {
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, self.versions[id] == currentVersion else { return }
             await save()
         }
     }
@@ -43,6 +46,7 @@ final class SessionScrollbackStore {
     func remove(_ id: UUID) {
         saveTasks.removeValue(forKey: id)?.cancel()
         buffers[id] = nil
+        versions[id] = nil
     }
 
     func cancelPendingSaves() {

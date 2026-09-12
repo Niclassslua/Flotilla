@@ -66,62 +66,62 @@ public struct ProcessCommandRunner: CommandRunning {
         workingDirectory: URL,
         extraEnvironment: [String: String]
     ) async throws -> CommandResult {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = executable
-            process.arguments = arguments
-            process.currentDirectoryURL = workingDirectory
-            process.standardInput = nil
-            process.standardOutput = Pipe()
-            process.standardError = Pipe()
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+        process.currentDirectoryURL = workingDirectory
+        process.standardInput = nil
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
 
-            process.environment = ProcessInfo.processInfo.environment
-                .merging(environmentOverrides) { _, override in override }
-                .merging(extraEnvironment) { _, override in override }
+        process.environment = ProcessInfo.processInfo.environment
+            .merging(environmentOverrides) { _, override in override }
+            .merging(extraEnvironment) { _, override in override }
 
-            let outPipe = process.standardOutput as! Pipe
-            let errPipe = process.standardError as! Pipe
-            let outCollector = PipeCollector(handle: outPipe.fileHandleForReading)
-            let errCollector = PipeCollector(handle: errPipe.fileHandleForReading)
-            outCollector.start()
-            errCollector.start()
+        let outPipe = process.standardOutput as! Pipe
+        let errPipe = process.standardError as! Pipe
+        let outCollector = PipeCollector(handle: outPipe.fileHandleForReading)
+        let errCollector = PipeCollector(handle: errPipe.fileHandleForReading)
 
-            // Both the termination handler and the timeout task can fire —
-            // the guard ensures only the first one to arrive resumes the
-            // continuation, since resuming twice is a fatal error.
-            let resumeGuard = ResumeGuard()
+        let state = ProcessRunnerState(
+            process: process,
+            outCollector: outCollector,
+            errCollector: errCollector
+        )
 
-            let timeoutTask = Task {
-                try? await Task.sleep(for: .seconds(self.timeout))
-                guard !Task.isCancelled, resumeGuard.claim() else { return }
-                process.terminationHandler = nil
-                process.terminate()
-                _ = outCollector.finish()
-                _ = errCollector.finish()
-                continuation.resume(throwing: CommandTimeoutError(seconds: self.timeout))
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                state.continuation = continuation
+                outCollector.start()
+                errCollector.start()
+
+                state.timeoutTask = Task {
+                    try? await Task.sleep(for: .seconds(self.timeout))
+                    guard !Task.isCancelled else { return }
+                    state.terminateProcess()
+                    state.complete(with: .failure(CommandTimeoutError(seconds: self.timeout)))
+                }
+
+                process.terminationHandler = { proc in
+                    let outData = outCollector.finish()
+                    let errData = errCollector.finish()
+                    state.complete(with: .success(CommandResult(
+                        exitCode: proc.terminationStatus,
+                        stdout: String(decoding: outData, as: UTF8.self),
+                        stderr: String(decoding: errData, as: UTF8.self)
+                    )))
+                }
+
+                do {
+                    try process.run()
+                } catch {
+                    state.terminateProcess()
+                    state.complete(with: .failure(error))
+                }
             }
-
-            process.terminationHandler = { proc in
-                timeoutTask.cancel()
-                guard resumeGuard.claim() else { return }
-                let outData = outCollector.finish()
-                let errData = errCollector.finish()
-                continuation.resume(returning: CommandResult(
-                    exitCode: proc.terminationStatus,
-                    stdout: String(decoding: outData, as: UTF8.self),
-                    stderr: String(decoding: errData, as: UTF8.self)
-                ))
-            }
-
-            do {
-                try process.run()
-            } catch {
-                timeoutTask.cancel()
-                guard resumeGuard.claim() else { return }
-                _ = outCollector.finish()
-                _ = errCollector.finish()
-                continuation.resume(throwing: error)
-            }
+        } onCancel: {
+            state.terminateProcess()
+            state.complete(with: .failure(CancellationError()))
         }
     }
 }
@@ -135,19 +135,59 @@ public struct CommandTimeoutError: Error, Equatable, LocalizedError {
     }
 }
 
-/// Ensures the continuation in `ProcessCommandRunner.run` is resumed exactly
-/// once, even though termination and timeout can race on different queues.
-private final class ResumeGuard: @unchecked Sendable {
+private final class ProcessRunnerState: @unchecked Sendable {
     private let lock = NSLock()
-    private var claimed = false
+    let process: Process
+    let outCollector: PipeCollector
+    let errCollector: PipeCollector
+    var continuation: CheckedContinuation<CommandResult, any Error>?
+    var timeoutTask: Task<Void, Never>?
+    private var isCompleted = false
 
-    /// Returns `true` for the first caller only.
-    func claim() -> Bool {
+    init(process: Process, outCollector: PipeCollector, errCollector: PipeCollector) {
+        self.process = process
+        self.outCollector = outCollector
+        self.errCollector = errCollector
+    }
+
+    func complete(with result: Result<CommandResult, any Error>) {
         lock.lock()
-        defer { lock.unlock() }
-        guard !claimed else { return false }
-        claimed = true
-        return true
+        guard !isCompleted, let cont = continuation else {
+            lock.unlock()
+            return
+        }
+        isCompleted = true
+        continuation = nil
+        let task = timeoutTask
+        timeoutTask = nil
+        process.terminationHandler = nil
+        lock.unlock()
+
+        task?.cancel()
+
+        switch result {
+        case .success(let value):
+            cont.resume(returning: value)
+        case .failure(let error):
+            cont.resume(throwing: error)
+        }
+    }
+
+    func terminateProcess() {
+        process.terminationHandler = nil
+        outCollector.cancel()
+        errCollector.cancel()
+        if process.isRunning {
+            process.terminate()
+            let pid = process.processIdentifier
+            if pid > 0 {
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
+                    if kill(pid, 0) == 0 {
+                        kill(pid, SIGKILL)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -221,6 +261,11 @@ private final class PipeCollector: @unchecked Sendable {
         lock.unlock()
     }
 
+    func cancel() {
+        try? handle.close()
+        markEOF()
+    }
+
     private func markEOF() {
         lock.lock()
         let alreadySignaled = isEOF
@@ -230,3 +275,4 @@ private final class PipeCollector: @unchecked Sendable {
         eofSemaphore.signal()
     }
 }
+

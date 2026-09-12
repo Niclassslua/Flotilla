@@ -17,22 +17,55 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
             withIntermediateDirectories: true
         )
 
-        if let queue = try? Self.openAndMigrate(at: path) {
-            dbQueue = queue
+        do {
+            dbQueue = try Self.openAndMigrate(at: path)
             recoveredFromCorruption = false
-        } else {
+        } catch {
+            guard FileManager.default.fileExists(atPath: path.path), Self.isCorruptionError(error) else {
+                throw error
+            }
+
             let corruptPath = path.appendingPathExtension("corrupt-\(UUID().uuidString)")
             let fileManager = FileManager.default
+            var movedMainDB = false
             for ext in ["", "-wal", "-shm"] {
                 let fileURL = URL(fileURLWithPath: path.path + ext)
                 let corruptURL = URL(fileURLWithPath: corruptPath.path + ext)
                 if fileManager.fileExists(atPath: fileURL.path) {
-                    try? fileManager.moveItem(at: fileURL, to: corruptURL)
+                    do {
+                        try fileManager.moveItem(at: fileURL, to: corruptURL)
+                        if ext.isEmpty { movedMainDB = true }
+                    } catch {
+                        if ext.isEmpty { throw error }
+                    }
                 }
+            }
+            guard movedMainDB else {
+                throw error
             }
             dbQueue = try Self.openAndMigrate(at: path)
             recoveredFromCorruption = true
         }
+    }
+
+    public static func isCorruptionError(_ error: Error) -> Bool {
+        if let dbError = error as? DatabaseError {
+            switch dbError.resultCode {
+            case .SQLITE_CORRUPT, .SQLITE_NOTADB:
+                return true
+            default:
+                let msg = dbError.description.lowercased()
+                return msg.contains("file is not a database")
+                    || msg.contains("file is encrypted or is not a database")
+                    || msg.contains("malformed")
+                    || msg.contains("corrupt")
+            }
+        }
+        let nsError = error as NSError
+        let desc = nsError.localizedDescription.lowercased()
+        return desc.contains("file is not a database")
+            || desc.contains("malformed")
+            || desc.contains("corrupt")
     }
 
     /// In-memory store — used by unit tests and `UI_TESTING=1` runs.
@@ -296,6 +329,15 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
             }
         } catch {
             return nil
+        }
+    }
+
+    public func updateScrollback(sessionID: UUID, scrollback: Data) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE session SET terminalScrollback = ? WHERE id = ?",
+                arguments: [scrollback, sessionID.uuidString]
+            )
         }
     }
 

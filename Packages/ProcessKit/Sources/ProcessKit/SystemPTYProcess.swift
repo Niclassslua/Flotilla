@@ -69,6 +69,8 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
     }
 
     private let broadcaster = OutputBroadcaster()
+    private let outputQueue = DispatchQueue(label: "com.niclassslua.flotilla.pty.output", qos: .userInitiated)
+    private let inputQueue = DispatchQueue(label: "com.niclassslua.flotilla.pty.input", qos: .userInitiated)
 
     /// Computed, not stored: each access hands back a fresh subscription
     /// so multiple independent consumers (terminal view, hooks observer)
@@ -180,7 +182,7 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
         // is called no new event handler invocations are queued, and the
         // cancel handler runs only after any already-running event handler
         // returns — so the fd is never closed while a read is in progress.
-        let source = DispatchSource.makeReadSource(fileDescriptor: master, queue: .global(qos: .utility))
+        let source = DispatchSource.makeReadSource(fileDescriptor: master, queue: outputQueue)
         source.setEventHandler { [weak self] in
             var buffer = [UInt8](repeating: 0, count: 65536)
             let n = Darwin.read(master, &buffer, buffer.count)
@@ -210,7 +212,10 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
             // WIFEXITED/WEXITSTATUS/WTERMSIG, reimplemented: these are C
             // macros and don't import into Swift.
             let exitCode: Int32 = (status & 0x7f) == 0 ? (status >> 8) & 0xff : status & 0x7f
-            self?.handleChildExit(exitCode)
+            guard let self else { return }
+            self.outputQueue.async {
+                self.handleChildExit(exitCode)
+            }
         }
     }
 
@@ -326,8 +331,9 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
         storedLastInputAt = Date()
         stateLock.unlock()
 
-        // Write on a background queue so the main thread never blocks.
-        DispatchQueue.global(qos: .utility).async {
+        // Write on a dedicated serial queue so writes are ordered and never block.
+        inputQueue.async { [weak self] in
+            guard let self else { return }
             _ = self.withDuplicatedMaster { fd in
                 input.withUnsafeBytes { raw in
                     // Retry until all bytes are written (or EINTR/EAGAIN).

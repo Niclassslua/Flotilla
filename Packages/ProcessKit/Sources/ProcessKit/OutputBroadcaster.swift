@@ -64,16 +64,20 @@ final class OutputBroadcaster: @unchecked Sendable {
 
     func broadcast(_ data: Data) {
         lock.lock()
+        guard !isFinished else {
+            lock.unlock()
+            return
+        }
         history.append(data)
         historyByteSize += data.count
         if historyByteSize > maxHistoryBytes {
             trimHistoryLocked()
         }
         let subscribers = Array(continuations.values)
-        lock.unlock()
         for continuation in subscribers {
             continuation.yield(data)
         }
+        lock.unlock()
     }
 
     /// Drops the oldest chunks in one pass rather than one `removeFirst()` at
@@ -105,12 +109,16 @@ final class OutputBroadcaster: @unchecked Sendable {
 
     func finish() {
         lock.lock()
+        guard !isFinished else {
+            lock.unlock()
+            return
+        }
         isFinished = true
         let subscribers = Array(continuations.values)
-        continuations.removeAll()
-        lock.unlock()
         for continuation in subscribers {
             continuation.finish()
         }
+        continuations.removeAll()
+        lock.unlock()
     }
 }

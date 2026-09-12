@@ -247,4 +247,91 @@ final class PersistenceKitTests: XCTestCase {
         XCTAssertEqual(sessions, [session])
         XCTAssertNil(sessions.first?.status)
     }
+
+    func testUpdateScrollbackDoesNotResurrectDeletedSession() throws {
+        let repo = try GRDBSessionRepository()
+        let session = Session(
+            title: "Will Delete",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: nil,
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        )
+        try repo.save(session)
+        try repo.delete(sessionID: session.id)
+
+        // Delayed scrollback write arrives after deletion
+        try repo.updateScrollback(sessionID: session.id, scrollback: Data("late terminal output\n".utf8))
+
+        let (_, sessions) = try repo.loadAll()
+        XCTAssertTrue(sessions.isEmpty, "updateScrollback must not resurrect a deleted session")
+        XCTAssertNil(repo.loadScrollback(sessionID: session.id))
+    }
+
+    func testUpdateScrollbackOnlyModifiesScrollbackField() throws {
+        let repo = try GRDBSessionRepository()
+        var session = Session(
+            title: "Original Title",
+            goal: "Original Goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working,
+            terminalScrollback: Data("initial\n".utf8),
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        )
+        try repo.save(session)
+
+        let newScrollback = Data("updated terminal scrollback\n".utf8)
+        try repo.updateScrollback(sessionID: session.id, scrollback: newScrollback)
+
+        let (_, sessions) = try repo.loadAll()
+        let loaded = try XCTUnwrap(sessions.first)
+        XCTAssertEqual(loaded.terminalScrollback, newScrollback)
+        XCTAssertEqual(loaded.title, "Original Title")
+        XCTAssertEqual(loaded.status, .working)
+        XCTAssertEqual(loaded.goal, "Original Goal")
+    }
+
+    func testCorruptionClassification() {
+        // Non-corruption errors must not be classified as corruption
+        let permError = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError, userInfo: [NSLocalizedDescriptionKey: "Permission denied"])
+        XCTAssertFalse(GRDBSessionRepository.isCorruptionError(permError))
+
+        let notFoundError = NSError(domain: NSCocoaErrorDomain, code: NSFileNoSuchFileError, userInfo: [NSLocalizedDescriptionKey: "No such file"])
+        XCTAssertFalse(GRDBSessionRepository.isCorruptionError(notFoundError))
+
+        // Corruption error descriptions
+        let corruptError = NSError(domain: "SQLite", code: 11, userInfo: [NSLocalizedDescriptionKey: "database disk image is malformed"])
+        XCTAssertTrue(GRDBSessionRepository.isCorruptionError(corruptError))
+
+        let notADbError = NSError(domain: "SQLite", code: 26, userInfo: [NSLocalizedDescriptionKey: "file is not a database"])
+        XCTAssertTrue(GRDBSessionRepository.isCorruptionError(notADbError))
+    }
+
+    func testCorruptionRecoveryPreservesDamagedFileAndRecreates() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let dbPath = tempDir.appendingPathComponent("flotilla.sqlite")
+        try "Garbage non-sqlite content".write(to: dbPath, atomically: true, encoding: .utf8)
+
+        let repo = try GRDBSessionRepository(path: dbPath)
+        XCTAssertTrue(repo.recoveredFromCorruption)
+
+        // Check that a corrupt backup file was created
+        let items = try FileManager.default.contentsOfDirectory(atPath: tempDir.path)
+        let backupFiles = items.filter { $0.contains("corrupt-") }
+        XCTAssertFalse(backupFiles.isEmpty, "A corrupt backup file should have been created")
+
+        // The new repository should be operational
+        let (projects, sessions) = try repo.loadAll()
+        XCTAssertTrue(projects.isEmpty)
+        XCTAssertTrue(sessions.isEmpty)
+    }
 }

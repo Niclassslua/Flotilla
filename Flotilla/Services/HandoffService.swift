@@ -190,6 +190,10 @@ final class HandoffService {
         let session = plan.session
         let sourceSessionID = plan.sourceSessionID
 
+        // Quiesce and kill existing source process before writing destination state
+        processManager.terminate(sessionID: session.id)
+        processManager.killServerSideSession(sessionID: session.id)
+
         // A fresh identity per move. Reusing one risks colliding with a
         // transcript the destination already has, and Codex refuses to resume
         // a thread another process is holding open.

@@ -75,7 +75,7 @@ struct MonacoHostView: NSViewRepresentable {
         webView.setValue(false, forKey: "drawsBackground")
         context.coordinator.webView = webView
 
-        let html = Self.hostHTML(initialContent: content, language: language.rawValue)
+        let html = Self.hostHTML()
         webView.loadHTMLString(html, baseURL: nil)
 
         return webView
@@ -86,14 +86,7 @@ struct MonacoHostView: NSViewRepresentable {
 
         if context.coordinator.lastLoadedURL != fileURL {
             context.coordinator.lastLoadedURL = fileURL
-            let escaped = Self.escapeForJavaScript(content)
-            let script = """
-            if (window.editor) {
-                window.editor.setValue("\(escaped)");
-                monaco.editor.setModelLanguage(window.editor.getModel(), "\(language.rawValue)");
-            }
-            """
-            webView.evaluateJavaScript(script, completionHandler: nil)
+            context.coordinator.setContentInEditor(content, language: language, fileURL: fileURL)
         }
     }
 
@@ -101,14 +94,43 @@ struct MonacoHostView: NSViewRepresentable {
         var parent: MonacoHostView
         weak var webView: WKWebView?
         var lastLoadedURL: URL?
+        var isEditorReady = false
+        var currentDocumentID: String = UUID().uuidString
 
         init(_ parent: MonacoHostView) {
             self.parent = parent
+            self.currentDocumentID = parent.fileURL?.absoluteString ?? UUID().uuidString
+        }
+
+        func setContentInEditor(_ content: String, language: MonacoLanguage, fileURL: URL?) {
+            guard isEditorReady, let webView else { return }
+            let docID = fileURL?.absoluteString ?? currentDocumentID
+            currentDocumentID = docID
+            webView.callAsyncJavaScript(
+                "window.setEditorContent(content, language, docId)",
+                arguments: [
+                    "content": content,
+                    "language": language.rawValue,
+                    "docId": docID
+                ],
+                in: nil,
+                in: .page,
+                completionHandler: nil
+            )
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let dict = message.body as? [String: Any],
                   let type = dict["type"] as? String else { return }
+
+            if type == "ready" {
+                isEditorReady = true
+                setContentInEditor(parent.content, language: parent.language, fileURL: parent.fileURL)
+                return
+            }
+
+            // Bind change/save messages to the intended file/document ID
+            guard let docID = dict["documentId"] as? String, docID == currentDocumentID else { return }
 
             if type == "change", let newContent = dict["content"] as? String {
                 Task { @MainActor in
@@ -124,18 +146,8 @@ struct MonacoHostView: NSViewRepresentable {
         }
     }
 
-    static func escapeForJavaScript(_ string: String) -> String {
-        string
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\t", with: "\\t")
-    }
-
-    static func hostHTML(initialContent: String, language: String) -> String {
-        let escapedContent = escapeForJavaScript(initialContent)
-        return """
+    static func hostHTML() -> String {
+        """
         <!DOCTYPE html>
         <html>
         <head>
@@ -159,6 +171,19 @@ struct MonacoHostView: NSViewRepresentable {
         <body>
             <div id="container"></div>
             <script>
+                window.currentDocumentId = "";
+                window.isSettingContent = false;
+
+                window.setEditorContent = function(content, language, docId) {
+                    window.currentDocumentId = docId;
+                    if (window.editor) {
+                        window.isSettingContent = true;
+                        window.editor.setValue(content);
+                        monaco.editor.setModelLanguage(window.editor.getModel(), language);
+                        window.isSettingContent = false;
+                    }
+                };
+
                 require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
                 require(['vs/editor/editor.main'], function() {
                     monaco.editor.defineTheme('flotillaDark', {
@@ -186,8 +211,8 @@ struct MonacoHostView: NSViewRepresentable {
                     });
 
                     window.editor = monaco.editor.create(document.getElementById('container'), {
-                        value: "\(escapedContent)",
-                        language: "\(language)",
+                        value: '',
+                        language: 'plaintext',
                         theme: 'flotillaDark',
                         fontSize: 13,
                         fontFamily: 'SF Mono, Menlo, Monaco, Courier New, monospace',
@@ -202,10 +227,12 @@ struct MonacoHostView: NSViewRepresentable {
                     });
 
                     window.editor.onDidChangeModelContent(function() {
+                        if (window.isSettingContent) return;
                         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.monacoBridge) {
                             window.webkit.messageHandlers.monacoBridge.postMessage({
                                 type: 'change',
-                                content: window.editor.getValue()
+                                content: window.editor.getValue(),
+                                documentId: window.currentDocumentId
                             });
                         }
                     });
@@ -214,10 +241,17 @@ struct MonacoHostView: NSViewRepresentable {
                         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.monacoBridge) {
                             window.webkit.messageHandlers.monacoBridge.postMessage({
                                 type: 'save',
-                                content: window.editor.getValue()
+                                content: window.editor.getValue(),
+                                documentId: window.currentDocumentId
                             });
                         }
                     });
+
+                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.monacoBridge) {
+                        window.webkit.messageHandlers.monacoBridge.postMessage({
+                            type: 'ready'
+                        });
+                    }
                 });
             </script>
         </body>

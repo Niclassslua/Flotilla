@@ -80,7 +80,11 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public func createWorktree(basePath: URL, branch: String, destination: URL) async throws -> GitWorktree {
         createWorktreeCalls.append((basePath, branch, destination))
         if let errorToThrow { throw errorToThrow }
-        return GitWorktree(branch: branch, path: destination, isMainWorktree: false)
+        let wt = GitWorktree(branch: branch, path: destination, isMainWorktree: false)
+        if !worktreesToReturn.contains(where: { $0.path == destination }) {
+            worktreesToReturn.append(wt)
+        }
+        return wt
     }
 
     public func removeWorktree(at path: URL, in repoPath: URL, branch: String, deleteBranch: Bool) async throws {

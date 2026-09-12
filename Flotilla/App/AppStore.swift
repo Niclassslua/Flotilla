@@ -166,6 +166,24 @@ final class AppStore {
             try? repository.save(mergingLiveScrollback(sessions[index]))
         }
 
+        // Handoff recovery: resolve or resume probation for any sessions
+        // that were in flight when Flotilla previously quit or crashed.
+        let now = Date()
+        let probationWindowSeconds = 15.0
+        for index in sessions.indices where sessions[index].pendingHandoff != nil {
+            let pending = sessions[index].pendingHandoff!
+            let elapsed = now.timeIntervalSince(pending.startedAt)
+            if elapsed >= probationWindowSeconds || sessions[index].status == .readyForReview {
+                let settled = handoffService.finalize(sessions[index])
+                sessions[index] = settled
+                try? repository.save(mergingLiveScrollback(settled))
+            } else {
+                let remaining = max(0.1, probationWindowSeconds - elapsed)
+                handoffProbation.insert(sessions[index].id)
+                scheduleHandoffSettlement(sessionID: sessions[index].id, afterSeconds: remaining)
+            }
+        }
+
         // A session with no status yet (never observed) is restarted like any
         // other live session. A crashed one is left alone, and so is a
         // Ready for Review one: its agent's turn already ended cleanly, there
@@ -183,6 +201,13 @@ final class AppStore {
                 // destructive work after every app launch.
                 try processManager.start(session: sessions[index], deliverGoal: false)
             } catch {
+                if sessions[index].pendingHandoff != nil {
+                    let sessionID = sessions[index].id
+                    Task { [weak self] in
+                        await self?.handleHandoffTermination(sessionID: sessionID, exitCode: 1)
+                    }
+                    continue
+                }
                 if case .conversationAlreadyActive = error as? SessionProcessManager.LaunchError {
                     sessions[index] = transition(sessions[index], to: .crashed, origin: .restoreFailed)
                     try? repository.save(mergingLiveScrollback(sessions[index]))
@@ -624,7 +649,34 @@ final class AppStore {
         projectFolder: URL?,
         replacing fallbackWorktree: WorktreeInfo?
     ) async {
-        if let fallbackWorktree {
+        // Validate agent-reported worktree against registered secondary worktrees
+        var validatedWorktree: WorktreeInfo?
+        if let branch = descriptor.branch,
+           let worktreePathString = descriptor.worktreePath,
+           let projectFolder {
+            let worktreePath = URL(fileURLWithPath: worktreePathString)
+            let canonicalWorktree = worktreePath.standardized.resolvingSymlinksInPath()
+            let canonicalProject = projectFolder.standardized.resolvingSymlinksInPath()
+
+            // Disallow root, project folder itself, or ancestor of project
+            if canonicalWorktree.path != "/",
+               canonicalWorktree.path != canonicalProject.path,
+               !canonicalProject.path.hasPrefix(canonicalWorktree.path + "/") {
+                if let worktrees = try? await gitService.listWorktrees(at: projectFolder),
+                   let matching = worktrees.first(where: {
+                       !$0.isMainWorktree && $0.path.standardized.resolvingSymlinksInPath().path == canonicalWorktree.path
+                   }) {
+                    let resolvedBranch = branch.isEmpty ? matching.branch : branch
+                    validatedWorktree = WorktreeInfo(
+                        branchName: resolvedBranch,
+                        worktreePath: matching.path,
+                        baseCheckoutPath: projectFolder
+                    )
+                }
+            }
+        }
+
+        if let fallbackWorktree, validatedWorktree != nil {
             if let index = sessions.firstIndex(where: { $0.id == sessionID }),
                sessions[index].workingDirectory == fallbackWorktree.worktreePath {
                 processManager.terminate(sessionID: sessionID)
@@ -650,17 +702,10 @@ final class AppStore {
             }
         }
 
-        // Apply worktree metadata.
-        if let branch = descriptor.branch, let worktreePathString = descriptor.worktreePath {
-            let worktreePath = URL(fileURLWithPath: worktreePathString)
-            if let projectFolder {
-                sessions[index].worktree = WorktreeInfo(
-                    branchName: branch,
-                    worktreePath: worktreePath,
-                    baseCheckoutPath: projectFolder
-                )
-                sessions[index].workingDirectory = worktreePath
-            }
+        // Apply worktree metadata if validated.
+        if let validatedWorktree {
+            sessions[index].worktree = validatedWorktree
+            sessions[index].workingDirectory = validatedWorktree.worktreePath
         }
 
         do {
@@ -726,23 +771,22 @@ final class AppStore {
 
     /// Appends to the live scrollback buffer only — `sessions` is untouched,
     /// so a chatty PTY no longer invalidates the observed session list on
-    /// every chunk. The debounced task below is the only place this reaches
-    /// `sessions` (read-only, to source the rest of the `Session` fields for
-    /// the row it's about to persist) or the repository.
+    /// every chunk. The debounced task updates the persistent scrollback
+    /// via `updateScrollback` without replacing the session record or
+    /// resurrecting deleted sessions.
     func appendTerminalOutput(_ data: Data, toSessionID sessionID: UUID) {
         guard !data.isEmpty, sessions.contains(where: { $0.id == sessionID }) else { return }
         scrollbackStore.append(data, to: sessionID) { [weak self] in
             guard let self else { return }
-            guard let index = self.sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-            let snapshot = self.mergingLiveScrollback(self.sessions[index])
+            guard self.sessions.contains(where: { $0.id == sessionID }) else { return }
+            guard let buffer = self.scrollbackStore.buffer(for: sessionID) else { return }
             let repository = self.repository
             // Off the main actor: `AppStore` is `@MainActor`, so an unstructured
-            // `Task` here inherits that isolation, and `save` is a synchronous
-            // fsyncing GRDB write. That put a 256 KB blob write on the main
-            // thread every two seconds for every session producing output.
+            // `Task` here inherits that isolation, and `updateScrollback` is a synchronous
+            // fsyncing GRDB write.
             let failure: String? = await Task.detached(priority: .utility) {
                 do {
-                    try repository.save(snapshot)
+                    try repository.updateScrollback(sessionID: sessionID, scrollback: buffer)
                     return nil
                 } catch {
                     return error.localizedDescription
@@ -763,9 +807,11 @@ final class AppStore {
 
     func flushLiveScrollback() {
         scrollbackStore.cancelPendingSaves()
-        let pending = sessions.filter { scrollbackStore.buffer(for: $0.id) != nil }
-            .map(mergingLiveScrollback)
-        try? repository.save(pending)
+        for session in sessions {
+            if let buffer = scrollbackStore.buffer(for: session.id) {
+                try? repository.updateScrollback(sessionID: session.id, scrollback: buffer)
+            }
+        }
     }
 
     func restartSession(sessionID: UUID) {
@@ -828,13 +874,19 @@ final class AppStore {
         let source = sessions[index].agent
 
         do {
+            // Quiesce/stop source agent before planning and transcoding so the tail is stable and no writes race
+            processManager.terminate(sessionID: sessionID)
+            processManager.killServerSideSession(sessionID: sessionID)
+
             let plan = try handoffService.plan(for: sessions[index], to: target)
             let moved = try await handoffService.perform(plan)
             handoffProbation.insert(sessionID)
-            sessions[index] = transition(moved, to: .working, origin: .handoff(from: source, to: target))
-            try repository.save(mergingLiveScrollback(sessions[index]))
-            onAgentChanged?(sessionID)
             scheduleHandoffSettlement(sessionID: sessionID)
+
+            guard let currentIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+            sessions[currentIndex] = transition(moved, to: .working, origin: .handoff(from: source, to: target))
+            try repository.save(mergingLiveScrollback(sessions[currentIndex]))
+            onAgentChanged?(sessionID)
             scheduleTitleSync(forSessionID: sessionID)
         } catch {
             lastOperationError = error.localizedDescription
@@ -843,8 +895,8 @@ final class AppStore {
 
     /// The source transcript is kept until the destination has stayed alive
     /// long enough to have actually read it.
-    private func scheduleHandoffSettlement(sessionID: UUID) {
-        let window = handoffService.probationWindow
+    private func scheduleHandoffSettlement(sessionID: UUID, afterSeconds: Double? = nil) {
+        let window: Duration = afterSeconds != nil ? .seconds(afterSeconds!) : handoffService.probationWindow
         Task { [weak self] in
             try? await Task.sleep(for: window)
             self?.settleHandoff(sessionID: sessionID)
@@ -1024,6 +1076,7 @@ final class AppStore {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         lastOperationError = nil
         metadataMonitor.cancel(sessionID)
+        scrollbackStore.remove(sessionID)
 
         processManager.terminate(sessionID: sessionID)
         processManager.killServerSideSession(sessionID: sessionID)
@@ -1056,8 +1109,6 @@ final class AppStore {
 
         let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         try? FileManager.default.removeItem(at: eventFile)
-
-        scrollbackStore.remove(sessionID)
 
         if selectedSessionID == sessionID {
             selectedSessionID = nil

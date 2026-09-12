@@ -187,7 +187,9 @@ enum TmuxSessionWrapping {
         sessionID: UUID,
         supportDirectory: URL
     ) -> [String] {
-        if let script = writeLaunchScript(
+        let totalLength = executable.path.utf8.count + arguments.reduce(0) { $0 + $1.utf8.count + 1 }
+        if totalLength > 8192,
+           let script = writeLaunchScript(
             executable: executable,
             arguments: arguments,
             keysToUnset: keysToUnset,
@@ -416,10 +418,16 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         // Synchronous on purpose: callers (session restart) immediately run
         // `new-session -A` with the same name, and an in-flight kill landing
         // after that would kill the freshly created session. Only wait when
-        // the process actually started — `waitUntilExit` on a process whose
-        // `run()` threw blocks forever.
-        if (try? process.run()) != nil {
+        // the process actually started, with a bounded wait to prevent hangs.
+        guard (try? process.run()) != nil else { return }
+
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
             process.waitUntilExit()
+            done.signal()
+        }
+        if done.wait(timeout: .now() + 2) != .success {
+            process.terminate()
         }
     }
 
@@ -435,17 +443,27 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return [] }
-            let output = String(decoding: data, as: UTF8.self)
-            return output
-                .components(separatedBy: .newlines)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
         } catch {
             return []
         }
+
+        let done = DispatchSemaphore(value: 0)
+        var data = Data()
+        DispatchQueue.global(qos: .utility).async {
+            data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + 2) == .success, process.terminationStatus == 0 else {
+            process.terminate()
+            try? outputPipe.fileHandleForReading.close()
+            return []
+        }
+        let output = String(decoding: data, as: UTF8.self)
+        return output
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 }
 
