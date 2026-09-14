@@ -305,50 +305,15 @@ struct CommandBarDesign: View {
                     accessibilityIdentifier: "CreateSession.EffortPicker"
                 )
             }
-            modeChip
             Spacer(minLength: 0)
+            // Grouped with the isolation toggle rather than the left-hand
+            // picker chips: both are binary switches, not choices from an
+            // open-ended list, so they read better as one control cluster.
+            SessionModeToggle(mode: $draft.initialMode, accessibilityIdentifier: "CreateSession.ModePicker")
             if draft.supportsWorktree { isolationToggle }
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .padding(.vertical, FlotillaSpacing.small)
-    }
-
-    private var modeChip: some View {
-        Menu {
-            Button {
-                draft.initialMode = .act
-            } label: {
-                Label("Act", systemImage: draft.initialMode == .act ? "checkmark" : "")
-            }
-            Button {
-                draft.initialMode = .plan
-            } label: {
-                Label("Plan", systemImage: draft.initialMode == .plan ? "checkmark" : "")
-            }
-        } label: {
-            HStack(spacing: FlotillaSpacing.xSmall) {
-                Image(systemName: draft.initialMode == .plan ? "doc.text.magnifyingglass" : "play.fill")
-                    .font(.system(size: FlotillaIconSize.xSmall))
-                Text(draft.initialMode.displayName)
-                    .font(FlotillaTypography.caption2.weight(.medium))
-            }
-            .foregroundStyle(draft.initialMode == .plan ? FlotillaColors.accent : FlotillaColors.textSecondary)
-            .padding(.horizontal, FlotillaSpacing.small)
-            .padding(.vertical, FlotillaSpacing.xSmall)
-            .background(
-                draft.initialMode == .plan ? FlotillaColors.accent.opacity(0.12) : FlotillaColors.surfaceElevated,
-                in: Capsule()
-            )
-            .overlay(Capsule().strokeBorder(
-                draft.initialMode == .plan ? FlotillaColors.accent.opacity(0.4) : FlotillaColors.separator,
-                lineWidth: FlotillaBorderWidth.hairline
-            ))
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .help("Session mode — Act lets the agent make changes; Plan restricts it to reading and proposing")
-        .accessibilityIdentifier("CreateSession.ModePicker")
-        .accessibilityValue(draft.initialMode.displayName)
     }
 
     private var projectChip: some View {

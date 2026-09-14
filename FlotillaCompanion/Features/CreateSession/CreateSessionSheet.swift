@@ -21,7 +21,6 @@ struct CreateSessionSheet: View {
     @State private var fetchFirst = true
     @State private var subscription: OpenCodeSubscription = .none
     @State private var mode: SessionMode = .act
-    @State private var showsModeSheet = false
     @State private var isCreating = false
 
     var body: some View {
@@ -34,18 +33,7 @@ struct CreateSessionSheet: View {
                         .focused($isGoalFocused)
                         .accessibilityIdentifier("CreateSession.GoalField")
                     HStack {
-                        Button { showsModeSheet = true } label: {
-                            Label(mode.displayName, systemImage: mode.symbolName)
-                                .font(.subheadline.weight(.medium))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(FlotillaColors.surfaceElevated, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(mode == .plan ? FlotillaColors.accent : FlotillaColors.textPrimary)
-                        .accessibilityLabel("Session mode")
-                        .accessibilityValue(mode.displayName)
-                        .accessibilityIdentifier("CreateSession.ModePicker")
+                        SessionModeToggle(mode: $mode, accessibilityIdentifier: "CreateSession.ModePicker")
                         Spacer()
                         if SessionMode.suggestsPlanCommand(in: goal) {
                             Button("/plan") { mode = .plan; goal = "" }
@@ -106,43 +94,8 @@ struct CreateSessionSheet: View {
                     mode = .plan
                 }
             }
-            .sheet(isPresented: $showsModeSheet) { modePickerSheet }
         }
         .presentationDetents([.large])
-    }
-
-    private var modePickerSheet: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Session mode").font(.headline)
-            ForEach(SessionMode.allCases) { m in
-                Button {
-                    mode = m
-                    showsModeSheet = false
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: m.symbolName)
-                            .frame(width: 24)
-                            .foregroundStyle(m == .plan ? FlotillaColors.accent : FlotillaColors.textPrimary)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(m.displayName).font(.headline)
-                            Text(m.explanation).font(.subheadline).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if m == mode {
-                            Image(systemName: "checkmark").foregroundStyle(FlotillaColors.accent)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(m == mode ? [.isSelected] : [])
-            }
-        }
-        .padding(24)
-        .presentationDetents([.height(260)])
-        .presentationDragIndicator(.visible)
     }
 
     private func applyRememberedChoice(for project: UUID?) {
