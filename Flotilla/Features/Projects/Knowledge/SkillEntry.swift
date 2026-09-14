@@ -1,5 +1,6 @@
 import Foundation
 import SessionKit
+import DesignSystem
 
 public enum SkillScope: String, Sendable, Hashable, Codable {
     case global
@@ -34,12 +35,12 @@ public enum SkillFramework: String, Sendable, Hashable, Codable, CaseIterable {
         }
     }
 
-    public var logoAssetName: String? {
+    public var logoAsset: ProviderLogoAsset? {
         switch self {
-        case .claude: return "ProviderLogoClaude"
-        case .codex: return "ProviderLogoCodex"
-        case .cursor: return "ProviderLogoCursor"
-        case .gemini: return "ProviderLogoAntigravity"
+        case .claude: return .claude
+        case .codex: return .codex
+        case .cursor: return .cursor
+        case .gemini: return .antigravity
         case .agents, .custom: return nil
         }
     }

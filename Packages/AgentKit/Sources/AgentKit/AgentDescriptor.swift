@@ -85,7 +85,6 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
     public var id: AgentKind { kind }
     public let kind: AgentKind
     public let displayName: String
-    public let logoAssetName: String
     public let binaryName: String
     public let settingsKey: String
     public let modelFlag: FlagSpec?
@@ -101,7 +100,6 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
     public init(
         kind: AgentKind,
         displayName: String,
-        logoAssetName: String,
         binaryName: String,
         settingsKey: String,
         modelFlag: FlagSpec? = .separateTokens("--model"),
@@ -116,7 +114,6 @@ public struct AgentDescriptor: Equatable, Sendable, Identifiable {
     ) {
         self.kind = kind
         self.displayName = displayName
-        self.logoAssetName = logoAssetName
         self.binaryName = binaryName
         self.settingsKey = settingsKey
         self.modelFlag = modelFlag
@@ -172,7 +169,6 @@ public enum AgentCatalog {
     public static let claudeCode = AgentDescriptor(
         kind: .claudeCode,
         displayName: "Claude Code",
-        logoAssetName: "ProviderLogoClaude",
         binaryName: "claude",
         settingsKey: "claudeCode",
         modelFlag: .separateTokens("--model"),
@@ -193,7 +189,6 @@ public enum AgentCatalog {
     public static let codexCLI = AgentDescriptor(
         kind: .codexCLI,
         displayName: "Codex CLI",
-        logoAssetName: "ProviderLogoCodex",
         binaryName: "codex",
         settingsKey: "codexCLI",
         modelFlag: .separateTokens("--model"),
@@ -213,7 +208,6 @@ public enum AgentCatalog {
     public static let openCode = AgentDescriptor(
         kind: .openCode,
         displayName: "OpenCode",
-        logoAssetName: "ProviderLogoOpenCode",
         binaryName: "opencode",
         settingsKey: "openCode",
         modelFlag: .separateTokens("--model"),
@@ -285,7 +279,6 @@ public enum AgentCatalog {
     public static let antigravity = AgentDescriptor(
         kind: .antigravity,
         displayName: "Antigravity",
-        logoAssetName: "ProviderLogoAntigravity",
         binaryName: "agy",
         settingsKey: "antigravity",
         modelFlag: .separateTokens("--model"),

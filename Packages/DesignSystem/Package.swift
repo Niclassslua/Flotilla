@@ -1,9 +1,9 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "DesignSystem",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v15), .iOS(.v26)],
     products: [
         .library(name: "DesignSystem", targets: ["DesignSystem"])
     ],
@@ -11,6 +11,10 @@ let package = Package(
         .package(path: "../SessionKit")
     ],
     targets: [
-        .target(name: "DesignSystem", dependencies: ["SessionKit"])
+        .target(
+            name: "DesignSystem",
+            dependencies: ["SessionKit"],
+            resources: [.process("Resources")]
+        )
     ]
 )

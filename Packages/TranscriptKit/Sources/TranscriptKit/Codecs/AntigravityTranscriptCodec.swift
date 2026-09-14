@@ -21,7 +21,7 @@ public struct AntigravityTranscriptCodec: TranscriptReading {
     private let brainDirectory: URL
 
     public init(
-        brainDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        brainDirectory: URL = FileManager.agentHomeDirectory
             .appendingPathComponent(".gemini/antigravity-cli/brain", isDirectory: true)
     ) {
         self.brainDirectory = brainDirectory

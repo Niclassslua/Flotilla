@@ -53,8 +53,8 @@ struct KnowledgeIconTile: View {
                 .font(.system(size: size * 0.42))
                 .foregroundStyle(tint)
         case .framework(let framework):
-            if let logo = framework.logoAssetName {
-                Image(logo)
+            if let logo = framework.logoAsset {
+                logo.image
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size * 0.53, height: size * 0.53)

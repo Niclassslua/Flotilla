@@ -35,7 +35,7 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
     /// which keeps it a pure, deterministically testable file codec. The
     /// defaults match what Codex writes for a stock local install.
     public init(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = FileManager.agentHomeDirectory,
         cliVersion: String = "0.125.0",
         modelProvider: String = "openai",
         model: String = "gpt-5-codex",

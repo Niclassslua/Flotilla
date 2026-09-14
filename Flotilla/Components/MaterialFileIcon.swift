@@ -20,31 +20,31 @@ public final class MaterialIconCache: @unchecked Sendable {
 
         // 1. Antigravity / Gemini official brand logo (ProviderLogoAntigravity)
         if name == "gemini" || name == "antigravity" || name == "agy" {
-            if let antigravityAsset = NSImage(named: "ProviderLogoAntigravity") {
+            if let antigravityAsset = ProviderLogoAsset.antigravity.nsImage {
                 cache.setObject(antigravityAsset, forKey: key)
                 return antigravityAsset
             }
         }
         if name == "claude" {
-            if let claudeAsset = NSImage(named: "ProviderLogoClaude") {
+            if let claudeAsset = ProviderLogoAsset.claude.nsImage {
                 cache.setObject(claudeAsset, forKey: key)
                 return claudeAsset
             }
         }
         if name == "codex" || name == "openai" {
-            if let codexAsset = NSImage(named: "ProviderLogoCodex") {
+            if let codexAsset = ProviderLogoAsset.codex.nsImage {
                 cache.setObject(codexAsset, forKey: key)
                 return codexAsset
             }
         }
         if name == "opencode" {
-            if let openCodeAsset = NSImage(named: "ProviderLogoOpenCode") {
+            if let openCodeAsset = ProviderLogoAsset.openCode.nsImage {
                 cache.setObject(openCodeAsset, forKey: key)
                 return openCodeAsset
             }
         }
         if name == "cursor" {
-            if let cursorAsset = NSImage(named: "ProviderLogoCursor") {
+            if let cursorAsset = ProviderLogoAsset.cursor.nsImage {
                 cache.setObject(cursorAsset, forKey: key)
                 return cursorAsset
             }

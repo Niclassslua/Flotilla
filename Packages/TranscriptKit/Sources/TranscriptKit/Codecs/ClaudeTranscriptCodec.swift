@@ -31,7 +31,7 @@ public struct ClaudeTranscriptCodec: TranscriptReading, TranscriptWriting {
     /// file codec with no subprocess or git dependency; the defaults are what a
     /// stock install writes.
     public init(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = FileManager.agentHomeDirectory,
         cliVersion: String = "2.1.119",
         permissionMode: String = "default",
         gitBranch: String? = nil

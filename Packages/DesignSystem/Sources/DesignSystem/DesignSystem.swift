@@ -1,5 +1,11 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
+typealias PlatformColor = NSColor
+#else
+import UIKit
+typealias PlatformColor = UIColor
+#endif
 
 // MARK: - Core Tokens
 public enum FlotillaSpacing: Sendable {
@@ -102,154 +108,160 @@ public enum FlotillaStateOpacity: Sendable {
 
 // MARK: - Color System
 public struct FlotillaColors: Sendable {
-    private static func dynamic(dark: NSColor, light: NSColor) -> Color {
+    private static func dynamic(dark: PlatformColor, light: PlatformColor) -> Color {
+        #if os(macOS)
         Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
         })
+        #else
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? dark : light
+        })
+        #endif
     }
 
     // MARK: - Surfaces
     public static let canvas = dynamic(
-        dark: NSColor(red: 10/255, green: 10/255, blue: 12/255, alpha: 1),
-        light: NSColor(red: 250/255, green: 250/255, blue: 252/255, alpha: 1)
+        dark: PlatformColor(red: 10/255, green: 10/255, blue: 12/255, alpha: 1),
+        light: PlatformColor(red: 250/255, green: 250/255, blue: 252/255, alpha: 1)
     )
 
     public static let sidebar = dynamic(
-        dark: NSColor(red: 18/255, green: 18/255, blue: 22/255, alpha: 1),
-        light: NSColor(red: 242/255, green: 242/255, blue: 247/255, alpha: 1)
+        dark: PlatformColor(red: 18/255, green: 18/255, blue: 22/255, alpha: 1),
+        light: PlatformColor(red: 242/255, green: 242/255, blue: 247/255, alpha: 1)
     )
 
     public static let surface = dynamic(
-        dark: NSColor(red: 22/255, green: 22/255, blue: 26/255, alpha: 1),
-        light: NSColor(red: 255/255, green: 255/255, blue: 255/255, alpha: 1)
+        dark: PlatformColor(red: 22/255, green: 22/255, blue: 26/255, alpha: 1),
+        light: PlatformColor(red: 255/255, green: 255/255, blue: 255/255, alpha: 1)
     )
 
     public static let surfaceElevated = dynamic(
-        dark: NSColor(red: 30/255, green: 30/255, blue: 35/255, alpha: 1),
-        light: NSColor(red: 245/255, green: 245/255, blue: 250/255, alpha: 1)
+        dark: PlatformColor(red: 30/255, green: 30/255, blue: 35/255, alpha: 1),
+        light: PlatformColor(red: 245/255, green: 245/255, blue: 250/255, alpha: 1)
     )
 
     public static let terminalCanvas = dynamic(
-        dark: NSColor(red: 10/255, green: 10/255, blue: 12/255, alpha: 1),
-        light: NSColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1)
+        dark: PlatformColor(red: 10/255, green: 10/255, blue: 12/255, alpha: 1),
+        light: PlatformColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1)
     )
 
     // MARK: - Content
     public static let textPrimary = dynamic(
-        dark: NSColor.white,
-        light: NSColor.black
+        dark: PlatformColor.white,
+        light: PlatformColor.black
     )
 
     public static let textSecondary = dynamic(
-        dark: NSColor.white.withAlphaComponent(0.72),
-        light: NSColor.black.withAlphaComponent(0.68)
+        dark: PlatformColor.white.withAlphaComponent(0.72),
+        light: PlatformColor.black.withAlphaComponent(0.68)
     )
 
     public static let textTertiary = dynamic(
-        dark: NSColor.white.withAlphaComponent(0.44),
-        light: NSColor.black.withAlphaComponent(0.4)
+        dark: PlatformColor.white.withAlphaComponent(0.44),
+        light: PlatformColor.black.withAlphaComponent(0.4)
     )
 
     // MARK: - Lines
     public static let separator = dynamic(
-        dark: NSColor(red: 50/255, green: 50/255, blue: 58/255, alpha: 1),
-        light: NSColor(red: 200/255, green: 200/255, blue: 205/255, alpha: 1)
+        dark: PlatformColor(red: 50/255, green: 50/255, blue: 58/255, alpha: 1),
+        light: PlatformColor(red: 200/255, green: 200/255, blue: 205/255, alpha: 1)
     )
 
     public static let separatorStrong = dynamic(
-        dark: NSColor(red: 70/255, green: 70/255, blue: 80/255, alpha: 1),
-        light: NSColor(red: 170/255, green: 170/255, blue: 180/255, alpha: 1)
+        dark: PlatformColor(red: 70/255, green: 70/255, blue: 80/255, alpha: 1),
+        light: PlatformColor(red: 170/255, green: 170/255, blue: 180/255, alpha: 1)
     )
 
     // MARK: - Accent
     public static let accent = dynamic(
-        dark: NSColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1),
-        light: NSColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
+        dark: PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1),
+        light: PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
     )
 
     public static let accentContent = Color.white
 
     // MARK: - Status (one per SessionStatus)
     public static let statusWorking = dynamic(
-        dark: NSColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1),
-        light: NSColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1)
+        dark: PlatformColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1),
+        light: PlatformColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1)
     )
 
     public static let statusIdle = dynamic(
-        dark: NSColor.white.withAlphaComponent(0.44),
-        light: NSColor.black.withAlphaComponent(0.4)
+        dark: PlatformColor.white.withAlphaComponent(0.44),
+        light: PlatformColor.black.withAlphaComponent(0.4)
     )
 
     public static let statusWaitingForInput = dynamic(
-        dark: NSColor(red: 1.0, green: 0.58, blue: 0.0, alpha: 1),
-        light: NSColor(red: 0.85, green: 0.45, blue: 0.0, alpha: 1)
+        dark: PlatformColor(red: 1.0, green: 0.58, blue: 0.0, alpha: 1),
+        light: PlatformColor(red: 0.85, green: 0.45, blue: 0.0, alpha: 1)
     )
 
     public static let statusReady = dynamic(
-        dark: NSColor(red: 0.26, green: 0.72, blue: 0.92, alpha: 1),
-        light: NSColor(red: 0.0, green: 0.5, blue: 0.8, alpha: 1)
+        dark: PlatformColor(red: 0.26, green: 0.72, blue: 0.92, alpha: 1),
+        light: PlatformColor(red: 0.0, green: 0.5, blue: 0.8, alpha: 1)
     )
 
     public static let statusFinished = dynamic(
-        dark: NSColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1),
-        light: NSColor(red: 0.0, green: 0.38, blue: 0.85, alpha: 1)
+        dark: PlatformColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1),
+        light: PlatformColor(red: 0.0, green: 0.38, blue: 0.85, alpha: 1)
     )
 
     public static let statusCrashed = dynamic(
-        dark: NSColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1),
-        light: NSColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1)
+        dark: PlatformColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1),
+        light: PlatformColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1)
     )
 
     // MARK: - Feedback
     public static let danger = dynamic(
-        dark: NSColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1),
-        light: NSColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1)
+        dark: PlatformColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1),
+        light: PlatformColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1)
     )
 
     public static let dangerSurface = dynamic(
-        dark: NSColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1).withAlphaComponent(0.12),
-        light: NSColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1).withAlphaComponent(0.1)
+        dark: PlatformColor(red: 1.0, green: 0.27, blue: 0.23, alpha: 1).withAlphaComponent(0.12),
+        light: PlatformColor(red: 0.85, green: 0.18, blue: 0.14, alpha: 1).withAlphaComponent(0.1)
     )
 
     public static let warning = dynamic(
-        dark: NSColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1),
-        light: NSColor(red: 0.8, green: 0.6, blue: 0.0, alpha: 1)
+        dark: PlatformColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1),
+        light: PlatformColor(red: 0.8, green: 0.6, blue: 0.0, alpha: 1)
     )
 
     public static let warningSurface = dynamic(
-        dark: NSColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1).withAlphaComponent(0.12),
-        light: NSColor(red: 0.8, green: 0.6, blue: 0.0, alpha: 1).withAlphaComponent(0.1)
+        dark: PlatformColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1).withAlphaComponent(0.12),
+        light: PlatformColor(red: 0.8, green: 0.6, blue: 0.0, alpha: 1).withAlphaComponent(0.1)
     )
 
     public static let success = dynamic(
-        dark: NSColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1),
-        light: NSColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1)
+        dark: PlatformColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1),
+        light: PlatformColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1)
     )
 
     public static let successSurface = dynamic(
-        dark: NSColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1).withAlphaComponent(0.12),
-        light: NSColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1).withAlphaComponent(0.1)
+        dark: PlatformColor(red: 0.19, green: 0.78, blue: 0.64, alpha: 1).withAlphaComponent(0.12),
+        light: PlatformColor(red: 0.14, green: 0.62, blue: 0.5, alpha: 1).withAlphaComponent(0.1)
     )
 
     // MARK: - Diff (colorblind-safe)
     public static let diffAdded = dynamic(
-        dark: NSColor(red: 0.2, green: 0.75, blue: 0.35, alpha: 1),
-        light: NSColor(red: 0.15, green: 0.6, blue: 0.25, alpha: 1)
+        dark: PlatformColor(red: 0.2, green: 0.75, blue: 0.35, alpha: 1),
+        light: PlatformColor(red: 0.15, green: 0.6, blue: 0.25, alpha: 1)
     )
 
     public static let diffAddedSurface = dynamic(
-        dark: NSColor(red: 0.2, green: 0.75, blue: 0.35, alpha: 1).withAlphaComponent(0.12),
-        light: NSColor(red: 0.15, green: 0.6, blue: 0.25, alpha: 1).withAlphaComponent(0.1)
+        dark: PlatformColor(red: 0.2, green: 0.75, blue: 0.35, alpha: 1).withAlphaComponent(0.12),
+        light: PlatformColor(red: 0.15, green: 0.6, blue: 0.25, alpha: 1).withAlphaComponent(0.1)
     )
 
     public static let diffRemoved = dynamic(
-        dark: NSColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1),
-        light: NSColor(red: 0.85, green: 0.2, blue: 0.2, alpha: 1)
+        dark: PlatformColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1),
+        light: PlatformColor(red: 0.85, green: 0.2, blue: 0.2, alpha: 1)
     )
 
     public static let diffRemovedSurface = dynamic(
-        dark: NSColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1).withAlphaComponent(0.12),
-        light: NSColor(red: 0.85, green: 0.2, blue: 0.2, alpha: 1).withAlphaComponent(0.1)
+        dark: PlatformColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1).withAlphaComponent(0.12),
+        light: PlatformColor(red: 0.85, green: 0.2, blue: 0.2, alpha: 1).withAlphaComponent(0.1)
     )
 
     @available(*, deprecated, message: "Use static properties directly, e.g. FlotillaColors.canvas")
