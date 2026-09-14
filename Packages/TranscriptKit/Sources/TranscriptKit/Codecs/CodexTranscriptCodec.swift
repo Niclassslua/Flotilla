@@ -169,35 +169,8 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
         else { return nil }
 
         let url = rawPath.hasPrefix("file://") ? URL(string: rawPath) : URL(fileURLWithPath: rawPath)
-        guard let url, let downsampled = downsampledImage(at: url) else { return nil }
+        guard let url, let downsampled = ImageDownsampler.downsample(at: url) else { return nil }
         return .image(mimeType: downsampled.mimeType, base64: downsampled.base64, timestamp: timestamp)
-    }
-
-    /// Shrinks an on-disk image to a size cheap enough to travel inline in a
-    /// whole-snapshot payload (frames cap at 8 MiB — see `docs/companion.md`).
-    /// A full-resolution screenshot would risk blowing that budget on its
-    /// own; a phone screen has no use for the extra pixels anyway.
-    private static func downsampledImage(
-        at url: URL,
-        maxPixelSize: CGFloat = 1600,
-        compressionQuality: CGFloat = 0.6
-    ) -> (mimeType: String, base64: String)? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let thumbnailOptions: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            kCGImageSourceCreateThumbnailWithTransform: true
-        ]
-        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary)
-        else { return nil }
-
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil)
-        else { return nil }
-        CGImageDestinationAddImage(destination, thumbnail, [kCGImageDestinationLossyCompressionQuality: compressionQuality] as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-
-        return (mimeType: "image/jpeg", base64: (data as Data).base64EncodedString())
     }
 
     /// Codex content is an array of typed parts, but plain strings appear in
