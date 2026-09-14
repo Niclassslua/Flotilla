@@ -119,6 +119,9 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
         case "message":
             let text = flattenContent(payload["content"])
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            if let note = systemNoteText(unwrapping: text) {
+                return .systemNote(text: note, timestamp: timestamp)
+            }
             return payload["role"] as? String == "user"
                 ? .userMessage(text: text, timestamp: timestamp)
                 : .assistantMessage(text: text, timestamp: timestamp)
@@ -150,6 +153,27 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
             // as well as on the way out — see `sanitize(_:)`.
             return nil
         }
+    }
+
+    /// Codex injects a handful of its own control messages into the
+    /// conversation as plain `response_item` text — not something either
+    /// party said, but bookkeeping about the turn (an interruption, most
+    /// commonly `<turn_aborted>…</turn_aborted>` after a stop). Read as an
+    /// ordinary user message it renders as if the human typed raw XML tags,
+    /// which is exactly the confusing bubble this recognises and reroutes to
+    /// a system note instead.
+    private static let controlTags = ["turn_aborted"]
+
+    private static func systemNoteText(unwrapping text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        for tag in controlTags {
+            let open = "<\(tag)>"
+            let close = "</\(tag)>"
+            guard trimmed.hasPrefix(open), trimmed.hasSuffix(close) else { continue }
+            let inner = trimmed.dropFirst(open.count).dropLast(close.count)
+            return inner.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return nil
     }
 
     /// Codex content is an array of typed parts, but plain strings appear in
