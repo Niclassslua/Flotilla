@@ -485,3 +485,26 @@ final class AntigravityDialogRelayTests: XCTestCase {
         XCTAssertEqual(options.filter(\.isHighlighted).map(\.key), ["1"])
     }
 }
+
+/// Codex 0.154's async question tool holds no server request. Questions arrive
+/// in an agent message and are answered through ordinary user input.
+@MainActor
+final class CodexAsyncQuestionTests: XCTestCase {
+    func testAsyncQuestionIsAnswerableUntilTheNextTurnStarts() {
+        let session = Session(title: "Hello", goal: "Hello", agent: .codexCLI, projectID: nil, workingDirectory: URL(fileURLWithPath: "/tmp/project"), status: .readyForReview)
+        let adapter = CodexCompanionAdapter(session: session, endpoint: "/tmp/unused.sock")
+        // Shape captured from a live Codex 0.154 `item/completed` notification.
+        adapter.receive(["method": "item/completed", "params": [
+            "threadId": "thread-1",
+            "item": ["type": "agentMessage", "id": "call_1", "text": "Which language?", "delivery": "async",
+                     "questions": [["title": "Which language should the hello-world script use?", "options": ["Python", "Ruby"]]]]
+        ]])
+
+        guard case .question(let steps) = adapter.pending.first?.kind else { return XCTFail("expected a question card") }
+        XCTAssertEqual(steps.map(\.prompt), ["Which language should the hello-world script use?"])
+        XCTAssertEqual(steps.first?.options.map(\.label), ["Python", "Ruby"])
+
+        adapter.receive(["method": "turn/started", "params": ["threadId": "thread-1", "turn": ["id": "turn-2"]]])
+        XCTAssertTrue(adapter.pending.isEmpty, "a question answered in the TUI must leave the phone")
+    }
+}

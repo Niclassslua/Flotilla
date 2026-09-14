@@ -185,8 +185,16 @@ Decisions made without asking, recorded so they can be revisited.
    - **Codex**: a wrapper starts `codex app-server --listen unix://…` beside
      the TUI, which attaches with `--remote`; Flotilla is a second JSON-RPC
      client (experimental API) and answers `requestApproval` and
-     `requestUserInput` server requests. Plan approval starts a default-mode
-     turn. The runtime sets `FLOTILLA_CODEX_REMOTE=1`, which makes the
+     `requestUserInput` server requests. Async questions arrive as
+     `agentMessage` items carrying `delivery: async` and `questions`; their
+     answers are normal user input through `turn/steer` or `turn/start`.
+     Rejoining hydrates the latest turn to recover open questions and plans.
+     Plan approval starts a default-mode turn after dismissing the recognized
+     TUI-local plan confirmation, so its old prompt cannot remain over the
+     implementation. File-change cards join their request with the paths and
+     patch from the started item. See [Codex verification](codex-companion-verification.md)
+     for the live results, repeatable probes and remaining limits.
+     The runtime sets `FLOTILLA_CODEX_REMOTE=1`, which makes the
      `PermissionRequest` hook leave approvals to the peer; without the runtime
      that hook forwards to the socket bridge instead (Allow, Deny, notes only).
    - **OpenCode**: launched with `--port` on loopback and a per-launch

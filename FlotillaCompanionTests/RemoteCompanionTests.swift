@@ -167,6 +167,40 @@ final class RemoteCompanionTests: XCTestCase {
         XCTAssertEqual(data.pendingInteractions(for: waiting.id).first?.resolution, .answeredOnMac(outcome: "Answered"))
     }
 
+    func testCodexQuestionSelectionsAndFreeTextReachTheMacThroughThePhoneStore() async throws {
+        var waiting = session(status: .waitingForInput)
+        waiting.agent = .codexCLI
+        let card = PendingInteraction(kind: .question([
+            .init(id: "0", header: "Language", prompt: "Which language?", options: [.init(label: "Python"), .init(label: "Ruby")], allowsMultiple: false, allowsFreeText: true),
+            .init(id: "1", header: "Name", prompt: "Project name?", options: [], allowsMultiple: false, allowsFreeText: true)
+        ]))
+        let mac = FakeMac(sessions: [waiting])
+        mac.fleet.pending = [waiting.id: [card]]
+        try await mac.start()
+        defer { mac.server.stop(); mac.lock.withLock { mac.peers }.forEach { $0.close() } }
+        let data = RemoteCompanionDataSource(store: .temporary(), identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
+        data.setActive(true)
+        defer { data.setActive(false) }
+        let domain = "CodexQuestionTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = CompanionStore(data: data, defaults: defaults)
+        _ = try await store.pair(with: mac.payload) { _, _ in }
+        await waitUntil { !store.pendingInteractions(for: waiting.id).isEmpty }
+        XCTAssertEqual(store.pendingInteractions(for: waiting.id).map(\.kind), [card.kind])
+        let answer = InteractionAnswer.questionAnswers([.init(stepID: "0", selected: ["Ruby"]), .init(stepID: "1", selected: [], other: "PhoneProject")])
+        let outcome = await store.answer(card.id, in: waiting.id, with: answer)
+        XCTAssertEqual(outcome, .accepted)
+        XCTAssertEqual(mac.lock.withLock { mac.received }.last, .answer(sessionID: waiting.id, interactionID: card.id, answer: answer))
+        var updated = mac.fleet
+        updated.pending = [:]
+        updated.sessions[0].status = .working
+        mac.push(updated)
+        await waitUntil { store.pendingInteractions(for: waiting.id).isEmpty }
+        XCTAssertTrue(store.pendingInteractions(for: waiting.id).isEmpty)
+        XCTAssertNil(store.actionError)
+    }
+
     func testRevokedPhoneNeedsRepairing() async throws {
         let mac = FakeMac(sessions: [])
         try await mac.start()

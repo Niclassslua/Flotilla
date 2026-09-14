@@ -27,7 +27,8 @@ final class CompanionAdapterRegistry {
         guard let descriptor = CompanionRuntimeDescriptor.read(session.id, support: support) else { return nil }
         let adapter: any CompanionSessionAdapter
         switch session.agent {
-        case .codexCLI: adapter = CodexCompanionAdapter(session: session, endpoint: descriptor.endpoint)
+        case .codexCLI:
+            adapter = CodexCompanionAdapter(session: session, endpoint: descriptor.endpoint, screen: screen.map { screen in { await screen(session.id) } }, send: send.map { send in { send(session.id, $0) } })
         case .openCode: adapter = OpenCodeCompanionAdapter(session: session, descriptor: descriptor)
         case .antigravity:
             guard let screen, let send else { return nil }

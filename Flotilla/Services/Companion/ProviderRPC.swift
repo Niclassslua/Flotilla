@@ -7,6 +7,7 @@ enum ProviderConnectionError: LocalizedError {
     case timeout
     case invalidResponse
     case rejected(String)
+    case requestFailed(code: Int, message: String)
 
     var errorDescription: String? {
         switch self {
@@ -14,15 +15,26 @@ enum ProviderConnectionError: LocalizedError {
         case .timeout: "The provider did not respond in time."
         case .invalidResponse: "The provider returned an invalid response."
         case .rejected(let message): message
+        case .requestFailed(_, let message): message
         }
     }
+}
+
+@MainActor
+protocol ProviderRPCServing: AnyObject {
+    var onMessage: ([String: Any]) -> Void { get set }
+    var onDisconnect: () -> Void { get set }
+    func connect(socketPath: String) async throws
+    func request(_ method: String, params: [String: Any]) async throws -> [String: Any]
+    func reply(id: Any, result: [String: Any]) throws
+    func close()
 }
 
 /// Codex's Unix listener speaks RFC 6455, rather than newline-delimited RPC.
 /// All mutable protocol state stays on the main actor; Network callbacks
 /// transfer only bytes. The socket lives in a user-only directory.
 @MainActor
-final class ProviderRPC {
+final class ProviderRPC: ProviderRPCServing {
     var onMessage: ([String: Any]) -> Void = { _ in }
     var onDisconnect: () -> Void = {}
     private var connection: NWConnection?
@@ -92,7 +104,9 @@ final class ProviderRPC {
         try send(["id": id, "result": result])
     }
 
-    func close(error: Error = ProviderConnectionError.disconnected) {
+    func close() { close(error: ProviderConnectionError.disconnected) }
+
+    func close(error: Error) {
         let old = connection
         connection = nil
         old?.cancel()
@@ -190,7 +204,7 @@ final class ProviderRPC {
                     if let object = try? JSONSerialization.jsonObject(with: fragment) as? [String: Any] {
                         if object["method"] == nil, let id = object["id"] as? Int, let continuation = pending.removeValue(forKey: id) {
                             if let error = object["error"] as? [String: Any] {
-                                continuation.resume(throwing: ProviderConnectionError.rejected(error["message"] as? String ?? "Provider request failed."))
+                                continuation.resume(throwing: ProviderConnectionError.requestFailed(code: error["code"] as? Int ?? 0, message: error["message"] as? String ?? "Provider request failed."))
                             } else {
                                 do { continuation.resume(returning: try JSONSerialization.data(withJSONObject: object["result"] as? [String: Any] ?? [:])) }
                                 catch { continuation.resume(throwing: error) }
