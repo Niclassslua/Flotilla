@@ -74,15 +74,17 @@ struct FlotillaApp: App {
             ? MockPTYProcessFactory(echoesInput: true)
             : SystemPTYProcessFactory()
 
+        let processManager = SessionProcessManager(
+            locator: locator,
+            processFactory: processFactory,
+            settingsProvider: { settingsViewModel.settings }
+        )
+        processManager.preparesCompanionRuntimes = !environment.isUITesting
         let appStore = AppStore(
             repository: environment.sessionRepository,
             gitService: environment.gitService,
             ghService: environment.ghService,
-            processManager: SessionProcessManager(
-                locator: locator,
-                processFactory: processFactory,
-                settingsProvider: { settingsViewModel.settings }
-            ),
+            processManager: processManager,
             worktreeBaseDirectoryProvider: {
                 let configuredPath = settingsViewModel.settings.worktreeBaseDirectory
                 return configuredPath.isEmpty ? environment.worktreeBaseDirectory : URL(fileURLWithPath: configuredPath)
@@ -140,6 +142,7 @@ struct FlotillaApp: App {
         _companionHost = State(initialValue: CompanionHost(
             store: appStore,
             gitService: environment.gitService,
+            screenReader: environment.isUITesting ? nil : hookCoordinator.screenReader,
             defaults: environment.isUITesting ? UserDefaults(suiteName: "FlotillaUITests-companion-\(ProcessInfo.processInfo.processIdentifier)")! : .standard
         ))
 

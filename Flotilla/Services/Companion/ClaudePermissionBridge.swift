@@ -2,21 +2,25 @@ import Foundation
 import Network
 import CompanionKit
 
-/// Claude Code's `PermissionRequest` payloads, turned into phone cards, and the
+/// Claude Code and Codex `PermissionRequest` payloads, turned into phone cards, and the
 /// phone's answers, turned back into hook decisions.
 ///
 /// Pure value code, kept apart from the socket so the mapping is unit-tested.
 enum ClaudePermissionPayload {
     struct Parsed {
+        var isCodex: Bool
         var toolName: String
         var toolInput: [String: Any]
         var suggestions: [Any]?
+        var toolUseID: String?
         var interaction: PendingInteraction
     }
 
     static func parse(_ json: Data, id: UUID = UUID(), now: Date = .now) -> Parsed? {
-        guard let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
-              let toolName = object["tool_name"] as? String else { return nil }
+        guard let envelope = try? JSONSerialization.jsonObject(with: json) as? [String: Any] else { return nil }
+        let isCodex = envelope["flotilla_provider"] as? String == "codex"
+        let object = isCodex ? envelope["request"] as? [String: Any] ?? [:] : envelope
+        guard let toolName = object["tool_name"] as? String else { return nil }
         let input = object["tool_input"] as? [String: Any] ?? [:]
         let subagent = object["agent_type"] as? String
 
@@ -44,13 +48,17 @@ enum ClaudePermissionPayload {
             kind = .permission(PermissionRequest(
                 tool: toolName,
                 summary: summary(toolName: toolName, input: input),
-                detail: detail(toolName: toolName, input: input)
+                detail: detail(toolName: toolName, input: input),
+                allowsAlwaysAllow: isCodex ? false : nil,
+                allowsDenyAndStop: isCodex ? false : nil
             ))
         }
         return Parsed(
+            isCodex: isCodex,
             toolName: toolName,
             toolInput: input,
             suggestions: object["permission_suggestions"] as? [Any],
+            toolUseID: object["tool_use_id"] as? String,
             interaction: PendingInteraction(id: id, kind: kind, subagent: subagent, raisedAt: now)
         )
     }
@@ -91,13 +99,33 @@ enum ClaudePermissionPayload {
     /// decision form — the caller must not answer those through the hook.
     static func decision(for answer: InteractionAnswer, parsed: Parsed) -> Data? {
         var decision: [String: Any]
+        if parsed.isCodex {
+            // Codex rejects updatedInput, updatedPermissions and interrupt.
+            switch answer {
+            case .allow, .allowWithNote:
+                decision = ["behavior": "allow"]
+            case .deny:
+                decision = ["behavior": "deny", "message": "The user denied this from their iPhone."]
+            case .denyWithNote(let note):
+                decision = ["behavior": "deny", "message": note]
+            default:
+                return nil
+            }
+            return try? JSONSerialization.data(withJSONObject: [
+                "hookSpecificOutput": ["hookEventName": "PermissionRequest", "decision": decision]
+            ], options: [.sortedKeys])
+        }
         switch answer {
         case .allow, .allowWithNote:
             decision = ["behavior": "allow"]
         case .alwaysAllow:
             decision = [
                 "behavior": "allow",
-                "updatedPermissions": parsed.suggestions ?? [[
+                "updatedPermissions": parsed.suggestions?.map { suggestion in
+                    guard var value = suggestion as? [String: Any] else { return suggestion }
+                    value["destination"] = "session"
+                    return value
+                } ?? [[
                     "type": "addRules",
                     "rules": [["toolName": parsed.toolName]],
                     "behavior": "allow",
@@ -143,7 +171,7 @@ enum ClaudePermissionPayload {
     }
 }
 
-/// Holds Claude Code permission requests for the phone.
+/// Holds Claude Code and Codex permission requests for the phone.
 ///
 /// Each request arrives on the companion socket as two lines — the session's
 /// hook event-file path (which names the Flotilla session) and the hook JSON —
@@ -262,6 +290,15 @@ final class ClaudePermissionBridge {
             changed = true
         }
         if changed { onChange() }
+    }
+
+    func retractCompleted(sessionID: UUID, toolUseID: String?) {
+        guard let toolUseID else { return }
+        let matching = held[sessionID]?.filter { $0.parsed.toolUseID == toolUseID } ?? []
+        guard !matching.isEmpty else { return }
+        matching.forEach { $0.connection.cancel() }
+        held[sessionID]?.removeAll { $0.parsed.toolUseID == toolUseID }
+        onChange()
     }
 
     func retractAll(sessionID: UUID) {

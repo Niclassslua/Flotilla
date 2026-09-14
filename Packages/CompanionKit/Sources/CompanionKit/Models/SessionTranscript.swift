@@ -8,8 +8,6 @@ public struct SessionTranscript: Hashable, Codable, Sendable {
     public var events: [TranscriptEvent]
     /// The in-progress assistant message at the provider's granularity.
     public var streamingText: String?
-    /// Antigravity only: the last lines of the Mac's terminal while a step runs.
-    public var terminalTail: String?
     /// Set while a provider retries (`Retrying · attempt 3`).
     public var retryAttempt: Int?
     public var isStopping: Bool
@@ -22,7 +20,6 @@ public struct SessionTranscript: Hashable, Codable, Sendable {
     public init(
         events: [TranscriptEvent] = [],
         streamingText: String? = nil,
-        terminalTail: String? = nil,
         retryAttempt: Int? = nil,
         isStopping: Bool = false,
         queuedPrompts: [QueuedPrompt] = [],
@@ -30,7 +27,6 @@ public struct SessionTranscript: Hashable, Codable, Sendable {
     ) {
         self.events = events
         self.streamingText = streamingText
-        self.terminalTail = terminalTail
         self.retryAttempt = retryAttempt
         self.isStopping = isStopping
         self.queuedPrompts = queuedPrompts

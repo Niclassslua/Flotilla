@@ -57,11 +57,15 @@ struct PermissionCard: View {
             .accessibilityIdentifier("PermissionCard.Allow")
 
             Menu {
-                Button(context.capabilities.alwaysAllowLabel(for: request), systemImage: "checkmark.seal") { send(.alwaysAllow) }
+                if request.allowsAlwaysAllow != false {
+                    Button(context.capabilities.alwaysAllowLabel(for: request), systemImage: "checkmark.seal") { send(.alwaysAllow) }
+                }
                 Button("Allow with Note…", systemImage: "text.bubble") { beginNote(.allow) }
                 Button("Deny with Note…", systemImage: "text.bubble") { beginNote(.deny) }
-                Divider()
-                Button("Deny and Stop", systemImage: "stop.circle", role: .destructive) { send(.denyAndStop) }
+                if request.allowsDenyAndStop != false {
+                    Divider()
+                    Button("Deny and Stop", systemImage: "stop.circle", role: .destructive) { send(.denyAndStop) }
+                }
             } label: {
                 Image(systemName: "ellipsis")
                     .frame(width: 22)

@@ -49,6 +49,7 @@ final class CompanionHost {
     @ObservationIgnored private let auth = CompanionAuthState()
     @ObservationIgnored private let bridge = ClaudePermissionBridge()
     @ObservationIgnored private let router: CompanionCommandRouter
+    @ObservationIgnored private let adapters: CompanionAdapterRegistry
     @ObservationIgnored private let transcripts: CompanionTranscriptReader
     @ObservationIgnored private let socketURL: URL
     @ObservationIgnored private var server: CompanionServer?
@@ -77,6 +78,7 @@ final class CompanionHost {
     init(
         store: AppStore,
         gitService: any GitServiceProtocol,
+        screenReader: (any SessionScreenReading)? = nil,
         supportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
         storage: CompanionHostStorage = .default(),
         defaults: UserDefaults = .standard,
@@ -87,13 +89,19 @@ final class CompanionHost {
         self.defaults = defaults
         self.macName = macName
         self.socketURL = HookConfigurationWriter.companionSocketPath(supportDirectory: supportDirectory)
-        self.router = CompanionCommandRouter(store: store, gitService: gitService, bridge: bridge)
+        let adapters = CompanionAdapterRegistry(support: supportDirectory)
+        self.adapters = adapters
+        self.router = CompanionCommandRouter(store: store, gitService: gitService, bridge: bridge, adapters: adapters)
         self.transcripts = CompanionTranscriptReader(registry: .flotilla())
         self.isEnabled = defaults.bool(forKey: Self.enabledKey) || Self.autoPairsForAutomation
+        adapters.screen = { id in await screenReader?.readScreen(for: id) }
+        adapters.send = { [weak store] id, data in store?.process(for: id)?.send(input: data) }
+        adapters.bridge = bridge
         devices = storage.loadDevices()
         auth.setDevices(devices, revoked: storage.loadRevoked())
 
         bridge.onChange = { [weak self] in self?.publishFleetIfChanged() }
+        adapters.onChange = { [weak self] in self?.publishFleetIfChanged() }
         bridge.onAllowNote = { [weak self] sessionID, note in
             Task { try? await self?.store.deliverMessage(note, to: sessionID) }
         }
@@ -143,6 +151,7 @@ final class CompanionHost {
         server?.stop()
         server = nil
         bridge.stop()
+        adapters.close()
         publishTask?.cancel()
         publishTask = nil
         transcriptPublishTask?.cancel()
@@ -384,11 +393,14 @@ final class CompanionHost {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
+                // A dead pane's endpoint is gone; polling it only logs failures.
+                await self.adapters.refresh(self.store.sessions.filter { self.store.process(for: $0.id) != nil })
                 self.bridge.retractResolved { sessionID in
                     self.store.sessions.first { $0.id == sessionID }?.status == .waitingForInput
                 }
                 guard !self.peers.isEmpty else { continue }
                 self.publishFleetIfChanged()
+                for peer in self.peers.values where peer.subscribedSessionID != nil { await self.publishTranscript(to: peer) }
             }
         }
         transcriptPublishTask?.cancel()
@@ -421,7 +433,19 @@ final class CompanionHost {
     private func publishTranscript(to peer: Peer) async {
         guard let sessionID = peer.subscribedSessionID,
               let session = store.sessions.first(where: { $0.id == sessionID }) else { return }
-        guard let transcript = await transcripts.transcript(for: session, ifChangedSince: peer.lastTranscript) else { return }
+        let transcript: SessionTranscript
+        if let adapter = adapters.adapter(for: session), session.agent == .openCode {
+            transcript = adapter.transcript
+        } else {
+            guard var native = await transcripts.transcript(for: session, ifChangedSince: nil) else { return }
+            if let adapter = adapters.adapter(for: session) {
+                native.streamingText = adapter.transcript.streamingText
+                native.retryAttempt = adapter.transcript.retryAttempt
+                native.events += adapter.transcript.events.filter { if case .turnFailed = $0.content { true } else { false } }
+            }
+            transcript = native
+        }
+        guard transcript != peer.lastTranscript else { return }
         guard peer.subscribedSessionID == sessionID else { return }
         peer.lastTranscript = transcript
         try? peer.session.send(.transcript(sessionID: sessionID, transcript))
@@ -438,7 +462,7 @@ final class CompanionHost {
                     diffStat: store.diffStatStore.stat(for: session.id),
                     handoffTargets: store.handoffTargets(for: session),
                     isProcessLive: store.process(for: session.id) != nil && session.status != .crashed,
-                    answerable: bridge.pending(for: session.id)
+                    answerable: session.agent == .claudeCode ? bridge.pending(for: session.id) : adapters.pending(session) + bridge.pending(for: session.id)
                 )
             }
         )

@@ -42,6 +42,10 @@ final class SessionProcessManager {
     /// attribution. Set by `AppStore`, which owns the attribution service;
     /// `nil` leaves the environment unchanged.
     var commitAttributionEnvironment: (@MainActor (Session, [String: String]) -> [String: String]?)?
+    /// Launches Codex, OpenCode and Antigravity with the control endpoint the
+    /// iPhone companion answers through (`CompanionRuntimeLaunch`). Off in
+    /// tests and UI testing, where launch arguments are asserted verbatim.
+    var preparesCompanionRuntimes = false
 
     enum SessionProcessEvent: Equatable {
         case terminated(sessionID: UUID, exitCode: Int32)
@@ -271,12 +275,28 @@ final class SessionProcessManager {
                 supportDirectory: hookSupportDirectory
             )
         }
-        guard let resolvedExecutable = resolveExecutable(plan: plan) else {
+        guard var resolvedExecutable = resolveExecutable(plan: plan) else {
             throw LaunchError.executableNotFound(
                 agent: session.agent,
                 binary: plan.binaryName,
                 configuredPath: plan.configuredPath
             )
+        }
+        // Best-effort like hooks: without a control endpoint the session
+        // still runs, and the phone shows "Needs the terminal" instead.
+        if preparesCompanionRuntimes {
+            do {
+                resolvedExecutable = try CompanionRuntimeLaunch.prepare(
+                    plan: &plan,
+                    session: session,
+                    executable: resolvedExecutable,
+                    support: hookSupportDirectory,
+                    reattaching: hasLiveTmuxSession
+                )
+            } catch {
+                Logger(subsystem: "com.niclassslua.flotilla", category: "Companion")
+                    .error("Companion runtime for \(session.id) unavailable: \(error.localizedDescription)")
+            }
         }
         tmuxWrappedSessions[session.id] = tmuxExecutable
         // Covers an already-running server; the `-f` config passed to

@@ -53,13 +53,15 @@ struct QuestionCard: View {
                             toggle(option.label, in: step)
                         }
                     }
-                    OptionButton(
-                        label: "Other",
-                        description: nil,
-                        isSelected: otherEnabled.contains(step.id),
-                        allowsMultiple: step.allowsMultiple
-                    ) {
-                        toggleOther(in: step)
+                    if step.allowsFreeText != false {
+                        OptionButton(
+                            label: "Other",
+                            description: nil,
+                            isSelected: otherEnabled.contains(step.id),
+                            allowsMultiple: step.allowsMultiple
+                        ) {
+                            toggleOther(in: step)
+                        }
                     }
                     if otherEnabled.contains(step.id) {
                         TextField("Your answer", text: Binding(

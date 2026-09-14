@@ -1052,6 +1052,31 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertTrue(event.contains(#"{"event":"PreToolUse","payload":{"toolCall":{"name":"ask_question"}}}"#))
     }
 
+    /// A phone prompt sent mid-turn waits in the queue file until Antigravity's
+    /// next `PostInvocation`, which must inject it exactly once.
+    func testAntigravityPostInvocationInjectsQueuedPromptsOnce() throws {
+        let sessionID = UUID()
+        XCTAssertTrue(HookConfigurationWriter().configureHooks(
+            for: .antigravity,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            supportDirectory: supportDirectory
+        ))
+        let script = supportDirectory.appendingPathComponent("hooks/flotilla-antigravity.sh")
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        let queued = #"{"injectSteps":[{"userMessage":"Also update the README"}]}"#
+        try Data(queued.utf8).write(to: URL(fileURLWithPath: eventFile.path + ".queue"))
+
+        let first = try runScript(at: script, arguments: ["PostInvocation"], stdin: "{}", eventFile: eventFile)
+        let second = try runScript(at: script, arguments: ["PostInvocation"], stdin: "{}", eventFile: eventFile)
+
+        XCTAssertEqual(first, queued)
+        XCTAssertEqual(second, "", "a delivered prompt must not be injected again")
+        let group = try readAntigravityHooks()
+        let entries = try XCTUnwrap(group["PostInvocation"] as? [[String: Any]])
+        XCTAssertTrue(try XCTUnwrap(entries.first?["command"] as? String).hasSuffix("PostInvocation"))
+    }
+
     func testAntigravityRelaunchIsIdempotentNotAccumulating() throws {
         let writer = HookConfigurationWriter()
         let sessionID = UUID()

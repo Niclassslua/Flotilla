@@ -21,16 +21,12 @@ extension MockCompanionDataSource {
                 try await pause(0.035)
                 mutateTranscript(sessionID) { $0.streamingText = ($0.streamingText ?? "") + token }
             }
-        case .stepsWithTerminalTail:
-            for frame in MockFixtures.terminalTailFrames {
-                mutateTranscript(sessionID) { $0.terminalTail = frame }
-                try await pause(0.5)
-            }
+        case .steps:
+            try await pause(2)
         }
         try Task.checkCancellation()
         mutateTranscript(sessionID) {
             $0.streamingText = nil
-            $0.terminalTail = nil
             $0.append(.assistantMessage(text: text, timestamp: .now))
         }
     }

@@ -45,6 +45,18 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(snapshot.sessions.first?.attentionSummary, "Allow rm -rf build?")
     }
 
+    /// OpenCode flips the session to working when one of two concurrent
+    /// approvals is answered; the other is still open and must stay answerable.
+    func testProviderRequestsStayVisibleWhileTheSessionReadsWorking() {
+        let working = session(status: .working, agent: .openCode)
+        let card = PendingInteraction(kind: .permission(PermissionRequest(tool: "external_directory", summary: "/etc/*")))
+        let snapshot = CompanionSnapshotBuilder.snapshot(macID: "m", macName: "Studio", sessions: [working], projects: [], context: { _ in self.context(answerable: [card]) })
+
+        XCTAssertEqual(snapshot.pending[working.id], [card])
+        XCTAssertEqual(snapshot.sessions.first?.status, .waitingForInput)
+        XCTAssertEqual(snapshot.sessions.first?.attentionSummary, "Allow /etc/*?")
+    }
+
     func testSessionFieldsMapAcross() {
         let crashed = session(status: .crashed, agent: .openCode)
         let mapped = CompanionSnapshotBuilder.companionSession(crashed, context: context(), cards: [])
@@ -53,7 +65,7 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(mapped.hasWorktree)
         XCTAssertEqual(mapped.diffStat, DiffStat(files: 0, additions: 12, deletions: 4))
         XCTAssertEqual(mapped.crashReason, CompanionSnapshotBuilder.crashReason)
-        XCTAssertFalse(mapped.hasTranscript, "OpenCode has no transcript reader")
+        XCTAssertTrue(mapped.hasTranscript, "OpenCode's transcript comes from its server")
         XCTAssertTrue(CompanionSnapshotBuilder.snapshot(macID: "m", macName: "S", sessions: [crashed], projects: [], context: { _ in self.context() }).pending.isEmpty)
     }
 
@@ -76,6 +88,20 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
 }
 
 final class ClaudePermissionPayloadTests: XCTestCase {
+    func testCodexAllowsOnlySupportedHookDecisionFields() throws {
+        let payload = #"{"flotilla_provider":"codex","request":{"tool_name":"Bash","tool_input":{"command":"touch title.json"}}}"#
+        let parsed = try XCTUnwrap(ClaudePermissionPayload.parse(Data(payload.utf8)))
+        for answer: InteractionAnswer in [.allow, .allowWithNote("Continue")] {
+            let data = try XCTUnwrap(ClaudePermissionPayload.decision(for: answer, parsed: parsed))
+            let output = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let specific = try XCTUnwrap(output["hookSpecificOutput"] as? [String: Any])
+            XCTAssertEqual(specific["decision"] as? [String: String], ["behavior": "allow"])
+        }
+        for answer: InteractionAnswer in [.alwaysAllow, .denyAndStop, .approvePlan(nil), .questionAnswers([])] {
+            XCTAssertNil(ClaudePermissionPayload.decision(for: answer, parsed: parsed))
+        }
+    }
+
     private func decision(_ answer: InteractionAnswer, payload: String) throws -> [String: Any] {
         let parsed = try XCTUnwrap(ClaudePermissionPayload.parse(Data(payload.utf8)))
         let data = try XCTUnwrap(ClaudePermissionPayload.decision(for: answer, parsed: parsed))
@@ -295,6 +321,84 @@ final class CompanionBridgeHookTests: XCTestCase {
         XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .deny), .alreadyAnswered)
     }
 
+    @MainActor
+    func testCodexApprovalTravelsThroughTheGeneratedHookAndPhoneBridge() async throws {
+        let sessionID = UUID()
+        let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
+        XCTAssertTrue(HookConfigurationWriter().configureHooks(
+            for: .codexCLI, sessionID: sessionID, workingDirectory: directory, supportDirectory: directory
+        ))
+        let arguments = HookConfigurationWriter.launchArguments(for: .codexCLI, supportDirectory: directory)
+        let config = try XCTUnwrap(arguments.first { $0.hasPrefix("hooks.PermissionRequest=") })
+        XCTAssertTrue(config.contains(" PermissionRequest"))
+        XCTAssertTrue(config.contains("timeout=86400"))
+        let bridge = ClaudePermissionBridge()
+        bridge.start(socketURL: HookConfigurationWriter.companionSocketPath(supportDirectory: directory))
+        defer { bridge.stop() }
+        let script = directory.appendingPathComponent("hooks/flotilla-codex.sh")
+        let payload = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"printf 'a\\nb'","description":"Write the session title"}}"#
+        let command = "'\(script.path)' PermissionRequest"
+        let hook = Task.detached { try Self.run(command, input: payload, eventFile: eventFile) }
+        let deadline = Date().addingTimeInterval(5)
+        while bridge.pending(for: sessionID).isEmpty && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let card = try XCTUnwrap(bridge.pending(for: sessionID).first)
+        XCTAssertEqual(card.kind, .permission(PermissionRequest(tool: "Bash", summary: "printf 'a\\nb'", detail: "printf 'a\\nb'", allowsAlwaysAllow: false, allowsDenyAndStop: false)))
+        XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .alwaysAllow), .alreadyAnswered)
+        XCTAssertEqual(bridge.pending(for: sessionID).count, 1, "An unsupported decision must leave the request open")
+        XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .denyWithNote("Use another path")), .accepted)
+        let result = try await hook.value
+        XCTAssertEqual(result.status, 0)
+        let output = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.stdout.utf8)) as? [String: Any])
+        let specific = try XCTUnwrap(output["hookSpecificOutput"] as? [String: Any])
+        XCTAssertEqual(specific["hookEventName"] as? String, "PermissionRequest")
+        XCTAssertEqual(specific["decision"] as? [String: String], ["behavior": "deny", "message": "Use another path"])
+        XCTAssertEqual(try String(contentsOf: eventFile, encoding: .utf8), payload + "\n")
+        XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .allow), .alreadyAnswered)
+    }
+
+    /// With the app-server runtime, the peer client answers approvals; a
+    /// hook holding the request as well would show the phone a second card.
+    @MainActor
+    func testCodexApprovalUnderTheRemoteRuntimeIsLeftToThePeerClient() async throws {
+        let sessionID = UUID()
+        let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
+        XCTAssertTrue(HookConfigurationWriter().configureHooks(
+            for: .codexCLI, sessionID: sessionID, workingDirectory: directory, supportDirectory: directory
+        ))
+        let bridge = ClaudePermissionBridge()
+        bridge.start(socketURL: HookConfigurationWriter.companionSocketPath(supportDirectory: directory))
+        defer { bridge.stop() }
+        let script = directory.appendingPathComponent("hooks/flotilla-codex.sh")
+        let payload = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"touch title.json"}}"#
+        let command = "FLOTILLA_CODEX_REMOTE=1 '\(script.path)' PermissionRequest"
+        let hook = Task.detached { try Self.run(command, input: payload, eventFile: eventFile) }
+        let deadline = Date().addingTimeInterval(3)
+        while bridge.pending(for: sessionID).isEmpty && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(bridge.pending(for: sessionID).isEmpty, "the bridge must not hold a request the peer client answers")
+        bridge.stop()
+        let result = try await hook.value
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.stdout, "")
+        XCTAssertEqual(try String(contentsOf: eventFile, encoding: .utf8), payload + "\n", "status tracking still sees the request")
+    }
+
+    func testCodexApprovalWithoutCompanionRemainsInTheTerminal() throws {
+        XCTAssertTrue(HookConfigurationWriter().configureHooks(
+            for: .codexCLI, sessionID: UUID(), workingDirectory: directory, supportDirectory: directory
+        ))
+        let script = directory.appendingPathComponent("hooks/flotilla-codex.sh")
+        let eventFile = directory.appendingPathComponent("event.jsonl")
+        let payload = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"touch title.json"}}"#
+        let result = try Self.run("'\(script.path)' PermissionRequest", input: payload, eventFile: eventFile)
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.stdout, "")
+        XCTAssertEqual(try String(contentsOf: eventFile, encoding: .utf8), payload + "\n")
+    }
+
     /// A single misread from the status heuristic must not drop a request a
     /// human is still reading on their phone — only a status that reads
     /// not-waiting continuously past the grace window may retract it.
@@ -352,5 +456,32 @@ private final class ClaudeBridgeHarness {
 
     func close() {
         Darwin.close(descriptor)
+    }
+}
+
+/// The Antigravity relay types digits into the live TUI, so it must read the
+/// open dialog — never a list left in the scrollback above it.
+final class AntigravityDialogRelayTests: XCTestCase {
+    func testOptionsComeFromTheOpenDialogWithItsHighlightedRow() {
+        // Captured from agy 1.2.2: an answered question above an open command approval.
+        let screen = """
+        Question 1/1: Which color do you prefer?
+        > 1. Red
+          2. Green
+        > Run the shell command: whoami   and reply with only its output.
+        Requesting permission for:
+           whoami
+        Run this command?
+        > 1. Yes, run command
+          2. Yes, and always allow in this conversation for commands that start with 'whoami'
+          3. Yes, and always allow for commands that start with 'whoami' (Persist to settings.json)
+          4. No, cancel
+          ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+        """
+        let options = AntigravityCompanionAdapter.options(in: screen)
+
+        XCTAssertEqual(options.map(\.key), ["1", "2", "3", "4"])
+        XCTAssertEqual(options.last?.label, "No, cancel")
+        XCTAssertEqual(options.filter(\.isHighlighted).map(\.key), ["1"])
     }
 }

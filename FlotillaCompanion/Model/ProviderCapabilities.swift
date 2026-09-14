@@ -9,8 +9,8 @@ struct ProviderCapabilities: Sendable {
     enum StreamingGranularity: Sendable {
         case lines
         case tokens
-        /// Completed steps only; a terminal-tail preview stands in meanwhile.
-        case stepsWithTerminalTail
+        /// Completed steps only; nothing streams while a step runs.
+        case steps
     }
 
     enum AlwaysAllowScope: Sendable {
@@ -33,7 +33,7 @@ struct ProviderCapabilities: Sendable {
         case .openCode:
             ProviderCapabilities(streaming: .tokens, planApprovalHasModeSplit: false, alwaysAllowScope: .commandPattern)
         case .antigravity:
-            ProviderCapabilities(streaming: .stepsWithTerminalTail, planApprovalHasModeSplit: false, alwaysAllowScope: .conversation)
+            ProviderCapabilities(streaming: .steps, planApprovalHasModeSplit: false, alwaysAllowScope: .conversation)
         }
     }
 

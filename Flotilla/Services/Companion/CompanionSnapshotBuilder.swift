@@ -13,7 +13,7 @@ enum CompanionSnapshotBuilder {
         var diffStat: GitDiffStat?
         var handoffTargets: [AgentKind]
         var isProcessLive: Bool
-        /// Cards the phone can answer, from the Claude permission bridge.
+        /// Cards the phone can answer, from the provider permission bridge.
         var answerable: [PendingInteraction]
     }
 
@@ -54,7 +54,7 @@ enum CompanionSnapshotBuilder {
             agent: session.agent,
             model: session.model ?? AgentCatalog.descriptor(for: session.agent).fallbackModels.first ?? "default",
             effort: session.effort,
-            status: session.status,
+            status: cards.contains(where: { $0.resolution == nil }) ? .waitingForInput : session.status,
             waitingReason: session.waitingReason,
             projectID: session.projectID,
             branch: session.worktree?.branchName,
@@ -62,19 +62,21 @@ enum CompanionSnapshotBuilder {
             isProcessLive: context.isProcessLive,
             updatedAt: session.lastActiveAt,
             diffStat: context.diffStat.flatMap { $0.isEmpty ? nil : DiffStat(files: 0, additions: $0.additions, deletions: $0.deletions) },
-            attentionSummary: session.status == .waitingForInput ? cards.first?.attentionSummary : nil,
+            attentionSummary: cards.first?.attentionSummary,
             crashReason: session.status == .crashed ? crashReason : nil,
             handoffTargets: context.handoffTargets,
-            hasTranscript: session.agent != .openCode
+            hasTranscript: true
         )
     }
 
-    /// The cards for a waiting session: the bridge's answerable requests when
-    /// there are any, otherwise one "Needs the terminal" card naming what the
-    /// agent waits for — the phone must never offer a prompt field then.
+    /// The provider's answerable requests whenever there are any — they are
+    /// authoritative, and the session's status can already read `working`
+    /// while a second approval is still open. Otherwise a waiting session gets
+    /// one "Needs the terminal" card naming what the agent waits for — the
+    /// phone must never offer a prompt field then.
     static func interactions(for session: Session, answerable: [PendingInteraction]) -> [PendingInteraction] {
-        guard session.status == .waitingForInput else { return [] }
         if !answerable.isEmpty { return answerable }
+        guard session.status == .waitingForInput else { return [] }
         let title = switch session.waitingReason {
         case .permission: "Permission prompt"
         case .question: "Question"

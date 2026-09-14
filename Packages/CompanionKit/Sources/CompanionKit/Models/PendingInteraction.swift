@@ -55,12 +55,18 @@ public struct PermissionRequest: Hashable, Codable, Sendable {
     /// The pattern an always-allow would cover, for providers that scope it
     /// by pattern (OpenCode: `touch *`).
     public var pattern: String?
+    /// `false` hides Always Allow where the answer path can't grant it (Codex's hook fallback).
+    public var allowsAlwaysAllow: Bool?
+    /// `false` hides Deny and Stop where the answer path can't interrupt (Codex's hook fallback).
+    public var allowsDenyAndStop: Bool?
 
-    public init(tool: String, summary: String, detail: String? = nil, pattern: String? = nil) {
+    public init(tool: String, summary: String, detail: String? = nil, pattern: String? = nil, allowsAlwaysAllow: Bool? = nil, allowsDenyAndStop: Bool? = nil) {
         self.tool = tool
         self.summary = summary
         self.detail = detail
         self.pattern = pattern
+        self.allowsAlwaysAllow = allowsAlwaysAllow
+        self.allowsDenyAndStop = allowsDenyAndStop
     }
 }
 
@@ -81,13 +87,16 @@ public struct QuestionStep: Identifiable, Hashable, Codable, Sendable {
     public var prompt: String
     public var options: [Option]
     public var allowsMultiple: Bool
+    /// `false` hides the write-in text field for providers that don't support free-text answers.
+    public var allowsFreeText: Bool?
 
-    public init(id: String, header: String, prompt: String, options: [Option], allowsMultiple: Bool) {
+    public init(id: String, header: String, prompt: String, options: [Option], allowsMultiple: Bool, allowsFreeText: Bool? = nil) {
         self.id = id
         self.header = header
         self.prompt = prompt
         self.options = options
         self.allowsMultiple = allowsMultiple
+        self.allowsFreeText = allowsFreeText
     }
 }
 

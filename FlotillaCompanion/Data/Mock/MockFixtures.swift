@@ -247,13 +247,6 @@ extension MockFixtures {
     The build passes; nothing else was touched.
     """
 
-    static let terminalTailFrames = [
-        "▸ Planning next step…",
-        "▸ Planning next step…\n  reading FleetView.swift",
-        "  reading FleetView.swift\n  editing UnreachableBanner.swift\n  ✓ 1 file changed",
-        "  ✓ 1 file changed\n  running xcodebuild…\n  ** BUILD SUCCEEDED **",
-    ]
-
     static let sampleQuestions = [
         QuestionStep(
             id: "storage",

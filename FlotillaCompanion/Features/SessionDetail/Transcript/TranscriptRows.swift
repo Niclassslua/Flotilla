@@ -52,27 +52,6 @@ struct AssistantMessageRow: View {
     }
 }
 
-/// Antigravity's stand-in for live text: the tail of the Mac's terminal,
-/// replaced by the completed step.
-struct TerminalTailPreview: View {
-    let text: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Live from the terminal", systemImage: "terminal")
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(FlotillaColors.textTertiary)
-            Text(text)
-                .font(.caption.monospaced())
-                .foregroundStyle(FlotillaColors.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentTransition(.opacity)
-        }
-        .padding(10)
-        .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-    }
-}
-
 /// Consecutive tool calls between two messages. A single call renders as its
 /// own row; several collapse into `Ran 7 tools`.
 struct ToolGroupRow: View {

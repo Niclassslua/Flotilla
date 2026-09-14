@@ -145,9 +145,6 @@ struct SessionDetailView: View {
                 AssistantMessageRow(markdown: streaming)
                     .id("streaming")
             }
-            if let tail = transcript.terminalTail {
-                TerminalTailPreview(text: tail)
-            }
             ForEach(transcript.queuedPrompts) { prompt in
                 UserMessageRow(text: prompt.text, isQueued: true)
             }

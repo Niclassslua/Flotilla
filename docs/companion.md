@@ -3,8 +3,8 @@
 The iOS companion (`FlotillaCompanion`) is a remote control for a running
 Flotilla on the Mac: the Mac keeps the real terminal and stays authoritative;
 the phone observes sessions, prompts and stops them, creates, restarts, hands
-off and deletes them, reads diffs, commits and files, and answers Claude Code
-permission, question and plan dialogs.
+off and deletes them, reads diffs, commits and files, and answers the
+approval, question and plan dialogs of all four agents.
 
 Product decisions live in `Ideas/mobile-companion/spec.md` (local, not
 tracked); this document describes what is built and every assumption made
@@ -24,7 +24,12 @@ iPhone (FlotillaCompanion)                         Mac (Flotilla)
 │  LANBrowser (Bonjour)       │                   │   ├ CompanionSnapshotBuilder ◄ AppStore
 │  PairMacView + diagnosis    │                   │   ├ CompanionTranscriptReader      │
 └─────────────────────────────┘                   │   ├ CompanionCommandRouter ► AppStore / GitService
-                                                  │   └ ClaudePermissionBridge ◄ hook shim
+                                                  │   ├ ClaudePermissionBridge ◄ hook shim
+                                                  │   └ CompanionAdapterRegistry
+                                                  │       ├ Claude      ► bridge + PTY
+                                                  │       ├ Codex       ► app-server peer (ProviderRPC)
+                                                  │       ├ OpenCode    ► HTTP + SSE peer
+                                                  │       └ Antigravity ► log + key relay
                                                   └───────────────────────────────────┘
 ```
 
@@ -165,23 +170,45 @@ Decisions made without asking, recorded so they can be revisited.
    events per session. Simpler and robust to reconnects; revisit if large
    sessions make it slow.
 8. **Transcripts come from the agents' own files** through TranscriptKit's
-   readers, polled once a second while a phone views the session. OpenCode
-   has no reader, so its sessions show status, diff and commits, and a
-   "Transcript not available for OpenCode" note. Live token streaming is not
-   available from files; messages appear when the agent writes them.
-9. **Structured answers (permission / question / plan) are Claude Code only.**
-   Claude Code's `PermissionRequest` hook is made blocking through a
-   fail-open socket shim (verified in `probe-claude-live-bridge.md`); the
-   terminal dialog stays live and first answer wins. Codex, OpenCode and
-   Antigravity need their peer-client / relay mechanisms from
-   `concept-codex-opencode-antigravity.md`, which change how Flotilla launches
-   those agents; until then their waiting sessions show the **Needs the
-   terminal** card naming what they wait for.
-10. **Stop sends Escape** to the session's terminal, which interrupts all four
-    agents' current turn. A pending Claude card is denied with
-    `interrupt: true` instead.
-11. **Prompts use `AppStore.deliverMessage`**, Flotilla's existing reliable
-    tmux submission path. Prompts sent while working show as Queued until the
+   readers, polled once a second while a phone views the session. The
+   provider adapter adds live text (Codex and OpenCode token deltas, Claude
+   `MessageDisplay` lines) and failed turns. OpenCode has no file reader; its
+   transcript comes from the server's message API. Antigravity writes steps
+   only when they complete, and the phone never mirrors the terminal screen.
+9. **Every agent's dialogs have structured answers**, through one
+   `CompanionSessionAdapter` per session (`CompanionAdapterRegistry`), and the
+   Mac terminal's dialog stays live — first answer wins. The agents differ in
+   how Flotilla launches them (`CompanionRuntimeLaunch`, skipped under
+   `UI_TESTING` and in unit tests):
+   - **Claude Code**: the blocking `PermissionRequest` hook through a
+     fail-open socket shim (verified in `probe-claude-live-bridge.md`).
+   - **Codex**: a wrapper starts `codex app-server --listen unix://…` beside
+     the TUI, which attaches with `--remote`; Flotilla is a second JSON-RPC
+     client (experimental API) and answers `requestApproval` and
+     `requestUserInput` server requests. Plan approval starts a default-mode
+     turn. The runtime sets `FLOTILLA_CODEX_REMOTE=1`, which makes the
+     `PermissionRequest` hook leave approvals to the peer; without the runtime
+     that hook forwards to the socket bridge instead (Allow, Deny, notes only).
+   - **OpenCode**: launched with `--port` on loopback and a per-launch
+     `OPENCODE_SERVER_PASSWORD`; Flotilla reconciles `GET /permission` and
+     `GET /question` every second and replies over REST. Autoupdate is off.
+   - **Antigravity**: launched with a per-session `--log-file`. `PreToolUse`
+     supplies the card content, the log proves the dialog is open (and
+     resolved), and the answer is the option key typed into the TUI, chosen by
+     label from the open dialog and re-checked against the log just before
+     typing. Notes use arrows, `Tab` and a paste.
+   Launch descriptors (endpoint, OpenCode password) are 0600 files in
+   `companion-runtimes/`, never sent to the phone. A dialog opened before the
+   Mac app restarted shows **Needs the terminal** (the hook event file starts
+   fresh on reattach). A waiting session without an answerable request shows
+   that card too, naming what it waits for.
+10. **Stop** is `turn/interrupt` for Codex and `/abort` for OpenCode; Claude
+    and Antigravity get Escape in the terminal. A pending Claude card is denied
+    with `interrupt: true` instead.
+11. **Prompts go through the adapter**: `turn/start` or `turn/steer` for
+    Codex, `prompt_async` for OpenCode, a bracketed paste for Claude and
+    Antigravity (Antigravity queues mid-turn prompts for `injectSteps`), and
+    `AppStore.deliverMessage` for a session without an adapter. Prompts sent while working show as Queued until the
     transcript contains them.
 12. **Creating a session from the phone** uses the Mac's current defaults for
     everything the phone doesn't send (title generation, worktree naming).

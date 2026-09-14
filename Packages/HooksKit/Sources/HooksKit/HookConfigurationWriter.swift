@@ -29,9 +29,9 @@ public protocol HookConfiguring: Sendable {
 ///
 /// Codex uses its documented lifecycle-hook schema through inline `--config`
 /// overrides and its self-describing `hook_event_name` payload.
-/// `PermissionRequest` is purely observational: the wrapper exits 0 without
-/// stdout, so Codex continues to its normal approval prompt while Flotilla
-/// records `waitingForInput`.
+/// `PermissionRequest` records `waitingForInput` and forwards requests to the
+/// companion bridge when available; otherwise it exits silently and leaves
+/// Codex's normal approval prompt in charge.
 ///
 /// Claude Code's own config is passed via `launchArguments`'s `--settings`
 /// flag rather than written into `<workingDirectory>/.claude/settings.json`
@@ -229,7 +229,7 @@ public struct HookConfigurationWriter: HookConfiguring {
             return [
                 "--config", "features.hooks=true",
                 "--config", "hooks.PreToolUse=\(hookGroup)",
-                "--config", "hooks.PermissionRequest=\(hookGroup)",
+                "--config", "hooks.PermissionRequest=[{matcher=\"\",hooks=[{type=\"command\",command=\(tomlStringLiteral(quoted(scriptPath.path) + " PermissionRequest")),timeout=86400}]}]",
                 "--config", "hooks.PostToolUse=\(hookGroup)",
                 "--config", "hooks.Stop=\(hookGroup)"
             ]
@@ -284,8 +284,9 @@ public struct HookConfigurationWriter: HookConfiguring {
     ///    script must also print `{"decision":"allow"}` for that event, or
     ///    Antigravity may hang waiting for a decision that never comes.
     ///
-    /// Only `PreToolUse`/`PostToolUse` (matcher `*`, catching every tool
-    /// call) and `Stop` are wired. `HookEventReceiver` decides `working` vs.
+    /// `PreToolUse`/`PostToolUse` (matcher `*`, catching every tool call)
+    /// and `Stop` drive status; `PostInvocation` only delivers prompts the
+    /// companion queued mid-turn. `HookEventReceiver` decides `working` vs.
     /// `waitingForInput` for `PreToolUse` by inspecting the real payload's
     /// `toolCall.name` (`"ask_question"` is Antigravity's own tool for
     /// asking the user something, free-text or multi-choice — there is no
@@ -310,7 +311,16 @@ public struct HookConfigurationWriter: HookConfiguring {
                 at: scriptPath.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let contents = wrapperScriptContents(decisionRequiredFor: ["PreToolUse"])
+            // The companion queues prompts sent mid-turn next to the event
+            // file; `PostInvocation` hands them to the agent as
+            // `injectSteps`. Moving the file first keeps a prompt queued
+            // during delivery for the next invocation.
+            let contents = wrapperScriptContents(decisionRequiredFor: ["PreToolUse"]) + """
+            \nif [ "$event" = "PostInvocation" ] && [ -n "$event_file" ] && [ -f "$event_file.queue" ]; then
+                queue="$event_file.queue.$$"
+                mv "$event_file.queue" "$queue" 2>/dev/null && cat "$queue" && rm -f "$queue"
+            fi
+            """
             try Data(contents.utf8).write(to: scriptPath, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
         } catch {
@@ -333,7 +343,8 @@ public struct HookConfigurationWriter: HookConfiguring {
                 root["flotilla-status"] = [
                     "PreToolUse": [["matcher": "*", "hooks": [hookCommand("PreToolUse")]]],
                     "PostToolUse": [["matcher": "*", "hooks": [hookCommand("PostToolUse")]]],
-                    "Stop": [hookCommand("Stop")]
+                    "Stop": [hookCommand("Stop")],
+                    "PostInvocation": [hookCommand("PostInvocation")]
                 ]
                 try writeJSONObject(root, to: configFile, creating: configDirectory)
             }
@@ -447,9 +458,9 @@ public struct HookConfigurationWriter: HookConfiguring {
     /// `--config` overrides, so Codex never modifies the project.
     ///
     /// `PostToolUse` maps to working, `Stop` to ready, and
-    /// `PermissionRequest` to waiting. The wrapper copies Codex's own JSON
-    /// payload and deliberately prints no response, preserving the normal
-    /// approval flow.
+    /// `PermissionRequest` to waiting. The wrapper records Codex's own JSON
+    /// and forwards approval requests to the companion socket. A provider
+    /// envelope keeps Claude-only decision fields out of Codex responses.
     private static func configureCodexHooks(
         supportDirectory: URL
     ) -> Bool {
@@ -459,7 +470,9 @@ public struct HookConfigurationWriter: HookConfiguring {
                 at: scriptPath.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let contents = eventForwardingShellCommand() + "\n"
+            let socket = quoted(companionSocketPath(supportDirectory: supportDirectory).path)
+            let contents = #"input=$(cat); event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; printf '%s\n' "$input" >> "$event_file"; "# +
+                #"[ "$1" = PermissionRequest ] || exit 0; [ "${FLOTILLA_CODEX_REMOTE:-}" = 1 ] && exit 0; [ -S \#(socket) ] || exit 0; printf '%s\n{"flotilla_provider":"codex","request":%s}\n' "$event_file" "$input" | /usr/bin/nc -U \#(socket) 2>/dev/null; exit 0"# + "\n"
             try Data(contents.utf8).write(to: scriptPath, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
         } catch {

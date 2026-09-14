@@ -196,7 +196,6 @@ final class MockCompanionDataSource: CompanionDataSource {
         mutateTranscript(sessionID) {
             $0.isStopping = false
             $0.streamingText = nil
-            $0.terminalTail = nil
             $0.retryAttempt = nil
             $0.append(.systemNote(text: "Interrupted", timestamp: .now))
         }
