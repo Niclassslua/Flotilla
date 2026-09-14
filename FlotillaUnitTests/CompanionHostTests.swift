@@ -294,6 +294,44 @@ final class CompanionBridgeHookTests: XCTestCase {
         XCTAssertTrue(result.stdout.contains(#""behavior":"allow""#), result.stdout)
         XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .deny), .alreadyAnswered)
     }
+
+    /// A single misread from the status heuristic must not drop a request a
+    /// human is still reading on their phone — only a status that reads
+    /// not-waiting continuously past the grace window may retract it.
+    @MainActor
+    func testRetractResolvedIgnoresATransientNotWaitingReadingButActsOnceItPersists() async throws {
+        let sessionID = UUID()
+        let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
+        let bridge = ClaudePermissionBridge()
+        bridge.start(socketURL: HookConfigurationWriter.companionSocketPath(supportDirectory: directory))
+        defer { bridge.stop() }
+
+        let command = try permissionCommand()
+        let hook = Task.detached {
+            try Self.run(command, input: #"{"tool_name":"Bash","tool_input":{"command":"ls"}}"#, eventFile: eventFile)
+        }
+
+        let deadline = Date().addingTimeInterval(5)
+        while bridge.pending(for: sessionID).isEmpty && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertFalse(bridge.pending(for: sessionID).isEmpty)
+
+        let start = Date()
+        // A single not-waiting tick, then back to waiting: the request has
+        // been open long enough that the old (raise-time-based) staleness
+        // check would have dropped it on this very tick.
+        bridge.retractResolved(isWaiting: { _ in false }, now: start.addingTimeInterval(10))
+        bridge.retractResolved(isWaiting: { _ in true }, now: start.addingTimeInterval(11))
+        XCTAssertFalse(bridge.pending(for: sessionID).isEmpty, "a transient misread must not retract a still-open request")
+
+        // Now genuinely not-waiting, continuously, past the grace window.
+        bridge.retractResolved(isWaiting: { _ in false }, now: start.addingTimeInterval(20))
+        bridge.retractResolved(isWaiting: { _ in false }, now: start.addingTimeInterval(24))
+        XCTAssertTrue(bridge.pending(for: sessionID).isEmpty, "a durable not-waiting reading should retract the request")
+
+        _ = try await hook.value
+    }
 }
 
 /// A socket that exists and then stops accepting, like one left by a crash.

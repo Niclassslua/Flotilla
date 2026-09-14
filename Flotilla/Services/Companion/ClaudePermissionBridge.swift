@@ -155,17 +155,20 @@ final class ClaudePermissionBridge {
     private final class Held {
         let parsed: ClaudePermissionPayload.Parsed
         let connection: NWConnection
-        let receivedAt: Date
 
-        init(parsed: ClaudePermissionPayload.Parsed, connection: NWConnection, receivedAt: Date) {
+        init(parsed: ClaudePermissionPayload.Parsed, connection: NWConnection) {
             self.parsed = parsed
             self.connection = connection
-            self.receivedAt = receivedAt
         }
     }
 
     private var listener: NWListener?
     private var held: [UUID: [Held]] = [:]
+    /// When a session was first observed not-waiting, per session — reset the
+    /// moment it reads as waiting again. `retractResolved` only acts once this
+    /// has held continuously past the grace window, so one misread from the
+    /// status heuristic can't drop a request a human is still reading.
+    private var notWaitingSince: [UUID: Date] = [:]
     private let queue = DispatchQueue(label: "companion.claude-bridge")
 
     /// Called whenever the set of held requests changes.
@@ -198,6 +201,7 @@ final class ClaudePermissionBridge {
         socketURL = nil
         for requests in held.values { requests.forEach { $0.connection.cancel() } }
         held = [:]
+        notWaitingSince = [:]
         onChange()
     }
 
@@ -237,14 +241,24 @@ final class ClaudePermissionBridge {
 
     /// Drops requests the terminal has already dealt with: the session left
     /// waiting (answered at the Mac, Esc, turn end). A short grace covers the
-    /// moment before the hook's own status update lands.
+    /// moment before the hook's own status update lands — measured from when
+    /// the session *became* not-waiting, not from how old the request is, so
+    /// a request that's simply taking a human a while to answer on the phone
+    /// isn't mistaken for one the terminal already resolved.
     func retractResolved(isWaiting: (UUID) -> Bool, now: Date = .now) {
         var changed = false
-        for (sessionID, requests) in held where !isWaiting(sessionID) {
-            let stale = requests.filter { now.timeIntervalSince($0.receivedAt) > 3 }
-            guard !stale.isEmpty else { continue }
-            stale.forEach { $0.connection.cancel() }
-            held[sessionID] = requests.filter { request in !stale.contains { $0 === request } }
+        for sessionID in held.keys {
+            guard !isWaiting(sessionID) else {
+                notWaitingSince[sessionID] = nil
+                continue
+            }
+            let since = notWaitingSince[sessionID] ?? now
+            notWaitingSince[sessionID] = since
+            guard now.timeIntervalSince(since) > 3,
+                  let requests = held[sessionID], !requests.isEmpty else { continue }
+            requests.forEach { $0.connection.cancel() }
+            held[sessionID] = []
+            notWaitingSince[sessionID] = nil
             changed = true
         }
         if changed { onChange() }
@@ -253,6 +267,7 @@ final class ClaudePermissionBridge {
     func retractAll(sessionID: UUID) {
         guard let requests = held.removeValue(forKey: sessionID) else { return }
         requests.forEach { $0.connection.cancel() }
+        notWaitingSince[sessionID] = nil
         onChange()
     }
 
@@ -276,7 +291,7 @@ final class ClaudePermissionBridge {
                         Task { @MainActor in self?.drop(connection, sessionID: sessionID) }
                     }
                 }
-                self.held[sessionID, default: []].append(Held(parsed: parsed, connection: connection, receivedAt: .now))
+                self.held[sessionID, default: []].append(Held(parsed: parsed, connection: connection))
                 self.onChange()
             }
         }
