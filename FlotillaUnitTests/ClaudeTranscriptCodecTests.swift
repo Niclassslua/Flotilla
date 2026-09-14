@@ -158,6 +158,26 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
 
     /// A subagent's conversation has its own parent chain; splicing it into the
     /// main thread would interleave two histories into one unreadable list.
+    /// System-reminders and background-task notifications are injected onto
+    /// a `user`-role turn because that's the only non-assistant role the API
+    /// accepts — they were never typed by a human and must not render as if
+    /// they were (docs/companion.md).
+    func testSyntheticUserTurnsAreExcluded() throws {
+        let url = try writeTranscript([
+            #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
+            #"{"type":"user","timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"<system-reminder>\nSome injected reminder text\n</system-reminder>"}}"#,
+            #"{"type":"user","timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":[{"type":"text","text":"<task-notification>\n<task-id>abc</task-id>\n</task-notification>"}]}}"#
+        ])
+
+        let entries = try codec.readNative(at: url)
+
+        XCTAssertEqual(entries.count, 1)
+        guard case let .userMessage(text, _) = entries[0] else {
+            return XCTFail("expected a user message, got \(entries[0])")
+        }
+        XCTAssertEqual(text, "real question")
+    }
+
     func testSidechainRecordsAreExcluded() throws {
         let url = try writeTranscript([
             #"{"type":"user","isSidechain":false,"timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"main thread"}}"#,

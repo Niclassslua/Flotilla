@@ -132,7 +132,7 @@ public struct ClaudeTranscriptCodec: TranscriptReading, TranscriptWriting {
         // array of typed blocks.
         if let text = message["content"] as? String {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return [] }
+            guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed)) else { return [] }
             return [type == "user"
                 ? .userMessage(text: text, timestamp: timestamp)
                 : .assistantMessage(text: text, timestamp: timestamp)]
@@ -143,8 +143,9 @@ public struct ClaudeTranscriptCodec: TranscriptReading, TranscriptWriting {
         return blocks.compactMap { block in
             switch block["type"] as? String {
             case "text":
-                guard let text = block["text"] as? String,
-                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                guard let text = block["text"] as? String else { return nil }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed)) else { return nil }
                 return type == "user"
                     ? .userMessage(text: text, timestamp: timestamp)
                     : .assistantMessage(text: text, timestamp: timestamp)
@@ -185,6 +186,16 @@ public struct ClaudeTranscriptCodec: TranscriptReading, TranscriptWriting {
                 return nil
             }
         }
+    }
+
+    /// Claude Code injects harness plumbing — background-task notifications,
+    /// reminders — as plain text on a `user`-role turn, since that's the only
+    /// role the API accepts for non-assistant content. A human never typed
+    /// this, so it must not render as a chat message the human sent.
+    private static func isSyntheticUserText(_ trimmed: String) -> Bool {
+        trimmed.hasPrefix("<system-reminder")
+            || trimmed.hasPrefix("<task-notification")
+            || trimmed.hasPrefix("[SYSTEM NOTIFICATION")
     }
 
     /// A tool result's content is a string, or blocks, or occasionally neither.

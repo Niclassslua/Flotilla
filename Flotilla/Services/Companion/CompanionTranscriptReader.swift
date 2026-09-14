@@ -8,9 +8,57 @@ import CompanionKit
 actor CompanionTranscriptReader {
     private let registry: TranscriptCodecRegistry
     private var cache: [UUID: (url: URL, modified: Date, size: Int, transcript: SessionTranscript)] = [:]
+    private var watchers: [UUID: TranscriptFileWatcher] = [:]
+    private let changeStream: AsyncStream<Void>
+    private let changeContinuation: AsyncStream<Void>.Continuation
+
+    /// Emits whenever a watched session's transcript file changes on disk.
+    nonisolated var changes: AsyncStream<Void> { changeStream }
 
     init(registry: TranscriptCodecRegistry) {
         self.registry = registry
+        var continuation: AsyncStream<Void>.Continuation!
+        self.changeStream = AsyncStream { continuation = $0 }
+        self.changeContinuation = continuation
+    }
+
+    /// Starts watching `session`'s transcript file for changes, retrying
+    /// discovery until the file exists (it may not have been created yet).
+    func watch(_ session: Session) {
+        guard watchers[session.id] == nil else { return }
+        guard let reader = registry.reader(for: session.agent) else { return }
+        let watcher = TranscriptFileWatcher { [weak self] in
+            self?.changeContinuation.yield()
+        }
+        watchers[session.id] = watcher
+        if let url = locate(session, reader: reader) {
+            watcher.start(url: url)
+            return
+        }
+        let sessionID = session.id
+        Task { [weak self] in
+            while let self, await self.isCurrentWatcher(watcher, for: sessionID) {
+                if let url = await self.locate(session, reader: reader) {
+                    watcher.start(url: url)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+    }
+
+    private func isCurrentWatcher(_ watcher: TranscriptFileWatcher, for sessionID: UUID) -> Bool {
+        watchers[sessionID] === watcher
+    }
+
+    func unwatch(_ sessionID: UUID) {
+        watchers[sessionID]?.stop()
+        watchers[sessionID] = nil
+    }
+
+    func unwatchAll() {
+        for watcher in watchers.values { watcher.stop() }
+        watchers.removeAll()
     }
 
     static let openCodeUnavailable = "OpenCode doesn't expose its transcript, so messages for this session are only visible in the terminal on your Mac."
@@ -74,4 +122,42 @@ actor CompanionTranscriptReader {
         }
         return nil
     }
+}
+
+/// Watches one transcript file for writes via a raw file descriptor, since
+/// the agent CLI appends to the same path for a session's whole lifetime.
+/// Only ever created, started, and stopped from `CompanionTranscriptReader`'s
+/// actor-isolated methods; its own event handler runs on the main queue and
+/// only calls the `onChange` callback, which is itself thread-safe.
+private final class TranscriptFileWatcher: @unchecked Sendable {
+    private let onChange: () -> Void
+    private var source: DispatchSourceFileSystemObject?
+    private var fileDescriptor: Int32 = -1
+
+    init(onChange: @escaping () -> Void) {
+        self.onChange = onChange
+    }
+
+    func start(url: URL) {
+        stop()
+        let fd = open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        fileDescriptor = fd
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in self?.onChange() }
+        source.setCancelHandler { [fd] in close(fd) }
+        self.source = source
+        source.resume()
+    }
+
+    func stop() {
+        source?.cancel()
+        source = nil
+    }
+
+    deinit { stop() }
 }

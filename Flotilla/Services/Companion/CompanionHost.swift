@@ -55,6 +55,7 @@ final class CompanionHost {
     @ObservationIgnored private var identity: (macID: String, identity: CompanionIdentity)?
     @ObservationIgnored private var peers: [ObjectIdentifier: Peer] = [:]
     @ObservationIgnored private var publishTask: Task<Void, Never>?
+    @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
     @ObservationIgnored private var lastFleet: FleetSnapshot?
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
 
@@ -144,6 +145,9 @@ final class CompanionHost {
         bridge.stop()
         publishTask?.cancel()
         publishTask = nil
+        transcriptPublishTask?.cancel()
+        transcriptPublishTask = nil
+        Task { await transcripts.unwatchAll() }
         for peer in peers.values { peer.session.close() }
         peers = [:]
         connectedDeviceIDs = []
@@ -329,8 +333,12 @@ final class CompanionHost {
         connected.session.onClose { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                let sessionID = self.peers[key]?.subscribedSessionID
                 self.peers[key] = nil
                 self.connectedDeviceIDs = Set(self.peers.values.map(\.deviceID))
+                if let sessionID {
+                    await self.stopWatchingIfUnneeded(sessionID)
+                }
             }
         }
         try? peer.session.send(.fleet(buildFleet()))
@@ -352,14 +360,19 @@ final class CompanionHost {
             peer.subscribedSessionID = sessionID
             peer.lastTranscript = nil
             await publishTranscript(to: peer)
+            if let session = store.sessions.first(where: { $0.id == sessionID }) {
+                await transcripts.watch(session)
+            }
         case .unsubscribe:
+            if let sessionID = peer.subscribedSessionID {
+                await stopWatchingIfUnneeded(sessionID)
+            }
             peer.subscribedSessionID = nil
             peer.lastTranscript = nil
         case .request(let id, let request):
             let response = await router.handle(request)
             try? peer.session.send(.response(id: id, response))
             publishFleetIfChanged()
-            await publishTranscript(to: peer)
         }
     }
 
@@ -376,11 +389,23 @@ final class CompanionHost {
                 }
                 guard !self.peers.isEmpty else { continue }
                 self.publishFleetIfChanged()
+            }
+        }
+        transcriptPublishTask?.cancel()
+        transcriptPublishTask = Task { [weak self] in
+            guard let self else { return }
+            for await _ in self.transcripts.changes {
+                guard !Task.isCancelled else { return }
                 for peer in self.peers.values where peer.subscribedSessionID != nil {
                     await self.publishTranscript(to: peer)
                 }
             }
         }
+    }
+
+    private func stopWatchingIfUnneeded(_ sessionID: UUID) async {
+        guard !peers.values.contains(where: { $0.subscribedSessionID == sessionID }) else { return }
+        await transcripts.unwatch(sessionID)
     }
 
     private func publishFleetIfChanged() {

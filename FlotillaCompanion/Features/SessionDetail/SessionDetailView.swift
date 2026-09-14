@@ -28,13 +28,18 @@ struct SessionDetailView: View {
         let isActionable = store.isActionable(sessionID: sessionID)
         let mac = store.mac(macID)
 
-        return ScrollView {
-            transcriptContent(session: session, transcript: transcript)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+        return ScrollViewReader { proxy in
+            ScrollView {
+                transcriptContent(session: session, transcript: transcript)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                Color.clear.frame(height: 1).id(Self.bottomAnchorID)
+            }
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .onChange(of: transcript.events.count) { scrollToBottom(proxy) }
+            .onChange(of: transcript.queuedPrompts.count) { scrollToBottom(proxy) }
+            .onChange(of: transcript.streamingText) { scrollToBottom(proxy) }
         }
-        .defaultScrollAnchor(.bottom, for: .initialOffset)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .scrollDismissesKeyboard(.interactively)
         .background(FlotillaColors.canvas)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { containerHeight = $0 }
@@ -81,6 +86,14 @@ struct SessionDetailView: View {
             Text("The agent process is restarted and resumes this conversation.")
         }
         .sessionDeleteDialog(session: $pendingDelete)
+    }
+
+    private static let bottomAnchorID = "bottom"
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        withAnimation(.snappy) {
+            proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+        }
     }
 
     private func transcriptContent(session: CompanionSession, transcript: SessionTranscript) -> some View {
