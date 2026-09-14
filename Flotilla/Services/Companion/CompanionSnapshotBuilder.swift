@@ -24,6 +24,7 @@ enum CompanionSnapshotBuilder {
         macName: String,
         sessions: [Session],
         projects: [Project],
+        catalog: CompanionKit.AgentCatalog? = nil,
         context: (Session) -> SessionContext
     ) -> FleetSnapshot {
         var pending: [UUID: [PendingInteraction]] = [:]
@@ -42,7 +43,7 @@ enum CompanionSnapshotBuilder {
             projects: projects
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
                 .map { ProjectSummary(id: $0.id, name: $0.name) },
-            catalog: catalog(),
+            catalog: catalog ?? self.catalog(),
             pending: pending
         )
     }
@@ -105,18 +106,72 @@ enum CompanionSnapshotBuilder {
                            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 
-    /// AgentKit's static lists (docs/companion.md, A14).
+    /// Queries `ModelCatalogCache` for live model profiles, descriptions, and Antigravity groups.
+    static func catalog() async -> CompanionKit.AgentCatalog {
+        var entries: [AgentKind: CompanionKit.AgentCatalog.Entry] = [:]
+        for agent in AgentKind.allCases {
+            let profiles = await ModelCatalogCache.shared.profiles(for: agent)
+            let models = profiles.map {
+                CompanionKit.ModelOption(slug: $0.slug, displayName: $0.displayName, description: $0.description)
+            }
+            let effortOptions = AgentEffortCatalog.options(for: agent, model: nil, profiles: profiles)
+            let antigravityGroups: [CompanionKit.AntigravityGroupOption]
+            if agent == .antigravity {
+                let groups = await ModelCatalogCache.shared.antigravityGroups()
+                antigravityGroups = groups.map {
+                    CompanionKit.AntigravityGroupOption(
+                        baseSlug: $0.baseSlug,
+                        displayName: $0.displayName,
+                        variants: $0.variants,
+                        soleSlug: $0.soleSlug
+                    )
+                }
+            } else {
+                antigravityGroups = []
+            }
+            let defaultModel = models.first?.slug ?? AgentKit.AgentCatalog.descriptor(for: agent).fallbackModels.first ?? ""
+            entries[agent] = .init(
+                models: models,
+                defaultModel: defaultModel,
+                effortLevels: effortOptions.map(\.level),
+                defaultEffort: agent.supportsEffortSelection ? (effortOptions.first { $0.level == .medium }?.level ?? effortOptions.first?.level) : nil,
+                effortLabels: Dictionary(uniqueKeysWithValues: effortOptions.map { ($0.level, $0.label) }),
+                antigravityGroups: antigravityGroups
+            )
+        }
+        return .init(entries: entries)
+    }
+
+    /// Static fallback lists when offline or before live catalog finishes loading.
     static func catalog() -> CompanionKit.AgentCatalog {
         var entries: [AgentKind: CompanionKit.AgentCatalog.Entry] = [:]
         for agent in AgentKind.allCases {
-            let descriptor = AgentKit.AgentCatalog.descriptor(for: agent)
+            let profiles = ModelCatalog.staticFallbackProfiles(for: agent)
+            let models = profiles.map {
+                CompanionKit.ModelOption(slug: $0.slug, displayName: $0.displayName, description: $0.description)
+            }
             let options = AgentEffortCatalog.staticOptions(for: agent)
+            let antigravityGroups: [CompanionKit.AntigravityGroupOption]
+            if agent == .antigravity {
+                antigravityGroups = ModelCatalog.staticAntigravityGroups().map {
+                    CompanionKit.AntigravityGroupOption(
+                        baseSlug: $0.baseSlug,
+                        displayName: $0.displayName,
+                        variants: $0.variants,
+                        soleSlug: $0.soleSlug
+                    )
+                }
+            } else {
+                antigravityGroups = []
+            }
+            let defaultModel = models.first?.slug ?? AgentKit.AgentCatalog.descriptor(for: agent).fallbackModels.first ?? ""
             entries[agent] = .init(
-                models: descriptor.fallbackModels,
-                defaultModel: descriptor.fallbackModels.first ?? "",
+                models: models,
+                defaultModel: defaultModel,
                 effortLevels: options.map(\.level),
                 defaultEffort: agent.supportsEffortSelection ? (options.first { $0.level == .medium }?.level ?? options.first?.level) : nil,
-                effortLabels: Dictionary(uniqueKeysWithValues: options.map { ($0.level, $0.label) })
+                effortLabels: Dictionary(uniqueKeysWithValues: options.map { ($0.level, $0.label) }),
+                antigravityGroups: antigravityGroups
             )
         }
         return .init(entries: entries)

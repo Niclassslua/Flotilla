@@ -44,3 +44,7 @@ fixtures/
 # Support directory, rewritten on every agent-managed session launch.
 /.claude/settings.json
 /.agents/hooks.json
+
+# Agent directories
+.claude
+.agents

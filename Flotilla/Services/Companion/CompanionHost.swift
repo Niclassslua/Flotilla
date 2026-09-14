@@ -59,6 +59,7 @@ final class CompanionHost {
     @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
     @ObservationIgnored private var lastFleet: FleetSnapshot?
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
+    @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog = CompanionSnapshotBuilder.catalog()
 
     private static let enabledKey = "companion.enabled"
     static let pairingLifetime: TimeInterval = 5 * 60
@@ -104,6 +105,12 @@ final class CompanionHost {
         adapters.onChange = { [weak self] in self?.publishFleetIfChanged() }
         bridge.onAllowNote = { [weak self] sessionID, note in
             Task { try? await self?.store.deliverMessage(note, to: sessionID) }
+        }
+        Task { [weak self] in
+            let live = await CompanionSnapshotBuilder.catalog()
+            guard let self else { return }
+            self.cachedCatalog = live
+            self.publishFleetIfChanged()
         }
         if isEnabled { start() }
     }
@@ -457,6 +464,7 @@ final class CompanionHost {
             macName: macName,
             sessions: store.sessions,
             projects: store.projects,
+            catalog: cachedCatalog,
             context: { session in
                 CompanionSnapshotBuilder.SessionContext(
                     diffStat: store.diffStatStore.stat(for: session.id),

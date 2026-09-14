@@ -12,6 +12,9 @@ struct AgentModelEffortControls: View {
     let catalog: AgentCatalog
     var agents: [AgentKind] = AgentKind.allCases
 
+    @State private var isModelSheetPresented = false
+    @State private var isEffortSheetPresented = false
+
     var body: some View {
         Section("Agent") {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -27,21 +30,161 @@ struct AgentModelEffortControls: View {
             .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
 
             let entry = catalog.entry(for: agent)
-            Picker("Model", selection: $model) {
-                ForEach(entry.models, id: \.self) { Text($0).tag($0) }
-            }
-            .pickerStyle(.menu)
 
-            if agent.supportsEffortSelection, !entry.effortLevels.isEmpty {
-                Picker("Effort", selection: $effort) {
-                    ForEach(entry.effortLevels) { level in
-                        Text(catalog.effortLabel(level, agent: agent)).tag(Optional(level))
+            Button {
+                isModelSheetPresented = true
+            } label: {
+                HStack {
+                    Label {
+                        Text("Model")
+                            .foregroundStyle(FlotillaColors.textPrimary)
+                    } icon: {
+                        Image(systemName: "cpu")
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    }
+                    Spacer()
+                    Text(selectedModelDisplayName)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $isModelSheetPresented) {
+                ModelPickerSheet(
+                    agent: agent,
+                    entry: entry,
+                    model: $model,
+                    effort: effectiveEffort
+                )
+            }
+
+            if supportsEffort {
+                Button {
+                    isEffortSheetPresented = true
+                } label: {
+                    HStack {
+                        Label {
+                            Text("Effort")
+                                .foregroundStyle(FlotillaColors.textPrimary)
+                        } icon: {
+                            Image(systemName: "brain")
+                                .foregroundStyle(FlotillaColors.textTertiary)
+                        }
+                        Spacer()
+                        if let currentEffort = effectiveEffort {
+                            HStack(spacing: 6) {
+                                effortMeter(for: currentEffort)
+                                Text(catalog.effortLabel(currentEffort, agent: agent))
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(currentEffort.tint)
+                            }
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(FlotillaColors.textTertiary)
                     }
                 }
-                .pickerStyle(.menu)
+                .buttonStyle(.plain)
+                .sheet(isPresented: $isEffortSheetPresented) {
+                    EffortPickerSheet(
+                        agent: agent,
+                        entry: entry,
+                        model: $model,
+                        effort: $effort,
+                        availableLevels: availableEffortLevels
+                    )
+                }
             }
         }
         .onAppear { clampToAgent() }
+    }
+
+    private var supportsEffort: Bool {
+        guard agent.supportsEffortSelection else { return false }
+        let entry = catalog.entry(for: agent)
+        if agent == .antigravity {
+            if entry.antigravityGroups.isEmpty {
+                return !entry.effortLevels.isEmpty
+            }
+            let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return true }
+            if let group = entry.antigravityGroups.first(where: {
+                $0.variants.values.contains(trimmed) || $0.soleSlug == trimmed || $0.baseSlug == trimmed
+            }) {
+                return !group.variants.isEmpty
+            }
+            return false
+        }
+        return !entry.effortLevels.isEmpty
+    }
+
+    private var availableEffortLevels: [AgentEffort] {
+        let entry = catalog.entry(for: agent)
+        if agent == .antigravity {
+            let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let group = entry.antigravityGroups.first(where: {
+                $0.variants.values.contains(trimmed) || $0.soleSlug == trimmed || $0.baseSlug == trimmed
+            }), !group.variants.isEmpty {
+                return group.variants.keys.sorted { $0.rank < $1.rank }
+            }
+            return entry.effortLevels
+        }
+        return entry.effortLevels
+    }
+
+    private var effectiveEffort: AgentEffort? {
+        let entry = catalog.entry(for: agent)
+        if agent == .antigravity {
+            let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let group = entry.antigravityGroups.first(where: { $0.variants.values.contains(trimmed) }) {
+                for (lvl, s) in group.variants where s == trimmed {
+                    return lvl
+                }
+            }
+            return effort ?? entry.defaultEffort
+        }
+        return effort ?? entry.defaultEffort
+    }
+
+    private var selectedModelDisplayName: String {
+        let entry = catalog.entry(for: agent)
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if agent == .antigravity {
+            if let group = entry.antigravityGroups.first(where: {
+                $0.variants.values.contains(trimmed) || $0.soleSlug == trimmed || $0.baseSlug == trimmed
+            }) {
+                return group.displayName
+            }
+            if let opt = entry.models.first(where: { $0.slug == trimmed }) {
+                return opt.displayName ?? opt.slug
+            }
+            return trimmed.isEmpty ? "Default" : trimmed
+        } else {
+            if let opt = entry.models.first(where: { $0.slug == trimmed }) {
+                return opt.displayName ?? opt.slug
+            }
+            return trimmed.isEmpty ? "Default" : trimmed
+        }
+    }
+
+    private func effortMeter(for level: AgentEffort) -> some View {
+        let levels = availableEffortLevels
+        let index = levels.firstIndex(of: level) ?? 0
+        let total = max(levels.count, 1)
+        return HStack(alignment: .bottom, spacing: 1.5) {
+            ForEach(0..<total, id: \.self) { pos in
+                Capsule()
+                    .fill(pos <= index ? level.tint : FlotillaColors.separatorStrong.opacity(0.5))
+                    .frame(
+                        width: 2.5,
+                        height: 12 * (0.4 + 0.6 * CGFloat(pos + 1) / CGFloat(total))
+                    )
+            }
+        }
+        .frame(height: 12, alignment: .bottom)
     }
 
     private func select(_ kind: AgentKind) {
@@ -56,9 +199,31 @@ struct AgentModelEffortControls: View {
     /// its default rather than showing an empty picker.
     private func clampToAgent() {
         let entry = catalog.entry(for: agent)
-        if !entry.models.contains(model) { model = entry.defaultModel }
-        if let current = effort, !entry.effortLevels.contains(current) { effort = entry.defaultEffort }
-        if effort == nil, agent.supportsEffortSelection { effort = entry.defaultEffort }
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if agent == .antigravity {
+            let isKnown = entry.antigravityGroups.contains { group in
+                group.variants.values.contains(trimmed) || group.soleSlug == trimmed || group.baseSlug == trimmed
+            } || entry.models.contains { $0.slug == trimmed }
+            if !isKnown && !trimmed.isEmpty {
+                model = entry.defaultModel
+            }
+            if let current = effort, !entry.effortLevels.contains(current) {
+                effort = entry.defaultEffort
+            }
+            if effort == nil && agent.supportsEffortSelection {
+                effort = entry.defaultEffort
+            }
+        } else {
+            if !entry.models.contains(where: { $0.slug == trimmed }) && !trimmed.isEmpty {
+                model = entry.defaultModel
+            }
+            if let current = effort, !entry.effortLevels.contains(current) {
+                effort = entry.defaultEffort
+            }
+            if effort == nil, agent.supportsEffortSelection {
+                effort = entry.defaultEffort
+            }
+        }
     }
 }
 

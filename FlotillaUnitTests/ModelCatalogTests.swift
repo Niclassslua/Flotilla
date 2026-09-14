@@ -316,4 +316,167 @@ final class ModelCatalogTests: XCTestCase {
             "gpt-oss-120b-medium"
         ])
     }
+
+    // MARK: - Antigravity model grouping
+
+    func testAntigravityGroupingCollapsesEffortSuffixedSlugsIntoOneGroup() {
+        let entries: [(slug: String, displayName: String?)] = [
+            ("gemini-3.7-flash-high", "Gemini 3.7 Flash (High)"),
+            ("gemini-3.7-flash-medium", "Gemini 3.7 Flash (Medium)"),
+            ("gemini-3.7-flash-low", "Gemini 3.7 Flash (Low)"),
+        ]
+
+        let groups = ModelCatalog.groupAntigravityModels(entries)
+
+        XCTAssertEqual(groups.count, 1)
+        let group = groups[0]
+        XCTAssertEqual(group.baseSlug, "gemini-3.7-flash")
+        XCTAssertEqual(group.displayName, "Gemini 3.7 Flash")
+        XCTAssertEqual(group.variants, [
+            .high: "gemini-3.7-flash-high",
+            .medium: "gemini-3.7-flash-medium",
+            .low: "gemini-3.7-flash-low",
+        ])
+        XCTAssertNil(group.soleSlug)
+    }
+
+    func testAntigravityGroupingLeavesUnsuffixedModelsAsSingleVariantGroups() {
+        let entries: [(slug: String, displayName: String?)] = [
+            ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)"),
+            ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"),
+        ]
+
+        let groups = ModelCatalog.groupAntigravityModels(entries)
+
+        let sonnet = groups.first { $0.baseSlug == "claude-sonnet-4-6" }
+        XCTAssertEqual(sonnet?.displayName, "Claude Sonnet 4.6 (Thinking)")
+        XCTAssertTrue(sonnet?.variants.isEmpty ?? false)
+        XCTAssertEqual(sonnet?.soleSlug, "claude-sonnet-4-6")
+
+        // Only a "-medium" slug exists for this model, so it's a real,
+        // single-key variant group rather than a sole-slug one — the effort
+        // picker should offer exactly "Medium" for it, not fall back to
+        // treating it as effort-less.
+        let gptOss = groups.first { $0.baseSlug == "gpt-oss-120b" }
+        XCTAssertEqual(gptOss?.displayName, "GPT-OSS 120B")
+        XCTAssertEqual(gptOss?.variants, [.medium: "gpt-oss-120b-medium"])
+        XCTAssertNil(gptOss?.soleSlug)
+    }
+
+    func testAntigravityStaticGroupsResolveEveryVariant() {
+        let groups = ModelCatalog.staticAntigravityGroups()
+
+        let flash = groups.first { $0.baseSlug == "gemini-3.7-flash" }
+        XCTAssertEqual(flash?.resolvedSlug(for: .high), "gemini-3.7-flash-high")
+        XCTAssertEqual(flash?.resolvedSlug(for: .medium), "gemini-3.7-flash-medium")
+        // Antigravity's `--low` covers this group but not `.xhigh`; the
+        // resolver snaps to the nearest rank rather than returning nil.
+        XCTAssertEqual(flash?.resolvedSlug(for: .xhigh), "gemini-3.7-flash-high")
+
+        let sonnet = groups.first { $0.baseSlug == "claude-sonnet-4-6" }
+        XCTAssertEqual(sonnet?.resolvedSlug(for: .low), "claude-sonnet-4-6")
+        XCTAssertEqual(sonnet?.resolvedSlug(for: nil), "claude-sonnet-4-6")
+    }
+
+    func testAntigravityFallbackProfilesNarrowEffortOptionsToVariantSet() {
+        let profiles = ModelCatalog.staticFallbackProfiles(for: .antigravity)
+
+        let flashOptions = AgentEffortCatalog.options(for: .antigravity, model: "gemini-3.7-flash-high", profiles: profiles)
+        XCTAssertEqual(flashOptions.map(\.level), [.low, .medium, .high])
+
+        let gptOssOptions = AgentEffortCatalog.options(for: .antigravity, model: "gpt-oss-120b-medium", profiles: profiles)
+        XCTAssertEqual(gptOssOptions.map(\.level), [.medium])
+
+        let sonnetOptions = AgentEffortCatalog.options(for: .antigravity, model: "claude-sonnet-4-6", profiles: profiles)
+        XCTAssertTrue(sonnetOptions.isEmpty)
+    }
+
+    func testAntigravityEffortFlagIsNilSoNoEffortArgumentIsEverSent() {
+        XCTAssertNil(AgentCatalog.descriptor(for: .antigravity).effortFlag)
+    }
+
+    // MARK: - A model profile found in the catalog answers for itself, even with zero options
+
+    func testKnownModelWithNoEffortOptionsDoesNotInheritOtherModelsLevels() {
+        let profiles = [
+            AgentModelProfile(slug: "has-levels", effortOptions: [
+                AgentEffortOption(level: .low, label: "Low", summary: "fast"),
+                AgentEffortOption(level: .high, label: "High", summary: "deep"),
+            ]),
+            AgentModelProfile(slug: "no-levels", effortOptions: []),
+        ]
+
+        let options = AgentEffortCatalog.options(for: .antigravity, model: "no-levels", profiles: profiles)
+
+        XCTAssertTrue(options.isEmpty)
+    }
+
+    // MARK: - Codex per-model description
+
+    func testCodexProfileCarriesItsOwnDescription() async {
+        let json = """
+        {"models":[
+          {"slug":"gpt-5.6-sol","visibility":"list","priority":1,
+           "description":"Latest frontier agentic coding model."}
+        ]}
+        """
+        let fetcher = ModelCatalogFetcher(
+            locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/codex")),
+            runner: MockCommandRunner(outcome: .success(CommandResult(exitCode: 0, stdout: json, stderr: "")))
+        )
+
+        let profiles = await fetcher.fetchProfiles(for: .codexCLI)
+
+        XCTAssertEqual(profiles.first?.description, "Latest frontier agentic coding model.")
+    }
+
+    // MARK: - OpenCode --verbose parsing
+
+    func testOpenCodeVerboseParsingExtractsRealDisplayNames() {
+        let output = """
+        opencode/big-pickle
+        {
+          "id": "big-pickle",
+          "providerID": "opencode",
+          "name": "Big Pickle",
+          "family": "big-pickle"
+        }
+        opencode/ling-3.0-flash-fin-free
+        {
+          "id": "ling-3.0-flash-fin-free",
+          "providerID": "opencode",
+          "name": "Ling 3.0 Flash Fin Free"
+        }
+        """
+
+        let profiles = ModelCatalogFetcher.parseOpenCodeVerboseModelList(output)
+
+        XCTAssertEqual(profiles.map(\.slug), ["opencode/big-pickle", "opencode/ling-3.0-flash-fin-free"])
+        XCTAssertEqual(profiles.map(\.displayName), ["Big Pickle", "Ling 3.0 Flash Fin Free"])
+    }
+
+    func testFetchModelsUsesVerboseOpenCodeProfilesWhenAvailable() async {
+        struct VerboseAwareRunner: CommandRunning {
+            func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult {
+                guard arguments.contains("--verbose") else { throw MockRunnerError() }
+                let json = """
+                opencode-go/kimi-k3
+                { "id": "kimi-k3", "providerID": "opencode-go", "name": "Kimi K3" }
+                """
+                return CommandResult(exitCode: 0, stdout: json, stderr: "")
+            }
+        }
+
+        // OpenCode's `providerID` only participates once a subscription is
+        // configured — reuse the plain-list test's provider via a subscription.
+        let fetcher = ModelCatalogFetcher(
+            locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/opencode")),
+            runner: VerboseAwareRunner()
+        )
+
+        let profiles = await fetcher.fetchProfiles(for: .openCode, openCodeSubscription: .go)
+
+        XCTAssertEqual(profiles.map(\.slug), ["opencode-go/kimi-k3"])
+        XCTAssertEqual(profiles.map(\.displayName), ["Kimi K3"])
+    }
 }

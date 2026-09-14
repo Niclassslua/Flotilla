@@ -30,6 +30,7 @@ struct CommandBarDesign: View {
     @State private var highlightedIndex = 0
     @FocusState private var goalFocused: Bool
     @FocusState private var chipSearchFocused: Bool
+    @State private var antigravityCoordinator = AntigravityModelEffortCoordinator()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,6 +66,7 @@ struct CommandBarDesign: View {
         .onChange(of: chipQuery) { _, _ in highlightedIndex = 0 }
         .onAppear { goalFocused = true }
         .background { hiddenActions }
+        .task(id: draft.agent) { await antigravityCoordinator.refresh() }
     }
 
     // MARK: - Query row
@@ -293,15 +295,20 @@ struct CommandBarDesign: View {
         HStack(spacing: FlotillaSpacing.small) {
             projectChip
             agentDots
-            ModelPickerView(agent: draft.agent, openCodeSubscription: draft.openCodeSubscription, model: $draft.model)
-                .controlSize(.small)
-                .fixedSize()
-                .accessibilityIdentifier("CreateSession.ModelField")
-            if draft.agent.supportsEffortSelection {
+            ModelPickerView(
+                agent: draft.agent,
+                openCodeSubscription: draft.openCodeSubscription,
+                model: $draft.model,
+                effort: antigravityCoordinator.currentEffort(for: draft)
+            )
+            .controlSize(.small)
+            .fixedSize()
+            .accessibilityIdentifier("CreateSession.ModelField")
+            if antigravityCoordinator.supportsEffort(for: draft) {
                 EffortLevelPicker(
                     agent: draft.agent,
                     model: draft.model,
-                    effort: $draft.effort,
+                    effort: antigravityCoordinator.effortBinding(for: draft),
                     accessibilityIdentifier: "CreateSession.EffortPicker"
                 )
             }

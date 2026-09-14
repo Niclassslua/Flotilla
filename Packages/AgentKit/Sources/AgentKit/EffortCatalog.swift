@@ -71,9 +71,11 @@ public enum AgentEffortCatalog {
         guard agent.supportsEffortSelection else { return [] }
 
         let slug = model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !slug.isEmpty,
-           let profile = profiles.first(where: { $0.slug == slug }),
-           !profile.effortOptions.isEmpty {
+        if !slug.isEmpty, let profile = profiles.first(where: { $0.slug == slug }) {
+            // A cataloged model answers for itself, even when that answer is
+            // "no levels" — e.g. an Antigravity model with no effort variant
+            // at all shouldn't inherit levels from other models in the same
+            // catalog just because its own list is empty.
             return profile.effortOptions
         }
         let shared = optionsSharedByEveryModel(in: profiles)

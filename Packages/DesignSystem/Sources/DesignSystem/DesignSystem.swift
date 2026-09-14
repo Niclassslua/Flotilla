@@ -1,4 +1,5 @@
 import SwiftUI
+import SessionKit
 #if os(macOS)
 import AppKit
 typealias PlatformColor = NSColor
@@ -345,3 +346,21 @@ public extension View {
 // Types are directly available in the module — no re-exports needed.
 // Import DesignSystem to access: FlotillaTypography, FlotillaElevation, FlotillaMotion,
 // StatusBadge, StatusBadgeSize, FlotillaBanner, FlotillaBannerStyle
+
+// MARK: - AgentEffort Tint
+public extension AgentEffort {
+    /// Cool-to-hot ramp: slate → steel → cyan → amber → orange → red →
+    /// magenta. Used as a foreground tint throughout, never as a fill behind
+    /// text, so every step only has to read against the panel background.
+    var tint: Color {
+        switch self {
+        case .minimal: Color(red: 0.42, green: 0.47, blue: 0.53)
+        case .low: Color(red: 0.30, green: 0.55, blue: 0.68)
+        case .medium: FlotillaColors.statusReady
+        case .high: FlotillaColors.warning
+        case .xhigh: FlotillaColors.accent
+        case .max: FlotillaColors.danger
+        case .ultra: Color(red: 0.80, green: 0.30, blue: 0.72)
+        }
+    }
+}

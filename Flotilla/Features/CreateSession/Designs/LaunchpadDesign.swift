@@ -30,6 +30,7 @@ struct LaunchpadDesign: View {
     @State private var projectQuery = ""
     @State private var showAllProjects = false
     @FocusState private var goalFocused: Bool
+    @State private var antigravityCoordinator = AntigravityModelEffortCoordinator()
 
     /// Tiles beyond this many are hidden behind "Show more" — the known-project
     /// list only grows, and an unbounded grid on a page that already scrolls
@@ -88,6 +89,7 @@ struct LaunchpadDesign: View {
             projectQuery = ""
         }
         .onChange(of: draft.goal) { _, _ in draft.syncModeFromGoal() }
+        .task(id: draft.agent) { await antigravityCoordinator.refresh() }
     }
 
     private func section<Trailing: View, Content: View>(
@@ -170,15 +172,20 @@ struct LaunchpadDesign: View {
 
     private var modelControls: some View {
         HStack(spacing: FlotillaSpacing.small) {
-            ModelPickerView(agent: draft.agent, openCodeSubscription: draft.openCodeSubscription, model: $draft.model)
-                .controlSize(.small)
-                .frame(maxWidth: 180)
-                .accessibilityIdentifier("Home.ModelField")
-            if draft.agent.supportsEffortSelection {
+            ModelPickerView(
+                agent: draft.agent,
+                openCodeSubscription: draft.openCodeSubscription,
+                model: $draft.model,
+                effort: antigravityCoordinator.currentEffort(for: draft)
+            )
+            .controlSize(.small)
+            .frame(maxWidth: 180)
+            .accessibilityIdentifier("Home.ModelField")
+            if antigravityCoordinator.supportsEffort(for: draft) {
                 EffortLevelPicker(
                     agent: draft.agent,
                     model: draft.model,
-                    effort: $draft.effort,
+                    effort: antigravityCoordinator.effortBinding(for: draft),
                     accessibilityIdentifier: "Home.EffortPicker"
                 )
             }

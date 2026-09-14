@@ -103,7 +103,7 @@ final class AgentProviderTests: XCTestCase {
         XCTAssertEqual(plan.arguments, ["--config", "model_reasoning_effort=\"xhigh\""])
     }
 
-    func testAntigravityLaunchPlanUsesNativeEffortFlag() {
+    func testAntigravityLaunchPlanOmitsEffortFlag() {
         let plan = AgentProviderRegistry().provider(for: .antigravity).launchPlan(
             goal: nil,
             model: "gemini-2.5-pro",
@@ -112,7 +112,7 @@ final class AgentProviderTests: XCTestCase {
             baseEnvironment: [:]
         )
 
-        XCTAssertEqual(plan.arguments, ["--model", "gemini-2.5-pro", "--effort", "high"])
+        XCTAssertEqual(plan.arguments, ["--model", "gemini-2.5-pro"])
     }
 
     func testOpenCodeLaunchPlanIgnoresUnsupportedEffort() {
@@ -273,7 +273,6 @@ final class AgentProviderTests: XCTestCase {
 
         XCTAssertEqual(plan.arguments, [
             "--model", "gemini-3.7-flash-high",
-            "--effort", "medium",
             "--prompt-interactive", "Fix layout bug in sidebar"
         ])
         XCTAssertNil(plan.initialInput)

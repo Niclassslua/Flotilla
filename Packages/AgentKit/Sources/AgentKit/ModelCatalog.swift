@@ -10,13 +10,15 @@ import SettingsKit
 public struct AgentModelProfile: Sendable, Equatable, Identifiable {
     public let slug: String
     public let displayName: String?
+    public let description: String?
     public let effortOptions: [AgentEffortOption]
 
     public var id: String { slug }
 
-    public init(slug: String, displayName: String? = nil, effortOptions: [AgentEffortOption]) {
+    public init(slug: String, displayName: String? = nil, description: String? = nil, effortOptions: [AgentEffortOption]) {
         self.slug = slug
         self.displayName = displayName
+        self.description = description
         self.effortOptions = effortOptions
     }
 
@@ -77,8 +79,7 @@ public struct ModelCatalogFetcher: Sendable {
                 case .codexCLI:
                     try await self.fetchCodexProfiles(executable: executable)
                 case .openCode:
-                    try await self.fetchOpenCodeModels(executable: executable, subscription: openCodeSubscription)
-                        .map { Self.profiles(forSlugs: $0, agent: .openCode) }
+                    try await self.fetchOpenCodeProfiles(executable: executable, subscription: openCodeSubscription)
                 case .antigravity:
                     try await self.fetchAntigravityProfiles(executable: executable)
                 }
@@ -106,8 +107,23 @@ public struct ModelCatalogFetcher: Sendable {
     /// per line (e.g. "opencode-go/kimi-k3"). Without a configured
     /// subscription there is nothing to scope the query to, so the static
     /// shortlist stays in charge.
-    private func fetchOpenCodeModels(executable: URL, subscription: OpenCodeSubscription) async throws -> [String]? {
+    ///
+    /// `--verbose` additionally prints each model's own JSON metadata (real
+    /// `name`, cost, limits, …) after its slug line, which is where the
+    /// human-facing display name comes from — the plain listing is only a
+    /// fallback for when that fails to parse.
+    private func fetchOpenCodeProfiles(executable: URL, subscription: OpenCodeSubscription) async throws -> [AgentModelProfile]? {
         guard let provider = subscription.providerID else { return nil }
+
+        if let verboseResult = try? await runner.run(
+            ["models", provider, "--verbose"],
+            executable: executable,
+            workingDirectory: FileManager.default.temporaryDirectory
+        ), verboseResult.exitCode == 0 {
+            let profiles = Self.parseOpenCodeVerboseModelList(verboseResult.stdout)
+            if !profiles.isEmpty { return profiles }
+        }
+
         let result = try await runner.run(
             ["models", provider],
             executable: executable,
@@ -115,7 +131,7 @@ public struct ModelCatalogFetcher: Sendable {
         )
         guard result.exitCode == 0 else { return nil }
         let models = Self.parseOpenCodeModelList(result.stdout)
-        return models.isEmpty ? nil : models
+        return models.isEmpty ? nil : Self.profiles(forSlugs: models, agent: .openCode)
     }
 
     static func parseOpenCodeModelList(_ output: String) -> [String] {
@@ -123,6 +139,68 @@ public struct ModelCatalogFetcher: Sendable {
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.contains("/") && !$0.contains(" ") }
+    }
+
+    /// Parses `opencode models <provider> --verbose`, which prints each
+    /// model's slug on its own line followed by a pretty-printed JSON object
+    /// describing it (`id`, `providerID`, `name`, …). The slug line is
+    /// ignored — `id`/`providerID` from the JSON itself rebuild it — since
+    /// only the JSON carries the real display `name`.
+    public static func parseOpenCodeVerboseModelList(_ output: String) -> [AgentModelProfile] {
+        let options = AgentEffortCatalog.staticOptions(for: .openCode)
+        let characters = Array(output)
+        var profiles: [AgentModelProfile] = []
+        var searchStart = characters.startIndex
+
+        while searchStart < characters.endIndex,
+              let braceStart = characters[searchStart...].firstIndex(of: "{") {
+            guard let braceEnd = jsonObjectEnd(in: characters, from: braceStart) else { break }
+            let jsonString = String(characters[braceStart...braceEnd])
+            if let data = jsonString.data(using: .utf8),
+               let entry = try? JSONDecoder().decode(OpenCodeVerboseModelEntry.self, from: data) {
+                let slug = entry.providerID.map { "\($0)/\(entry.id)" } ?? entry.id
+                profiles.append(AgentModelProfile(slug: slug, displayName: entry.name, effortOptions: options))
+            }
+            searchStart = characters.index(after: braceEnd)
+        }
+        return profiles
+    }
+
+    /// Finds the index of the `}` that closes the JSON object opened at
+    /// `start`, respecting string contents so a `{`/`}` inside a quoted
+    /// value (or an escaped quote) isn't mistaken for structure.
+    private static func jsonObjectEnd(in characters: [Character], from start: Int) -> Int? {
+        var depth = 0
+        var inString = false
+        var isEscaped = false
+        var index = start
+        while index < characters.count {
+            let character = characters[index]
+            if inString {
+                if isEscaped {
+                    isEscaped = false
+                } else if character == "\\" {
+                    isEscaped = true
+                } else if character == "\"" {
+                    inString = false
+                }
+            } else if character == "\"" {
+                inString = true
+            } else if character == "{" {
+                depth += 1
+            } else if character == "}" {
+                depth -= 1
+                if depth == 0 { return index }
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    struct OpenCodeVerboseModelEntry: Decodable {
+        let id: String
+        let providerID: String?
+        let name: String?
     }
 
     private func fetchClaudeModels(executable: URL) async throws -> [String]? {
@@ -197,6 +275,24 @@ public struct ModelCatalogFetcher: Sendable {
         }
     }
 
+    func fetchAntigravityGroups(for agent: AgentKind) async -> [AntigravityModelGroup] {
+        guard let executable = locator.locate(binaryName(for: agent)) else {
+            return ModelCatalog.staticAntigravityGroups()
+        }
+        let entries: [AntigravityModelEntry]?
+        do {
+            entries = try await withTimeout(seconds: timeoutSeconds) {
+                try await self.fetchAntigravityModelEntries(executable: executable)
+            }
+        } catch {
+            entries = nil
+        }
+        guard let entries, !entries.isEmpty else {
+            return ModelCatalog.staticAntigravityGroups()
+        }
+        return ModelCatalog.groupAntigravityModels(entries.map { ($0.slug, $0.displayName) })
+    }
+
     private func fetchAntigravityProfiles(executable: URL) async throws -> [AgentModelProfile]? {
         async let modelsTask = fetchAntigravityModelEntries(executable: executable)
         async let levelsTask = fetchAntigravityEffortLevels(executable: executable)
@@ -204,19 +300,13 @@ public struct ModelCatalogFetcher: Sendable {
             _ = try? await levelsTask
             return nil
         }
-        let levels = (try? await levelsTask) ?? nil
+        _ = (try? await levelsTask)
 
-        let options: [AgentEffortOption] = levels.map { levels in
-            levels.map { level in
-                AgentEffortOption(
-                    level: level,
-                    label: AgentEffortCatalog.label(for: level, agent: .antigravity),
-                    summary: AgentEffortCatalog.summary(for: level, agent: .antigravity)
-                )
-            }
-        } ?? AgentEffortCatalog.staticOptions(for: .antigravity)
-
-        return models.map { AgentModelProfile(slug: $0.slug, displayName: $0.displayName, effortOptions: options) }
+        let groups = ModelCatalog.groupAntigravityModels(models.map { ($0.slug, $0.displayName) })
+        return models.map { model in
+            let options = ModelCatalog.antigravityEffortOptions(for: model.slug, in: groups)
+            return AgentModelProfile(slug: model.slug, displayName: model.displayName, effortOptions: options)
+        }
     }
 
     private func fetchAntigravityModelEntries(executable: URL) async throws -> [AntigravityModelEntry]? {
@@ -316,6 +406,7 @@ public struct ModelCatalogFetcher: Sendable {
         return AgentModelProfile(
             slug: entry.slug,
             displayName: entry.displayName,
+            description: entry.description,
             effortOptions: options.isEmpty ? AgentEffortCatalog.staticOptions(for: .codexCLI) : options
         )
     }
@@ -344,6 +435,7 @@ public struct ModelCatalogFetcher: Sendable {
         let visibility: String
         let priority: Int
         let displayName: String?
+        let description: String?
         let defaultReasoningLevel: String?
         let supportedReasoningLevels: [CodexReasoningLevel]?
 
@@ -352,6 +444,7 @@ public struct ModelCatalogFetcher: Sendable {
             case visibility
             case priority
             case displayName = "display_name"
+            case description
             case defaultReasoningLevel = "default_reasoning_level"
             case supportedReasoningLevels = "supported_reasoning_levels"
         }
@@ -380,6 +473,45 @@ private func withTimeout<T: Sendable>(
     }
 }
 
+/// One Antigravity model, grouped from the one-or-more slugs that share a
+/// base name — e.g. `gemini-3.7-flash-{low,medium,high}` become a single
+/// "Gemini 3.7 Flash" group with three variants. Antigravity bakes reasoning
+/// effort into the model slug itself rather than accepting it as a separate
+/// flag, so the model picker offers the base name and a second, group-scoped
+/// picker offers the variant — see `AgentDescriptor.antigravity.effortFlag`
+/// (`nil`: no `--effort` is ever sent) and `AntigravityModelEffortCoordinator`.
+public struct AntigravityModelGroup: Sendable, Equatable, Identifiable {
+    public let baseSlug: String
+    public let displayName: String
+    /// Effort level -> the real slug that launches it. Empty when the model
+    /// carries no recognized effort suffix at all (e.g. "claude-sonnet-4-6"),
+    /// in which case `soleSlug` is the only launchable value.
+    public let variants: [AgentEffort: String]
+    public let soleSlug: String?
+
+    public var id: String { baseSlug }
+
+    public init(baseSlug: String, displayName: String, variants: [AgentEffort: String], soleSlug: String? = nil) {
+        self.baseSlug = baseSlug
+        self.displayName = displayName
+        self.variants = variants
+        self.soleSlug = soleSlug
+    }
+
+    /// The slug to launch for a requested effort: the matching variant if
+    /// this model has one, else the nearest available rank, else `soleSlug`.
+    public func resolvedSlug(for effort: AgentEffort?) -> String? {
+        if variants.isEmpty { return soleSlug }
+        if let effort, let exact = variants[effort] { return exact }
+        guard let effort else {
+            return variants[.medium] ?? variants.values.first
+        }
+        return variants.min { lhs, rhs in
+            abs(lhs.key.rank - effort.rank) < abs(rhs.key.rank - effort.rank)
+        }?.value
+    }
+}
+
 /// Small static shortlist used when live discovery isn't possible: the CLI
 /// isn't installed, the query failed/timed out, or — as with OpenCode,
 /// which has no model-enumeration command — was never attempted.
@@ -394,14 +526,76 @@ public enum ModelCatalog {
         openCodeSubscription: OpenCodeSubscription = .none
     ) -> [AgentModelProfile] {
         if agent == .antigravity {
-            let options = AgentEffortCatalog.staticOptions(for: .antigravity)
+            let groups = staticAntigravityGroups()
             return antigravityFallbackModels.map { entry in
-                AgentModelProfile(slug: entry.slug, displayName: entry.displayName, effortOptions: options)
+                let options = antigravityEffortOptions(for: entry.slug, in: groups)
+                return AgentModelProfile(slug: entry.slug, displayName: entry.displayName, effortOptions: options)
             }
         }
         let slugs = staticFallback(for: agent, openCodeSubscription: openCodeSubscription)
         return slugs.map { slug in
             AgentModelProfile(slug: slug, effortOptions: fallbackEffortOptions(for: agent, slug: slug))
+        }
+    }
+
+    public static func staticAntigravityGroups() -> [AntigravityModelGroup] {
+        groupAntigravityModels(antigravityFallbackModels.map { ($0.slug, $0.displayName) })
+    }
+
+    /// Groups Antigravity model entries by base name, splitting off a
+    /// recognized trailing `-low`/`-medium`/`-high` slug suffix (and its
+    /// `" (Low)"`/`" (Medium)"`/`" (High)"` display-name counterpart). An
+    /// entry with no recognized suffix becomes its own single-variant group.
+    public static func groupAntigravityModels(_ entries: [(slug: String, displayName: String?)]) -> [AntigravityModelGroup] {
+        let slugSuffixes: [(String, AgentEffort)] = [("-low", .low), ("-medium", .medium), ("-high", .high)]
+        let nameSuffixes: [(String, AgentEffort)] = [(" (Low)", .low), (" (Medium)", .medium), (" (High)", .high)]
+
+        struct Parsed {
+            let baseSlug: String
+            let baseDisplayName: String
+            let effort: AgentEffort?
+            let slug: String
+        }
+
+        let parsed: [Parsed] = entries.map { entry in
+            let name = entry.displayName ?? entry.slug
+            guard let (slugSuffix, effort) = slugSuffixes.first(where: { entry.slug.hasSuffix($0.0) }) else {
+                return Parsed(baseSlug: entry.slug, baseDisplayName: name, effort: nil, slug: entry.slug)
+            }
+            let base = String(entry.slug.dropLast(slugSuffix.count))
+            let baseName: String
+            if let (nameSuffix, _) = nameSuffixes.first(where: { name.hasSuffix($0.0) }) {
+                baseName = String(name.dropLast(nameSuffix.count))
+            } else {
+                baseName = name
+            }
+            return Parsed(baseSlug: base, baseDisplayName: baseName, effort: effort, slug: entry.slug)
+        }
+
+        var order: [String] = []
+        var byBase: [String: [Parsed]] = [:]
+        for entry in parsed {
+            if byBase[entry.baseSlug] == nil { order.append(entry.baseSlug) }
+            byBase[entry.baseSlug, default: []].append(entry)
+        }
+
+        return order.compactMap { base in
+            guard let group = byBase[base], let first = group.first else { return nil }
+            var variants: [AgentEffort: String] = [:]
+            var soleSlug: String?
+            for entry in group {
+                if let effort = entry.effort {
+                    variants[effort] = entry.slug
+                } else {
+                    soleSlug = entry.slug
+                }
+            }
+            return AntigravityModelGroup(
+                baseSlug: base,
+                displayName: first.baseDisplayName,
+                variants: variants,
+                soleSlug: variants.isEmpty ? (soleSlug ?? first.slug) : nil
+            )
         }
     }
 
@@ -421,6 +615,16 @@ public enum ModelCatalog {
         ("claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)"),
         ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"),
     ]
+
+    static func antigravityEffortOptions(for slug: String, in groups: [AntigravityModelGroup]) -> [AgentEffortOption] {
+        let staticOptions = AgentEffortCatalog.staticOptions(for: .antigravity)
+        let optionsByLevel = Dictionary(uniqueKeysWithValues: staticOptions.map { ($0.level, $0) })
+        guard let group = groups.first(where: { $0.variants.values.contains(slug) || $0.soleSlug == slug }) else {
+            return staticOptions
+        }
+        if group.variants.isEmpty { return [] }
+        return group.variants.keys.sorted { $0.rank < $1.rank }.compactMap { optionsByLevel[$0] }
+    }
 
     private static func fallbackEffortOptions(for agent: AgentKind, slug: String) -> [AgentEffortOption] {
         let all = AgentEffortCatalog.staticOptions(for: agent)
@@ -455,6 +659,7 @@ public actor ModelCatalogCache {
     public static let shared = ModelCatalogCache()
 
     private var cache: [AgentKind: [AgentModelProfile]] = [:]
+    private var antigravityGroupsCache: [AntigravityModelGroup]?
     private let fetcher: ModelCatalogFetcher
 
     public init(fetcher: ModelCatalogFetcher = ModelCatalogFetcher()) {
@@ -472,5 +677,15 @@ public actor ModelCatalogCache {
         let profiles = await fetcher.fetchProfiles(for: agent, openCodeSubscription: openCodeSubscription)
         cache[agent] = profiles
         return profiles
+    }
+
+    /// Antigravity's models grouped by base name — see `AntigravityModelGroup`.
+    public func antigravityGroups() async -> [AntigravityModelGroup] {
+        if let cached = antigravityGroupsCache {
+            return cached
+        }
+        let groups = await fetcher.fetchAntigravityGroups(for: .antigravity)
+        antigravityGroupsCache = groups
+        return groups
     }
 }

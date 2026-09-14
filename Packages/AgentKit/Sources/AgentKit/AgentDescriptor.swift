@@ -282,7 +282,14 @@ public enum AgentCatalog {
         binaryName: "agy",
         settingsKey: "antigravity",
         modelFlag: .separateTokens("--model"),
-        effortFlag: .flag(.separateTokens("--effort")),
+        // No `--effort` flag: the model slug already bakes in the reasoning
+        // level (e.g. "gemini-3.7-flash-high"), so a second, independently
+        // chosen `--effort` would be redundant at best and conflicting at
+        // worst. `effortLevels` stays non-empty so the effort picker still
+        // renders — see `AntigravityModelGroup` and
+        // `AntigravityModelEffortCoordinator`, which resolve a chosen level
+        // into the right slug instead of a CLI flag.
+        effortFlag: nil,
         promptFlag: .separateTokens("--prompt-interactive"),
         effortLevels: [.low, .medium, .high],
         effortLabels: [:],
