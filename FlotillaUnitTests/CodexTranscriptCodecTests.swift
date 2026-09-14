@@ -212,6 +212,58 @@ final class CodexTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(codec.sanitize(entries), [.userMessage(text: "look", timestamp: Self.writeTime)])
     }
 
+    // MARK: - Viewed images
+
+    /// Codex has no place to embed image bytes in a `response_item`; the only
+    /// structured record of a `view_image` call is the TUI's `ImageView`
+    /// `event_msg`, which carries just a file path. Reading it back must
+    /// resolve that path into an inline, downsampled image.
+    func testViewedImageIsReadFromDiskAsAnInlineImage() async throws {
+        let handle = try await codec.writeNative(
+            [.userMessage(text: "take a look", timestamp: Self.writeTime)],
+            workingDirectory: workingDirectory,
+            sessionID: sessionID
+        )
+        let url = try XCTUnwrap(handle.transcriptURL)
+
+        let pngPath = home.appendingPathComponent("screenshot.png")
+        // A minimal 1x1 PNG — enough for ImageIO to decode and re-encode.
+        let onePixelPNG = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        try onePixelPNG.write(to: pngPath)
+
+        let record = #"""
+        {"timestamp":"2026-09-08T01:18:36Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"ImageView","id":"exec-1","path":"file://\#(pngPath.path)"}}}
+        """#
+        let injected = try String(contentsOf: url, encoding: .utf8) + "\n" + record
+        try injected.write(to: url, atomically: true, encoding: .utf8)
+
+        let recovered = try codec.readNative(at: url)
+        XCTAssertEqual(recovered.count, 2)
+        guard case .image(let mimeType, let base64, _) = recovered.last else {
+            return XCTFail("expected the second entry to be an image")
+        }
+        XCTAssertEqual(mimeType, "image/jpeg")
+        XCTAssertFalse(base64.isEmpty)
+        XCTAssertNotNil(Data(base64Encoded: base64))
+    }
+
+    /// A path that no longer exists on disk (a temp screenshot already
+    /// cleaned up) must be skipped rather than fail the whole read.
+    func testViewedImageWithAMissingFileIsSkipped() async throws {
+        let handle = try await codec.writeNative(
+            [.userMessage(text: "take a look", timestamp: Self.writeTime)],
+            workingDirectory: workingDirectory,
+            sessionID: sessionID
+        )
+        let url = try XCTUnwrap(handle.transcriptURL)
+
+        let record = #"{"timestamp":"2026-09-08T01:18:36Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"ImageView","id":"exec-1","path":"file:///tmp/does-not-exist-\#(sessionID).png"}}}"#
+        let injected = try String(contentsOf: url, encoding: .utf8) + "\n" + record
+        try injected.write(to: url, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(try codec.readNative(at: url), [.userMessage(text: "take a look", timestamp: Self.writeTime)])
+    }
+
     // MARK: - Reading back
 
     func testRoundTripsItsOwnOutput() async throws {
