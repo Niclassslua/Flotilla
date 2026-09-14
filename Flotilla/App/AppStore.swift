@@ -1161,6 +1161,7 @@ final class AppStore {
         agent: AgentKind,
         model: String? = nil,
         effort: AgentEffort? = nil,
+        initialMode: SessionMode = .act,
         projectFolder: URL?,
         checkoutMode: CheckoutMode,
         deliverGoal: Bool = true,
@@ -1265,7 +1266,8 @@ final class AppStore {
                 effort: effort,
                 projectID: projectID,
                 workingDirectory: workingDirectory,
-                worktree: worktreeInfo
+                worktree: worktreeInfo,
+                startingMode: initialMode
             )
             try processManager.start(
                 session: session,

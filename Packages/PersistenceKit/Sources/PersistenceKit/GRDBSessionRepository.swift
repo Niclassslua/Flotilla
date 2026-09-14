@@ -243,6 +243,11 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
         migrator.registerMigration("v12_addCommitAttribution") { db in
             try Self.createAttributionTables(db, legacySessionKey: true)
         }
+        migrator.registerMigration("v14_sessionStartingMode") { db in
+            try db.alter(table: "session") { t in
+                t.add(column: "startingMode", .text)
+            }
+        }
         migrator.registerMigration("v13_scopeAttributionSessionsToRepository") { db in
             // Early development builds keyed snapshots only by session UUID.
             // Preserve all three tables while upgrading that schema in place.

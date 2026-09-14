@@ -57,7 +57,10 @@ struct CommandBarDesign: View {
                 .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
         }
         .flotillaShadow(.level3)
-        .onChange(of: draft.goal) { _, newValue in syncTypedTrigger(newValue) }
+        .onChange(of: draft.goal) { _, _ in
+            syncTypedTrigger(draft.goal)
+            draft.syncModeFromGoal()
+        }
         .onChange(of: mode) { _, _ in highlightedIndex = 0 }
         .onChange(of: chipQuery) { _, _ in highlightedIndex = 0 }
         .onAppear { goalFocused = true }
@@ -302,11 +305,50 @@ struct CommandBarDesign: View {
                     accessibilityIdentifier: "CreateSession.EffortPicker"
                 )
             }
+            modeChip
             Spacer(minLength: 0)
             if draft.supportsWorktree { isolationToggle }
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .padding(.vertical, FlotillaSpacing.small)
+    }
+
+    private var modeChip: some View {
+        Menu {
+            Button {
+                draft.initialMode = .act
+            } label: {
+                Label("Act", systemImage: draft.initialMode == .act ? "checkmark" : "")
+            }
+            Button {
+                draft.initialMode = .plan
+            } label: {
+                Label("Plan", systemImage: draft.initialMode == .plan ? "checkmark" : "")
+            }
+        } label: {
+            HStack(spacing: FlotillaSpacing.xSmall) {
+                Image(systemName: draft.initialMode == .plan ? "doc.text.magnifyingglass" : "play.fill")
+                    .font(.system(size: FlotillaIconSize.xSmall))
+                Text(draft.initialMode.displayName)
+                    .font(FlotillaTypography.caption2.weight(.medium))
+            }
+            .foregroundStyle(draft.initialMode == .plan ? FlotillaColors.accent : FlotillaColors.textSecondary)
+            .padding(.horizontal, FlotillaSpacing.small)
+            .padding(.vertical, FlotillaSpacing.xSmall)
+            .background(
+                draft.initialMode == .plan ? FlotillaColors.accent.opacity(0.12) : FlotillaColors.surfaceElevated,
+                in: Capsule()
+            )
+            .overlay(Capsule().strokeBorder(
+                draft.initialMode == .plan ? FlotillaColors.accent.opacity(0.4) : FlotillaColors.separator,
+                lineWidth: FlotillaBorderWidth.hairline
+            ))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .help("Session mode — Act lets the agent make changes; Plan restricts it to reading and proposing")
+        .accessibilityIdentifier("CreateSession.ModePicker")
+        .accessibilityValue(draft.initialMode.displayName)
     }
 
     private var projectChip: some View {

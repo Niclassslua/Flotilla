@@ -19,6 +19,7 @@ final class SessionDraft {
     var agent: AgentKind
     var model = ""
     var effort: AgentEffort = .medium
+    var initialMode: SessionMode = .act
     var createWorktree: Bool
     private(set) var isCreating = false
 
@@ -64,7 +65,7 @@ final class SessionDraft {
 
     var canLaunch: Bool {
         guard !isCreating else { return false }
-        return requiresGoal ? !trimmedGoal.isEmpty : true
+        return requiresGoal ? !effectiveGoal.isEmpty : true
     }
 
     var trimmedGoal: String {
@@ -77,12 +78,12 @@ final class SessionDraft {
     }
 
     var title: String {
-        SessionLaunchPreview.derivedTitle(goal: goal, projectChoice: projectChoice)
+        SessionLaunchPreview.derivedTitle(goal: effectiveGoal, projectChoice: projectChoice)
     }
 
     var preview: SessionLaunchPreview {
         SessionLaunchPreview.resolve(
-            goal: goal,
+            goal: effectiveGoal,
             projectChoice: projectChoice,
             agent: agent,
             model: trimmedModel,
@@ -146,6 +147,15 @@ final class SessionDraft {
         model = ""
     }
 
+    /// Called from each design's `onChange(of: draft.goal)`. Auto-promotes to
+    /// plan mode when the user types `/plan`; never auto-demotes (use the chip
+    /// to switch back to Act, or clear the goal).
+    func syncModeFromGoal() {
+        if trimmedGoal.hasPrefix("/plan") {
+            initialMode = .plan
+        }
+    }
+
     // MARK: - Launch
 
     /// Returns the created session's ID, or `nil` if creation failed — in which
@@ -155,19 +165,37 @@ final class SessionDraft {
         isCreating = true
         defer { isCreating = false }
 
-        let goalToDeliver = trimmedGoal
+        // Strip a leading /plan command that the user typed as a shortcut.
+        // The command is preserved in the text field while typing so keyboard
+        // synthesis never sees the field change under it; normalization happens
+        // here at launch time so the delivered goal is clean.
+        let normalizedGoal = effectiveGoal
+        let effectiveMode = initialMode
         return await store.createSession(
-            title: title,
-            goal: goal,
+            title: SessionLaunchPreview.derivedTitle(goal: normalizedGoal, projectChoice: projectChoice),
+            goal: normalizedGoal,
             agent: agent,
             model: trimmedModel,
             effort: agent.supportsEffortSelection ? effort : nil,
+            initialMode: effectiveMode,
             projectFolder: projectChoice.folder,
             checkoutMode: effectiveCheckoutMode,
-            deliverGoal: !goalToDeliver.isEmpty,
+            deliverGoal: !normalizedGoal.isEmpty,
             fetchBeforeCreatingWorktree: fetchBeforeCreatingWorktree,
             selectAfterCreating: opensSession
         )
+    }
+
+    /// Goal with the leading `/plan ` trigger stripped, used at launch time.
+    var effectiveGoal: String {
+        let t = trimmedGoal
+        if t.hasPrefix("/plan ") {
+            return String(t.dropFirst(6))
+        }
+        if t == "/plan" {
+            return ""
+        }
+        return t
     }
 
     /// Clears the objective while keeping agent, model, effort and workspace.
@@ -175,6 +203,7 @@ final class SessionDraft {
     /// the next task, not reset to factory defaults the user already changed.
     func clearGoal() {
         goal = ""
+        initialMode = .act
     }
 
     // MARK: - Folder panel

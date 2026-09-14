@@ -79,6 +79,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var waitingReason: String?
     var kanbanColumnID: String?
     var workflowStage: String?
+    var startingMode: String?
     var agentSessionID: String?
     var nativeTranscriptPath: String?
     var handoffSourceAgent: String?
@@ -107,6 +108,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         waitingReason = session.waitingReason?.rawValue
         kanbanColumnID = session.kanbanColumnID?.uuidString
         workflowStage = session.workflowStage?.rawValue
+        startingMode = session.startingMode == .act ? nil : session.startingMode.rawValue
         agentSessionID = session.agentSessionID
         nativeTranscriptPath = session.nativeTranscriptPath?.path
         handoffSourceAgent = session.pendingHandoff?.sourceAgent.rawValue
@@ -210,6 +212,8 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             pending = nil
         }
 
+        let sessionMode = startingMode.flatMap(SessionMode.init(rawValue:)) ?? .act
+
         return Session(
             id: uuid,
             title: title,
@@ -224,6 +228,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             waitingReason: sessionWaitingReason,
             kanbanColumnID: kanbanColumnUUID,
             workflowStage: workflowStageValue,
+            startingMode: sessionMode,
             agentSessionID: agentSessionID,
             nativeTranscriptPath: nativeTranscriptPath.map { URL(fileURLWithPath: $0) },
             pendingHandoff: pending,

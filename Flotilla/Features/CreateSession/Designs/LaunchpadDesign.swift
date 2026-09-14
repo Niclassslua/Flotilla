@@ -87,6 +87,7 @@ struct LaunchpadDesign: View {
             // the (now newly relevant) list on the next look.
             projectQuery = ""
         }
+        .onChange(of: draft.goal) { _, _ in draft.syncModeFromGoal() }
     }
 
     private func section<Trailing: View, Content: View>(
@@ -181,7 +182,46 @@ struct LaunchpadDesign: View {
                     accessibilityIdentifier: "Home.EffortPicker"
                 )
             }
+            modeChip
         }
+    }
+
+    private var modeChip: some View {
+        Menu {
+            Button {
+                draft.initialMode = .act
+            } label: {
+                Label("Act", systemImage: draft.initialMode == .act ? "checkmark" : "")
+            }
+            Button {
+                draft.initialMode = .plan
+            } label: {
+                Label("Plan", systemImage: draft.initialMode == .plan ? "checkmark" : "")
+            }
+        } label: {
+            HStack(spacing: FlotillaSpacing.xSmall) {
+                Image(systemName: draft.initialMode == .plan ? "doc.text.magnifyingglass" : "play.fill")
+                    .font(.system(size: FlotillaIconSize.xSmall))
+                Text(draft.initialMode.displayName)
+                    .font(FlotillaTypography.caption2.weight(.medium))
+            }
+            .foregroundStyle(draft.initialMode == .plan ? FlotillaColors.accent : FlotillaColors.textSecondary)
+            .padding(.horizontal, FlotillaSpacing.small)
+            .padding(.vertical, FlotillaSpacing.xSmall)
+            .background(
+                draft.initialMode == .plan ? FlotillaColors.accent.opacity(0.12) : FlotillaColors.surfaceElevated,
+                in: Capsule()
+            )
+            .overlay(Capsule().strokeBorder(
+                draft.initialMode == .plan ? FlotillaColors.accent.opacity(0.4) : FlotillaColors.separator,
+                lineWidth: FlotillaBorderWidth.hairline
+            ))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .help("Session mode — Act lets the agent make changes; Plan restricts it to reading and proposing")
+        .accessibilityIdentifier("Home.ModePicker")
+        .accessibilityValue(draft.initialMode.displayName)
     }
 
     // MARK: - Workspace

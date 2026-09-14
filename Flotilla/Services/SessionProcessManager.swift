@@ -256,6 +256,7 @@ final class SessionProcessManager {
             goal: effectiveGoal,
             model: session.model,
             effort: session.effort,
+            mode: session.startingMode,
             resumeIntent: resumeIntent,
             settings: settings,
             baseEnvironment: baseEnvironment

@@ -10,31 +10,38 @@ final class CompanionCommandRouter {
     private let store: AppStore
     private let gitService: any GitServiceProtocol
     private let bridge: ClaudePermissionBridge
+    private let adapters: CompanionAdapterRegistry?
 
     nonisolated static let maximumFileSize = 1_000_000
 
-    init(store: AppStore, gitService: any GitServiceProtocol, bridge: ClaudePermissionBridge) {
+    init(store: AppStore, gitService: any GitServiceProtocol, bridge: ClaudePermissionBridge, adapters: CompanionAdapterRegistry? = nil) {
         self.store = store
         self.gitService = gitService
         self.bridge = bridge
+        self.adapters = adapters
     }
 
     func handle(_ request: CompanionRequest) async -> CompanionResponse {
         switch request {
         case .sendPrompt(let sessionID, let text):
-            guard session(sessionID) != nil else { return .failure(message: Self.missingSession) }
+            guard let session = session(sessionID) else { return .failure(message: Self.missingSession) }
             guard !bridge.hasPending(sessionID) else {
                 return .failure(message: "Answer the open dialog first.")
             }
             do {
-                try await store.deliverMessage(text, to: sessionID)
+                if let adapter = adapters?.adapter(for: session) { try await adapter.sendPrompt(text) }
+                else { try await store.deliverMessage(text, to: sessionID) }
                 return .ok
             } catch {
                 return .failure(message: "The prompt couldn't be delivered: \(error.localizedDescription)")
             }
 
         case .stop(let sessionID):
-            guard session(sessionID) != nil else { return .failure(message: Self.missingSession) }
+            guard let session = session(sessionID) else { return .failure(message: Self.missingSession) }
+            if let adapter = adapters?.adapter(for: session) {
+                do { try await adapter.stop(); return .ok }
+                catch { return .failure(message: error.localizedDescription) }
+            }
             if bridge.denyAndStop(sessionID: sessionID) { return .ok }
             guard let process = store.process(for: sessionID) else {
                 return .failure(message: "The agent isn't running.")
@@ -45,6 +52,10 @@ final class CompanionCommandRouter {
             return .ok
 
         case .answer(let sessionID, let interactionID, let answer):
+            if let session = session(sessionID), let adapter = adapters?.adapter(for: session) {
+                do { return .answer(try await adapter.answer(interactionID, with: answer)) }
+                catch { return .failure(message: error.localizedDescription) }
+            }
             return .answer(bridge.answer(sessionID: sessionID, interactionID: interactionID, with: answer))
 
         case .createSession(let request):
@@ -60,6 +71,7 @@ final class CompanionCommandRouter {
                 agent: request.agent,
                 model: request.model.isEmpty ? nil : request.model,
                 effort: request.agent.supportsEffortSelection ? request.effort : nil,
+                initialMode: request.initialMode,
                 projectFolder: project?.rootPath,
                 checkoutMode: request.createWorktree && project != nil ? .newWorktree : .mainCheckout,
                 deliverGoal: !goal.isEmpty,
@@ -75,18 +87,21 @@ final class CompanionCommandRouter {
                 return .failure(message: "\(session.agent.displayName) can't hand off to \(handoff.agent.displayName).")
             }
             bridge.retractAll(sessionID: sessionID)
+            adapters?.remove(sessionID)
             await store.handoffSession(sessionID: sessionID, to: handoff.agent)
             return store.lastOperationError.map { .failure(message: $0) } ?? .ok
 
         case .restart(let sessionID):
             guard session(sessionID) != nil else { return .failure(message: Self.missingSession) }
             bridge.retractAll(sessionID: sessionID)
+            adapters?.remove(sessionID)
             store.restartSession(sessionID: sessionID)
             return store.lastOperationError.map { .failure(message: $0) } ?? .ok
 
         case .delete(let sessionID, let removeWorktree):
             guard session(sessionID) != nil else { return .ok }
             bridge.retractAll(sessionID: sessionID)
+            adapters?.remove(sessionID)
             await store.deleteSession(sessionID: sessionID, deleteWorktree: removeWorktree)
             guard session(sessionID) == nil else {
                 return .failure(message: store.lastOperationError ?? "The session couldn't be deleted.")

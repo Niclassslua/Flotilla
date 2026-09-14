@@ -20,6 +20,7 @@ struct CreateSessionSheet: View {
     @State private var createWorktree = true
     @State private var fetchFirst = true
     @State private var subscription: OpenCodeSubscription = .none
+    @State private var mode: SessionMode = .act
     @State private var isCreating = false
 
     var body: some View {
@@ -38,6 +39,20 @@ struct CreateSessionSheet: View {
                         ForEach(store.projects(on: macID)) { project in
                             Text(project.name).tag(Optional(project.id))
                         }
+                    }
+                }
+
+                Section("Mode") {
+                    Picker("Mode", selection: $mode) {
+                        Text("Act").tag(SessionMode.act)
+                        Text("Plan").tag(SessionMode.plan)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("CreateSession.ModePicker")
+                    if mode == .plan {
+                        Text("Explore and propose a plan before making changes.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -107,6 +122,7 @@ struct CreateSessionSheet: View {
             agent: agent,
             model: model,
             effort: agent.supportsEffortSelection ? effort : nil,
+            initialMode: mode,
             createWorktree: projectID != nil && createWorktree,
             fetchFirst: fetchFirst,
             openCodeSubscription: subscription

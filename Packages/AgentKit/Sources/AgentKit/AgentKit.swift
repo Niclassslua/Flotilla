@@ -40,6 +40,7 @@ public protocol AgentProviding: Sendable {
         goal: String?,
         model: String?,
         effort: AgentEffort?,
+        mode: SessionMode,
         resumeIntent: ResumeIntent,
         settings: AppSettings,
         baseEnvironment: [String: String]
@@ -51,6 +52,7 @@ extension AgentProviding {
         goal: String? = nil,
         model: String? = nil,
         effort: AgentEffort? = nil,
+        mode: SessionMode = .act,
         resumeIntent: ResumeIntent = .none,
         settings: AppSettings = AppSettings(),
         baseEnvironment: [String: String] = [:]
@@ -59,6 +61,7 @@ extension AgentProviding {
             goal: goal,
             model: model,
             effort: effort,
+            mode: mode,
             resumeIntent: resumeIntent,
             settings: settings,
             baseEnvironment: baseEnvironment
@@ -76,6 +79,7 @@ extension AgentProviding {
             goal: goal,
             model: model,
             effort: effort,
+            mode: .act,
             resumeIntent: .none,
             settings: settings,
             baseEnvironment: baseEnvironment
@@ -93,6 +97,7 @@ extension AgentProviding {
             goal: goal,
             model: model,
             effort: nil,
+            mode: .act,
             resumeIntent: .none,
             settings: settings,
             baseEnvironment: baseEnvironment
@@ -109,6 +114,7 @@ extension AgentProviding {
             goal: goal,
             model: nil,
             effort: nil,
+            mode: .act,
             resumeIntent: .none,
             settings: settings,
             baseEnvironment: baseEnvironment
@@ -129,6 +135,7 @@ public struct CLIAgentProvider: AgentProviding {
         goal: String?,
         model: String?,
         effort: AgentEffort?,
+        mode: SessionMode,
         resumeIntent: ResumeIntent,
         settings: AppSettings,
         baseEnvironment: [String: String]
@@ -167,6 +174,21 @@ public struct CLIAgentProvider: AgentProviding {
             arguments += effortFlag.arguments(for: effort)
         }
 
+        // Planning-mode flags vary by CLI.
+        // Codex has no startup flag — planning mode is delivered via initialInput below.
+        if mode == .plan {
+            switch kind {
+            case .claudeCode:
+                arguments += ["--permission-mode", "plan"]
+            case .antigravity:
+                arguments += ["--mode", "plan"]
+            case .openCode:
+                arguments += ["--mode", "plan"]
+            case .codexCLI:
+                break
+            }
+        }
+
         var leadingSubcommands: [String] = []
         switch resumeIntent {
         case .freshWithAssignedIdentity(let id):
@@ -197,10 +219,25 @@ public struct CLIAgentProvider: AgentProviding {
             break
         }
 
-        if !trimmedGoal.isEmpty, case .resume = resumeIntent {
-            // Resumed sessions do not receive an initial prompt argument
-        } else if !trimmedGoal.isEmpty, let promptFlag = descriptor.promptFlag {
-            arguments += promptFlag.arguments(for: trimmedGoal)
+        // Codex plan mode: withhold the goal from argv and deliver it via
+        // initialInput as "/plan <goal>" so Codex's TUI processes the slash
+        // command. Other agents receive the goal normally via their promptFlag.
+        let codexPlanInitialInput: Data?
+        if mode == .plan, kind == .codexCLI, !trimmedGoal.isEmpty,
+           case .none = resumeIntent {
+            codexPlanInitialInput = "/plan \(trimmedGoal)\n"
+                .data(using: .utf8)
+        } else {
+            codexPlanInitialInput = nil
+        }
+
+        let skipPromptFlag = codexPlanInitialInput != nil
+        if !skipPromptFlag {
+            if !trimmedGoal.isEmpty, case .resume = resumeIntent {
+                // Resumed sessions do not receive an initial prompt argument
+            } else if !trimmedGoal.isEmpty, let promptFlag = descriptor.promptFlag {
+                arguments += promptFlag.arguments(for: trimmedGoal)
+            }
         }
 
         let fullArguments = leadingSubcommands + arguments
@@ -210,7 +247,7 @@ public struct CLIAgentProvider: AgentProviding {
             configuredPath: settings.agentOverrides.paths[descriptor.settingsKey] ?? "",
             arguments: fullArguments,
             environment: environment,
-            initialInput: nil
+            initialInput: codexPlanInitialInput
         )
     }
 }

@@ -101,6 +101,7 @@ public struct NewSessionRequest: Hashable, Codable, Sendable {
     public var agent: AgentKind
     public var model: String
     public var effort: AgentEffort?
+    public var initialMode: SessionMode
     public var createWorktree: Bool
     public var fetchFirst: Bool
     public var openCodeSubscription: OpenCodeSubscription
@@ -111,6 +112,7 @@ public struct NewSessionRequest: Hashable, Codable, Sendable {
         agent: AgentKind,
         model: String,
         effort: AgentEffort?,
+        initialMode: SessionMode = .act,
         createWorktree: Bool,
         fetchFirst: Bool,
         openCodeSubscription: OpenCodeSubscription
@@ -120,6 +122,7 @@ public struct NewSessionRequest: Hashable, Codable, Sendable {
         self.agent = agent
         self.model = model
         self.effort = effort
+        self.initialMode = initialMode
         self.createWorktree = createWorktree
         self.fetchFirst = fetchFirst
         self.openCodeSubscription = openCodeSubscription

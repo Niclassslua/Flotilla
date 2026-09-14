@@ -69,6 +69,24 @@ public enum AgentEffort: String, Codable, CaseIterable, Sendable, Identifiable {
     }
 }
 
+/// Whether a session starts in full-autonomy mode or in planning mode.
+///
+/// Planning mode constrains the agent to reading and proposing rather than
+/// making changes. Each CLI expresses this differently: Claude Code uses
+/// `--permission-mode plan`, Antigravity uses `--mode plan`, and Codex CLI
+/// receives a `/plan` prefix on its initial goal via `initialInput`.
+public enum SessionMode: String, Codable, Sendable, Equatable {
+    case act
+    case plan
+
+    public var displayName: String {
+        switch self {
+        case .act: "Act"
+        case .plan: "Plan"
+        }
+    }
+}
+
 public enum SessionStatus: String, Codable, Sendable, CaseIterable, Identifiable {
     case working
     case waitingForInput
@@ -313,6 +331,10 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public var kanbanColumnID: UUID?
     /// Workflow stage (for workflow column mode)
     public var workflowStage: WorkflowStage?
+    /// The mode the session was started in. `.act` (default) lets the agent
+    /// make changes; `.plan` restricts it to reading and proposing.
+    /// Stored so a manual restart replays the same flag.
+    public var startingMode: SessionMode
     /// Native agent session ID for session resumption across launches
     public var agentSessionID: String?
     /// Where the current agent keeps this session's transcript.
@@ -343,6 +365,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         waitingReason: SessionWaitingReason? = nil,
         kanbanColumnID: UUID? = nil,
         workflowStage: WorkflowStage? = nil,
+        startingMode: SessionMode = .act,
         agentSessionID: String? = nil,
         nativeTranscriptPath: URL? = nil,
         pendingHandoff: PendingHandoff? = nil,
@@ -363,6 +386,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         self.waitingReason = status == .waitingForInput ? waitingReason : nil
         self.kanbanColumnID = kanbanColumnID
         self.workflowStage = workflowStage
+        self.startingMode = startingMode
         self.agentSessionID = agentSessionID
         self.nativeTranscriptPath = nativeTranscriptPath
         self.pendingHandoff = pendingHandoff
