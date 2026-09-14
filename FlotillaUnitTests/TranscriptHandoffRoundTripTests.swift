@@ -1,5 +1,6 @@
 import XCTest
 import SessionKit
+import SQLite3
 @testable import TranscriptKit
 
 /// The whole feature in miniature: a Claude transcript on disk becomes a Codex
@@ -123,10 +124,118 @@ final class TranscriptHandoffRoundTripTests: XCTestCase {
 
         XCTAssertEqual(registry.handoffTargets(from: .claudeCode), [.codexCLI])
         XCTAssertEqual(registry.handoffTargets(from: .codexCLI), [.claudeCode])
-        // An agent with no codec registered is neither a source nor a target,
-        // which is the property that keeps Antigravity out of the destination
-        // picker without anyone hardcoding the rule.
-        XCTAssertTrue(registry.handoffTargets(from: .antigravity).isEmpty)
-        XCTAssertFalse(registry.writableAgents.contains(.antigravity))
+        // An agent with no codec registered in *this* registry is neither a
+        // source nor a target — the property that keeps an agent out of the
+        // destination picker without anyone hardcoding the rule. OpenCode is
+        // absent from this registry (and from `TranscriptCodecRegistry.default`
+        // itself, pending its HTTP session API), unlike Antigravity, which is
+        // both a source and a target in the shipping registry — see
+        // `AntigravityTranscriptCodecTests`.
+        XCTAssertTrue(registry.handoffTargets(from: .openCode).isEmpty)
+        XCTAssertFalse(registry.writableAgents.contains(.openCode))
+    }
+
+    // MARK: - Antigravity
+
+    private func writeAntigravityConversation(sessionID: String) throws -> URL {
+        let antigravity = AntigravityTranscriptCodec(brainDirectory: home.appendingPathComponent(".gemini/antigravity-cli/brain", isDirectory: true))
+        var db: OpaquePointer?
+        let directory = home.appendingPathComponent(".gemini/antigravity-cli/conversations", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("\(sessionID).db")
+        XCTAssertEqual(sqlite3_open_v2(file.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        sqlite3_exec(db, "CREATE TABLE `steps` (`idx` integer,`step_type` integer,`step_payload` blob, PRIMARY KEY (`idx`))", nil, nil, nil)
+
+        func insert(idx: Int, type: Int, payload: Data) {
+            var statement: OpaquePointer?
+            sqlite3_prepare_v2(db, "INSERT INTO steps (idx, step_type, step_payload) VALUES (?, ?, ?)", -1, &statement, nil)
+            sqlite3_bind_int(statement, 1, Int32(idx))
+            sqlite3_bind_int(statement, 2, Int32(type))
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            payload.withUnsafeBytes { raw in _ = sqlite3_bind_blob(statement, 3, raw.baseAddress, Int32(payload.count), transient) }
+            sqlite3_step(statement)
+            sqlite3_finalize(statement)
+        }
+
+        func step(type: Int, contentField: Int, text: String) -> Data {
+            let envelope = AntigravityWireFormat.messageField(5, [
+                AntigravityWireFormat.messageField(1, [AntigravityWireFormat.varintField(1, 1_789_000_000)])
+            ])
+            return AntigravityWireFormat.serialize([
+                AntigravityWireFormat.varintField(1, UInt64(type)),
+                envelope,
+                AntigravityWireFormat.messageField(contentField, [AntigravityWireFormat.stringField(type == 14 ? 2 : 1, text)])
+            ])
+        }
+
+        insert(idx: 0, type: 14, payload: step(type: 14, contentField: 19, text: "list the files"))
+        insert(idx: 1, type: 15, payload: step(type: 15, contentField: 20, text: "on it, running ls"))
+        try FileManager.default.createDirectory(
+            at: home.appendingPathComponent(".gemini/antigravity-cli/brain/\(sessionID)", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        return file
+    }
+
+    /// The write side is deliberately lossier than the Claude↔Codex round
+    /// trip — see the doc comment on `AntigravityTranscriptCodec.writeNative`
+    /// for why the whole history folds into one synthetic step rather than a
+    /// matching sequence of Antigravity-shaped steps.
+    func testClaudeTranscriptSurvivesTheMoveToAntigravity() async throws {
+        let source = try writeClaudeTranscript()
+        let antigravity = AntigravityTranscriptCodec(brainDirectory: home.appendingPathComponent(".gemini/antigravity-cli/brain", isDirectory: true))
+        let antigravitySessionID = "22222222-3333-4444-5555-666666666666"
+
+        let read = try claude.readNative(at: source)
+        let marked = read.appendingHandoffMarker(from: .claudeCode, to: .antigravity, at: Self.writeTime)
+        let paired = ToolCallPairing.pair(marked)
+
+        let handle = try await antigravity.writeNative(
+            antigravity.sanitize(paired.entries),
+            workingDirectory: workingDirectory,
+            sessionID: antigravitySessionID
+        )
+
+        XCTAssertEqual(handle.nativeSessionID, antigravitySessionID)
+        let recovered = try antigravity.readNative(at: XCTUnwrap(handle.transcriptURL))
+
+        XCTAssertEqual(recovered.count, 1, "the whole handoff folds into one synthetic user step")
+        guard case let .userMessage(text, _) = recovered[0] else {
+            return XCTFail("expected a user message, got \(recovered[0])")
+        }
+        XCTAssertTrue(text.contains("list the files"), "the opening request survives")
+        XCTAssertTrue(text.contains("ran Bash"), "the tool call survives as folded text")
+    }
+
+    func testAntigravityConversationSurvivesTheMoveToClaude() async throws {
+        let antigravitySessionID = "33333333-4444-5555-6666-777777777777"
+        let source = try writeAntigravityConversation(sessionID: antigravitySessionID)
+        let antigravity = AntigravityTranscriptCodec(brainDirectory: home.appendingPathComponent(".gemini/antigravity-cli/brain", isDirectory: true))
+
+        XCTAssertEqual(try antigravity.embeddedSessionID(at: source), antigravitySessionID)
+        let read = try antigravity.readNative(at: source)
+        XCTAssertTrue(read.hasConversationalContent)
+
+        let marked = read.appendingHandoffMarker(from: .antigravity, to: .claudeCode, at: Self.writeTime)
+        let claudeSessionID = "44444444-5555-6666-7777-888888888888"
+        let handle = try await claude.writeNative(
+            claude.sanitize(marked),
+            workingDirectory: workingDirectory,
+            sessionID: claudeSessionID
+        )
+
+        let recovered = try claude.readNative(at: XCTUnwrap(handle.transcriptURL))
+        XCTAssertEqual(recovered.count, 2)
+        guard case let .userMessage(text, _) = recovered[0] else {
+            return XCTFail("expected a user message, got \(recovered[0])")
+        }
+        XCTAssertEqual(text, "list the files")
+    }
+
+    func testTheShippingRegistryOffersAntigravityBothWays() {
+        let registry = TranscriptCodecRegistry.default
+        XCTAssertTrue(registry.handoffTargets(from: .claudeCode).contains(.antigravity))
+        XCTAssertTrue(registry.handoffTargets(from: .antigravity).contains(.claudeCode))
     }
 }

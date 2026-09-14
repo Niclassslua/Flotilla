@@ -32,7 +32,7 @@ extension TranscriptCodecRegistry {
     /// |---|---|---|
     /// | Claude Code | yes | yes |
     /// | Codex CLI | yes | yes |
-    /// | Antigravity | yes | no — its state is undocumented protobuf |
+    /// | Antigravity | yes | yes — via a reverse-engineered format, see `FORMAT.md` |
     /// | OpenCode | no — no supported way to release a session | yes |
     static func flotilla(
         commandRunner: any CommandRunning = ProcessCommandRunner(),
@@ -64,6 +64,7 @@ extension TranscriptCodecRegistry {
             writers: [
                 ClaudeTranscriptCodec(),
                 CodexTranscriptCodec(),
+                AntigravityTranscriptCodec(),
                 openCode
             ]
         )

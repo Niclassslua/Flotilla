@@ -22,13 +22,14 @@ public struct TranscriptCodecRegistry: Sendable {
 
     /// The codecs Flotilla ships with.
     ///
-    /// Antigravity appears only in `readers`, permanently: its resume state is
-    /// protobuf in a per-conversation SQLite database with no published schema,
-    /// so a session can be escaped from it but never moved into it. OpenCode is
-    /// absent from both pending its HTTP session API.
+    /// Antigravity is both a source and a target — see
+    /// `AntigravityTranscriptCodec`'s doc comment and `FORMAT.md` alongside it
+    /// for how an undocumented, reverse-engineered format backs both
+    /// directions. OpenCode is absent from `readers` pending its HTTP session
+    /// API.
     public static let `default` = TranscriptCodecRegistry(
         readers: [ClaudeTranscriptCodec(), CodexTranscriptCodec(), AntigravityTranscriptCodec()],
-        writers: [ClaudeTranscriptCodec(), CodexTranscriptCodec()]
+        writers: [ClaudeTranscriptCodec(), CodexTranscriptCodec(), AntigravityTranscriptCodec()]
     )
 
     public func reader(for agent: AgentKind) -> (any TranscriptReading)? {

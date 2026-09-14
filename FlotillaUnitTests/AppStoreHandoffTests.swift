@@ -224,7 +224,11 @@ final class AppStoreHandoffTests: XCTestCase {
         let targets = store.handoffTargets(for: session)
         XCTAssertTrue(targets.contains(.codexCLI))
         XCTAssertFalse(targets.contains(.claudeCode), "moving to the agent already running it is a restart")
-        XCTAssertFalse(targets.contains(.antigravity), "no writer, so never a destination")
+        // This test's registry only registers Claude and Codex (see
+        // `handoffService(processManager:)` above) — Antigravity has a writer
+        // in the shipping registry now (`AntigravityTranscriptCodec`), but not
+        // in this deliberately scoped-down one.
+        XCTAssertFalse(targets.contains(.antigravity), "not registered in this test's registry")
     }
 
     func testHandoffWithNoTranscriptReportsWhyInsteadOfMovingTheSession() async throws {

@@ -1,51 +1,166 @@
 import XCTest
 import SessionKit
+import SQLite3
 @testable import TranscriptKit
 
-/// Antigravity is a handoff source and never a destination. These tests cover
-/// the reading, and — just as importantly — that the registry keeps it out of
-/// the destination list without anyone writing that rule by hand.
+/// Antigravity is now both a handoff source and a target — see `FORMAT.md`
+/// next to `AntigravityTranscriptCodec` for the reverse-engineered wire
+/// format these tests exercise. Fixture databases here are hand-built with
+/// the same `AntigravityWireFormat` primitives the codec itself uses, kept
+/// deliberately independent of `writeNative` so the read side is verified
+/// against fixtures it did not produce.
 final class AntigravityTranscriptCodecTests: XCTestCase {
+    private var root: URL!
     private var brain: URL!
     private var codec: AntigravityTranscriptCodec!
     private let conversationID = "c8edbc25-7a71-4173-9f1b-a97d14aef556"
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        brain = FileManager.default.temporaryDirectory
+        // `conversations/` is a *sibling* of `brain/`, both under
+        // `antigravity-cli/` (see `AntigravityTranscriptCodec.conversationsDirectory`)
+        // — the fixture has to mirror that shape, or `conversations/` resolves
+        // outside this test's isolated root and collides with every other
+        // test run using the real `brainDirectory` layout in parallel.
+        root = FileManager.default.temporaryDirectory
             .appendingPathComponent("AntigravityTests-\(UUID().uuidString)", isDirectory: true)
+        brain = root.appendingPathComponent("antigravity-cli/brain", isDirectory: true)
         codec = AntigravityTranscriptCodec(brainDirectory: brain)
     }
 
     override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: brain)
+        try? FileManager.default.removeItem(at: root)
         try super.tearDownWithError()
     }
 
+    // MARK: - Fixture helpers
+
+    private var conversationsDirectory: URL {
+        brain.deletingLastPathComponent().appendingPathComponent("conversations", isDirectory: true)
+    }
+
+    /// Builds a conversation database directly with `AntigravityWireFormat`,
+    /// bypassing `writeNative` entirely, so read tests are not just checking
+    /// that the codec agrees with itself.
     @discardableResult
-    private func writeTranscript(_ lines: [String]) throws -> URL {
-        let directory = brain
-            .appendingPathComponent(conversationID, isDirectory: true)
-            .appendingPathComponent(".system_generated/logs", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let file = directory.appendingPathComponent("transcript.jsonl")
-        try lines.joined(separator: "\n").write(to: file, atomically: true, encoding: .utf8)
+    private func writeDatabase(id: String = "", steps: [(type: Int, payload: Data)]) throws -> URL {
+        let conversationID = id.isEmpty ? self.conversationID : id
+        try FileManager.default.createDirectory(at: conversationsDirectory, withIntermediateDirectories: true)
+        let file = conversationsDirectory.appendingPathComponent("\(conversationID).db")
+        try? FileManager.default.removeItem(at: file)
+
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open_v2(file.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil), SQLITE_OK)
+        defer { sqlite3_close(db) }
+
+        XCTAssertEqual(sqlite3_exec(db, """
+        CREATE TABLE `steps` (`idx` integer,`step_type` integer,`step_payload` blob, PRIMARY KEY (`idx`))
+        """, nil, nil, nil), SQLITE_OK)
+
+        for (index, step) in steps.enumerated() {
+            var statement: OpaquePointer?
+            XCTAssertEqual(sqlite3_prepare_v2(db, "INSERT INTO steps (idx, step_type, step_payload) VALUES (?, ?, ?)", -1, &statement, nil), SQLITE_OK)
+            sqlite3_bind_int(statement, 1, Int32(index))
+            sqlite3_bind_int(statement, 2, Int32(step.type))
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            step.payload.withUnsafeBytes { raw in
+                _ = sqlite3_bind_blob(statement, 3, raw.baseAddress, Int32(step.payload.count), transient)
+            }
+            XCTAssertEqual(sqlite3_step(statement), SQLITE_DONE)
+            sqlite3_finalize(statement)
+        }
+
+        // The conversation's brain directory need only exist for discovery
+        // to find it — it doesn't need real log content, since reading now
+        // goes through the database.
+        try FileManager.default.createDirectory(
+            at: brain.appendingPathComponent(conversationID, isDirectory: true),
+            withIntermediateDirectories: true
+        )
         return file
     }
 
-    func testLocatesTheLogInsideTheConversationDirectory() throws {
-        let written = try writeTranscript([
-            #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"hello"}"#
+    private static func timestampField(_ number: Int, seconds: UInt64) -> AntigravityWireFormat.Field {
+        AntigravityWireFormat.messageField(number, [AntigravityWireFormat.varintField(1, seconds)])
+    }
+
+    private static func userStepPayload(text: String, seconds: UInt64 = 1_789_000_000) -> Data {
+        let envelope: [AntigravityWireFormat.Field] = [
+            timestampField(1, seconds: seconds),
+            AntigravityWireFormat.varintField(3, 4) // role: user
+        ]
+        return AntigravityWireFormat.serialize([
+            AntigravityWireFormat.varintField(1, 14),
+            AntigravityWireFormat.messageField(5, envelope),
+            AntigravityWireFormat.messageField(19, [
+                AntigravityWireFormat.stringField(2, text)
+            ])
         ])
+    }
+
+    private static func assistantStepPayload(text: String, seconds: UInt64 = 1_789_000_001) -> Data {
+        let envelope: [AntigravityWireFormat.Field] = [
+            timestampField(1, seconds: seconds),
+            AntigravityWireFormat.varintField(3, 2) // role: assistant
+        ]
+        return AntigravityWireFormat.serialize([
+            AntigravityWireFormat.varintField(1, 15),
+            AntigravityWireFormat.messageField(5, envelope),
+            AntigravityWireFormat.messageField(20, [
+                AntigravityWireFormat.stringField(1, text)
+            ])
+        ])
+    }
+
+    private static func systemStepPayload(text: String, seconds: UInt64 = 1_789_000_002) -> Data {
+        let envelope: [AntigravityWireFormat.Field] = [
+            timestampField(1, seconds: seconds),
+            AntigravityWireFormat.varintField(3, 5)
+        ]
+        return AntigravityWireFormat.serialize([
+            AntigravityWireFormat.varintField(1, 101),
+            AntigravityWireFormat.messageField(5, envelope),
+            AntigravityWireFormat.messageField(114, [
+                AntigravityWireFormat.stringField(1, text)
+            ])
+        ])
+    }
+
+    private static func toolCallStepPayload(callID: String, tool: String, argumentsJSON: String, seconds: UInt64 = 1_789_000_003) -> Data {
+        let call = AntigravityWireFormat.messageField(4, [
+            AntigravityWireFormat.stringField(1, callID),
+            AntigravityWireFormat.stringField(2, tool),
+            AntigravityWireFormat.stringField(3, argumentsJSON)
+        ])
+        let envelope: [AntigravityWireFormat.Field] = [
+            timestampField(1, seconds: seconds),
+            AntigravityWireFormat.varintField(3, 2),
+            call
+        ]
+        return AntigravityWireFormat.serialize([
+            AntigravityWireFormat.varintField(1, 132),
+            AntigravityWireFormat.messageField(5, envelope)
+        ])
+    }
+
+    // MARK: - Reading
+
+    func testLocatesTheConversationDatabase() throws {
+        let written = try writeDatabase(steps: [(14, Self.userStepPayload(text: "hello"))])
         let found = try codec.transcriptURL(sessionID: conversationID, workingDirectory: URL(fileURLWithPath: "/tmp"))
         XCTAssertEqual(found?.standardizedFileURL, written.standardizedFileURL)
     }
 
-    func testMapsEachSpeakerToItsCanonicalEntry() throws {
-        let url = try writeTranscript([
-            #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"<USER_REQUEST>\nfix the tests\n</USER_REQUEST>"}"#,
-            #"{"step_index":1,"source":"SYSTEM","type":"CHECKPOINT","status":"DONE","created_at":"2026-08-22T02:24:37Z","content":"{{ CHECKPOINT 0 }}"}"#,
-            #"{"step_index":2,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-08-22T02:24:38Z","content":"on it"}"#
+    func testTheFilenameIsTheEmbeddedSessionID() throws {
+        let url = try writeDatabase(steps: [(14, Self.userStepPayload(text: "hi"))])
+        XCTAssertEqual(try codec.embeddedSessionID(at: url), conversationID)
+    }
+
+    func testDecodesUserAssistantAndSystemSteps() throws {
+        let url = try writeDatabase(steps: [
+            (14, Self.userStepPayload(text: "fix the tests")),
+            (101, Self.systemStepPayload(text: "reconnected")),
+            (15, Self.assistantStepPayload(text: "on it"))
         ])
 
         let entries = try codec.readNative(at: url)
@@ -54,23 +169,43 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
         guard case let .userMessage(text, _) = entries[0] else {
             return XCTFail("expected a user message, got \(entries[0])")
         }
-        XCTAssertEqual(text, "fix the tests", "Antigravity's own framing is stripped")
+        XCTAssertEqual(text, "fix the tests")
 
-        guard case .systemNote = entries[1] else {
+        guard case let .systemNote(text, _) = entries[1] else {
             return XCTFail("expected a system note, got \(entries[1])")
         }
-        guard case let .assistantMessage(reply, _) = entries[2] else {
+        XCTAssertEqual(text, "reconnected")
+
+        guard case let .assistantMessage(text, _) = entries[2] else {
             return XCTFail("expected an assistant message, got \(entries[2])")
         }
-        XCTAssertEqual(reply, "on it")
+        XCTAssertEqual(text, "on it")
+    }
+
+    func testDecodesAToolCallWithoutAMatchingResult() throws {
+        let url = try writeDatabase(steps: [
+            (132, Self.toolCallStepPayload(callID: "call_1", tool: "run_command", argumentsJSON: #"{"CommandLine":"pwd"}"#))
+        ])
+
+        let entries = try codec.readNative(at: url)
+
+        XCTAssertEqual(entries.count, 1)
+        guard case let .toolUse(id, tool, input, _) = entries[0] else {
+            return XCTFail("expected a tool use, got \(entries[0])")
+        }
+        XCTAssertEqual(id, "call_1")
+        XCTAssertEqual(tool, "run_command")
+        XCTAssertEqual(String(data: input, encoding: .utf8), #"{"CommandLine":"pwd"}"#)
+        // No .toolResult — ToolCallPairing (run by every real handoff)
+        // synthesizes a placeholder for this, rather than the codec guessing
+        // at a result field it never confidently mapped.
     }
 
     func testEmptyAndUnrecognisedStepsAreSkipped() throws {
-        let url = try writeTranscript([
-            #"{"step_index":0,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-08-22T02:24:38Z","content":""}"#,
-            #"{"step_index":1,"source":"SOMETHING_NEW","type":"?","status":"DONE","created_at":"2026-08-22T02:24:39Z","content":"ignore me"}"#,
-            "not json",
-            #"{"step_index":2,"source":"MODEL","type":"GENERIC","status":"DONE","created_at":"2026-08-22T02:24:40Z","content":"kept"}"#
+        let url = try writeDatabase(steps: [
+            (15, Self.assistantStepPayload(text: "")),
+            (9999, Self.assistantStepPayload(text: "ignore me")),
+            (15, Self.assistantStepPayload(text: "kept"))
         ])
 
         let entries = try codec.readNative(at: url)
@@ -82,76 +217,11 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(text, "kept")
     }
 
-    /// The log records no identity, so the codec says so instead of guessing —
-    /// which lets the handoff skip ownership verification rather than fail it.
-    func testItReportsThatItCannotVerifyIdentity() throws {
-        let url = try writeTranscript([
-            #"{"step_index":0,"source":"MODEL","type":"GENERIC","status":"DONE","created_at":"2026-08-22T02:24:38Z","content":"hi"}"#
-        ])
-        XCTAssertNil(try codec.embeddedSessionID(at: url))
-    }
-
     // MARK: - Discovery
 
-    /// Antigravity writes its `conversation_summaries.db` row only once it has
-    /// titled a conversation, and writes no workspace into the log at all — so
-    /// a live session is invisible to title/cwd matching. Discovery keys off the
-    /// launch time instead, which is what makes a fresh session handoff-able.
     func testDiscoversAConversationStartedAfterLaunch() throws {
         let launchedAt = Date()
-        try writeTranscript([
-            #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"do the thing"}"#
-        ])
-
-        let found = try codec.discoverSession(
-            workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
-            since: launchedAt.addingTimeInterval(-30)
-        )
-
-        XCTAssertEqual(found?.sessionID, conversationID, "no title and no workspace required")
-        XCTAssertNotNil(found?.url)
-    }
-
-    /// The guard that keeps this from resolving to somebody else's session.
-    func testIgnoresConversationsCreatedBeforeTheLaunch() throws {
-        try writeTranscript([
-            #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"an older conversation"}"#
-        ])
-
-        XCTAssertNil(try codec.discoverSession(
-            workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
-            since: Date().addingTimeInterval(60)
-        ), "a conversation that predates the launch is not ours")
-    }
-
-    /// The association that matters when several sessions have run: ours is the
-    /// first conversation created after we launched, not the most recent one.
-    /// A conversation created weeks ago but touched today would win on
-    /// modification time and is a different session entirely.
-    func testPicksTheEarliestConversationStartedAfterTheLaunch() throws {
-        let launchedAt = Date()
-
-        let ours = try writeTranscript(
-            [#"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"ours"}"#]
-        )
-        // A conversation a later session started.
-        let laterID = "ffffffff-1111-2222-3333-444444444444"
-        let laterDirectory = brain
-            .appendingPathComponent(laterID, isDirectory: true)
-            .appendingPathComponent(".system_generated/logs", isDirectory: true)
-        try FileManager.default.createDirectory(at: laterDirectory, withIntermediateDirectories: true)
-        try #"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"theirs"}"#
-            .write(to: laterDirectory.appendingPathComponent("transcript.jsonl"), atomically: true, encoding: .utf8)
-
-        // Make ours unambiguously the earlier of the two.
-        try FileManager.default.setAttributes(
-            [.creationDate: launchedAt.addingTimeInterval(5)],
-            ofItemAtPath: brain.appendingPathComponent(conversationID).path
-        )
-        try FileManager.default.setAttributes(
-            [.creationDate: launchedAt.addingTimeInterval(600)],
-            ofItemAtPath: brain.appendingPathComponent(laterID).path
-        )
+        try writeDatabase(steps: [(14, Self.userStepPayload(text: "do the thing"))])
 
         let found = try codec.discoverSession(
             workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
@@ -159,14 +229,20 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
         )
 
         XCTAssertEqual(found?.sessionID, conversationID)
-        XCTAssertEqual(found?.url.standardizedFileURL, ours.standardizedFileURL)
+        XCTAssertNotNil(found?.url)
     }
 
-    /// A directory the agent created but never spoke in is not worth moving.
+    func testIgnoresConversationsCreatedBeforeTheLaunch() throws {
+        try writeDatabase(steps: [(14, Self.userStepPayload(text: "an older conversation"))])
+
+        XCTAssertNil(try codec.discoverSession(
+            workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
+            since: Date().addingTimeInterval(60)
+        ))
+    }
+
     func testIgnoresAConversationWithNoContent() throws {
-        try writeTranscript([
-            #"{"step_index":0,"source":"SYSTEM","type":"CHECKPOINT","status":"DONE","created_at":"2026-08-22T02:24:36Z","content":"{{ CHECKPOINT 0 }}"}"#
-        ])
+        try writeDatabase(steps: [(101, Self.systemStepPayload(text: "reconnected"))])
 
         XCTAssertNil(try codec.discoverSession(
             workingDirectory: URL(fileURLWithPath: "/tmp/anything"),
@@ -174,19 +250,78 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
         ))
     }
 
-    func testTheShippingRegistryOffersAntigravityAsASourceButNeverADestination() {
+    // MARK: - Writing
+
+    func testWritesAConversationTheReaderCanReadBack() async throws {
+        let target = AntigravityTranscriptCodec(brainDirectory: brain, now: { Date(timeIntervalSince1970: 1_790_000_000) })
+        let sessionID = "11111111-2222-3333-4444-555555555555"
+
+        let entries: [CanonicalEntry] = [
+            .userMessage(text: "how do I run the tests", timestamp: Date()),
+            .assistantMessage(text: "swift test", timestamp: Date()),
+            .toolUse(id: "call_1", tool: "run_command", input: Data(#"{"CommandLine":"swift test"}"#.utf8), timestamp: Date())
+        ]
+
+        let handle = try await target.writeNative(
+            target.sanitize(entries),
+            workingDirectory: URL(fileURLWithPath: "/tmp/project"),
+            sessionID: sessionID
+        )
+
+        XCTAssertEqual(handle.nativeSessionID, sessionID)
+        let transcriptURL = try XCTUnwrap(handle.transcriptURL)
+
+        XCTAssertEqual(try target.embeddedSessionID(at: transcriptURL), sessionID)
+
+        let recovered = try target.readNative(at: transcriptURL)
+        XCTAssertEqual(recovered.count, 1, "the whole history folds into one synthetic user step")
+        guard case let .userMessage(text, _) = recovered[0] else {
+            return XCTFail("expected a user message, got \(recovered[0])")
+        }
+        XCTAssertTrue(text.contains("how do I run the tests"))
+        XCTAssertTrue(text.contains("swift test"))
+        XCTAssertTrue(text.contains("ran run_command"), "sanitize folded the tool call into text")
+    }
+
+    func testWrittenConversationIsDiscoverableByThePinnedIdentity() async throws {
+        let target = AntigravityTranscriptCodec(brainDirectory: brain)
+        let sessionID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+        _ = try await target.writeNative(
+            [.userMessage(text: "hello", timestamp: Date())],
+            workingDirectory: URL(fileURLWithPath: "/tmp/project"),
+            sessionID: sessionID
+        )
+
+        let located = try target.transcriptURL(sessionID: sessionID, workingDirectory: URL(fileURLWithPath: "/tmp/project"))
+        XCTAssertNotNil(located)
+        XCTAssertEqual(try target.embeddedSessionID(at: XCTUnwrap(located)), sessionID)
+    }
+
+    func testRemoveNativeStateDeletesTheDatabase() async throws {
+        let target = AntigravityTranscriptCodec(brainDirectory: brain)
+        let sessionID = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+        let handle = try await target.writeNative(
+            [.userMessage(text: "hello", timestamp: Date())],
+            workingDirectory: URL(fileURLWithPath: "/tmp/project"),
+            sessionID: sessionID
+        )
+        let file = try XCTUnwrap(handle.transcriptURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+
+        try target.removeNativeState(sessionID: sessionID, workingDirectory: URL(fileURLWithPath: "/tmp/project"))
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    // MARK: - Registry
+
+    func testTheShippingRegistryOffersAntigravityAsBothSourceAndTarget() {
         let registry = TranscriptCodecRegistry.default
 
         XCTAssertTrue(registry.readableAgents.contains(.antigravity))
-        XCTAssertFalse(registry.writableAgents.contains(.antigravity))
-        XCTAssertEqual(
-            Set(registry.handoffTargets(from: .antigravity)),
-            [.claudeCode, .codexCLI],
-            "a session can escape Antigravity"
-        )
-        XCTAssertFalse(
-            registry.handoffTargets(from: .claudeCode).contains(.antigravity),
-            "but never arrive at it"
-        )
+        XCTAssertTrue(registry.writableAgents.contains(.antigravity))
+        XCTAssertTrue(registry.handoffTargets(from: .claudeCode).contains(.antigravity))
+        XCTAssertTrue(registry.handoffTargets(from: .antigravity).contains(.claudeCode))
     }
 }

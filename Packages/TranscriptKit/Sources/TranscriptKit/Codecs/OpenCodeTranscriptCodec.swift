@@ -11,9 +11,10 @@ import SessionKit
 /// they own the same conversation. Rather than write into a live server's
 /// database behind its back, this codec only ever adds.
 ///
-/// The exact mirror of ``AntigravityTranscriptCodec``, which can only be read.
-/// Between them they are the reason ``TranscriptReading`` and
-/// ``TranscriptWriting`` are separate protocols.
+/// This is why ``TranscriptReading`` and ``TranscriptWriting`` are separate
+/// protocols: this codec is a target and never a source. (``AntigravityTranscriptCodec``
+/// used to be the mirror image — source-only — until its write path was
+/// reverse-engineered too; see `FORMAT.md` alongside it.)
 public struct OpenCodeTranscriptCodec: TranscriptWriting {
     public let agent: AgentKind = .openCode
 

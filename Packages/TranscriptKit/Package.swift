@@ -13,7 +13,8 @@ let package = Package(
     targets: [
         .target(
             name: "TranscriptKit",
-            dependencies: ["SessionKit"]
+            dependencies: ["SessionKit"],
+            exclude: ["Codecs/Antigravity/FORMAT.md"]
         )
     ]
 )
