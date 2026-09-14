@@ -73,8 +73,9 @@ public enum AgentEffort: String, Codable, CaseIterable, Sendable, Identifiable {
 ///
 /// Planning mode constrains the agent to reading and proposing rather than
 /// making changes. Each CLI expresses this differently: Claude Code uses
-/// `--permission-mode plan`, Antigravity uses `--mode plan`, and Codex CLI
-/// receives a `/plan` prefix on its initial goal via `initialInput`.
+/// `--permission-mode plan`, Antigravity uses `--mode plan`, OpenCode uses
+/// `--agent plan`, and Codex CLI receives a `/plan` prefix on its initial
+/// goal via `initialInput`.
 public enum SessionMode: String, Codable, Sendable, Equatable, CaseIterable, Identifiable {
     case act
     case plan

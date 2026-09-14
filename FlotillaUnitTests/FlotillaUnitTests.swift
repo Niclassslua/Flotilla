@@ -279,6 +279,78 @@ final class AgentProviderTests: XCTestCase {
         XCTAssertNil(plan.initialInput)
     }
 
+    func testOpenCodeLaunchPlanWithPlanModeUsesAgentFlag() {
+        let provider = AgentProviderRegistry().provider(for: .openCode)
+        let plan = provider.launchPlan(
+            goal: "Refactor database migrations",
+            model: "opencode/deepseek-v4-flash-free",
+            mode: .plan,
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [
+            "--model", "opencode/deepseek-v4-flash-free",
+            "--agent", "plan",
+            "--prompt", "Refactor database migrations"
+        ])
+        XCTAssertNil(plan.initialInput)
+    }
+
+    func testClaudeLaunchPlanWithPlanModeUsesPermissionMode() {
+        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let plan = provider.launchPlan(
+            goal: "Refactor database migrations",
+            model: "sonnet",
+            mode: .plan,
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [
+            "--model", "sonnet",
+            "--permission-mode", "plan",
+            "Refactor database migrations"
+        ])
+        XCTAssertNil(plan.initialInput)
+    }
+
+    func testAntigravityLaunchPlanWithPlanModeUsesModeFlag() {
+        let provider = AgentProviderRegistry().provider(for: .antigravity)
+        let plan = provider.launchPlan(
+            goal: "Refactor database migrations",
+            model: "gemini-3.7-flash-high",
+            mode: .plan,
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [
+            "--model", "gemini-3.7-flash-high",
+            "--mode", "plan",
+            "--prompt-interactive", "Refactor database migrations"
+        ])
+        XCTAssertNil(plan.initialInput)
+    }
+
+    func testCodexLaunchPlanWithPlanModeDeliversViaInitialInput() {
+        let provider = AgentProviderRegistry().provider(for: .codexCLI)
+        let plan = provider.launchPlan(
+            goal: "Refactor database migrations",
+            model: "gpt-5.5",
+            mode: .plan,
+            resumeIntent: .none,
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, ["--model", "gpt-5.5"])
+        XCTAssertEqual(plan.initialInput, "/plan Refactor database migrations\n".data(using: .utf8))
+    }
+
     func testLaunchPlanOmitsPromptFlagWhenGoalIsNilOrBlank() {
         let provider = AgentProviderRegistry().provider(for: .claudeCode)
         let planWithNil = provider.launchPlan(

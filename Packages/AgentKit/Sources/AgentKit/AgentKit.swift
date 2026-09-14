@@ -183,7 +183,7 @@ public struct CLIAgentProvider: AgentProviding {
             case .antigravity:
                 arguments += ["--mode", "plan"]
             case .openCode:
-                arguments += ["--mode", "plan"]
+                arguments += ["--agent", "plan"]
             case .codexCLI:
                 break
             }
