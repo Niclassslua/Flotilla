@@ -1,6 +1,6 @@
 import Foundation
 import SessionKit
-import TranscriptKit
+import CompanionKit
 
 /// The prototype's fixture fleet: a reachable Mac with sessions spanning every
 /// status and waiting reason, and an unreachable one with cached sessions.
@@ -43,8 +43,8 @@ struct MockFixtures {
 
         var fixtures = MockFixtures(
             macs: [
-                MacHost(id: MacID.studio, name: "Studio", isReachable: true, lastSeen: now),
-                MacHost(id: MacID.macBook, name: "MacBook Pro", isReachable: false, lastSeen: min(lastSeen, ago(5))),
+                MacHost(id: MacID.studio, name: "Studio", connection: .connected(path: .lan, address: "192.168.1.20"), lastSeen: now),
+                MacHost(id: MacID.macBook, name: "MacBook Pro", connection: .unreachable, lastSeen: min(lastSeen, ago(5))),
             ],
             sessionsByMac: [:],
             projectsByMac: [
@@ -224,7 +224,7 @@ struct TranscriptBuilder {
 
     /// A tool call; `output: nil` leaves it running.
     mutating func tool(_ tool: String, _ input: [String: String], output: String?, isError: Bool = false, id: String = UUID().uuidString) {
-        transcript.append(.toolUse(id: id, tool: tool, input: MockFixtures.json(input), timestamp: tick()))
+        transcript.append(.toolUse(id: id, tool: tool, input: input, timestamp: tick()))
         if let output {
             transcript.append(.toolResult(toolUseID: id, output: output, isError: isError, timestamp: tick()))
         }
@@ -237,10 +237,6 @@ struct TranscriptBuilder {
 }
 
 extension MockFixtures {
-    static func json(_ input: [String: String]) -> Data {
-        (try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys])) ?? Data()
-    }
-
     // MARK: - Canned content
 
     static let sampleReply = """

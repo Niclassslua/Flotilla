@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 import SessionKit
-import TranscriptKit
+import CompanionKit
 
 /// Simulated Macs for the UI prototype. Intents behave plausibly — a prompt
 /// starts a turn that streams at the provider's granularity, an answer
@@ -43,7 +43,17 @@ final class MockCompanionDataSource: CompanionDataSource {
     // MARK: - Reads
 
     func sessions(on macID: MacHost.ID) -> [CompanionSession] {
-        sessionsByMac[macID] ?? []
+        (sessionsByMac[macID] ?? []).map(Self.withDemoHandoffTargets)
+    }
+
+    /// Mirrors the Mac's codec matrix: Antigravity can't be written to, and
+    /// OpenCode can't be read from.
+    static func withDemoHandoffTargets(_ session: CompanionSession) -> CompanionSession {
+        var session = session
+        if session.handoffTargets.isEmpty, session.agent != .openCode {
+            session.handoffTargets = AgentKind.allCases.filter { $0 != session.agent && $0 != .antigravity }
+        }
+        return session
     }
 
     func projects(on macID: MacHost.ID) -> [ProjectSummary] {
@@ -55,7 +65,7 @@ final class MockCompanionDataSource: CompanionDataSource {
     }
 
     func session(_ id: CompanionSession.ID) -> CompanionSession? {
-        sessionsByMac.values.lazy.flatMap { $0 }.first { $0.id == id }
+        sessionsByMac.values.lazy.flatMap { $0 }.first { $0.id == id }.map(Self.withDemoHandoffTargets)
     }
 
     func macID(for sessionID: CompanionSession.ID) -> MacHost.ID? {
@@ -70,16 +80,39 @@ final class MockCompanionDataSource: CompanionDataSource {
         pending[sessionID] ?? []
     }
 
-    func diff(for sessionID: CompanionSession.ID) -> [FileDiff] {
-        diffs[sessionID] ?? []
+    var supportsPairing: Bool { false }
+
+    func diff(for sessionID: CompanionSession.ID, commitHash: String?) -> Remote<[FileDiff]> {
+        if let commitHash {
+            return .loaded(commitsBySession[sessionID]?.first { $0.hash == commitHash }?.files ?? [])
+        }
+        return .loaded(diffs[sessionID] ?? [])
     }
 
-    func commits(for sessionID: CompanionSession.ID) -> [CommitSummary] {
-        commitsBySession[sessionID] ?? []
+    func commits(for sessionID: CompanionSession.ID) -> Remote<[CommitSummary]> {
+        .loaded(commitsBySession[sessionID] ?? [])
     }
 
-    func fileContents(at path: String, in sessionID: CompanionSession.ID) -> String? {
-        files[path]
+    func fileContents(at path: String, in sessionID: CompanionSession.ID) -> Remote<String?> {
+        .loaded(files[path])
+    }
+
+    func loadDiff(for sessionID: CompanionSession.ID, commitHash: String?) async {}
+    func loadCommits(for sessionID: CompanionSession.ID) async {}
+    func loadFile(at path: String, in sessionID: CompanionSession.ID) async {}
+    func focus(on sessionID: CompanionSession.ID?) {}
+    func setActive(_ isActive: Bool) {}
+
+    func pair(with payload: PairingPayload, progress: @escaping @MainActor (ConnectTarget, AttemptStatus) -> Void) async throws -> MacHost.ID {
+        throw CompanionActionError(message: "The demo can't pair with a Mac. Launch the app without -demo.")
+    }
+
+    func removeMac(_ macID: MacHost.ID) {
+        macs.removeAll { $0.id == macID }
+    }
+
+    func reconnect(_ macID: MacHost.ID) {
+        setReachable(true, macID: macID)
     }
 
     // MARK: - Intents
@@ -88,7 +121,7 @@ final class MockCompanionDataSource: CompanionDataSource {
         _ interactionID: PendingInteraction.ID,
         in sessionID: CompanionSession.ID,
         with answer: InteractionAnswer
-    ) async -> AnswerOutcome {
+    ) async throws -> AnswerOutcome {
         guard var list = pending[sessionID], let index = list.firstIndex(where: { $0.id == interactionID }) else {
             return .alreadyAnswered
         }
@@ -144,7 +177,7 @@ final class MockCompanionDataSource: CompanionDataSource {
         return .accepted
     }
 
-    func sendPrompt(_ text: String, to sessionID: CompanionSession.ID) async {
+    func sendPrompt(_ text: String, to sessionID: CompanionSession.ID) async throws {
         acknowledgeReview(sessionID)
         guard let session = session(sessionID) else { return }
         if session.status == .working {
@@ -156,7 +189,7 @@ final class MockCompanionDataSource: CompanionDataSource {
         startReplyTurn(sessionID)
     }
 
-    func stop(_ sessionID: CompanionSession.ID) async {
+    func stop(_ sessionID: CompanionSession.ID) async throws {
         mutateTranscript(sessionID) { $0.isStopping = true }
         try? await Task.sleep(for: stopDelay)
         cancelTurn(sessionID)
@@ -170,7 +203,7 @@ final class MockCompanionDataSource: CompanionDataSource {
         mutateSession(sessionID) { $0.status = .readyForReview }
     }
 
-    func createSession(_ request: NewSessionRequest, on macID: MacHost.ID) async -> CompanionSession.ID {
+    func createSession(_ request: NewSessionRequest, on macID: MacHost.ID) async throws -> CompanionSession.ID {
         let title = Self.title(from: request.goal)
         let session = CompanionSession(
             id: UUID(),
@@ -195,11 +228,11 @@ final class MockCompanionDataSource: CompanionDataSource {
         return session.id
     }
 
-    func handoff(_ sessionID: CompanionSession.ID, _ request: HandoffRequest) async {
+    func handoff(_ sessionID: CompanionSession.ID, _ request: HandoffRequest) async throws {
         guard let session = session(sessionID) else { return }
         cancelTurn(sessionID)
         mutateTranscript(sessionID) {
-            $0.append(.handoffMarker(from: session.agent, to: request.agent, reason: request.note, timestamp: .now))
+            $0.append(.handoff(from: session.agent, to: request.agent, timestamp: .now))
         }
         mutateSession(sessionID) {
             $0.agent = request.agent
@@ -213,7 +246,7 @@ final class MockCompanionDataSource: CompanionDataSource {
         startReplyTurn(sessionID)
     }
 
-    func restart(_ sessionID: CompanionSession.ID) async {
+    func restart(_ sessionID: CompanionSession.ID) async throws {
         mutateSession(sessionID) {
             $0.crashReason = nil
             $0.isProcessLive = true
@@ -222,7 +255,7 @@ final class MockCompanionDataSource: CompanionDataSource {
         startReplyTurn(sessionID)
     }
 
-    func delete(_ sessionID: CompanionSession.ID, removeWorktree: Bool) async {
+    func delete(_ sessionID: CompanionSession.ID, removeWorktree: Bool) async throws {
         cancelTurn(sessionID)
         for macID in sessionsByMac.keys {
             sessionsByMac[macID]?.removeAll { $0.id == sessionID }
@@ -254,7 +287,7 @@ final class MockCompanionDataSource: CompanionDataSource {
     func setReachable(_ reachable: Bool, macID: MacHost.ID) {
         guard let index = macs.firstIndex(where: { $0.id == macID }) else { return }
         if !reachable { macs[index].lastSeen = .now }
-        macs[index].isReachable = reachable
+        macs[index].connection = reachable ? .connected(path: .lan, address: "192.168.1.20") : .unreachable
     }
 
     /// Raises a card and moves the session to waiting.

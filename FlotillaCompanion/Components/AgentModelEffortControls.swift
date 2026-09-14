@@ -1,6 +1,7 @@
 import SwiftUI
 import SessionKit
 import DesignSystem
+import CompanionKit
 
 /// Agent, model, and effort pickers shared by create session and handoff.
 /// Meant to sit inside a `Form`.

@@ -1,6 +1,7 @@
 import SwiftUI
 import SessionKit
 import DesignSystem
+import CompanionKit
 
 /// The one place anything that needs the user appears.
 ///
@@ -27,7 +28,7 @@ struct ComposerSlot: View {
             } else if session.status == .crashed {
                 CrashedCard(sessionID: session.id, reason: session.crashReason, isActionable: isActionable)
             } else {
-                if session.status == .readyForReview, !session.reviewAcknowledged, let stat = session.diffStat, stat.files > 0 {
+                if session.status == .readyForReview, !session.reviewAcknowledged, let stat = session.diffStat, stat.hasChanges {
                     ReviewChangesCard(sessionID: session.id, stat: stat)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -268,7 +269,7 @@ private struct ReviewChangesCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Ready for review")
                     .font(.subheadline.weight(.semibold))
-                Text(stat.summary)
+                Text(stat.compactSummary)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(FlotillaColors.textSecondary)
             }

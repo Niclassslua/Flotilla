@@ -6,7 +6,7 @@
 
 Flotilla is a macOS SwiftUI application that serves as a local command center for running multiple coding agent sessions simultaneously (Claude Code, Codex CLI, OpenCode). It provides integrated terminal emulation, git worktree management, session lifecycle tracking, and a dark, keyboard-first developer UI.
 
-An iOS companion (`FlotillaCompanion`, see [`Ideas/mobile-companion/`](Ideas/mobile-companion/README.md)) lives in the same project. It is currently a UI prototype running entirely on simulated data (`MockCompanionDataSource`); only `SessionKit`, `TranscriptKit`, and `DesignSystem` are shared with it.
+An iOS companion (`FlotillaCompanion`) lives in the same project: a remote control for a running Flotilla, paired over the LAN or Tailscale with an end-to-end encrypted link hosted inside the Mac app (Settings ▸ iPhone Companion). Architecture, protocol, and every assumption are in [`docs/companion.md`](docs/companion.md). The companion shares `SessionKit`, `TranscriptKit`, `DesignSystem`, and `CompanionKit` with the Mac; its demo mode (`-demo`) runs on the fixture fleet.
 
 - **Platform:** macOS 26.0+ (companion: iOS 26.0+)
 - **Language:** Swift 6.0 (strict concurrency)
@@ -28,7 +28,9 @@ An iOS companion (`FlotillaCompanion`, see [`Ideas/mobile-companion/`](Ideas/mob
 | `make run` | Build and launch the app |
 | `make run-ephemeral` | Build and launch the full app without saving preferences |
 | `make build-companion` | Build the iOS companion for the simulator |
-| `make run-companion` | Build, install, and launch the companion in an iPhone simulator (`SCENARIO=<name>` boots into a scripted state, `SIMULATOR="iPhone 17"` picks the device) |
+| `make run-companion` | Build, install, and launch the companion in an iPhone simulator, talking to real Macs (`SIMULATOR="iPhone 17"` picks the device) |
+| `make run-companion-demo` | The companion on its fixture fleet; `SCENARIO=<name>` boots into a scripted state |
+| `make test-companion` | `CompanionKit` package tests and the iOS unit tests (built outside `~/Documents`, which simulator processes can't read) |
 | `make clean` | Remove build artifacts |
 | `xcodegen generate` | Regenerate `.xcodeproj` from `project.yml` |
 
@@ -49,20 +51,21 @@ Flotilla/
 │   │   ├── CommandPalette/        # CommandPaletteView, CommandPalettePanel
 │   │   ├── Settings/              # SettingsView, SettingsViewModel, Startup warning/checks
 │   │   └── FileBrowser/           # FileBrowserView, FileBrowserViewModel, WorkspaceFileServicing, icon helpers
-│   ├── Services/                  # SessionProcessManager, SessionMetadataMonitor, SessionScrollbackStore, HookCoordinator, WorkspaceRegistry, ActivityStore
+│   ├── Services/                  # SessionProcessManager, SessionMetadataMonitor, SessionScrollbackStore, HookCoordinator, WorkspaceRegistry, ActivityStore; Companion/ (CompanionHost, command router, Claude permission bridge)
 │   ├── Components/                # StatusBadge, MaterialFileIcon, AgentBrand, pickers
 │   └── Resources/                 # Assets.xcassets, MaterialIcons SVG catalog
-├── FlotillaCompanion/             # iOS companion (UI prototype on simulated data)
-│   ├── App/                       # CompanionApp, CompanionStore (navigation, reachability gating), Route
-│   ├── Model/                     # Companion-local types: MacHost, CompanionSession, PendingInteraction, ProviderCapabilities, transcript layout, diffs
-│   ├── Data/                      # CompanionDataSource protocol; Mock/ fixtures, streaming cadence, Scenario scripts
+├── FlotillaCompanion/             # iOS companion (remote control; docs/companion.md)
+│   ├── App/                       # CompanionApp (demo vs remote, opened pairing links), CompanionStore, Route
+│   ├── Model/                     # Phone-only types: MacHost + connection state, ProviderCapabilities, transcript layout
+│   ├── Data/                      # CompanionDataSource; Remote/ (MacConnection, pairing, LAN browser, diagnosis, persistence); Mock/ (demo fleet, scenarios)
 │   ├── Components/                # Session row, status dot, unreachable banner, agent/model/effort controls
-│   ├── Features/                  # Macs, Fleet, SessionDetail (transcript, composer slot, cards), CreateSession + Handoff, Diff/Commits/File, Settings
+│   ├── Features/                  # Macs, Pairing, Fleet, SessionDetail (transcript, composer slot, cards), CreateSession + Handoff, Diff/Commits/File, Settings
 │   └── Debug/                     # Scenario toolbar menu (DEBUG only)
+├── FlotillaCompanionTests/        # iOS unit tests (real loopback pairing against CompanionServer)
 ├── docs/                          # Long-form references (provider hooks, UI vocabulary)
 ├── FlotillaUnitTests/             # Unit and local integration tests, grouped by subsystem
 ├── FlotillaUITests/               # UI tests
-├── Packages/                      # 10 local Swift packages
+├── Packages/                      # 11 local Swift packages
 ├── project.yml                    # XcodeGen specification
 ├── Makefile                       # Build automation
 ├── .impeccable.md                 # Brand/design guidelines
@@ -77,6 +80,7 @@ Flotilla/
 | `docs/provider-hooks.md` | Per-provider hook wiring and the status-transition matrix |
 | `docs/commit-attribution.md` | Attribution modes, marker protocol, local persistence, rewrite matching, and limitations |
 | `docs/session-handoff.md` | Moving a live session between agents: the codec layer, the transaction, every agent's transcript format, and how to add a fifth agent |
+| `docs/companion.md` | iPhone companion: architecture, pairing handshake, protocol, error surfaces, and the assumptions made building it |
 | `docs/testing.md` | Testing policy: behavioral contracts, assertion quality, isolation, and choosing the right test layer |
 | `docs/test-suite-audit.md` | Dated test-value findings, cleanup priorities, and complete inventory link |
 | `.impeccable.md` | Brand and visual design guidelines |
@@ -205,9 +209,10 @@ PersistenceKit → SessionKit, GRDB.swift (external)
 TerminalKit    → ProcessKit, SwiftTerm (external)
 HooksKit       → SessionKit, ProcessKit
 TranscriptKit  → SessionKit
+CompanionKit   → SessionKit, TranscriptKit
 
 Flotilla (app)          → all packages
-FlotillaCompanion (iOS) → SessionKit, TranscriptKit, DesignSystem, Textual (external)
+FlotillaCompanion (iOS) → SessionKit, TranscriptKit, DesignSystem, CompanionKit, Textual (external)
 ```
 
 ### Package Reference
@@ -223,6 +228,7 @@ FlotillaCompanion (iOS) → SessionKit, TranscriptKit, DesignSystem, Textual (ex
 | **PersistenceKit** | GRDBSessionRepository (SQLite), versioned migrations (v1–v13) | GRDB.swift 6.29+ |
 | **TerminalKit** | TerminalController, SwiftUI/AppKit bridge to SwiftTerm | SwiftTerm 1.2+ |
 | **HooksKit** | SessionStatusObserver, WaitingNotificationGate, TerminalOutputDigest | None |
+| **CompanionKit** | iPhone companion wire protocol: Codable models and messages, pairing link, Ed25519/X25519/ChaChaPoly handshake and sealed channel, Network.framework server/client, interface classification. macOS + iOS | None |
 | **TranscriptKit** | CanonicalEntry, TranscriptReading/TranscriptWriting codecs, ToolCallPairing, TranscriptCodecRegistry — reads and writes agents' native transcripts so a session can move between agents | None |
 
 ### Package Structure Convention

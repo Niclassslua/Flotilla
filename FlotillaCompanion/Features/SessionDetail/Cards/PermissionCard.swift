@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import CompanionKit
 
 struct PermissionCard: View {
     let context: CardContext

@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import CompanionKit
 
 /// Steps through every question; nothing is sent until Submit, as one payload.
 struct QuestionCard: View {

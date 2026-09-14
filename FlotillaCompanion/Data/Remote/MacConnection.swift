@@ -1,0 +1,465 @@
+import Foundation
+import Observation
+import CompanionKit
+
+/// The live link to one paired Mac, plus everything received from it.
+@MainActor
+@Observable
+final class MacConnection {
+    private(set) var record: PairedMacRecord
+    private(set) var state: MacConnectionState = .unreachable
+    private(set) var fleet: FleetSnapshot?
+    private(set) var transcripts: [UUID: SessionTranscript] = [:]
+    private(set) var diffs: [String: Remote<[FileDiff]>] = [:]
+    private(set) var commits: [UUID: Remote<[CommitSummary]>] = [:]
+    private(set) var files: [String: Remote<String?>] = [:]
+    /// The last connection attempt, per address, for the diagnostics screen.
+    private(set) var lastAttempts: [ConnectTarget: AttemptStatus] = [:]
+    private(set) var lastDiagnosis: ConnectionDiagnosis?
+
+    private(set) var queuedPrompts: [UUID: [QueuedPrompt]] = [:]
+    private(set) var acknowledgedReviews: Set<UUID> = []
+    /// Cards that just disappeared, shown briefly with how they ended.
+    private(set) var resolvedCards: [UUID: [PendingInteraction]] = [:]
+
+    @ObservationIgnored private var session: ClientSideSession?
+    @ObservationIgnored private var nextRequestID: UInt64 = 1
+    @ObservationIgnored private var waiting: [UInt64: CheckedContinuation<CompanionResponse, Error>] = [:]
+    @ObservationIgnored private var focusedSessionID: UUID?
+    @ObservationIgnored private var connectTask: Task<Void, Never>?
+    @ObservationIgnored private var receiveTask: Task<Void, Never>?
+    @ObservationIgnored private var retryAttempt = 0
+    @ObservationIgnored private var isActive = false
+    @ObservationIgnored private var answeredHere: Set<UUID> = []
+
+    @ObservationIgnored private let identityStore: any DeviceIdentityStoring
+    @ObservationIgnored private let browser: LANBrowser?
+    @ObservationIgnored private let deviceName: String
+    @ObservationIgnored var onRecordChange: (PairedMacRecord) -> Void = { _ in }
+    @ObservationIgnored var onCacheChange: (PairedMacStore.Cache) -> Void = { _ in }
+
+    static let requestTimeout: Duration = .seconds(45)
+    static let retryDelays: [Double] = [1, 2, 5, 10, 20, 30]
+
+    init(
+        record: PairedMacRecord,
+        cache: PairedMacStore.Cache?,
+        identityStore: any DeviceIdentityStoring,
+        browser: LANBrowser?,
+        deviceName: String
+    ) {
+        self.record = record
+        self.fleet = cache?.fleet
+        self.transcripts = cache?.transcripts ?? [:]
+        self.identityStore = identityStore
+        self.browser = browser
+        self.deviceName = deviceName
+        if let reason = record.repairReason.flatMap(Self.repairReason(from:)) {
+            state = .needsRepairing(reason)
+        }
+    }
+
+    var isConnected: Bool {
+        if case .connected = state { return true }
+        return false
+    }
+
+    // MARK: - Lifecycle
+
+    func setActive(_ active: Bool) {
+        isActive = active
+        if active {
+            if case .needsRepairing = state { return }
+            if !isConnected { connect() }
+        } else {
+            connectTask?.cancel()
+            disconnect()
+        }
+    }
+
+    /// Tries every known address now, resetting the backoff.
+    func connect() {
+        if case .needsRepairing = state { return }
+        guard connectTask == nil, !isConnected else { return }
+        retryAttempt = 0
+        scheduleConnect(after: 0)
+    }
+
+    private func scheduleConnect(after delay: Double) {
+        connectTask?.cancel()
+        connectTask = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard !Task.isCancelled, let self else { return }
+            await self.attemptConnection()
+            self.connectTask = nil
+        }
+    }
+
+    private func attemptConnection() async {
+        guard isActive else { return }
+        state = .connecting
+        let targets = connectTargets()
+        let log = AttemptLog()
+        do {
+            let identity = try identityStore.loadOrCreate()
+            let macID = record.macID
+            let name = deviceName
+            let result = try await CompanionClient.connect(
+                to: targets,
+                hello: {
+                    try Handshake.makeClientHello(mode: .resume, macID: macID, deviceID: identity.deviceID, deviceName: name, identity: identity.identity, pairingSecret: nil)
+                },
+                pinnedMacKey: record.macKey,
+                onAttempt: { target, status in log.record(target, status) }
+            )
+            guard !Task.isCancelled, isActive else {
+                result.session.close()
+                return
+            }
+            lastAttempts = log.snapshot
+            lastDiagnosis = nil
+            adopt(result.session, target: result.target, macName: result.serverHello.macName)
+        } catch {
+            lastAttempts = log.snapshot
+            handleConnectFailure(error, offered: Set(targets.map(\.path)))
+        }
+    }
+
+    private func handleConnectFailure(_ error: Error, offered: Set<NetworkPath>) {
+        lastDiagnosis = ConnectionDiagnosis.diagnose(
+            error: error,
+            attempts: lastAttempts,
+            offeredPaths: offered,
+            phoneHasTailnet: NetworkInterfaces.hasTailnetAddress,
+            localNetworkDenied: browser?.permission == .denied
+        )
+        switch error {
+        case ConnectError.handshake(.rejected(.revoked)):
+            markNeedsRepairing(.revoked)
+        case ConnectError.handshake(.rejected(.unknownDevice)):
+            markNeedsRepairing(.unknownDevice)
+        case ConnectError.handshake(.macIdentityMismatch):
+            markNeedsRepairing(.identityChanged)
+        case ConnectError.handshake(.rejected(.versionUnsupported)), ConnectError.handshake(.versionMismatch):
+            markNeedsRepairing(.versionMismatch)
+        default:
+            state = .unreachable
+            guard isActive else { return }
+            let delay = Self.retryDelays[min(retryAttempt, Self.retryDelays.count - 1)]
+            retryAttempt += 1
+            scheduleConnect(after: delay)
+        }
+    }
+
+    private func markNeedsRepairing(_ reason: MacConnectionState.RepairReason) {
+        state = .needsRepairing(reason)
+        record.repairReason = String(describing: reason)
+        onRecordChange(record)
+    }
+
+    private static func repairReason(from string: String) -> MacConnectionState.RepairReason? {
+        switch string {
+        case "revoked": .revoked
+        case "unknownDevice": .unknownDevice
+        case "identityChanged": .identityChanged
+        case "versionMismatch": .versionMismatch
+        default: nil
+        }
+    }
+
+    private func connectTargets() -> [ConnectTarget] {
+        var targets: [ConnectTarget] = []
+        if let discovered = browser?.endpoint(forMac: record.macID) {
+            targets.append(ConnectTarget(path: .lan, label: "\(discovered.name) (Bonjour)", endpoint: discovered.endpoint))
+        }
+        for candidate in record.candidates {
+            if let target = ConnectTarget(candidate), !targets.contains(target) { targets.append(target) }
+        }
+        return targets
+    }
+
+    /// Takes over an authenticated session — from `attemptConnection`, or
+    /// the one pairing just opened.
+    func adopt(_ newSession: ClientSideSession, target: ConnectTarget, macName: String) {
+        disconnect()
+        session = newSession
+        retryAttempt = 0
+        state = .connected(path: target.path, address: target.label)
+        record.name = macName
+        record.lastSeen = .now
+        record.repairReason = nil
+        if let candidate = record.candidates.first(where: { ConnectTarget($0) == target }) {
+            record.lastConnected = candidate
+        }
+        onRecordChange(record)
+
+        newSession.onClose { [weak self] _ in
+            Task { @MainActor in self?.sessionClosed(newSession) }
+        }
+        receiveTask = Task { [weak self] in
+            do {
+                for try await message in newSession.messages {
+                    self?.receive(message)
+                }
+            } catch {}
+        }
+        if let focusedSessionID {
+            try? newSession.send(.subscribe(sessionID: focusedSessionID))
+        }
+    }
+
+    func disconnect() {
+        receiveTask?.cancel()
+        receiveTask = nil
+        let closing = session
+        session = nil
+        closing?.close()
+        failWaiting(CompanionActionError.unreachable)
+        if isConnected { state = .unreachable }
+    }
+
+    private func sessionClosed(_ closed: ClientSideSession) {
+        guard closed === session else { return }
+        session = nil
+        receiveTask = nil
+        failWaiting(CompanionActionError.unreachable)
+        record.lastSeen = .now
+        onRecordChange(record)
+        if case .needsRepairing = state { return }
+        state = .unreachable
+        if isActive {
+            scheduleConnect(after: Self.retryDelays[0])
+        }
+    }
+
+    private func failWaiting(_ error: Error) {
+        let pending = waiting
+        waiting = [:]
+        pending.values.forEach { $0.resume(throwing: error) }
+    }
+
+    // MARK: - Incoming
+
+    private func receive(_ message: ServerMessage) {
+        record.lastSeen = .now
+        switch message {
+        case .fleet(let snapshot):
+            applyFleet(snapshot)
+        case .transcript(let sessionID, let transcript):
+            transcripts[sessionID] = transcript
+            pruneQueuedPrompts(sessionID)
+            saveCache()
+        case .response(let id, let response):
+            waiting.removeValue(forKey: id)?.resume(returning: response)
+        case .pong:
+            break
+        }
+    }
+
+    private func applyFleet(_ snapshot: FleetSnapshot) {
+        let previous = fleet?.pending ?? [:]
+        for (sessionID, cards) in previous {
+            let stillOpen = Set((snapshot.pending[sessionID] ?? []).map(\.id))
+            let gone = cards.filter { !stillOpen.contains($0.id) && !answeredHere.contains($0.id) }
+            guard !gone.isEmpty else { continue }
+            showResolved(gone.map { card in
+                var resolved = card
+                resolved.resolution = .answeredOnMac(outcome: Self.macOutcome(for: card))
+                return resolved
+            }, in: sessionID)
+        }
+        fleet = snapshot
+        if case .connected = state, snapshot.macName != record.name {
+            record.name = snapshot.macName
+            onRecordChange(record)
+        }
+        saveCache()
+    }
+
+    private static func macOutcome(for card: PendingInteraction) -> String {
+        switch card.kind {
+        case .permission, .needsTerminal: "Answered"
+        case .question: "Answered"
+        case .plan: "Handled"
+        }
+    }
+
+    private func showResolved(_ cards: [PendingInteraction], in sessionID: UUID) {
+        resolvedCards[sessionID, default: []].append(contentsOf: cards)
+        let ids = Set(cards.map(\.id))
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            self?.resolvedCards[sessionID]?.removeAll { ids.contains($0.id) }
+        }
+    }
+
+    private func saveCache() {
+        onCacheChange(PairedMacStore.Cache(fleet: fleet, transcripts: transcripts))
+    }
+
+    // MARK: - Reads
+
+    func pending(for sessionID: UUID) -> [PendingInteraction] {
+        (resolvedCards[sessionID] ?? []) + (fleet?.pending[sessionID] ?? [])
+    }
+
+    func transcript(for sessionID: UUID) -> SessionTranscript {
+        var transcript = transcripts[sessionID] ?? SessionTranscript()
+        transcript.queuedPrompts = queuedPrompts[sessionID] ?? []
+        return transcript
+    }
+
+    /// Drops queued prompts the Mac's transcript now contains.
+    private func pruneQueuedPrompts(_ sessionID: UUID) {
+        guard var queued = queuedPrompts[sessionID], !queued.isEmpty,
+              let events = transcripts[sessionID]?.events else { return }
+        let delivered = events.compactMap { event -> (String, Date)? in
+            if case .userMessage(let text, let timestamp) = event.content { return (text, timestamp) }
+            return nil
+        }
+        queued.removeAll { prompt in
+            delivered.contains { $0.0.trimmingCharacters(in: .whitespacesAndNewlines) == prompt.text && $0.1 >= prompt.sentAt.addingTimeInterval(-5) }
+        }
+        queuedPrompts[sessionID] = queued
+    }
+
+    // MARK: - Requests
+
+    func focus(on sessionID: UUID?) {
+        guard sessionID != focusedSessionID else { return }
+        focusedSessionID = sessionID
+        if let sessionID {
+            try? session?.send(.subscribe(sessionID: sessionID))
+        } else {
+            try? session?.send(.unsubscribe)
+        }
+    }
+
+    func request(_ request: CompanionRequest) async throws -> CompanionResponse {
+        guard let session else { throw CompanionActionError.unreachable }
+        let id = nextRequestID
+        nextRequestID += 1
+        let timeout = Task { [weak self] in
+            try? await Task.sleep(for: Self.requestTimeout)
+            guard !Task.isCancelled else { return }
+            self?.waiting.removeValue(forKey: id)?.resume(throwing: CompanionActionError(message: "The Mac didn't respond in time."))
+        }
+        defer { timeout.cancel() }
+        return try await withCheckedThrowingContinuation { continuation in
+            waiting[id] = continuation
+            do {
+                try session.send(.request(id: id, request))
+            } catch {
+                waiting.removeValue(forKey: id)?.resume(throwing: CompanionActionError.unreachable)
+            }
+        }
+    }
+
+    /// Sends a request that answers with `.ok`, throwing its failure message.
+    func perform(_ request: CompanionRequest) async throws {
+        let response = try await self.request(request)
+        if case .failure(let message) = response { throw CompanionActionError(message: message) }
+    }
+
+    func answer(_ interactionID: UUID, in sessionID: UUID, with answer: InteractionAnswer) async throws -> AnswerOutcome {
+        answeredHere.insert(interactionID)
+        let response = try await request(.answer(sessionID: sessionID, interactionID: interactionID, answer: answer))
+        switch response {
+        case .answer(let outcome):
+            if outcome == .alreadyAnswered, var card = fleet?.pending[sessionID]?.first(where: { $0.id == interactionID }) {
+                card.resolution = .alreadyAnswered
+                showResolved([card], in: sessionID)
+            }
+            return outcome
+        case .failure(let message):
+            answeredHere.remove(interactionID)
+            throw CompanionActionError(message: message)
+        default:
+            return .accepted
+        }
+    }
+
+    func sendPrompt(_ text: String, to sessionID: UUID) async throws {
+        let isBusy = fleet?.sessions.first { $0.id == sessionID }?.status == .working
+        let prompt = QueuedPrompt(text: text, sentAt: .now)
+        if isBusy { queuedPrompts[sessionID, default: []].append(prompt) }
+        do {
+            try await perform(.sendPrompt(sessionID: sessionID, text: text))
+        } catch {
+            queuedPrompts[sessionID]?.removeAll { $0.id == prompt.id }
+            throw error
+        }
+    }
+
+    func acknowledgeReview(_ sessionID: UUID) {
+        acknowledgedReviews.insert(sessionID)
+    }
+
+    func loadDiff(for sessionID: UUID, commitHash: String?) async {
+        let key = "\(sessionID)|\(commitHash ?? "")"
+        if diffs[key]?.value == nil { diffs[key] = .loading }
+        do {
+            switch try await request(.diff(sessionID: sessionID, commitHash: commitHash)) {
+            case .diff(let files): diffs[key] = .loaded(files)
+            case .failure(let message): diffs[key] = .failed(message)
+            default: diffs[key] = .failed("Unexpected response.")
+            }
+        } catch {
+            if diffs[key]?.value == nil { diffs[key] = .failed(error.localizedDescription) }
+        }
+    }
+
+    func diff(for sessionID: UUID, commitHash: String?) -> Remote<[FileDiff]> {
+        diffs["\(sessionID)|\(commitHash ?? "")"] ?? .loading
+    }
+
+    func loadCommits(for sessionID: UUID) async {
+        if commits[sessionID]?.value == nil { commits[sessionID] = .loading }
+        do {
+            switch try await request(.commits(sessionID: sessionID)) {
+            case .commits(let list): commits[sessionID] = .loaded(list)
+            case .failure(let message): commits[sessionID] = .failed(message)
+            default: commits[sessionID] = .failed("Unexpected response.")
+            }
+        } catch {
+            if commits[sessionID]?.value == nil { commits[sessionID] = .failed(error.localizedDescription) }
+        }
+    }
+
+    func loadFile(at path: String, in sessionID: UUID) async {
+        let key = "\(sessionID)|\(path)"
+        if files[key]?.value == nil { files[key] = .loading }
+        do {
+            switch try await request(.file(sessionID: sessionID, path: path)) {
+            case .file(let contents): files[key] = .loaded(contents)
+            case .failure(let message): files[key] = .failed(message)
+            default: files[key] = .failed("Unexpected response.")
+            }
+        } catch {
+            if files[key]?.value == nil { files[key] = .failed(error.localizedDescription) }
+        }
+    }
+
+    func fileContents(at path: String, in sessionID: UUID) -> Remote<String?> {
+        files["\(sessionID)|\(path)"] ?? .loading
+    }
+}
+
+/// Collects attempt statuses from the client's background callbacks.
+final class AttemptLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [ConnectTarget: AttemptStatus] = [:]
+
+    func record(_ target: ConnectTarget, _ status: AttemptStatus) {
+        lock.withLock {
+            // Keep the informative outcome; a late "abandoned" shouldn't hide
+            // an earlier failure reason.
+            if case .abandoned = status, case .failed? = entries[target] { return }
+            entries[target] = status
+        }
+    }
+
+    var snapshot: [ConnectTarget: AttemptStatus] {
+        lock.withLock { entries }
+    }
+}

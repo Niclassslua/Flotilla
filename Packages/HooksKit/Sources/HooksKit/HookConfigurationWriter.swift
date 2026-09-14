@@ -190,6 +190,18 @@ public struct HookConfigurationWriter: HookConfiguring {
                     ["type": "command", "command": command]
                 ]
             ]
+            // The phone answers Claude's dialogs through this hook. The
+            // timeout is a day because a held request waits for a person;
+            // the terminal dialog stays live and first answer wins.
+            let permissionHookGroup: [String: Any] = [
+                "hooks": [
+                    [
+                        "type": "command",
+                        "command": companionBridgeShellCommand(socketPath: companionSocketPath(supportDirectory: supportDirectory)),
+                        "timeout": 86_400
+                    ]
+                ]
+            ]
             let interactiveHookGroup: [String: Any] = [
                 "matcher": "AskUserQuestion|ExitPlanMode",
                 "hooks": [
@@ -200,7 +212,7 @@ public struct HookConfigurationWriter: HookConfiguring {
                 "hooks": [
                     "Notification": [hookGroup],
                     "PreToolUse": [interactiveHookGroup],
-                    "PermissionRequest": [hookGroup],
+                    "PermissionRequest": [permissionHookGroup],
                     "Stop": [hookGroup],
                     "PostToolUse": [hookGroup]
                 ]
@@ -231,6 +243,25 @@ public struct HookConfigurationWriter: HookConfiguring {
     /// no terminator, so the newline keeps the file line-delimited.
     private static func eventForwardingShellCommand() -> String {
         return #"event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; cat >> "$event_file" && printf '\n' >> "$event_file""#
+    }
+
+    /// The Unix socket the iPhone companion's permission bridge listens on
+    /// while the companion link is enabled.
+    public static func companionSocketPath(supportDirectory: URL) -> URL {
+        supportDirectory.appendingPathComponent("companion.sock", isDirectory: false)
+    }
+
+    /// Records the event exactly like `eventForwardingShellCommand`, then —
+    /// only when the companion socket exists — hands the request to Flotilla
+    /// and prints whatever decision comes back.
+    ///
+    /// Fail-open by construction: no socket, a stale socket, or a bridge that
+    /// closes without answering all print nothing and exit 0, which leaves
+    /// Claude's own terminal dialog in charge.
+    static func companionBridgeShellCommand(socketPath: URL) -> String {
+        let socket = quoted(socketPath.path)
+        return #"input=$(cat); event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; printf '%s\n' "$input" >> "$event_file"; "# +
+            #"[ -S \#(socket) ] || exit 0; printf '%s\n%s\n' "$event_file" "$input" | /usr/bin/nc -U \#(socket) 2>/dev/null; exit 0"#
     }
 
     // MARK: - Antigravity

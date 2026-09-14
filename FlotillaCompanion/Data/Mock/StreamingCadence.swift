@@ -1,6 +1,6 @@
 import Foundation
 import SessionKit
-import TranscriptKit
+import CompanionKit
 
 /// Simulated live output at each provider's granularity.
 extension MockCompanionDataSource {
@@ -45,7 +45,7 @@ extension MockCompanionDataSource {
         in sessionID: CompanionSession.ID
     ) async throws {
         let useID = UUID().uuidString
-        mutateTranscript(sessionID) { $0.append(.toolUse(id: useID, tool: tool, input: MockFixtures.json(input), timestamp: .now)) }
+        mutateTranscript(sessionID) { $0.append(.toolUse(id: useID, tool: tool, input: input, timestamp: .now)) }
         try await pause(seconds)
         mutateTranscript(sessionID) { $0.append(.toolResult(toolUseID: useID, output: output, isError: isError, timestamp: .now)) }
     }

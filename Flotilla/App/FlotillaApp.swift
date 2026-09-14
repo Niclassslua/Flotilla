@@ -18,6 +18,7 @@ struct FlotillaApp: App {
     @State private var startupCheck: StartupCheckViewModel
     @State private var navigator: WorkspaceNavigator
     @State private var notificationDelegate: FlotillaNotificationDelegate
+    @State private var companionHost: CompanionHost
     @Environment(\.openWindow) private var openWindow
 
     /// Held so the review scene — which is not a descendant of the shell and
@@ -136,6 +137,11 @@ struct FlotillaApp: App {
 
         gitService = environment.gitService
         sessionRepository = environment.sessionRepository
+        _companionHost = State(initialValue: CompanionHost(
+            store: appStore,
+            gitService: environment.gitService,
+            defaults: environment.isUITesting ? UserDefaults(suiteName: "FlotillaUITests-companion-\(ProcessInfo.processInfo.processIdentifier)")! : .standard
+        ))
 
         appStore.onSessionFinished = { session in
             let isActive = NSApp?.isActive ?? true
@@ -339,6 +345,7 @@ struct FlotillaApp: App {
             SettingsView(viewModel: settingsViewModel)
                 .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
                 .environment(navigator)
+                .environment(companionHost)
                 .tint(FlotillaColors.accent)
         }
         .defaultSize(width: 800, height: 620)

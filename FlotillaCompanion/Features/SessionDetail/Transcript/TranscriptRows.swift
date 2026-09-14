@@ -2,6 +2,7 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 import Textual
+import CompanionKit
 
 struct UserMessageRow: View {
     let text: String

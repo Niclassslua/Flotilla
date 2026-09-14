@@ -1,6 +1,7 @@
 import SwiftUI
 import DesignSystem
 import Textual
+import CompanionKit
 
 struct PlanCard: View {
     let context: CardContext

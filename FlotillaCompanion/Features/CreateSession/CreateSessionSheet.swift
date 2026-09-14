@@ -1,6 +1,7 @@
 import SwiftUI
 import SessionKit
 import DesignSystem
+import CompanionKit
 
 /// Same fields and defaults as the Mac's create-session flow.
 struct CreateSessionSheet: View {
@@ -120,7 +121,8 @@ struct CreateSessionSheet: View {
     }
 }
 
-/// Moves a session to another agent, carrying its conversation.
+/// Moves a session to another agent, carrying its conversation. The Mac picks
+/// the new agent's default model and effort (docs/companion.md, A18).
 struct HandoffSheet: View {
     let session: CompanionSession
     let macID: MacHost.ID
@@ -128,19 +130,14 @@ struct HandoffSheet: View {
     @Environment(CompanionStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var agent: AgentKind
-    @State private var model = ""
-    @State private var effort: AgentEffort?
     @State private var note = ""
     @State private var isConfirming = false
+    @State private var isHandingOff = false
 
     init(session: CompanionSession, macID: MacHost.ID) {
         self.session = session
         self.macID = macID
-        let target = AgentKind.allCases.first { $0 != session.agent } ?? .claudeCode
-        _agent = State(initialValue: target)
-        let entry = AgentCatalog.fallback.entry(for: target)
-        _model = State(initialValue: entry.defaultModel)
-        _effort = State(initialValue: entry.defaultEffort)
+        _agent = State(initialValue: session.handoffTargets.first ?? session.agent)
     }
 
     var body: some View {
@@ -155,14 +152,23 @@ struct HandoffSheet: View {
                             .font(.subheadline)
                     }
                 } footer: {
-                    Text("The conversation moves to the new agent. The session keeps its project and worktree.")
+                    Text("The conversation moves to the new agent, which starts with its default model and effort. The session keeps its project and worktree.")
                 }
 
-                AgentModelEffortControls(
-                    agent: $agent, model: $model, effort: $effort,
-                    catalog: store.catalog(on: macID),
-                    agents: AgentKind.allCases.filter { $0 != session.agent }
-                )
+                Section("Hand off to") {
+                    Picker("Agent", selection: $agent) {
+                        ForEach(session.handoffTargets) { target in
+                            Label {
+                                Text(target.displayName)
+                            } icon: {
+                                ProviderLogo(agent: target).frame(width: 18, height: 18)
+                            }
+                            .tag(target)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
 
                 Section("Reason (optional)") {
                     TextField("Why hand off?", text: $note, axis: .vertical)
@@ -180,14 +186,18 @@ struct HandoffSheet: View {
                     Button("Hand Off") { isConfirming = true }
                         .buttonStyle(.glassProminent)
                         .tint(FlotillaColors.accent)
-                        .disabled(!store.isActionable(sessionID: session.id))
+                        .disabled(isHandingOff || session.handoffTargets.isEmpty || !store.isActionable(sessionID: session.id))
                 }
             }
             .confirmationDialog("Hand off to \(agent.displayName)?", isPresented: $isConfirming, titleVisibility: .visible) {
                 Button("Hand Off") {
+                    isHandingOff = true
                     Task {
-                        await store.handoff(session.id, HandoffRequest(agent: agent, model: model, effort: effort, note: note))
-                        dismiss()
+                        let entry = store.catalog(on: macID).entry(for: agent)
+                        if await store.handoff(session.id, HandoffRequest(agent: agent, model: entry.defaultModel, effort: entry.defaultEffort, note: note)) {
+                            dismiss()
+                        }
+                        isHandingOff = false
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -195,7 +205,7 @@ struct HandoffSheet: View {
                 Text("\(session.agent.displayName) stops and \(agent.displayName) continues from the same conversation.")
             }
         }
-        .presentationDetents([.large])
+        .presentationDetents([.medium, .large])
     }
 }
 

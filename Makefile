@@ -1,4 +1,4 @@
-.PHONY: build build-release build-ephemeral build-companion test clean run run-ephemeral run-board-demo run-companion xcodegen
+.PHONY: build build-release build-ephemeral build-companion test test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo xcodegen
 
 SCHEME := Flotilla
 EPHEMERAL_SCHEME := Flotilla Ephemeral
@@ -11,7 +11,7 @@ COMPANION_BUNDLE_ID := com.niclassslua.flotilla.companion
 # Any installed iPhone simulator name; override with `make run-companion SIMULATOR="iPhone 17"`.
 LPAREN := (
 SIMULATOR ?= $(shell xcrun simctl list devices available | grep -m1 iPhone | sed -E 's/^ +//; s/ [$(LPAREN)].*//')
-# Boots straight into a simulated state, e.g. `make run-companion SCENARIO=stackedPermissions`.
+# Boots the demo straight into a scripted state, e.g. `make run-companion-demo SCENARIO=stackedPermissions`.
 SCENARIO ?=
 
 xcodegen:
@@ -97,12 +97,33 @@ run-ephemeral: build-ephemeral
 run-board-demo: build-ephemeral
 	FLOTILLA_DEMO_DATA=1 "$(EPHEMERAL_APP)/Contents/MacOS/Flotilla Ephemeral" &
 
-# iOS companion prototype in the simulator, running on simulated data.
+# iOS companion in the simulator, connecting to real Macs.
 run-companion: build-companion
 	xcrun simctl boot "$(SIMULATOR)" 2>/dev/null || true
 	open -b com.apple.iphonesimulator 2>/dev/null || true
 	xcrun simctl install "$(SIMULATOR)" "$(COMPANION_APP)"
-	xcrun simctl launch --terminate-running-process "$(SIMULATOR)" $(COMPANION_BUNDLE_ID) $(if $(SCENARIO),-scenario $(SCENARIO))
+	xcrun simctl launch --terminate-running-process "$(SIMULATOR)" $(COMPANION_BUNDLE_ID)
+
+# The companion on its fixture fleet and scripted scenarios — no Mac needed.
+run-companion-demo: build-companion
+	xcrun simctl boot "$(SIMULATOR)" 2>/dev/null || true
+	open -b com.apple.iphonesimulator 2>/dev/null || true
+	xcrun simctl install "$(SIMULATOR)" "$(COMPANION_APP)"
+	xcrun simctl launch --terminate-running-process "$(SIMULATOR)" $(COMPANION_BUNDLE_ID) -demo $(if $(SCENARIO),-scenario $(SCENARIO))
+
+# Simulator processes can't read ~/Documents, where build/ usually lives, so the
+# test host would hang loading XCTest from there. Build tests outside it.
+COMPANION_TEST_DERIVED_DATA := $(HOME)/Library/Developer/Xcode/DerivedData/FlotillaCompanionTests
+
+test-companion: xcodegen
+	cd Packages/CompanionKit && swift test
+	xcodebuild \
+		-project $(PROJECT) \
+		-scheme $(COMPANION_SCHEME) \
+		-destination 'platform=iOS Simulator,name=$(SIMULATOR)' \
+		-derivedDataPath "$(COMPANION_TEST_DERIVED_DATA)" \
+		-test-timeouts-enabled YES \
+		test
 
 clean:
 	xcodebuild \

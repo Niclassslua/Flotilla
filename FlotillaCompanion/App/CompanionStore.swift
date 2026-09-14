@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SessionKit
+import CompanionKit
 
 enum Route: Hashable {
     case fleet(MacHost.ID)
@@ -12,8 +13,8 @@ enum Route: Hashable {
 }
 
 /// The single object views talk to. Owns navigation and phone-local memory,
-/// gates every action on the Mac being reachable, and forwards the rest to
-/// whichever `CompanionDataSource` it was built with.
+/// gates every action on the Mac being reachable, surfaces failures, and
+/// forwards the rest to whichever `CompanionDataSource` it was built with.
 @Observable
 @MainActor
 final class CompanionStore {
@@ -22,6 +23,13 @@ final class CompanionStore {
     var path: [Route] = [] {
         didSet { rememberLastMac() }
     }
+
+    /// The last intent that failed, shown as an alert.
+    var actionError: CompanionActionError?
+
+    /// A pairing link opened from outside the app (Camera, Safari), waiting
+    /// for the pairing sheet to pick it up.
+    var incomingPairingLink: String?
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -45,11 +53,17 @@ final class CompanionStore {
         if case .fleet(let id)? = path.first {
             defaults.set(id, forKey: Key.lastMac)
         }
+        let focused = path.reversed().lazy.compactMap { route -> CompanionSession.ID? in
+            if case .session(let id) = route { return id }
+            return nil
+        }.first
+        data.focus(on: focused)
     }
 
     // MARK: - Reads
 
     var macs: [MacHost] { data.macs }
+    var supportsPairing: Bool { data.supportsPairing }
 
     func mac(_ id: MacHost.ID) -> MacHost? {
         data.macs.first { $0.id == id }
@@ -65,9 +79,13 @@ final class CompanionStore {
     func session(_ id: CompanionSession.ID) -> CompanionSession? { data.session(id) }
     func transcript(for id: CompanionSession.ID) -> SessionTranscript { data.transcript(for: id) }
     func pendingInteractions(for id: CompanionSession.ID) -> [PendingInteraction] { data.pendingInteractions(for: id) }
-    func diff(for id: CompanionSession.ID) -> [FileDiff] { data.diff(for: id) }
-    func commits(for id: CompanionSession.ID) -> [CommitSummary] { data.commits(for: id) }
-    func fileContents(at path: String, in id: CompanionSession.ID) -> String? { data.fileContents(at: path, in: id) }
+    func diff(for id: CompanionSession.ID, commitHash: String?) -> Remote<[FileDiff]> { data.diff(for: id, commitHash: commitHash) }
+    func commits(for id: CompanionSession.ID) -> Remote<[CommitSummary]> { data.commits(for: id) }
+    func fileContents(at path: String, in id: CompanionSession.ID) -> Remote<String?> { data.fileContents(at: path, in: id) }
+
+    func loadDiff(for id: CompanionSession.ID, commitHash: String?) async { await data.loadDiff(for: id, commitHash: commitHash) }
+    func loadCommits(for id: CompanionSession.ID) async { await data.loadCommits(for: id) }
+    func loadFile(at path: String, in id: CompanionSession.ID) async { await data.loadFile(at: path, in: id) }
 
     func projectName(_ id: UUID?, on macID: MacHost.ID) -> String {
         guard let id else { return "General" }
@@ -83,52 +101,85 @@ final class CompanionStore {
         mac(forSession: sessionID)?.isReachable ?? false
     }
 
+    func setActive(_ isActive: Bool) {
+        data.setActive(isActive)
+    }
+
     // MARK: - Intents
+
+    /// Runs an intent, turning a thrown error into the alert.
+    private func perform<T>(_ work: () async throws -> T) async -> T? {
+        do {
+            return try await work()
+        } catch let error as CompanionActionError {
+            actionError = error
+        } catch {
+            actionError = CompanionActionError(message: error.localizedDescription)
+        }
+        return nil
+    }
 
     func answer(_ interaction: PendingInteraction.ID, in session: CompanionSession.ID, with answer: InteractionAnswer) async -> AnswerOutcome? {
         guard isActionable(sessionID: session) else { return nil }
-        return await data.answer(interaction, in: session, with: answer)
+        return await perform { try await data.answer(interaction, in: session, with: answer) }
     }
 
     func sendPrompt(_ text: String, to session: CompanionSession.ID) async {
         guard isActionable(sessionID: session) else { return }
-        await data.sendPrompt(text, to: session)
+        await perform { try await data.sendPrompt(text, to: session) }
     }
 
     func stop(_ session: CompanionSession.ID) async {
         guard isActionable(sessionID: session) else { return }
-        await data.stop(session)
+        await perform { try await data.stop(session) }
     }
 
     func createSession(_ request: NewSessionRequest, on macID: MacHost.ID) async -> CompanionSession.ID? {
         guard isActionable(macID: macID) else { return nil }
         rememberChoice(request)
-        return await data.createSession(request, on: macID)
+        return await perform { try await data.createSession(request, on: macID) }
     }
 
-    func handoff(_ session: CompanionSession.ID, _ request: HandoffRequest) async {
-        guard isActionable(sessionID: session) else { return }
-        await data.handoff(session, request)
+    func handoff(_ session: CompanionSession.ID, _ request: HandoffRequest) async -> Bool {
+        guard isActionable(sessionID: session) else { return false }
+        return await perform { try await data.handoff(session, request) } != nil
     }
 
     func restart(_ session: CompanionSession.ID) async {
         guard isActionable(sessionID: session) else { return }
-        await data.restart(session)
+        await perform { try await data.restart(session) }
     }
 
     func delete(_ session: CompanionSession.ID, removeWorktree: Bool) async {
         guard isActionable(sessionID: session) else { return }
+        let succeeded = await perform { try await data.delete(session, removeWorktree: removeWorktree) } != nil
+        guard succeeded else { return }
         path.removeAll { route in
             switch route {
             case .session(let id), .diff(let id, _, _), .commits(let id), .file(let id, _): id == session
             case .fleet: false
             }
         }
-        await data.delete(session, removeWorktree: removeWorktree)
     }
 
     func acknowledgeReview(_ session: CompanionSession.ID) {
         data.acknowledgeReview(session)
+    }
+
+    // MARK: - Macs
+
+    func pair(with payload: PairingPayload, progress: @escaping @MainActor (ConnectTarget, AttemptStatus) -> Void) async throws -> MacHost.ID {
+        try await data.pair(with: payload, progress: progress)
+    }
+
+    func removeMac(_ macID: MacHost.ID) {
+        // Everything on the stack below a Mac's fleet belongs to that Mac.
+        if case .fleet(macID)? = path.first { path = [] }
+        data.removeMac(macID)
+    }
+
+    func reconnect(_ macID: MacHost.ID) {
+        data.reconnect(macID)
     }
 
     // MARK: - Remembered create-session choices (per project, like the Mac)

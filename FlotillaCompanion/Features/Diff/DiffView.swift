@@ -1,5 +1,32 @@
 import SwiftUI
 import DesignSystem
+import CompanionKit
+
+/// Shows a value fetched from the Mac: a spinner, an error with Retry, or the
+/// content.
+struct RemoteContent<Value: Sendable, Content: View>: View {
+    let value: Remote<Value>
+    let retry: () async -> Void
+    @ViewBuilder let content: (Value) -> Content
+
+    var body: some View {
+        switch value {
+        case .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .failed(let message):
+            ContentUnavailableView {
+                Label("Couldn't Load", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(message)
+            } actions: {
+                Button("Try Again") { Task { await retry() } }
+            }
+        case .loaded(let loaded):
+            content(loaded)
+        }
+    }
+}
 
 /// All files in one scroll with collapsible headers. Shows a session's working
 /// diff, or a single commit's.
@@ -13,43 +40,47 @@ struct DiffView: View {
     @State private var scrollTarget: String?
 
     var body: some View {
-        let commit = commitHash.flatMap { hash in store.commits(for: sessionID).first { $0.hash == hash } }
-        let files = commit?.files ?? store.diff(for: sessionID)
+        let commit = commitHash.flatMap { hash in store.commits(for: sessionID).value?.first { $0.hash == hash } }
+        let remote = store.diff(for: sessionID, commitHash: commitHash)
+        let files = remote.value ?? []
 
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
-                if let commit {
-                    CommitHeader(commit: commit)
-                }
-                ForEach(files) { file in
-                    Section {
-                        if !collapsed.contains(file.path) {
-                            FileDiffBody(file: file)
-                        }
-                    } header: {
-                        FileDiffHeader(
-                            sessionID: sessionID,
-                            file: file,
-                            isCollapsed: collapsed.contains(file.path)
-                        ) {
-                            withAnimation(.snappy) {
-                                if collapsed.contains(file.path) { collapsed.remove(file.path) } else { collapsed.insert(file.path) }
+        RemoteContent(value: remote, retry: load) { files in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
+                    if let commit {
+                        CommitHeader(commit: commit)
+                    }
+                    ForEach(files) { file in
+                        Section {
+                            if !collapsed.contains(file.path) {
+                                FileDiffBody(file: file)
+                            }
+                        } header: {
+                            FileDiffHeader(
+                                sessionID: sessionID,
+                                file: file,
+                                isCollapsed: collapsed.contains(file.path)
+                            ) {
+                                withAnimation(.snappy) {
+                                    if collapsed.contains(file.path) { collapsed.remove(file.path) } else { collapsed.insert(file.path) }
+                                }
                             }
                         }
+                        .id(file.path)
                     }
-                    .id(file.path)
+                }
+                .scrollTargetLayout()
+            }
+            .scrollPosition(id: $scrollTarget, anchor: .top)
+            .overlay {
+                if files.isEmpty {
+                    ContentUnavailableView("No Changes", systemImage: "doc.text", description: Text("This session hasn't changed any files."))
                 }
             }
-            .scrollTargetLayout()
         }
-        .scrollPosition(id: $scrollTarget, anchor: .top)
         .background(FlotillaColors.canvas)
-        .overlay {
-            if files.isEmpty {
-                ContentUnavailableView("No Changes", systemImage: "doc.text", description: Text("This session hasn't changed any files."))
-            }
-        }
-        .navigationTitle(commit.map { $0.shortHash } ?? "Changes")
+        .refreshable { await load() }
+        .navigationTitle(commit.map { $0.shortHash } ?? (commitHash.map { String($0.prefix(7)) } ?? "Changes"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if files.count > 1 {
@@ -68,10 +99,15 @@ struct DiffView: View {
                 }
             }
         }
-        .onAppear {
+        .task {
             if commitHash == nil { store.acknowledgeReview(sessionID) }
+            await load()
             if let focusPath { scrollTarget = focusPath }
         }
+    }
+
+    private func load() async {
+        await store.loadDiff(for: sessionID, commitHash: commitHash)
     }
 }
 
@@ -157,7 +193,8 @@ private struct FileDiffBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(file.hunks) { hunk in
+            ForEach(file.hunks.indices, id: \.self) { hunkIndex in
+                let hunk = file.hunks[hunkIndex]
                 Text(hunk.header)
                     .font(.caption2.monospaced())
                     .foregroundStyle(FlotillaColors.textTertiary)
@@ -165,7 +202,8 @@ private struct FileDiffBody: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 4)
                     .background(FlotillaColors.surface)
-                ForEach(hunk.lines) { line in
+                ForEach(hunk.lines.indices, id: \.self) { lineIndex in
+                    let line = hunk.lines[lineIndex]
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(line.marker)
                             .foregroundStyle(markerColor(line.kind))
@@ -205,43 +243,50 @@ struct CommitsView: View {
     @Environment(CompanionStore.self) private var store
 
     var body: some View {
-        let commits = store.commits(for: sessionID)
-        List(commits) { commit in
-            NavigationLink(value: Route.diff(sessionID, commitHash: commit.hash, focusPath: nil)) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(commit.subject)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(FlotillaColors.textPrimary)
-                        .lineLimit(2)
-                    HStack(spacing: 6) {
-                        Text(commit.shortHash).monospaced()
-                        Text("·")
-                        Text(commit.author)
-                        Text("·")
-                        Text(commit.date, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
-                        if !commit.isPushed {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .foregroundStyle(FlotillaColors.statusWaitingForInput)
-                                .accessibilityLabel("Unpushed")
+        RemoteContent(value: store.commits(for: sessionID), retry: load) { commits in
+            List(commits) { commit in
+                NavigationLink(value: Route.diff(sessionID, commitHash: commit.hash, focusPath: nil)) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(commit.subject)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(FlotillaColors.textPrimary)
+                            .lineLimit(2)
+                        HStack(spacing: 6) {
+                            Text(commit.shortHash).monospaced()
+                            Text("·")
+                            Text(commit.author)
+                            Text("·")
+                            Text(commit.date, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
+                            if !commit.isPushed {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .foregroundStyle(FlotillaColors.statusWaitingForInput)
+                                    .accessibilityLabel("Unpushed")
+                            }
                         }
+                        .font(.caption)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                        .lineLimit(1)
                     }
-                    .font(.caption)
-                    .foregroundStyle(FlotillaColors.textSecondary)
-                    .lineLimit(1)
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
+                .listRowBackground(FlotillaColors.surface)
             }
-            .listRowBackground(FlotillaColors.surface)
+            .scrollContentBackground(.hidden)
+            .overlay {
+                if commits.isEmpty {
+                    ContentUnavailableView("No Commits", systemImage: "clock.arrow.circlepath", description: Text("This session's branch has no commits yet."))
+                }
+            }
         }
-        .scrollContentBackground(.hidden)
         .background(FlotillaColors.canvas)
-        .overlay {
-            if commits.isEmpty {
-                ContentUnavailableView("No Commits", systemImage: "clock.arrow.circlepath", description: Text("This session's branch has no commits yet."))
-            }
-        }
+        .refreshable { await load() }
         .navigationTitle("Commits")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private func load() async {
+        await store.loadCommits(for: sessionID)
     }
 }
 
@@ -252,11 +297,11 @@ struct FileViewer: View {
     @Environment(CompanionStore.self) private var store
 
     var body: some View {
-        Group {
-            if let contents = store.fileContents(at: path, in: sessionID) {
+        RemoteContent(value: store.fileContents(at: path, in: sessionID), retry: load) { contents in
+            if let contents {
                 ScrollView([.vertical, .horizontal]) {
+                    let lines = contents.components(separatedBy: "\n")
                     HStack(alignment: .top, spacing: 10) {
-                        let lines = contents.components(separatedBy: "\n")
                         VStack(alignment: .trailing, spacing: 0) {
                             ForEach(lines.indices, id: \.self) { index in
                                 Text("\(index + 1)")
@@ -277,13 +322,18 @@ struct FileViewer: View {
                     .padding(16)
                 }
                 .scrollIndicators(.visible)
-                .background(FlotillaColors.canvas)
             } else {
-                ContentUnavailableView("File Unavailable", systemImage: "doc.questionmark", description: Text(path))
+                ContentUnavailableView("File Unavailable", systemImage: "doc.questionmark", description: Text("\(path)\n\nThe file is outside the session's folder, too large, or not text."))
             }
         }
+        .background(FlotillaColors.canvas)
         .navigationTitle((path as NSString).lastPathComponent)
         .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private func load() async {
+        await store.loadFile(at: path, in: sessionID)
     }
 }
 

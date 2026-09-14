@@ -1,6 +1,6 @@
 import Foundation
 import SessionKit
-import TranscriptKit
+import CompanionKit
 
 /// A scripted situation from `Ideas/mobile-companion/prototype.md`. Run from
 /// the debug menu or at launch with `-scenario <rawValue>`.
@@ -179,7 +179,7 @@ extension MockCompanionDataSource {
             if scenario == .slowStop { stopDelay = .seconds(4) }
             let useID = UUID().uuidString
             mutateTranscript(id) {
-                $0.append(.toolUse(id: useID, tool: "shell", input: MockFixtures.json(["command": "npm test"]), timestamp: .now.addingTimeInterval(-42)))
+                $0.append(.toolUse(id: useID, tool: "shell", input: ["command": "npm test"], timestamp: .now.addingTimeInterval(-42)))
             }
             startTurn(id) { source in
                 try await source.pause(20)
@@ -259,7 +259,7 @@ extension MockCompanionDataSource {
     ) -> PendingInteraction {
         let useID = UUID().uuidString
         mutateTranscript(sessionID) {
-            $0.append(.toolUse(id: useID, tool: request.tool, input: MockFixtures.json(["command": request.summary]), timestamp: .now))
+            $0.append(.toolUse(id: useID, tool: request.tool, input: ["command": request.summary], timestamp: .now))
         }
         let interaction = PendingInteraction(kind: .permission(request), subagent: subagent)
         gatedToolCalls[interaction.id] = (useID, output)

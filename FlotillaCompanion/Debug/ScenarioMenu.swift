@@ -1,5 +1,6 @@
 #if DEBUG
 import SwiftUI
+import CompanionKit
 
 /// Toolbar menu that starts a scripted scenario on the simulated data.
 struct ScenarioMenu: View {

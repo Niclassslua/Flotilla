@@ -1,5 +1,6 @@
 import Foundation
 import SessionKit
+import CompanionKit
 
 /// How each provider differs in ways the UI has to express. Views read these
 /// values instead of switching on `AgentKind`, so a provider's behaviour is

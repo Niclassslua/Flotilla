@@ -13,6 +13,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case terminal
     case git
     case notifications
+    case companion
     case agents
     // case appearance  // Removed - dark mode only for now
     case projects
@@ -29,6 +30,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .terminal: "Terminal & Editor"
         case .git: "Git & Worktrees"
         case .notifications: "Notifications"
+        case .companion: "iPhone Companion"
         case .agents: "Coding Agents"
         // case .appearance: "Appearance"
         case .projects: "Projects"
@@ -45,6 +47,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .terminal: "terminal.fill"
         case .git: "arrow.triangle.branch"
         case .notifications: "bell.fill"
+        case .companion: "iphone"
         case .agents: "cpu.fill"
         // case .appearance: "paintbrush.fill"
         case .projects: "folder.fill"
@@ -61,6 +64,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .terminal: .cyan
         case .git: FlotillaColors.accent
         case .notifications: .red
+        case .companion: .green
         case .agents: .purple
         // case .appearance: .pink
         case .projects: .blue
@@ -77,6 +81,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .terminal: "terminal editor font size scroll option meta"
         case .git: "git branch worktree delete lifecycle"
         case .notifications: "notifications waiting input sound privacy never active always delivery"
+        case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices"
         case .agents: "claude codex opencode agy antigravity executable arguments authentication"
         // case .appearance: "appearance theme system light dark"
         case .projects: "projects paths rules skills local"
@@ -202,6 +207,8 @@ struct SettingsView: View {
             GitSettingsPane(viewModel: viewModel)
         case .notifications:
             NotificationSettingsPane(viewModel: viewModel)
+        case .companion:
+            CompanionSettingsPane()
         case .agents:
             AgentSettingsPane(viewModel: viewModel)
         // case .appearance:

@@ -1,6 +1,7 @@
 import SwiftUI
 import SessionKit
 import DesignSystem
+import CompanionKit
 
 /// One Mac's sessions: **Needs you** pinned on top, then grouped by project.
 struct FleetView: View {

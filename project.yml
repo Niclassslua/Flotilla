@@ -32,6 +32,8 @@ packages:
     path: Packages/SettingsKit
   TranscriptKit:
     path: Packages/TranscriptKit
+  CompanionKit:
+    path: Packages/CompanionKit
   Textual:
     url: https://github.com/gonzalezreal/textual
     from: 0.5.0
@@ -87,6 +89,7 @@ targets:
       - package: PersistenceKit
       - package: SettingsKit
       - package: TranscriptKit
+      - package: CompanionKit
       - package: Textual
         product: Textual
 
@@ -99,8 +102,24 @@ targets:
       - path: FlotillaCompanion
       - path: Flotilla.icon
         buildPhase: resources
+    info:
+      path: FlotillaCompanion/Info.plist
+      properties:
+        CFBundleDisplayName: Flotilla
+        NSCameraUsageDescription: Flotilla uses the camera to scan the pairing code shown on your Mac.
+        NSLocalNetworkUsageDescription: Flotilla connects to your Mac on the local network to show and control your sessions.
+        NSBonjourServices:
+          - _flotilla-comp._tcp
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.niclassslua.flotilla.companion.pairing
+            CFBundleURLSchemes:
+              - flotilla
     settings:
       base:
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_IDENTITY: ""
         PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.companion
         PRODUCT_NAME: FlotillaCompanion
         INFOPLIST_KEY_CFBundleDisplayName: Flotilla
@@ -118,8 +137,25 @@ targets:
       - package: DesignSystem
       - package: SessionKit
       - package: TranscriptKit
+      - package: CompanionKit
       - package: Textual
         product: Textual
+
+  FlotillaCompanionTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FlotillaCompanionTests
+    dependencies:
+      - target: FlotillaCompanion
+      - package: CompanionKit
+      - package: SessionKit
+    settings:
+      base:
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        CODE_SIGN_IDENTITY: ""
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/FlotillaCompanion.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FlotillaCompanion"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 
   FlotillaUnitTests:
     type: bundle.unit-test
@@ -138,6 +174,7 @@ targets:
       - package: PersistenceKit
       - package: SettingsKit
       - package: TranscriptKit
+      - package: CompanionKit
       - package: GRDB.swift
         product: GRDB
     settings:
@@ -172,8 +209,22 @@ schemes:
     build:
       targets:
         FlotillaCompanion: all
+        FlotillaCompanionTests: [test]
     run:
       config: Debug
+    test:
+      targets:
+        - FlotillaCompanionTests
+
+  # The companion on its fixture fleet — for UI work without a Mac.
+  FlotillaCompanion Demo:
+    build:
+      targets:
+        FlotillaCompanion: all
+    run:
+      config: Debug
+      commandLineArguments:
+        "-demo": true
 
   Flotilla Ephemeral:
     build:

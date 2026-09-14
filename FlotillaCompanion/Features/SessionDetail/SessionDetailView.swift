@@ -1,6 +1,7 @@
 import SwiftUI
 import SessionKit
 import DesignSystem
+import CompanionKit
 
 /// Transcript first; diff, commits, handoff, restart, and delete one step away.
 struct SessionDetailView: View {
@@ -11,7 +12,7 @@ struct SessionDetailView: View {
     @State private var isConfirmingRestart = false
     @State private var pendingDelete: CompanionSession?
     /// User overrides of a tool group's default expansion.
-    @State private var expandedGroups: [UUID: Bool] = [:]
+    @State private var expandedGroups: [String: Bool] = [:]
     @State private var containerHeight: CGFloat = 800
 
     var body: some View {
@@ -61,7 +62,7 @@ struct SessionDetailView: View {
                         Label("Commits", systemImage: "clock.arrow.circlepath")
                     }
                     Button("Hand Off…", systemImage: "arrow.left.arrow.right") { isShowingHandoff = true }
-                        .disabled(!isActionable)
+                        .disabled(!isActionable || session.handoffTargets.isEmpty)
                     Button("Restart…", systemImage: "arrow.clockwise") { isConfirmingRestart = true }
                         .disabled(!isActionable)
                     Divider()
@@ -90,6 +91,14 @@ struct SessionDetailView: View {
         let isInProgress = isWorking || session.status == .waitingForInput
 
         return LazyVStack(alignment: .leading, spacing: 14) {
+            if let reason = transcript.unavailableReason {
+                Label(reason, systemImage: "text.bubble.badge.clock")
+                    .font(.footnote)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+            }
             ForEach(items) { item in
                 switch item {
                 case .user(_, let text):
@@ -142,8 +151,8 @@ struct SessionDetailView: View {
     }
 
     private func headerDiffStat(_ session: CompanionSession) -> DiffStat? {
-        let diff = store.diff(for: sessionID)
-        return diff.isEmpty ? session.diffStat : diff.stat
+        guard let diff = store.diff(for: sessionID, commitHash: nil).value, !diff.isEmpty else { return session.diffStat }
+        return diff.stat
     }
 }
 
@@ -167,11 +176,13 @@ private struct SessionHeader: View {
 
             Spacer(minLength: 8)
 
-            if let diffStat, diffStat.files > 0 {
+            if let diffStat, diffStat.hasChanges {
                 NavigationLink(value: Route.diff(session.id, commitHash: nil, focusPath: nil)) {
                     HStack(spacing: 4) {
-                        Text("\(diffStat.files) \(diffStat.files == 1 ? "file" : "files")")
-                            .foregroundStyle(FlotillaColors.textSecondary)
+                        if diffStat.files > 0 {
+                            Text("\(diffStat.files) \(diffStat.files == 1 ? "file" : "files")")
+                                .foregroundStyle(FlotillaColors.textSecondary)
+                        }
                         Text("+\(diffStat.additions)").foregroundStyle(FlotillaColors.diffAdded)
                         Text("−\(diffStat.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
                         Image(systemName: "chevron.right")
@@ -180,7 +191,7 @@ private struct SessionHeader: View {
                     }
                     .font(.caption.monospacedDigit())
                 }
-                .accessibilityLabel("Changes: \(diffStat.summary)")
+                .accessibilityLabel("Changes: \(diffStat.compactSummary)")
             }
         }
         .padding(.horizontal, 16)
