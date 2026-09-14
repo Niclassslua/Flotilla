@@ -21,53 +21,57 @@ struct CreateSessionSheet: View {
     @State private var fetchFirst = true
     @State private var subscription: OpenCodeSubscription = .none
     @State private var mode: SessionMode = .act
+    @State private var showsModeSheet = false
     @State private var isCreating = false
 
     var body: some View {
         let catalog = store.catalog(on: macID)
         NavigationStack {
             Form {
-                Section("Goal") {
-                    TextField("What should the agent do?", text: $goal, axis: .vertical)
+                Section {
+                    TextField("Describe the outcome…", text: $goal, axis: .vertical)
                         .lineLimit(3...8)
                         .focused($isGoalFocused)
+                        .accessibilityIdentifier("CreateSession.GoalField")
+                    HStack {
+                        Button { showsModeSheet = true } label: {
+                            Label(mode.displayName, systemImage: mode.symbolName)
+                                .font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(FlotillaColors.surfaceElevated, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(mode == .plan ? FlotillaColors.accent : FlotillaColors.textPrimary)
+                        .accessibilityLabel("Session mode")
+                        .accessibilityValue(mode.displayName)
+                        .accessibilityIdentifier("CreateSession.ModePicker")
+                        Spacer()
+                        if SessionMode.suggestsPlanCommand(in: goal) {
+                            Button("/plan") { mode = .plan; goal = "" }
+                                .font(.subheadline)
+                                .foregroundStyle(FlotillaColors.accent)
+                                .accessibilityIdentifier("CreateSession.Command.Plan")
+                        }
+                    }
+                } footer: {
+                    Text(mode == .plan ? mode.explanation : "Type /plan to plan before making changes.")
                 }
 
-                Section("Project") {
+                Section("Workspace") {
                     Picker("Project", selection: $projectID) {
                         Text("General").tag(UUID?.none)
                         ForEach(store.projects(on: macID)) { project in
                             Text(project.name).tag(Optional(project.id))
                         }
                     }
-                }
-
-                Section("Mode") {
-                    Picker("Mode", selection: $mode) {
-                        Text("Act").tag(SessionMode.act)
-                        Text("Plan").tag(SessionMode.plan)
-                    }
-                    .pickerStyle(.segmented)
-                    .accessibilityIdentifier("CreateSession.ModePicker")
-                    if mode == .plan {
-                        Text("Explore and propose a plan before making changes.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    if projectID != nil {
+                        Toggle("New worktree", isOn: $createWorktree.animation())
+                        if createWorktree { Toggle("Fetch first", isOn: $fetchFirst) }
                     }
                 }
 
                 AgentModelEffortControls(agent: $agent, model: $model, effort: $effort, catalog: catalog)
-
-                if projectID != nil {
-                    Section {
-                        Toggle("Create worktree", isOn: $createWorktree.animation())
-                        if createWorktree {
-                            Toggle("Fetch first", isOn: $fetchFirst)
-                        }
-                    } footer: {
-                        Text("A worktree isolates the session on its own branch.")
-                    }
-                }
 
                 if agent == .openCode {
                     Section("OpenCode") {
@@ -88,18 +92,57 @@ struct CreateSessionSheet: View {
                     Button("Create", systemImage: "arrow.up") { create() }
                         .buttonStyle(.glassProminent)
                         .tint(FlotillaColors.accent)
-                        .disabled(isCreating || !store.isActionable(macID: macID))
+                        .disabled(isCreating || goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.isActionable(macID: macID))
                 }
             }
             .onAppear {
                 isGoalFocused = true
                 applyRememberedChoice(for: projectID)
             }
-            .onChange(of: projectID) { _, newValue in
-                applyRememberedChoice(for: newValue)
+            .onChange(of: projectID) { _, newValue in applyRememberedChoice(for: newValue) }
+            .onChange(of: goal) { _, newValue in
+                if SessionMode.planCommandGoal(in: newValue) != nil,
+                   newValue.trimmingCharacters(in: .whitespacesAndNewlines) != "/plan" {
+                    mode = .plan
+                }
             }
+            .sheet(isPresented: $showsModeSheet) { modePickerSheet }
         }
         .presentationDetents([.large])
+    }
+
+    private var modePickerSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Session mode").font(.headline)
+            ForEach(SessionMode.allCases) { m in
+                Button {
+                    mode = m
+                    showsModeSheet = false
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: m.symbolName)
+                            .frame(width: 24)
+                            .foregroundStyle(m == .plan ? FlotillaColors.accent : FlotillaColors.textPrimary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(m.displayName).font(.headline)
+                            Text(m.explanation).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if m == mode {
+                            Image(systemName: "checkmark").foregroundStyle(FlotillaColors.accent)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(m == mode ? [.isSelected] : [])
+            }
+        }
+        .padding(24)
+        .presentationDetents([.height(260)])
+        .presentationDragIndicator(.visible)
     }
 
     private func applyRememberedChoice(for project: UUID?) {

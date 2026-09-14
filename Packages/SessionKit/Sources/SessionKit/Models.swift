@@ -75,15 +75,45 @@ public enum AgentEffort: String, Codable, CaseIterable, Sendable, Identifiable {
 /// making changes. Each CLI expresses this differently: Claude Code uses
 /// `--permission-mode plan`, Antigravity uses `--mode plan`, and Codex CLI
 /// receives a `/plan` prefix on its initial goal via `initialInput`.
-public enum SessionMode: String, Codable, Sendable, Equatable {
+public enum SessionMode: String, Codable, Sendable, Equatable, CaseIterable, Identifiable {
     case act
     case plan
+
+    public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
         case .act: "Act"
         case .plan: "Plan"
         }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .act: "bolt.fill"
+        case .plan: "doc.text.magnifyingglass"
+        }
+    }
+
+    public var explanation: String {
+        switch self {
+        case .act: "The agent can read files and make changes."
+        case .plan: "Explore and propose a plan before making changes."
+        }
+    }
+
+    /// True when the goal field contains a bare `/plan` that should surface
+    /// as a quick-action suggestion in the mode chip area.
+    public static func suggestsPlanCommand(in goal: String) -> Bool {
+        goal.trimmingCharacters(in: .whitespacesAndNewlines) == "/plan"
+    }
+
+    /// Strips a leading `/plan ` prefix from the goal and returns the clean
+    /// objective, or `nil` if no `/plan` prefix is present.
+    public static func planCommandGoal(in goal: String) -> String? {
+        let t = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.hasPrefix("/plan ") { return String(t.dropFirst(6)) }
+        return nil
     }
 }
 
