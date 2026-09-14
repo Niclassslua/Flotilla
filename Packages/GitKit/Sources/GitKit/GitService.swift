@@ -505,24 +505,34 @@ public struct GitService: GitServiceProtocol {
         return GitWorktree(branch: branch, path: destination, isMainWorktree: false)
     }
 
+    private static func normalizePathForComparison(_ url: URL) -> String {
+        let p = url.standardized.resolvingSymlinksInPath().path
+        if p.hasPrefix("/private/") {
+            return String(p.dropFirst("/private".count))
+        }
+        return p
+    }
+
     public func removeWorktree(at path: URL, in repoPath: URL, branch: String, deleteBranch: Bool) async throws {
         let canonicalPath = path.standardized.resolvingSymlinksInPath()
         let canonicalRepoPath = repoPath.standardized.resolvingSymlinksInPath()
+        let normPath = Self.normalizePathForComparison(path)
+        let normRepoPath = Self.normalizePathForComparison(repoPath)
 
         // 1. Guard against root, empty paths, or non-directory
-        guard canonicalPath.path != "/", !canonicalPath.path.isEmpty else {
+        guard normPath != "/", !normPath.isEmpty else {
             throw GitServiceError.invalidWorktreePath(path)
         }
 
         // 2. Guard against removing the main repository or an ancestor of the repository
-        if canonicalPath.path == canonicalRepoPath.path || canonicalRepoPath.path.hasPrefix(canonicalPath.path + "/") {
+        if normPath == normRepoPath || normRepoPath.hasPrefix(normPath + "/") {
             throw GitServiceError.cannotRemoveMainWorktree(path)
         }
 
         // 3. Verify against git's registered worktrees
         let worktrees = try await listWorktrees(at: repoPath)
         let matchingWorktree = worktrees.first {
-            $0.path.standardized.resolvingSymlinksInPath().path == canonicalPath.path
+            Self.normalizePathForComparison($0.path) == normPath
         }
 
         if let matching = matchingWorktree, matching.isMainWorktree {
@@ -545,9 +555,10 @@ public struct GitService: GitServiceProtocol {
         }
 
         // 4. It is an owned secondary worktree. Attempt git worktree remove.
+        let targetPath = matchingWorktree?.path.path ?? path.path
         var worktreeFailure: GitServiceError?
         do {
-            _ = try await run(["worktree", "remove", path.path, "--force"], at: repoPath)
+            _ = try await run(["worktree", "remove", targetPath, "--force"], at: repoPath)
         } catch let GitServiceError.commandFailed(exitCode, stderr) {
             worktreeFailure = .commandFailed(exitCode: exitCode, stderr: stderr)
         }

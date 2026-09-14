@@ -15,7 +15,7 @@ import Foundation
 /// data in practice: a test called `simulateOutput` before its `async let`
 /// consumer task had actually started running and subscribed).
 final class OutputBroadcaster: @unchecked Sendable {
-    private let lock = NSLock()
+    private let lock = NSRecursiveLock()
     private var continuations: [UUID: AsyncStream<Data>.Continuation] = [:]
     private var history: [Data] = []
     private var historyByteSize = 0
@@ -108,17 +108,19 @@ final class OutputBroadcaster: @unchecked Sendable {
     private static let trimSlackBytes = 64 * 1_024
 
     func finish() {
+        let subscribers: [AsyncStream<Data>.Continuation]
         lock.lock()
         guard !isFinished else {
             lock.unlock()
             return
         }
         isFinished = true
-        let subscribers = Array(continuations.values)
+        subscribers = Array(continuations.values)
+        continuations.removeAll()
+        lock.unlock()
+
         for continuation in subscribers {
             continuation.finish()
         }
-        continuations.removeAll()
-        lock.unlock()
     }
 }

@@ -204,12 +204,6 @@ final class HandoffService {
             sessionID: targetSessionID
         )
 
-        // Both, in this order. A surviving tmux session makes the relaunch
-        // reattach to the *old* agent instead of starting the new one, with no
-        // error to show for it.
-        processManager.terminate(sessionID: session.id)
-        processManager.killServerSideSession(sessionID: session.id)
-
         var moved = session
         moved.agent = plan.target
         moved.agentSessionID = handle.nativeSessionID
