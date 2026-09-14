@@ -4,9 +4,11 @@
 
 ## Project Overview
 
-Flotilla is a **macOS-only** SwiftUI application that serves as a local command center for running multiple coding agent sessions simultaneously (Claude Code, Codex CLI, OpenCode). It provides integrated terminal emulation, git worktree management, session lifecycle tracking, and a dark, keyboard-first developer UI.
+Flotilla is a macOS SwiftUI application that serves as a local command center for running multiple coding agent sessions simultaneously (Claude Code, Codex CLI, OpenCode). It provides integrated terminal emulation, git worktree management, session lifecycle tracking, and a dark, keyboard-first developer UI.
 
-- **Platform:** macOS 26.0+
+An iOS companion (`FlotillaCompanion`, see [`Ideas/mobile-companion/`](Ideas/mobile-companion/README.md)) lives in the same project. It is currently a UI prototype running entirely on simulated data (`MockCompanionDataSource`); only `SessionKit`, `TranscriptKit`, and `DesignSystem` are shared with it.
+
+- **Platform:** macOS 26.0+ (companion: iOS 26.0+)
 - **Language:** Swift 6.0 (strict concurrency)
 - **Build system:** XcodeGen (`project.yml` → `Flotilla.xcodeproj`)
 - **Bundle ID:** `com.niclassslua.flotilla`
@@ -25,6 +27,8 @@ Flotilla is a **macOS-only** SwiftUI application that serves as a local command 
 | `make archive` | Create xcarchive |
 | `make run` | Build and launch the app |
 | `make run-ephemeral` | Build and launch the full app without saving preferences |
+| `make build-companion` | Build the iOS companion for the simulator |
+| `make run-companion` | Build, install, and launch the companion in an iPhone simulator (`SCENARIO=<name>` boots into a scripted state, `SIMULATOR="iPhone 17"` picks the device) |
 | `make clean` | Remove build artifacts |
 | `xcodegen generate` | Regenerate `.xcodeproj` from `project.yml` |
 
@@ -46,8 +50,15 @@ Flotilla/
 │   │   ├── Settings/              # SettingsView, SettingsViewModel, Startup warning/checks
 │   │   └── FileBrowser/           # FileBrowserView, FileBrowserViewModel, WorkspaceFileServicing, icon helpers
 │   ├── Services/                  # SessionProcessManager, SessionMetadataMonitor, SessionScrollbackStore, HookCoordinator, WorkspaceRegistry, ActivityStore
-│   ├── Components/                # StatusBadge, MaterialFileIcon, ProviderLogo, AgentBrand, pickers
+│   ├── Components/                # StatusBadge, MaterialFileIcon, AgentBrand, pickers
 │   └── Resources/                 # Assets.xcassets, MaterialIcons SVG catalog
+├── FlotillaCompanion/             # iOS companion (UI prototype on simulated data)
+│   ├── App/                       # CompanionApp, CompanionStore (navigation, reachability gating), Route
+│   ├── Model/                     # Companion-local types: MacHost, CompanionSession, PendingInteraction, ProviderCapabilities, transcript layout, diffs
+│   ├── Data/                      # CompanionDataSource protocol; Mock/ fixtures, streaming cadence, Scenario scripts
+│   ├── Components/                # Session row, status dot, unreachable banner, agent/model/effort controls
+│   ├── Features/                  # Macs, Fleet, SessionDetail (transcript, composer slot, cards), CreateSession + Handoff, Diff/Commits/File, Settings
+│   └── Debug/                     # Scenario toolbar menu (DEBUG only)
 ├── docs/                          # Long-form references (provider hooks, UI vocabulary)
 ├── FlotillaUnitTests/             # Unit and local integration tests, grouped by subsystem
 ├── FlotillaUITests/               # UI tests
@@ -186,7 +197,7 @@ struct ContentView: View {
 SessionKit (leaf)
 SettingsKit (leaf)
 ProcessKit (leaf)
-DesignSystem (leaf)
+DesignSystem   → SessionKit
 
 AgentKit       → SessionKit, SettingsKit, ProcessKit
 GitKit         → ProcessKit
@@ -195,7 +206,8 @@ TerminalKit    → ProcessKit, SwiftTerm (external)
 HooksKit       → SessionKit, ProcessKit
 TranscriptKit  → SessionKit
 
-Flotilla (app) → all packages
+Flotilla (app)          → all packages
+FlotillaCompanion (iOS) → SessionKit, TranscriptKit, DesignSystem, Textual (external)
 ```
 
 ### Package Reference
@@ -205,7 +217,7 @@ Flotilla (app) → all packages
 | **SessionKit** | Domain models (Session, Project, AgentKind, SessionStatus), SessionRepository protocol, SessionStatusMachine, BranchNaming | None |
 | **ProcessKit** | PTY process abstraction (forkpty-backed), PTYProcessProtocol, the one `CommandRunning`/`ProcessCommandRunner` subprocess runner, StartupEnvironmentChecker, OutputBroadcaster | None |
 | **GitKit** | GitServiceProtocol, GitService (real), MockGitService, WorktreePlanner, diff parsing | ProcessKit |
-| **DesignSystem** | FlotillaPalette (colors), FlotillaSpacing, FlotillaRadius, FlotillaPanel modifier, StatusIndicator | None |
+| **DesignSystem** | FlotillaColors, spacing/radius tokens, FlotillaPanel modifier, `StatusPresentation`, `ProviderLogo` and the provider logo assets. macOS + iOS | None |
 | **SettingsKit** | AppSettings (Codable), SettingsStoring, UserDefaultsSettingsStore | None |
 | **AgentKit** | AgentProviding, CLIAgentProvider, AgentLaunchPlan, ModelCatalogFetcher | None |
 | **PersistenceKit** | GRDBSessionRepository (SQLite), versioned migrations (v1–v13) | GRDB.swift 6.29+ |
