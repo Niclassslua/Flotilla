@@ -105,14 +105,14 @@ private let publications: [Publication] = [
         "10-presentation-grid", "grid-presentation.png",
         section: "Fleet presentations and session cards",
         caption: "Grid presentation",
-        alt: "Grid presentation with its toolbar and three terminal tiles"
+        alt: "Grid presentation with its toolbar and six terminal tiles"
     ),
     Publication(
         "11-grid-view", "grid-tile.png",
         section: "Fleet presentations and session cards",
         caption: "Grid tile / session card",
         alt: "A grid tile showing the tile header, status, branch, focus control, and terminal surface",
-        crop: NormalizedCrop(x: 0, top: 0, width: 0.3335, height: 0.3498)
+        crop: NormalizedCrop(x: 0, top: 0, width: 0.3335, height: 0.5)
     ),
     Publication(
         "13-presentation-board", "board-presentation.png",
@@ -139,7 +139,7 @@ private let publications: [Publication] = [
         alt: "The worktrees block in the context column",
         // The Worktrees block now lives in the Stream workspace's context
         // column on the right, not across the foot of the old overview.
-        crop: NormalizedCrop(x: 0.859375, top: 0.099291, width: 0.139063, height: 0.070213)
+        crop: NormalizedCrop(x: 0.808889, top: 0.129204, width: 0.188889, height: 0.079646)
     ),
     Publication(
         "36-project-git-commits", "commit-graph.png",
@@ -178,14 +178,14 @@ private let publications: [Publication] = [
         alt: "File tree with filter field and selected README file",
         // The file browser sits inside the routed surface now, so its tree
         // starts to the right of the app navigator, under the return bar.
-        crop: NormalizedCrop(x: 0.136719, top: 0.053191, width: 0.091797, height: 0.148936)
+        crop: NormalizedCrop(x: 0.2, top: 0.074336, width: 0.122222, height: 0.168142)
     ),
     Publication(
         "37-project-files", "editor-pane.png",
         section: "Diff and files",
         caption: "Editor pane region",
         alt: "Editor pane showing a rendered Markdown preview and its toolbar",
-        crop: NormalizedCrop(x: 0.224609, top: 0.053191, width: 0.771484, height: 0.184397)
+        crop: NormalizedCrop(x: 0.322222, top: 0.074336, width: 0.675556, height: 0.138053)
     ),
     Publication(
         "20-new-session-command-bar", "new-session-window.png",

@@ -299,7 +299,7 @@ The Home view above contains the **composer**, **summary line**, **attention que
 
 **Grid presentation**
 
-![Grid presentation with its toolbar and three terminal tiles](images/ui-vocabulary/grid-presentation.png)
+![Grid presentation with its toolbar and six terminal tiles](images/ui-vocabulary/grid-presentation.png)
 
 **Grid tile / session card**
 
