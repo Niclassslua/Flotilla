@@ -116,10 +116,12 @@ targets:
           - CFBundleURLName: com.niclassslua.flotilla.companion.pairing
             CFBundleURLSchemes:
               - flotilla
+    configFiles:
+      Debug: Config/CompanionSigning.xcconfig
+      Ephemeral: Config/CompanionSigning.xcconfig
+      Release: Config/CompanionSigning.xcconfig
     settings:
       base:
-        DEVELOPMENT_TEAM: ""
-        CODE_SIGN_IDENTITY: ""
         PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.companion
         PRODUCT_NAME: FlotillaCompanion
         INFOPLIST_KEY_CFBundleDisplayName: Flotilla
@@ -150,10 +152,13 @@ targets:
       - target: FlotillaCompanion
       - package: CompanionKit
       - package: SessionKit
+    configFiles:
+      Debug: Config/CompanionSigning.xcconfig
+      Ephemeral: Config/CompanionSigning.xcconfig
+      Release: Config/CompanionSigning.xcconfig
     settings:
       base:
         IPHONEOS_DEPLOYMENT_TARGET: "26.0"
-        CODE_SIGN_IDENTITY: ""
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/FlotillaCompanion.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FlotillaCompanion"
         BUNDLE_LOADER: "$(TEST_HOST)"
 

@@ -29,6 +29,7 @@ An iOS companion (`FlotillaCompanion`) lives in the same project: a remote contr
 | `make run-ephemeral` | Build and launch the full app without saving preferences |
 | `make build-companion` | Build the iOS companion for the simulator |
 | `make run-companion` | Build, install, and launch the companion in an iPhone simulator, talking to real Macs (`SIMULATOR="iPhone 17"` picks the device) |
+| `make run-companion-device` | Build, install, and launch the companion on a connected iPhone (team in `Config/CompanionSigning.local.xcconfig`) |
 | `make run-companion-demo` | The companion on its fixture fleet; `SCENARIO=<name>` boots into a scripted state |
 | `make test-companion` | `CompanionKit` package tests and the iOS unit tests (built outside `~/Documents`, which simulator processes can't read) |
 | `make clean` | Remove build artifacts |

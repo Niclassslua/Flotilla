@@ -27,6 +27,8 @@ Carthage/Build/
 
 # Xcode automatic signing
 *.xcuserstate
+# Personal Apple Developer team for iPhone builds (Config/CompanionSigning.xcconfig)
+Config/*.local.xcconfig
 
 # Playgrounds
 timeline.xctimeline

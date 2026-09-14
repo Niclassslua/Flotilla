@@ -733,6 +733,7 @@
 		C8B15FCD1B68428DB2360D62 /* RealHandoffPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealHandoffPipelineTests.swift; sourceTree = "<group>"; };
 		CC0DC025A4D1218E432748CD /* robot.svg */ = {isa = PBXFileReference; path = robot.svg; sourceTree = "<group>"; };
 		CD199A1CA28AD71F097C4FF6 /* QuestionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionCard.swift; sourceTree = "<group>"; };
+		CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = CompanionSigning.xcconfig; sourceTree = "<group>"; };
 		CD408488BFF9C6CA7DFEB01A /* KnowledgeItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeItemTests.swift; sourceTree = "<group>"; };
 		CDBA97D9F394B0964E96F7FA /* RuleFileEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleFileEntry.swift; sourceTree = "<group>"; };
 		CE0AD87AB25E974027D293DC /* folder-intellij.svg */ = {isa = PBXFileReference; path = "folder-intellij.svg"; sourceTree = "<group>"; };
@@ -1079,6 +1080,14 @@
 				493B1EA7A245C951392A9EE8 /* Companion */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		25DB608F53877DB266754BD8 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		2C84221F234AD1816D69FB84 /* Home */ = {
@@ -1574,6 +1583,7 @@
 			isa = PBXGroup;
 			children = (
 				C5EB5FF1FDC1128604459E68 /* Flotilla.icon */,
+				25DB608F53877DB266754BD8 /* Config */,
 				3B58405213944059CAA749AF /* Flotilla */,
 				48DE65187C796A26FEC980F3 /* FlotillaCompanion */,
 				AE6E6CABDD9D0CF5D6D4FDA0 /* FlotillaCompanionTests */,
@@ -1781,6 +1791,7 @@
 						ProvisioningStyle = Automatic;
 					};
 					B05B2C94FDAEFB6F633CD47F = {
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 					F79566462D627D03B88452BF = {
@@ -2268,9 +2279,9 @@
 /* Begin XCBuildConfiguration section */
 		036824E45E4254571AB2ECAF /* Ephemeral */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2286,10 +2297,9 @@
 		};
 		096FA8C73715F544F1050DAE /* Ephemeral */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Flotilla;
-				CODE_SIGN_IDENTITY = "";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = FlotillaCompanion/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flotilla;
@@ -2330,9 +2340,9 @@
 		};
 		1E9BC03029964128D36E8AB1 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2383,10 +2393,9 @@
 		};
 		42AD6FC16E7675D0950B00D1 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Flotilla;
-				CODE_SIGN_IDENTITY = "";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = FlotillaCompanion/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flotilla;
@@ -2513,10 +2522,9 @@
 		};
 		8D6F66FCE4D97B4C8842F4C2 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Flotilla;
-				CODE_SIGN_IDENTITY = "";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = FlotillaCompanion/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flotilla;
@@ -2540,9 +2548,9 @@
 		};
 		ACD3BD8CB5EF89F2CA68D6D1 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

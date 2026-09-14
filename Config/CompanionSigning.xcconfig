@@ -1,0 +1,16 @@
+// Signing for the iOS companion and its tests.
+//
+// A device build needs a real Apple Development signature and a team. The
+// team is personal, so it lives in the untracked CompanionSigning.local.xcconfig
+// next to this file (see docs/companion.md, "Running on an iPhone"). It is set
+// here rather than in Xcode's Signing tab because `make` regenerates the
+// project with XcodeGen, which would discard a team picked in the UI.
+
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
+// The simulator needs no certificate; sign ad hoc there so a clone without a
+// team still builds and runs.
+CODE_SIGN_IDENTITY[sdk=iphonesimulator*] = -
+DEVELOPMENT_TEAM =
+
+#include? "CompanionSigning.local.xcconfig"

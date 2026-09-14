@@ -47,6 +47,18 @@ fixture fleet and scenarios, for UI work without a Mac.
 | `make test-companion` | `CompanionKit` package tests plus the iOS unit tests (including real loopback pairing) |
 | `make test` | Mac unit tests, including `CompanionHostTests` (snapshot mapping, Claude hook decisions, the hook shell command against a live socket, file-access and pairing-secret rules) |
 
+### Running on an iPhone
+
+1. Create `Config/CompanionSigning.local.xcconfig` (gitignored) with your team:
+   `DEVELOPMENT_TEAM = <TEAM ID>`. Find the ID in Xcode ▸ Settings ▸ Accounts, or
+   in the `OU=` field of `security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject`.
+   Don't set the team in Xcode's Signing tab: `make` regenerates the project
+   with XcodeGen and discards it.
+2. Connect the iPhone (iOS 26 or later, Developer Mode on) and run
+   `make run-companion-device`, or pick the phone in Xcode and press Run.
+3. With a free Personal Team, trust the developer once on the phone under
+   Settings ▸ General ▸ VPN & Device Management; the profile expires after 7 days.
+
 End-to-end in the simulator (DEBUG): launch Flotilla with
 `FLOTILLA_COMPANION_PAIRING_FILE=/tmp/pair.txt` (enables the link and writes a
 fresh pairing link there), then launch the companion with
@@ -181,12 +193,12 @@ Decisions made without asking, recorded so they can be revisited.
     not the live CLI discovery (which is slow and runs subprocesses).
 15. **Several phones may connect at once**; all receive the same updates, and
     first answer wins across phones and the Mac.
-16. **Deployability**: the app builds and runs signed with automatic signing
-    once a `DEVELOPMENT_TEAM` is set in `project.yml` (left empty here). The
-    bundle id, display name, icon, Info.plist usage strings (camera, local
-    network, Bonjour services) and export compliance
-    (`ITSAppUsesNonExemptEncryption = NO` — CryptoKit only, standard algorithms
-    exempt) are set.
+16. **Deployability**: signing comes from `Config/CompanionSigning.xcconfig` —
+    automatic, Apple Development — with the team in an untracked local
+    xcconfig, so no personal team is checked in. The bundle id, display name,
+    icon, Info.plist usage strings (camera, local network, Bonjour services)
+    and export compliance (`ITSAppUsesNonExemptEncryption = NO` — CryptoKit
+    only, standard algorithms exempt) are set.
 17. **Camera scanning needs a device.** The simulator has no camera, so the
     pairing screen also accepts a pasted link; DEBUG builds accept
     `-pairingLink <link>` at launch for automated end-to-end runs.

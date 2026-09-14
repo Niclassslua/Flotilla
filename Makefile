@@ -1,4 +1,4 @@
-.PHONY: build build-release build-ephemeral build-companion test test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo xcodegen
+.PHONY: build build-release build-ephemeral build-companion test test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo run-companion-device xcodegen
 
 SCHEME := Flotilla
 EPHEMERAL_SCHEME := Flotilla Ephemeral
@@ -103,6 +103,24 @@ run-companion: build-companion
 	open -b com.apple.iphonesimulator 2>/dev/null || true
 	xcrun simctl install "$(SIMULATOR)" "$(COMPANION_APP)"
 	xcrun simctl launch --terminate-running-process "$(SIMULATOR)" $(COMPANION_BUNDLE_ID)
+
+# The companion on a connected iPhone. Needs Config/CompanionSigning.local.xcconfig
+# with DEVELOPMENT_TEAM (docs/companion.md, "Running on an iPhone").
+DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/physical/ && /connected/ {for (i=1;i<=NF;i++) if ($$i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$$/) {print $$i; exit}}')
+DEVICE_APP := $(DERIVED_DATA)/Build/Products/Debug-iphoneos/FlotillaCompanion.app
+
+run-companion-device: xcodegen
+	@test -n "$(DEVICE)" || (echo "No connected iPhone found. Connect one or pass DEVICE=<udid>." && exit 1)
+	xcodebuild \
+		-project $(PROJECT) \
+		-scheme $(COMPANION_SCHEME) \
+		-configuration Debug \
+		-destination 'id=$(DEVICE)' \
+		-derivedDataPath $(DERIVED_DATA) \
+		-allowProvisioningUpdates \
+		build
+	xcrun devicectl device install app --device $(DEVICE) "$(DEVICE_APP)"
+	xcrun devicectl device process launch --device $(DEVICE) $(COMPANION_BUNDLE_ID)
 
 # The companion on its fixture fleet and scripted scenarios — no Mac needed.
 run-companion-demo: build-companion
