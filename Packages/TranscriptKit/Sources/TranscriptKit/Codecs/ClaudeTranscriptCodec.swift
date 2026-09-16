@@ -132,7 +132,22 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
             entries.append(contentsOf: Self.entries(from: message, type: type, isMeta: isMeta, timestamp: timestamp))
         }
 
-        return entries
+        return Self.dedupingImages(entries)
+    }
+
+    /// A screenshot the agent takes commonly reaches the transcript twice:
+    /// once when a `Read` tool call echoes it back as a `tool_result` image
+    /// block, and again when `SendUserFile` delivers the same on-disk file to
+    /// the user. Both paths downsample deterministically, so the same source
+    /// image produces byte-identical base64 either way — which makes that
+    /// payload a reliable dedup key. Kept in file order, so whichever entry
+    /// occurs first (chronologically) is the one that survives.
+    private static func dedupingImages(_ entries: [CanonicalEntry]) -> [CanonicalEntry] {
+        var seen = Set<String>()
+        return entries.filter { entry in
+            guard case let .image(_, base64, _) = entry else { return true }
+            return seen.insert(base64).inserted
+        }
     }
 
     // MARK: - Record decoding
