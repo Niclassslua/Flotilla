@@ -85,6 +85,7 @@
 		28C7BC6A5A4E7DF5FA5AB635 /* GridZoomGestures.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCCCB074F672295EAE2B75E1 /* GridZoomGestures.swift */; };
 		2A1815B85FD73D417DEB4ED6 /* AgentScreenshotPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AD2B29354C7511AFC7550C /* AgentScreenshotPanel.swift */; };
 		2A2F0C61C62E472853C9E99A /* FlotillaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 179ED2D6FC5AA9AEAF3BE74D /* FlotillaApp.swift */; };
+		2B89AF33610BE313E326C81E /* PresenceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450290A29D767A2FE28CAF6E /* PresenceMonitor.swift */; };
 		2B95A03ABC30C6F6A63AC3C3 /* folder-debug.svg in Resources */ = {isa = PBXBuildFile; fileRef = 049E0C337CE5FC398BE3AC76 /* folder-debug.svg */; };
 		2C15A78E3C6B06BEBAC35D2E /* GitKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 874C07585626CF8D03699AB0 /* GitKitTests.swift */; };
 		2C21F9D390BF90B937B675E9 /* WorkspaceFileServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F00DEE0E8ADB9286C29903 /* WorkspaceFileServicing.swift */; };
@@ -101,6 +102,7 @@
 		33DF7438DDF33C40266843E7 /* WorktreeSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C94752D73B04499C0033AB /* WorktreeSnapshot.swift */; };
 		33FD723C9B4C4FCDB87D7C5B /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 9BF6184167526D0FDF11DC27 /* DesignSystem */; };
 		351C9D0DD08D4BF98BCDB078 /* PlanCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D87DE3D8544D9CDB8E53188D /* PlanCard.swift */; };
+		353AA6ABD4C216FC6777FBAE /* CompanionAttentionNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BABD8D796C420F3C0FD4E13 /* CompanionAttentionNotifications.swift */; };
 		35C2A7D5F5438BF9023DE5D2 /* MonacoHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E782E7FF5EA05CA2F213E13 /* MonacoHostView.swift */; };
 		3666AB5248298AE8334EA77C /* GitKit in Frameworks */ = {isa = PBXBuildFile; productRef = FA2549906C49D5C37F9C14E3 /* GitKit */; };
 		366F3CAE92D194B34F04D252 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 986838BD9EEFA2DB54F3B9E1 /* DesignSystem */; };
@@ -606,6 +608,7 @@
 		43F6E270E43A5CE706FF597B /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		446F1EB2161B52565A40137C /* folder-node.svg */ = {isa = PBXFileReference; path = "folder-node.svg"; sourceTree = "<group>"; };
 		44C721ECC732427A1B4EE485 /* PerfUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfUtils.swift; sourceTree = "<group>"; };
+		450290A29D767A2FE28CAF6E /* PresenceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceMonitor.swift; sourceTree = "<group>"; };
 		46F6F4F4BEABA3ED096AB412 /* typescript-def.svg */ = {isa = PBXFileReference; path = "typescript-def.svg"; sourceTree = "<group>"; };
 		473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChildProcessEnvironment.swift; sourceTree = "<group>"; };
 		47A8019491687751346DAF32 /* DiffPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffPanelView.swift; sourceTree = "<group>"; };
@@ -642,6 +645,7 @@
 		59332161DEB4FD07366F7E02 /* KnowledgeTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeTemplates.swift; sourceTree = "<group>"; };
 		5A15137C679C6CBF7FF6F220 /* KnowledgeChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeChrome.swift; sourceTree = "<group>"; };
 		5A8B0B7570DC782018E724CE /* SessionProcessStarting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionProcessStarting.swift; sourceTree = "<group>"; };
+		5BABD8D796C420F3C0FD4E13 /* CompanionAttentionNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAttentionNotifications.swift; sourceTree = "<group>"; };
 		5C2D50B6652163301BEF829D /* c.svg */ = {isa = PBXFileReference; path = c.svg; sourceTree = "<group>"; };
 		5CBF5FBD34E5BFF83E229BA2 /* SessionTileChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTileChrome.swift; sourceTree = "<group>"; };
 		5D80A73E251FF9AE065547BC /* CommitAttributionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitAttributionService.swift; sourceTree = "<group>"; };
@@ -1288,6 +1292,7 @@
 				230BF08BDD20144090ACF146 /* CompanionSnapshotBuilder.swift */,
 				C79C38472E56265BCF12BA43 /* CompanionTranscriptReader.swift */,
 				AA61233CF542DD4926EE5776 /* OpenCodeCompanionAdapter.swift */,
+				450290A29D767A2FE28CAF6E /* PresenceMonitor.swift */,
 				1AE1A40724A3749042507017 /* ProviderRPC.swift */,
 			);
 			path = Companion;
@@ -1402,6 +1407,7 @@
 			isa = PBXGroup;
 			children = (
 				D5DBE2B7B53A7EB40BB2E13E /* CompanionApp.swift */,
+				5BABD8D796C420F3C0FD4E13 /* CompanionAttentionNotifications.swift */,
 				232A92E1871AA7FEED4E7EA4 /* CompanionStore.swift */,
 			);
 			path = App;
@@ -2220,6 +2226,7 @@
 			files = (
 				87B803E95B694889A2A1802E /* AgentModelEffortControls.swift in Sources */,
 				CD5B1B37DF615471EFA5F901 /* CompanionApp.swift in Sources */,
+				353AA6ABD4C216FC6777FBAE /* CompanionAttentionNotifications.swift in Sources */,
 				28B5463D594F0FBA801B589C /* CompanionDataSource.swift in Sources */,
 				B00C79D88B5E6AF59A4C419B /* CompanionPersistence.swift in Sources */,
 				2D919B02125CF5F5B95F0BA3 /* CompanionSettingsView.swift in Sources */,
@@ -2342,6 +2349,7 @@
 				35C2A7D5F5438BF9023DE5D2 /* MonacoHostView.swift in Sources */,
 				22D07401DDBD8084087F20C7 /* OpenCodeCompanionAdapter.swift in Sources */,
 				D412A78C3C52CED49C0BB34E /* PerfLog.swift in Sources */,
+				2B89AF33610BE313E326C81E /* PresenceMonitor.swift in Sources */,
 				7F51622808C590C08DEF81A2 /* ProjectChoice.swift in Sources */,
 				78F770A87C25112B79EF24B8 /* ProjectCommandCard.swift in Sources */,
 				4B733F632936F80343509855 /* ProjectDetailView.swift in Sources */,

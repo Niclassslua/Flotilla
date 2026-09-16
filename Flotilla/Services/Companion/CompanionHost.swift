@@ -64,6 +64,8 @@ final class CompanionHost {
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
     @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog
     @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
+    @ObservationIgnored private let presence = PresenceMonitor()
+    @ObservationIgnored private var lastAttentionSessions: [UUID: CompanionSession] = [:]
     /// Reads the Mac's currently configured OpenCode plan, so the catalog
     /// sent to the phone can scope a live model query to it — without this,
     /// OpenCode has nothing to enumerate against and falls back to bare ids.
@@ -181,6 +183,9 @@ final class CompanionHost {
         )
         self.server = server
         server.start()
+        if ProcessInfo.processInfo.arguments.contains("-proto"), ProcessInfo.processInfo.arguments.contains("smartPresence") {
+            lastAttentionSessions = Dictionary(uniqueKeysWithValues: buildFleet().sessions.map { ($0.id, $0) })
+        }
         startPublishing()
     }
 
@@ -199,6 +204,7 @@ final class CompanionHost {
         readGeneration += 1
         activeReads = 0
         queuedReads.removeAll()
+        lastAttentionSessions = [:]
         connectedDeviceIDs = []
         cancelPairing()
         status = .off
@@ -531,6 +537,7 @@ final class CompanionHost {
                     await self.refreshTailscaleName()
                 }
                 self.publishAddressUpdateIfNeeded()
+                self.publishAttentionTransitions()
                 guard !self.peers.isEmpty else { continue }
                 self.publishFleetIfChanged()
                 for peer in self.peers.values where peer.subscribedSessionID != nil { await self.publishTranscript(to: peer) }
@@ -567,6 +574,37 @@ final class CompanionHost {
                 peer.fleetRevision = 0
             }
             peer.lastFleet = fleet
+        }
+    }
+
+    private func publishAttentionTransitions() {
+        guard ProcessInfo.processInfo.arguments.contains("-proto"),
+              ProcessInfo.processInfo.arguments.contains("smartPresence") else { return }
+        let fleet = buildFleet()
+        let previous = lastAttentionSessions
+        lastAttentionSessions = Dictionary(uniqueKeysWithValues: fleet.sessions.map { ($0.id, $0) })
+        guard presence.isAway, !peers.isEmpty else { return }
+        for session in fleet.sessions {
+            guard let old = previous[session.id], old.status != session.status,
+                  let status = session.status,
+                  status == .waitingForInput || status == .readyForReview || status == .crashed else { continue }
+            let permission = fleet.pending[session.id]?.first { card in
+                if case .permission = card.kind { return true }
+                return false
+            }
+            let summary = session.attentionSummary ?? {
+                switch status {
+                case .waitingForInput: "Needs your input"
+                case .readyForReview: "Ready for review"
+                case .crashed: "Session crashed"
+                case .working: "Working"
+                }
+            }()
+            let event = SessionAttentionEvent(
+                sessionID: session.id, title: session.title, status: status,
+                summary: summary, permissionID: permission?.id
+            )
+            for peer in peers.values { try? peer.session.send(.attention(event)) }
         }
     }
 

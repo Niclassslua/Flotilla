@@ -91,6 +91,7 @@ Screenshot-review scaffolding for UI ideas not yet shipped, gated behind
 | `haptics` | Fills gaps in the existing `.sensoryFeedback` usage: `.impact(.light)` on expand/collapse (tool groups, project headers), `.impact(.medium)` on Send, `.warning` on Stop and Deny, `.success` on entering waiting-for-input/ready-for-review. Device-only, nothing to screenshot — verify with `make run-companion-device`. |
 | `statusTint` | Session detail: soft gradient behind the header and nav bar, following `StatusPresentation.color` — amber while waiting, emerald when ready |
 | `liveActivity` | Starts a Live Activity (Dynamic Island + Lock Screen) for the open session, updated on status change, ended on leaving the screen. The compact Island shows a status dot and elapsed time; holding it reveals the session title, status, agent, and timer. The Lock Screen card uses the same information. Local-only — no push token requested, so it only reflects reality while the app is open (decision #6). Needs `FlotillaCompanionWidget` (widget-extension target, `SessionActivityAttributes` shared between it and the app). |
+| `smartPresence` | Mac and iPhone: when the Mac is inactive, idle for over 45 seconds, or locked, an attention transition sends `SessionAttentionEvent` to connected phones. The phone presents a local notification with View Session, plus Approve/Deny for permissions. Launch both apps with the flag. This only works while the encrypted link is active; delivery after iOS suspends the app requires APNs. |
 
 `codeBlockHeader`'s implementation note: `StructuredText`'s per-block style
 customization hooks (`.textual.codeBlockStyle(_:)`, `.textual.paragraphStyle(_:)`)
@@ -127,7 +128,12 @@ Remove a row here once its feature ships (drops the flag) or is dropped
    registers the phone's own Ed25519 key with the Mac. Later connections
    authenticate with that key; no secret is ever reused.
 
-### Handshake (protocol version 2)
+### Handshake (protocol version 4)
+
+The attention event changed the wire protocol from 3 to 4. The current
+handshake requires an exact version match, so an older phone cannot pair or
+resume with a version-4 Mac until both apps are updated. The `v2` transcript
+domain separator below is a cryptographic label and did not change.
 
 All frames are length-prefixed (`UInt32` big-endian, max 8 MiB).
 

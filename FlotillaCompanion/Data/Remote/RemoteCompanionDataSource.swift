@@ -21,6 +21,7 @@ final class RemoteCompanionDataSource: CompanionDataSource {
     @ObservationIgnored private let deviceName: String
     @ObservationIgnored private var isActive = false
     @ObservationIgnored private var desiredFocus: UUID?
+    @ObservationIgnored var onAttention: (MacHost.ID, SessionAttentionEvent) -> Void = { _, _ in }
 
     init(
         store: PairedMacStore = .default(),
@@ -48,6 +49,7 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         connection.onCacheFlush = { cache, revision in Task { await cacheWriter.flush(cache, revision: revision) } }
         connection.onCacheDiscard = { await cacheWriter.discard() }
         connection.onFleetChange = { [weak self] in self?.applyFocus() }
+        connection.onAttention = { [weak self] event in self?.onAttention(macID, event) }
         return connection
     }
 

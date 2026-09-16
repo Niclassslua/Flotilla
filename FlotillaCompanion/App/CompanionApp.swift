@@ -183,9 +183,16 @@ struct RootView: View {
             }
         }
         .onOpenURL { url in
-            guard url.scheme == PairingPayload.scheme, store.supportsPairing else { return }
-            store.incomingPairingLink = url.absoluteString
+            guard url.scheme == PairingPayload.scheme else { return }
+            if url.host == "session", ProtoFlags.isOn("smartPresence"),
+               let id = UUID(uuidString: url.lastPathComponent),
+               let macID = store.mac(forSession: id)?.id {
+                store.path = [.fleet(macID), .session(id)]
+            } else if store.supportsPairing {
+                store.incomingPairingLink = url.absoluteString
+            }
         }
+        .task { CompanionAttentionNotifications.shared.configure(store: store) }
         .sheet(isPresented: Binding(
             get: { store.incomingPairingLink != nil },
             set: { if !$0 { store.incomingPairingLink = nil } }

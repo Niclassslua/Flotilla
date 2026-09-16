@@ -1,8 +1,9 @@
 import Foundation
+import SessionKit
 
 /// The wire protocol version. Both the handshake and the pairing link carry it.
 public enum CompanionProtocol {
-    public static let version = 3
+    public static let version = 4
     /// Transcripts are capped to the newest events (docs/companion.md, A7).
     public static let transcriptEventLimit = 400
 }
@@ -47,6 +48,24 @@ public enum ServerMessage: Hashable, Codable, Sendable {
     /// Tailscale connects after pairing) so an already-paired phone learns a
     /// new path without re-scanning a pairing code.
     case addressUpdate(candidates: [HostCandidate])
+    /// A status edge worth surfacing while the phone's encrypted link is open.
+    case attention(SessionAttentionEvent)
+}
+
+public struct SessionAttentionEvent: Hashable, Codable, Sendable {
+    public let sessionID: UUID
+    public let title: String
+    public let status: SessionStatus
+    public let summary: String
+    public let permissionID: UUID?
+
+    public init(sessionID: UUID, title: String, status: SessionStatus, summary: String, permissionID: UUID? = nil) {
+        self.sessionID = sessionID
+        self.title = title
+        self.status = status
+        self.summary = summary
+        self.permissionID = permissionID
+    }
 }
 
 public enum CompanionResponse: Hashable, Codable, Sendable {

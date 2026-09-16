@@ -54,6 +54,7 @@ final class MacConnection {
     @ObservationIgnored var onCacheFlush: (PairedMacStore.Cache, UInt64) -> Void = { _, _ in }
     @ObservationIgnored var onCacheDiscard: () async -> Void = {}
     @ObservationIgnored var onFleetChange: () -> Void = {}
+    @ObservationIgnored var onAttention: (SessionAttentionEvent) -> Void = { _ in }
 
     static let requestTimeout: Duration = .seconds(45)
     static let retryDelays: [Double] = [1, 2, 5, 10, 20, 30]
@@ -325,6 +326,8 @@ final class MacConnection {
             guard candidates != record.candidates else { return }
             record.candidates = candidates
             onRecordChange(record)
+        case .attention(let event):
+            onAttention(event)
         }
     }
 

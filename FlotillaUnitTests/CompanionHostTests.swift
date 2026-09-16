@@ -7,6 +7,34 @@ import HooksKit
 import CompanionKit
 @testable import Flotilla
 
+@MainActor
+final class PresenceMonitorTests: XCTestCase {
+    func testMacActivityIdleTimeAndScreenLockControlAwayState() {
+        var active = true
+        var idle: TimeInterval = 0
+        var time = Date(timeIntervalSince1970: 1_000)
+        let monitor = PresenceMonitor(
+            isAppActive: { active }, idleSeconds: { idle }, now: { time }, observeScreenLock: false
+        )
+
+        XCTAssertFalse(monitor.isAway)
+        active = false
+        time.addTimeInterval(2)
+        XCTAssertTrue(monitor.isAway)
+        active = true
+        idle = 46
+        time.addTimeInterval(2)
+        XCTAssertTrue(monitor.isAway)
+        idle = 0
+        time.addTimeInterval(2)
+        XCTAssertFalse(monitor.isAway)
+        monitor.setScreenLockedForTesting(true)
+        XCTAssertTrue(monitor.isAway)
+        monitor.setScreenLockedForTesting(false)
+        XCTAssertFalse(monitor.isAway)
+    }
+}
+
 final class CompanionSnapshotBuilderTests: XCTestCase {
     private func session(status: SessionStatus?, reason: SessionWaitingReason? = nil, agent: AgentKind = .claudeCode) -> Session {
         Session(
