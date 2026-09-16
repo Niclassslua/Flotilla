@@ -7,6 +7,10 @@ public struct DiscoveredAgentSession: Identifiable, Sendable, Equatable {
     public let id: String
     public let title: String
     public let workingDirectory: URL?
+    /// When the native provider records it, the instant this conversation was
+    /// created. Unlike `lastActiveAt`, this remains stable when an unrelated
+    /// older conversation receives new output while Flotilla is launching one.
+    public let createdAt: Date?
     public let lastActiveAt: Date?
     public let agent: AgentKind
     public let isCustomTitle: Bool
@@ -15,6 +19,7 @@ public struct DiscoveredAgentSession: Identifiable, Sendable, Equatable {
         id: String,
         title: String,
         workingDirectory: URL? = nil,
+        createdAt: Date? = nil,
         lastActiveAt: Date? = nil,
         agent: AgentKind,
         isCustomTitle: Bool = false
@@ -22,6 +27,7 @@ public struct DiscoveredAgentSession: Identifiable, Sendable, Equatable {
         self.id = id
         self.title = title
         self.workingDirectory = workingDirectory
+        self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt
         self.agent = agent
         self.isCustomTitle = isCustomTitle

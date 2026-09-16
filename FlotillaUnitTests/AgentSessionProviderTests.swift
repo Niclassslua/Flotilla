@@ -204,14 +204,16 @@ final class AgentSessionProviderTests: XCTestCase {
             name text,
             title text NOT NULL,
             cwd text NOT NULL,
+            created_at integer NOT NULL,
+            created_at_ms integer NOT NULL,
             updated_at integer NOT NULL
         );
         """
         XCTAssertEqual(sqlite3_exec(db, createTable, nil, nil, nil), SQLITE_OK)
 
         let insertThread = """
-        INSERT INTO threads (id, name, title, cwd, updated_at) VALUES
-        ('thread_1', NULL, '## Fix navigation split view bar\\nWe need to adjust padding', '/Users/test/codex-proj', 1787021948);
+        INSERT INTO threads (id, name, title, cwd, created_at, created_at_ms, updated_at) VALUES
+        ('thread_1', NULL, '## Fix navigation split view bar\\nWe need to adjust padding', '/Users/test/codex-proj', 1787021948, 1787021948000, 1787021948);
         """
         XCTAssertEqual(sqlite3_exec(db, insertThread, nil, nil, nil), SQLITE_OK)
 
@@ -223,6 +225,58 @@ final class AgentSessionProviderTests: XCTestCase {
         let sessions = try await provider.fetchSessions()
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.title, "Fix navigation split view bar")
+    }
+
+    func testCodexSessionProviderAssociatesLaunchWithFirstNewThreadInExactDirectory() async throws {
+        let codexDir = tempDir.appendingPathComponent(".codex")
+        try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
+        let dbFile = codexDir.appendingPathComponent("state_5.sqlite")
+
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(dbFile.path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let createTable = """
+        CREATE TABLE threads (
+            id text PRIMARY KEY,
+            name text,
+            title text NOT NULL,
+            cwd text NOT NULL,
+            created_at integer NOT NULL,
+            created_at_ms integer NOT NULL,
+            updated_at integer NOT NULL
+        );
+        """
+        XCTAssertEqual(sqlite3_exec(db, createTable, nil, nil, nil), SQLITE_OK)
+        let insertThreads = """
+        INSERT INTO threads (id, name, title, cwd, created_at, created_at_ms, updated_at) VALUES
+        ('active-parent', NULL, 'An older active parent checkout thread', '/Users/test/project', 1000, 1000000, 9000),
+        ('first-launch', NULL, 'First Flotilla launch', '/Users/test/project/worktree', 2000, 2000000, 3000),
+        ('second-launch', NULL, 'Second Flotilla launch', '/Users/test/project/worktree', 3000, 3000000, 8000);
+        """
+        XCTAssertEqual(sqlite3_exec(db, insertThreads, nil, nil, nil), SQLITE_OK)
+
+        let provider = CodexSessionProvider(
+            indexURL: codexDir.appendingPathComponent("session_index.jsonl"),
+            databaseURL: dbFile
+        )
+
+        let first = try await provider.fetchLatestSession(
+            for: URL(fileURLWithPath: "/Users/test/project/worktree"),
+            since: Date(timeIntervalSince1970: 1_500)
+        )
+        XCTAssertEqual(first?.id, "first-launch", "The first thread minted after a launch owns that Flotilla session.")
+
+        let second = try await provider.fetchLatestSession(
+            for: URL(fileURLWithPath: "/Users/test/project/worktree"),
+            since: Date(timeIntervalSince1970: 2_500)
+        )
+        XCTAssertEqual(second?.id, "second-launch", "A later launch must not reuse the earlier session's ID.")
+
+        let parent = try await provider.fetchLatestSession(
+            for: URL(fileURLWithPath: "/Users/test/project/worktree"),
+            since: Date(timeIntervalSince1970: 500)
+        )
+        XCTAssertNotEqual(parent?.id, "active-parent", "A parent checkout's active thread is not a worktree conversation.")
     }
 
     // MARK: - OpenCode Provider Tests

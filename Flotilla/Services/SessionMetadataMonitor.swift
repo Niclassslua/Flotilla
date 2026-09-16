@@ -33,7 +33,7 @@ final class SessionMetadataMonitor {
             if let found = await AgentSessionProviderRegistry.default.fetchLatestSession(
                 for: session.agent,
                 workingDirectory: session.workingDirectory,
-                since: session.createdAt.addingTimeInterval(-30)
+                since: session.createdAt
             ) {
                 return found
             }
@@ -51,7 +51,7 @@ final class SessionMetadataMonitor {
             guard let reader = TranscriptCodecRegistry.flotilla().reader(for: session.agent),
                   let discovered = try? reader.discoverSession(
                       workingDirectory: session.workingDirectory,
-                      since: session.createdAt.addingTimeInterval(-30)
+                      since: session.createdAt
                   )
             else { return nil }
 

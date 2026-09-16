@@ -83,6 +83,7 @@ public struct CodexSessionProvider: AgentSessionProviding {
                     id: entry.id,
                     title: finalTitle,
                     workingDirectory: resolvedCwd,
+                    createdAt: sessionsByID[entry.id]?.createdAt,
                     lastActiveAt: date ?? sessionsByID[entry.id]?.lastActiveAt,
                     agent: .codexCLI,
                     isCustomTitle: isCustom
@@ -98,16 +99,21 @@ public struct CodexSessionProvider: AgentSessionProviding {
         let sessions = try await fetchSessions()
         let target = workingDirectory.standardizedFileURL.path
 
-        return sessions.first { session in
-            guard let dir = session.workingDirectory?.standardizedFileURL.path else { return false }
-            let matchesPath = (dir == target || target.hasPrefix(dir) || dir.hasPrefix(target))
-            guard matchesPath else { return false }
-
-            if let since {
-                return (session.lastActiveAt ?? .distantPast) >= since
-            }
-            return true
+        let matches = sessions.filter {
+            $0.workingDirectory?.standardizedFileURL.path == target
         }
+        guard let since else { return matches.first }
+
+        // A thread which merely received output after the launch is not proof
+        // that Flotilla launched it. This used to steal a currently-active
+        // Codex conversation from the same checkout (or its parent checkout),
+        // persisting that ID and making a later native resume non-deterministic.
+        // The first thread created after this launch is the one Codex minted
+        // for it; choosing the earliest also disambiguates back-to-back
+        // Flotilla launches in the same directory.
+        return matches
+            .filter { ($0.createdAt ?? .distantPast) >= since }
+            .min { ($0.createdAt ?? .distantFuture) < ($1.createdAt ?? .distantFuture) }
     }
 
     private func fetchSessionsFromDatabase() -> [(id: String, session: DiscoveredAgentSession?, cwd: URL?)] {
@@ -117,7 +123,13 @@ public struct CodexSessionProvider: AgentSessionProviding {
         }
         defer { sqlite3_close(db) }
 
-        let query = "SELECT id, name, title, cwd, updated_at FROM threads ORDER BY updated_at DESC;"
+        // `created_at_ms` arrived after the original seconds-resolution
+        // column. Keep discovery working with older Codex installations while
+        // using the finer timestamp whenever the database provides it.
+        let createdTimestamp = hasCreatedAtMillisecondsColumn(in: db)
+            ? "created_at_ms"
+            : "created_at * 1000"
+        let query = "SELECT id, name, title, cwd, \(createdTimestamp), updated_at FROM threads ORDER BY updated_at DESC;"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK, let stmt else {
             return []
@@ -131,7 +143,11 @@ public struct CodexSessionProvider: AgentSessionProviding {
             let id = String(cString: idCStr)
 
             let cwd: URL? = sqlite3_column_text(stmt, 3).map { URL(fileURLWithPath: String(cString: $0)) }
-            let updatedSeconds = sqlite3_column_int64(stmt, 4)
+            let createdMilliseconds = sqlite3_column_int64(stmt, 4)
+            let createdAt: Date? = createdMilliseconds > 0
+                ? Date(timeIntervalSince1970: Double(createdMilliseconds) / 1_000)
+                : nil
+            let updatedSeconds = sqlite3_column_int64(stmt, 5)
             let date: Date? = updatedSeconds > 0 ? Date(timeIntervalSince1970: Double(updatedSeconds)) : nil
 
             let nameCStr = sqlite3_column_text(stmt, 1)
@@ -158,6 +174,7 @@ public struct CodexSessionProvider: AgentSessionProviding {
                     id: id,
                     title: resolvedTitle,
                     workingDirectory: cwd,
+                    createdAt: createdAt,
                     lastActiveAt: date,
                     agent: .codexCLI,
                     isCustomTitle: isCustom
@@ -169,5 +186,19 @@ public struct CodexSessionProvider: AgentSessionProviding {
         }
 
         return results
+    }
+
+    private func hasCreatedAtMillisecondsColumn(in database: OpaquePointer) -> Bool {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "PRAGMA table_info(threads);", -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else { return false }
+        defer { sqlite3_finalize(statement) }
+
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let name = sqlite3_column_text(statement, 1) else { continue }
+            if String(cString: name) == "created_at_ms" { return true }
+        }
+        return false
     }
 }
