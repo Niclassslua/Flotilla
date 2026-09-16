@@ -33,8 +33,31 @@ final class AntigravityCompanionAdapter: CompanionSessionAdapter {
 
     private func log() -> String { (try? String(contentsOf: logURL, encoding: .utf8)) ?? "" }
 
+    private func readRecentEvents(maxBytes: Int = 64 * 1024) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: eventsURL) else { return "" }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        if size <= UInt64(maxBytes) {
+            try? handle.seek(toOffset: 0)
+            let data = (try? handle.readToEnd()) ?? Data()
+            return String(data: data, encoding: .utf8) ?? ""
+        }
+        let offset = size - UInt64(maxBytes)
+        try? handle.seek(toOffset: offset)
+        guard let data = try? handle.readToEnd(),
+              let text = String(data: data, encoding: .utf8) else { return "" }
+        if let firstNewline = text.firstIndex(of: "\n") {
+            return String(text[text.index(after: firstNewline)...])
+        }
+        return text
+    }
+
     nonisolated static func isOpen(step: Int, conversation: String, tool: String, log: String) -> Bool {
-        let lines = log.components(separatedBy: "\n")
+        guard log.contains("Surfacing") else { return false }
+        return isOpen(step: step, conversation: conversation, tool: tool, lines: log.components(separatedBy: "\n"))
+    }
+
+    nonisolated static func isOpen(step: Int, conversation: String, tool: String, lines: [String]) -> Bool {
         let opened = lines.lastIndex { $0.contains("Surfacing") && $0.contains("step \(step)") && ($0.contains("tool confirmation") || $0.contains("ask_question")) }
         guard let opened else { return false }
         return !lines.dropFirst(opened + 1).contains {
@@ -46,13 +69,22 @@ final class AntigravityCompanionAdapter: CompanionSessionAdapter {
 
     func refresh() async throws {
         let log = log()
+        let hasSurfacing = log.contains("Surfacing")
+        let logLines = hasSurfacing ? log.components(separatedBy: "\n") : []
+
         requests = requests.filter { entry in
             if case .plan = entry.value.card.kind { return true }
-            return Self.isOpen(step: entry.value.step, conversation: entry.value.conversation, tool: entry.value.tool, log: log)
+            guard hasSurfacing else { return false }
+            return Self.isOpen(step: entry.value.step, conversation: entry.value.conversation, tool: entry.value.tool, lines: logLines)
         }
         order.removeAll { requests[$0] == nil }
-        let events = (try? String(contentsOf: eventsURL, encoding: .utf8)) ?? ""
+
+        let events = readRecentEvents()
         for line in events.split(separator: "\n") {
+            // Fast reject lines that cannot contain an interactive prompt or plan
+            guard line.contains("PreToolUse") || (line.contains("PostToolUse") && line.contains("write_to_file")) else { continue }
+            if !hasSurfacing && line.contains("PreToolUse") { continue }
+
             guard let event = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
                   let payload = event["payload"] as? [String: Any],
                   let step = payload["stepIdx"] as? Int,
@@ -65,7 +97,7 @@ final class AntigravityCompanionAdapter: CompanionSessionAdapter {
             if event["event"] as? String == "PostToolUse", tool == "write_to_file", (args["ArtifactMetadata"] as? [String: Any])?["RequestFeedback"] as? Bool == true {
                 kind = .plan(.init(title: args["TargetFile"] as? String ?? "Review the plan", markdown: args["CodeContent"] as? String ?? ""))
             } else {
-                guard event["event"] as? String == "PreToolUse", Self.isOpen(step: step, conversation: conversation, tool: tool, log: log) else { continue }
+                guard event["event"] as? String == "PreToolUse", Self.isOpen(step: step, conversation: conversation, tool: tool, lines: logLines) else { continue }
                 if tool == "ask_question" {
                     let questions = args["questions"] as? [[String: Any]] ?? [args]
                     kind = .question(questions.enumerated().map { index, question in
@@ -88,11 +120,20 @@ final class AntigravityCompanionAdapter: CompanionSessionAdapter {
         if !requests.isEmpty {
             try await Task.sleep(for: .milliseconds(300))
             let current = self.log()
-            requests = requests.filter { if case .plan = $0.value.card.kind { true } else { Self.isOpen(step: $0.value.step, conversation: $0.value.conversation, tool: $0.value.tool, log: current) } }
+            let currentHasSurfacing = current.contains("Surfacing")
+            let currentLines = currentHasSurfacing ? current.components(separatedBy: "\n") : []
+            requests = requests.filter {
+                if case .plan = $0.value.card.kind { return true }
+                guard currentHasSurfacing else { return false }
+                return Self.isOpen(step: $0.value.step, conversation: $0.value.conversation, tool: $0.value.tool, lines: currentLines)
+            }
             order.removeAll { requests[$0] == nil }
         }
-        if let retry = log.components(separatedBy: "\n").last(where: { $0.localizedCaseInsensitiveContains("retry") }) {
-            transcript.retryAttempt = retry.split(whereSeparator: { !$0.isNumber }).last.flatMap { Int($0) }
+        if log.localizedCaseInsensitiveContains("retry") {
+            let retryLines = logLines.isEmpty ? log.components(separatedBy: "\n") : logLines
+            if let retry = retryLines.last(where: { $0.localizedCaseInsensitiveContains("retry") }) {
+                transcript.retryAttempt = retry.split(whereSeparator: { !$0.isNumber }).last.flatMap { Int($0) }
+            }
         }
     }
 

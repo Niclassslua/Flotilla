@@ -16,49 +16,11 @@ public struct ExperimentalAntigravitySessionProvider: AgentSessionProviding {
     }
 
     public func fetchSessions() async throws -> [DiscoveredAgentSession] {
-        guard FileManager.default.fileExists(atPath: brainURL.path) else { return [] }
-
-        // 1. Read conversation_summaries.db for workspace mappings and titles
-        let dbSummaries = fetchSummariesFromDatabase()
-
-        let conversationFolders = (try? FileManager.default.contentsOfDirectory(
-            at: brainURL,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        )) ?? []
-
-        var sessions: [DiscoveredAgentSession] = []
-
-        for folder in conversationFolders {
-            let sessionID = folder.lastPathComponent
-            let logFile = folder.appendingPathComponent(".system_generated/logs/transcript.jsonl")
-            guard FileManager.default.fileExists(atPath: logFile.path) else { continue }
-
-            let date = (try? logFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
-                ?? dbSummaries[sessionID]?.date
-
-            let dbInfo = dbSummaries[sessionID]
-            let resolvedTitle = (extractTitleFromTranscript(logFile) ?? dbInfo?.title)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let title = resolvedTitle, !title.isEmpty, !title.contains("\n"), title.count <= 120 else { continue }
-
-            let resolvedCwd = dbInfo?.cwd ?? extractWorkspaceFromTranscript(logFile)
-
-            sessions.append(DiscoveredAgentSession(
-                id: sessionID,
-                title: title,
-                workingDirectory: resolvedCwd,
-                lastActiveAt: date,
-                agent: .antigravity,
-                isCustomTitle: true
-            ))
-        }
-
-        return sessions.sorted { ($0.lastActiveAt ?? .distantPast) > ($1.lastActiveAt ?? .distantPast) }
+        try await fetchSessions(since: nil)
     }
 
     public func fetchLatestSession(for workingDirectory: URL, since: Date? = nil) async throws -> DiscoveredAgentSession? {
-        let sessions = try await fetchSessions()
+        let sessions = try await fetchSessions(since: since, limit: 10)
         let target = workingDirectory.standardizedFileURL.path
         let isGeneralSession = target.contains(".flotilla/general-session") || target.hasSuffix("/general-session")
 
@@ -77,6 +39,71 @@ public struct ExperimentalAntigravitySessionProvider: AgentSessionProviding {
             }
             return true
         }
+    }
+
+    private func fetchSessions(since: Date?, limit: Int? = nil) async throws -> [DiscoveredAgentSession] {
+        guard FileManager.default.fileExists(atPath: brainURL.path) else { return [] }
+
+        // 1. Read conversation_summaries.db for workspace mappings and titles
+        let dbSummaries = fetchSummariesFromDatabase()
+
+        let conversationFolders = (try? FileManager.default.contentsOfDirectory(
+            at: brainURL,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        let threshold = since?.addingTimeInterval(-60)
+        var foldersWithDates: [(url: URL, date: Date)] = []
+        for folder in conversationFolders {
+            let sessionID = folder.lastPathComponent
+            let date = (try? folder.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+                ?? dbSummaries[sessionID]?.date
+                ?? .distantPast
+            if let threshold, date < threshold {
+                continue
+            }
+            foldersWithDates.append((folder, date))
+        }
+
+        foldersWithDates.sort { $0.date > $1.date }
+
+        var sessions: [DiscoveredAgentSession] = []
+
+        for (folder, folderDate) in foldersWithDates {
+            let sessionID = folder.lastPathComponent
+            let logFile = folder.appendingPathComponent(".system_generated/logs/transcript.jsonl")
+            guard FileManager.default.fileExists(atPath: logFile.path) else { continue }
+
+            let date = (try? logFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+                ?? (folderDate != .distantPast ? folderDate : dbSummaries[sessionID]?.date)
+
+            if let threshold, let date, date < threshold {
+                continue
+            }
+
+            let dbInfo = dbSummaries[sessionID]
+            let resolvedTitle = (extractTitleFromTranscript(logFile) ?? dbInfo?.title)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let title = resolvedTitle, !title.isEmpty, !title.contains("\n"), title.count <= 120 else { continue }
+
+            let resolvedCwd = dbInfo?.cwd ?? extractWorkspaceFromTranscript(logFile)
+
+            sessions.append(DiscoveredAgentSession(
+                id: sessionID,
+                title: title,
+                workingDirectory: resolvedCwd,
+                lastActiveAt: date,
+                agent: .antigravity,
+                isCustomTitle: true
+            ))
+
+            if let limit, sessions.count >= limit {
+                break
+            }
+        }
+
+        return sessions.sorted { ($0.lastActiveAt ?? .distantPast) > ($1.lastActiveAt ?? .distantPast) }
     }
 
     private func fetchSummariesFromDatabase() -> [String: (title: String?, cwd: URL?, date: Date?)] {
@@ -139,13 +166,15 @@ public struct ExperimentalAntigravitySessionProvider: AgentSessionProviding {
         guard let data = try? Data(contentsOf: fileURL),
               let text = String(data: data, encoding: .utf8) else { return nil }
 
+        guard text.contains("USER Objective:") else { return nil }
+
         for line in text.split(separator: "\n") {
+            guard line.contains("USER Objective:") else { continue }
             let normalized = line.replacingOccurrences(of: "\\n", with: "\n")
                 .replacingOccurrences(of: "\\r", with: "")
 
             // Strictly check for checkpoint objective - Antigravity's official AI-generated title
-            if normalized.contains("USER Objective:"),
-               let range = normalized.range(of: "USER Objective:") {
+            if let range = normalized.range(of: "USER Objective:") {
                 let after = normalized[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
                 if let firstLine = after.components(separatedBy: .newlines).first, !firstLine.isEmpty {
                     let candidate = String(firstLine).trimmingCharacters(in: .whitespacesAndNewlines)

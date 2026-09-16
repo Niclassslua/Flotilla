@@ -599,4 +599,35 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertFalse(process.startedArguments.contains("rm the stale caches"))
         XCTAssertTrue(process.sentInput.isEmpty)
     }
+
+    func testCodexRestartSessionPreservesAgentSessionIDAndResumes() throws {
+        let repository = try GRDBSessionRepository()
+        let session = Session(
+            title: "Codex thread",
+            goal: "Do work",
+            agent: .codexCLI,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .readyForReview,
+            agentSessionID: "thread-uuid-123"
+        )
+        try repository.save(session)
+        let factory = RecordingProcessFactory()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: factory),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+
+        XCTAssertEqual(factory.processes.count, 0)
+        XCTAssertEqual(store.sessions.first?.agentSessionID, "thread-uuid-123")
+
+        store.restartSession(sessionID: session.id)
+
+        XCTAssertEqual(store.sessions.first?.agentSessionID, "thread-uuid-123", "Codex agentSessionID must be preserved on restart")
+        let process = try XCTUnwrap(factory.processes.first)
+        XCTAssertTrue(process.startedArguments.contains("resume"), "Process arguments must include 'resume'")
+        XCTAssertTrue(process.startedArguments.contains("thread-uuid-123"), "Process arguments must include the session ID")
+    }
 }

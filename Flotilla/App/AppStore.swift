@@ -828,11 +828,17 @@ final class AppStore {
         // its dead or superseded agent) instead of launching a fresh one.
         processManager.terminate(sessionID: sessionID)
         processManager.killServerSideSession(sessionID: sessionID)
-        // Clear agentSessionID before restart to ensure a completely fresh conversation
-        sessions[index].agentSessionID = nil
         let descriptor = AgentCatalog.descriptor(for: sessions[index].agent)
-        if case .assignable = descriptor.resume {
+        switch descriptor.resume {
+        case .assignable:
             sessions[index].agentSessionID = sessions[index].id.uuidString
+        case .discoverable:
+            // Keep the already-discovered agent session ID (such as Codex thread ID)
+            // so the process can resume the existing interactive session rather than
+            // starting an orphaned new one.
+            break
+        case .unsupported:
+            sessions[index].agentSessionID = nil
         }
         do {
             try processManager.start(session: sessions[index], deliverGoal: false)
