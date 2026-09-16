@@ -178,6 +178,46 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(text, "real question")
     }
 
+    /// `--resume` makes the CLI nudge itself with an `isMeta` "Continue from
+    /// where you left off." turn; when nothing was pending it answers itself
+    /// client-side with "No response requested." (model `<synthetic>`, zero
+    /// usage). Neither half is something a human said or the agent decided.
+    func testResumeSelfNudgeAndSyntheticNoOpReplyAreExcluded() throws {
+        let url = try writeTranscript([
+            #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-08T01:18:37Z","message":{"role":"assistant","content":"real answer"}}"#,
+            #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":[{"type":"text","text":"Continue from where you left off."}]}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-08T01:18:38Z","message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"No response requested."}]}}"#
+        ])
+
+        let entries = try codec.readNative(at: url)
+
+        XCTAssertEqual(entries.count, 2)
+        guard case let .userMessage(userText, _) = entries[0],
+              case let .assistantMessage(assistantText, _) = entries[1] else {
+            return XCTFail("expected the real exchange, got \(entries)")
+        }
+        XCTAssertEqual(userText, "real question")
+        XCTAssertEqual(assistantText, "real answer")
+    }
+
+    /// `isMeta` also covers legitimate content — another Claude session
+    /// handing back a message — so it must not be treated as synthetic on
+    /// its own, only alongside the exact resume-nudge text.
+    func testIsMetaAloneDoesNotExcludeLegitimateContent() throws {
+        let url = try writeTranscript([
+            #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"Another Claude session sent a message: hello"}}"#
+        ])
+
+        let entries = try codec.readNative(at: url)
+
+        XCTAssertEqual(entries.count, 1)
+        guard case let .userMessage(text, _) = entries[0] else {
+            return XCTFail("expected a user message, got \(entries[0])")
+        }
+        XCTAssertEqual(text, "Another Claude session sent a message: hello")
+    }
+
     func testSidechainRecordsAreExcluded() throws {
         let url = try writeTranscript([
             #"{"type":"user","isSidechain":false,"timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"main thread"}}"#,

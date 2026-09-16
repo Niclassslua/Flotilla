@@ -118,8 +118,18 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                   type == "user" || type == "assistant",
                   let message = record["message"] as? [String: Any] else { continue }
 
+            // Resuming a session (`--resume`) makes the CLI nudge itself with
+            // an `isMeta` "Continue from where you left off." turn. When
+            // nothing was actually pending it answers itself client-side —
+            // `model: "<synthetic>"`, zero usage, never hit the API — with
+            // "No response requested." Neither half is something a human
+            // said or the agent decided, so both are dropped here rather
+            // than rendered as a real exchange.
+            if (message["model"] as? String) == Self.syntheticNoOpModel { continue }
+            let isMeta = record["isMeta"] as? Bool == true
+
             let timestamp = Self.parseTimestamp(record["timestamp"] as? String)
-            entries.append(contentsOf: Self.entries(from: message, type: type, timestamp: timestamp))
+            entries.append(contentsOf: Self.entries(from: message, type: type, isMeta: isMeta, timestamp: timestamp))
         }
 
         return entries
@@ -127,16 +137,19 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
 
     // MARK: - Record decoding
 
+    private static let syntheticNoOpModel = "<synthetic>"
+
     private static func entries(
         from message: [String: Any],
         type: String,
+        isMeta: Bool,
         timestamp: Date
     ) -> [CanonicalEntry] {
         // Claude writes user text as a bare string and everything richer as an
         // array of typed blocks.
         if let text = message["content"] as? String {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed)) else { return [] }
+            guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed, isMeta: isMeta)) else { return [] }
             return [type == "user"
                 ? .userMessage(text: text, timestamp: timestamp)
                 : .assistantMessage(text: text, timestamp: timestamp)]
@@ -151,7 +164,7 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
             case "text":
                 guard let text = block["text"] as? String else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed)) else { continue }
+                guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed, isMeta: isMeta)) else { continue }
                 entries.append(type == "user"
                     ? .userMessage(text: text, timestamp: timestamp)
                     : .assistantMessage(text: text, timestamp: timestamp))
@@ -253,13 +266,20 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
     }
 
     /// Claude Code injects harness plumbing — background-task notifications,
-    /// reminders — as plain text on a `user`-role turn, since that's the only
-    /// role the API accepts for non-assistant content. A human never typed
-    /// this, so it must not render as a chat message the human sent.
-    private static func isSyntheticUserText(_ trimmed: String) -> Bool {
+    /// reminders, the self-nudge it sends on `--resume` — as plain text on a
+    /// `user`-role turn, since that's the only role the API accepts for
+    /// non-assistant content. A human never typed this, so it must not
+    /// render as a chat message the human sent.
+    ///
+    /// The resume nudge is only filtered when `isMeta` marks it as harness
+    /// plumbing: `isMeta` also covers legitimate content (e.g. another
+    /// Claude session handing back a message), so it isn't a synthetic
+    /// marker on its own, and a real user could type this exact sentence.
+    private static func isSyntheticUserText(_ trimmed: String, isMeta: Bool) -> Bool {
         trimmed.hasPrefix("<system-reminder")
             || trimmed.hasPrefix("<task-notification")
             || trimmed.hasPrefix("[SYSTEM NOTIFICATION")
+            || (isMeta && trimmed == "Continue from where you left off.")
     }
 
     /// A tool result's content is a string, or blocks, or occasionally neither.
