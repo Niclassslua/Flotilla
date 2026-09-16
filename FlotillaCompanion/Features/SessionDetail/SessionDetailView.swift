@@ -306,7 +306,6 @@ struct SessionDetailView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 160)
             .allowsHitTesting(false)
         } else {
             FlotillaColors.canvas
