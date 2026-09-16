@@ -253,6 +253,10 @@ final class MacConnection {
             waiting.removeValue(forKey: id)?.resume(returning: response)
         case .pong:
             break
+        case .addressUpdate(let candidates):
+            guard candidates != record.candidates else { return }
+            record.candidates = candidates
+            onRecordChange(record)
         }
     }
 
