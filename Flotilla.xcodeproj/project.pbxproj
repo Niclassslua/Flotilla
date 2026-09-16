@@ -303,6 +303,7 @@
 		B2611563F5D4E20C095C8CB8 /* TranscriptSearchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281236F00DDC230B34EBB94F /* TranscriptSearchBar.swift */; };
 		B285C3B2503185F91CCBE041 /* SkillEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F403C1167C04264CF015F99 /* SkillEntry.swift */; };
 		B28B43FA19D996E532BAA240 /* GitGraphLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9CA216025ED610FE445F0B8 /* GitGraphLayoutTests.swift */; };
+		B2FE977B3361C37288ACA1BB /* CurrentTurnSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 881D69E6710698A7699A2CF3 /* CurrentTurnSummary.swift */; };
 		B3B0631C46DF712E62A05356 /* git-branch.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5E7CD7C066464B1F9AACF09A /* git-branch.svg */; };
 		B405B6FBA7BE63CA144193BC /* FileChangeKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F914E3566BA5361082F9D6 /* FileChangeKind.swift */; };
 		B4A38809E4CFB671B5376798 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE677A016A7E33854CFA93A /* MarkdownView.swift */; };
@@ -669,6 +670,7 @@
 		855986A922FD6FCB156C0658 /* python.svg */ = {isa = PBXFileReference; path = python.svg; sourceTree = "<group>"; };
 		874C07585626CF8D03699AB0 /* GitKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitKitTests.swift; sourceTree = "<group>"; };
 		87DD78BE8BF778129081EB27 /* cpp.svg */ = {isa = PBXFileReference; path = cpp.svg; sourceTree = "<group>"; };
+		881D69E6710698A7699A2CF3 /* CurrentTurnSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentTurnSummary.swift; sourceTree = "<group>"; };
 		887223A2AD875BE94A7BB8BF /* document.svg */ = {isa = PBXFileReference; path = document.svg; sourceTree = "<group>"; };
 		88F189D975DD32C573D4279F /* HooksKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HooksKit; path = Packages/HooksKit; sourceTree = SOURCE_ROOT; };
 		899F910D5D61381622451EAC /* audio.svg */ = {isa = PBXFileReference; path = audio.svg; sourceTree = "<group>"; };
@@ -1415,6 +1417,7 @@
 		95FB78F346290C2C9BF2AD83 /* Model */ = {
 			isa = PBXGroup;
 			children = (
+				881D69E6710698A7699A2CF3 /* CurrentTurnSummary.swift */,
 				175C12E738E296887FE18F76 /* MacHost.swift */,
 				09F427E1215571CD448FC68B /* ProviderCapabilities.swift */,
 				A3DD030B490E8C57712D5908 /* TranscriptLayout.swift */,
@@ -2113,6 +2116,7 @@
 				3E103C1107316506E06E0CCC /* CompanionStore.swift in Sources */,
 				F016F6D853D05A48885B2FE6 /* ComposerSlot.swift in Sources */,
 				D9C41061F46629FA093F297C /* CreateSessionSheet.swift in Sources */,
+				B2FE977B3361C37288ACA1BB /* CurrentTurnSummary.swift in Sources */,
 				2498F38C3172B63CEE813EB9 /* DiffView.swift in Sources */,
 				C2C54BCEB898A2E3550CDC88 /* EffortPickerSheet.swift in Sources */,
 				085170FFEE7C23280AD15430 /* FleetView.swift in Sources */,

@@ -70,6 +70,11 @@ struct SessionDetailView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 SessionHeader(session: session, diffStat: headerDiffStat(session))
+                CurrentTurnSummaryRow(
+                    latestLine: transcript.latestCompleteLine,
+                    inFlight: TranscriptLayout.inFlightCall(in: transcript.events),
+                    diffStat: headerDiffStat(session)
+                )
                 if let mac, !mac.isReachable { UnreachableBanner(mac: mac) }
                 if isSearching {
                     TranscriptSearchBar(
@@ -311,6 +316,49 @@ private struct SessionHeader: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(.bar)
+    }
+}
+
+/// A one-glance recap of the current turn — the agent's latest words, plus
+/// what's actively running and known change counts when there's something
+/// to say. A snapshot alongside `SessionHeader`, not a replacement for the
+/// live `WorkingIndicator` near the composer.
+private struct CurrentTurnSummaryRow: View {
+    let latestLine: String?
+    let inFlight: ToolCall?
+    let diffStat: DiffStat?
+
+    private var detail: String? {
+        CurrentTurnSummaryFormatting.detail(inFlight: inFlight, diffStat: diffStat)
+    }
+
+    var body: some View {
+        if latestLine != nil || detail != nil {
+            VStack(alignment: .leading, spacing: 2) {
+                if let latestLine {
+                    Text(latestLine)
+                        .font(.caption)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .accessibilityIdentifier("SessionDetail.TurnSummary.LatestLine")
+                }
+                if let detail {
+                    Text(detail)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("SessionDetail.TurnSummary.Detail")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 2)
+            .padding(.bottom, 6)
+            .background(.bar)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("SessionDetail.TurnSummary")
+        }
     }
 }
 

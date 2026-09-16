@@ -383,3 +383,30 @@ final class TranscriptSearchTests: XCTestCase {
         XCTAssertLessThan(excerpt!.count, longText.count)
     }
 }
+
+final class CurrentTurnSummaryFormattingTests: XCTestCase {
+    func testNoDetailWhenNothingIsActiveOrChanged() {
+        XCTAssertNil(CurrentTurnSummaryFormatting.detail(inFlight: nil, diffStat: nil))
+        XCTAssertNil(CurrentTurnSummaryFormatting.detail(inFlight: nil, diffStat: DiffStat(files: 0, additions: 0, deletions: 0)))
+    }
+
+    func testActiveToolShowsSubjectAndElapsed() {
+        let start = Date().addingTimeInterval(-125)
+        let call = ToolCall(id: "a", tool: "Bash", input: ["command": "make test"], output: nil, isError: false, startedAt: start)
+        let detail = CurrentTurnSummaryFormatting.detail(inFlight: call, diffStat: nil, now: start.addingTimeInterval(125))
+        XCTAssertEqual(detail, "Running make test · 2m")
+    }
+
+    func testChangeCountsOmitUnknownFileCount() {
+        let detail = CurrentTurnSummaryFormatting.detail(inFlight: nil, diffStat: DiffStat(files: 0, additions: 12, deletions: 4))
+        XCTAssertEqual(detail, "+12 −4")
+        XCTAssertFalse(detail!.contains("file"))
+    }
+
+    func testCompactElapsedUsesLargestReasonableUnit() {
+        let now = Date()
+        XCTAssertEqual(CurrentTurnSummaryFormatting.compactElapsed(since: now.addingTimeInterval(-45), now: now), "45s")
+        XCTAssertEqual(CurrentTurnSummaryFormatting.compactElapsed(since: now.addingTimeInterval(-180), now: now), "3m")
+        XCTAssertEqual(CurrentTurnSummaryFormatting.compactElapsed(since: now.addingTimeInterval(-7200), now: now), "2h")
+    }
+}
