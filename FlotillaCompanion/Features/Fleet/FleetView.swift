@@ -80,17 +80,6 @@ struct FleetView: View {
         // Anchored to this row (not the List) so on iPad the dialog pops up
         // over the row being deleted instead of near the top of the screen.
         .sessionDeleteDialog(session: $pendingDelete, matching: session)
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            // Questions need their options and plans need reading, so only
-            // permissions get swipe answers — and only plain Approve / Deny.
-            if let permission {
-                Button("Approve", systemImage: "checkmark") {
-                    Task { _ = await store.answer(permission.id, in: session.id, with: .allow) }
-                }
-                .tint(FlotillaColors.accent)
-                .disabled(!isActionable)
-            }
-        }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button("Delete", systemImage: "trash") { pendingDelete = session }
                 .tint(FlotillaColors.danger)
