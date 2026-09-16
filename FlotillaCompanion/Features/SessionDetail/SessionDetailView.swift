@@ -14,6 +14,11 @@ struct SessionDetailView: View {
     /// User overrides of a tool group's default expansion.
     @State private var expandedGroups: [String: Bool] = [:]
     @State private var containerHeight: CGFloat = 800
+    /// Within this many points of the bottom counts as "still reading the tail".
+    private static let nearBottomThreshold: CGFloat = 80
+    @State private var isNearBottom = true
+    @State private var hasNewOutputWhileScrolledUp = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if let session = store.session(sessionID), let macID = store.mac(forSession: sessionID)?.id {
@@ -36,9 +41,21 @@ struct SessionDetailView: View {
                 Color.clear.frame(height: 1).id(Self.bottomAnchorID)
             }
             .defaultScrollAnchor(.bottom, for: .initialOffset)
-            .onChange(of: transcript.events.count) { scrollToBottom(proxy) }
-            .onChange(of: transcript.queuedPrompts.count) { scrollToBottom(proxy) }
-            .onChange(of: transcript.streamingText) { scrollToBottom(proxy) }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - Self.nearBottomThreshold
+            } action: { _, isNear in
+                isNearBottom = isNear
+                if isNear { hasNewOutputWhileScrolledUp = false }
+            }
+            .onChange(of: transcript.events.count) { _, _ in handleNewContent(proxy) }
+            .onChange(of: transcript.queuedPrompts.count) { _, _ in handleNewContent(proxy) }
+            .onChange(of: transcript.streamingText) { _, _ in handleNewContent(proxy) }
+            .overlay(alignment: .bottom) {
+                if hasNewOutputWhileScrolledUp {
+                    newOutputButton(proxy)
+                }
+            }
+            .animation(reduceMotion ? nil : .snappy, value: hasNewOutputWhileScrolledUp)
         }
         .scrollDismissesKeyboard(.interactively)
         .background(FlotillaColors.canvas)
@@ -101,10 +118,40 @@ struct SessionDetailView: View {
 
     private static let bottomAnchorID = "bottom"
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        withAnimation(.snappy) {
-            proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+    /// New output only pulls the reader along when they're already at the
+    /// tail; otherwise it's flagged for the "New output" jump instead.
+    private func handleNewContent(_ proxy: ScrollViewProxy) {
+        if isNearBottom {
+            scrollToBottom(proxy)
+        } else {
+            hasNewOutputWhileScrolledUp = true
         }
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        if reduceMotion {
+            proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+        } else {
+            withAnimation(.snappy) {
+                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+            }
+        }
+    }
+
+    private func newOutputButton(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            hasNewOutputWhileScrolledUp = false
+            scrollToBottom(proxy)
+        } label: {
+            Label("New output", systemImage: "arrow.down")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.glassProminent)
+        .tint(FlotillaColors.accent)
+        .controlSize(.small)
+        .padding(.bottom, 8)
+        .accessibilityIdentifier("Transcript.NewOutput")
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private func transcriptContent(session: CompanionSession, transcript: SessionTranscript) -> some View {
