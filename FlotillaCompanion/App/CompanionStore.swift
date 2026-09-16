@@ -88,6 +88,8 @@ final class CompanionStore {
     func session(_ id: CompanionSession.ID) -> CompanionSession? { data.session(id) }
     func transcript(for id: CompanionSession.ID) -> SessionTranscript { data.transcript(for: id) }
     func pendingInteractions(for id: CompanionSession.ID) -> [PendingInteraction] { data.pendingInteractions(for: id) }
+    func fleetReceivedAt(_ macID: MacHost.ID) -> Date? { data.fleetReceivedAt(macID) }
+    func transcriptReceivedAt(_ id: CompanionSession.ID) -> Date? { data.transcriptReceivedAt(id) }
     func diff(for id: CompanionSession.ID, commitHash: String?) -> Remote<[FileDiff]> { data.diff(for: id, commitHash: commitHash) }
     func commits(for id: CompanionSession.ID) -> Remote<[CommitSummary]> { data.commits(for: id) }
     func fileContents(at path: String, in id: CompanionSession.ID) -> Remote<String?> { data.fileContents(at: path, in: id) }

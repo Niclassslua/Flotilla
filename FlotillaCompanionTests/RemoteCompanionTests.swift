@@ -123,6 +123,25 @@ final class RemoteCompanionTests: XCTestCase {
         XCTAssertNil(store.loadCache("test-mac"), "removing a Mac must not let a delayed write restore its cache")
     }
 
+    func testReceivedTimestampsSurviveTheCacheRoundTrip() async {
+        let store = PairedMacStore.temporary()
+        let writer = CompanionCacheWriter(store: store, macID: "test-mac")
+        let sessionID = UUID()
+        let fleetAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let transcriptAt = Date(timeIntervalSince1970: 1_700_000_500)
+        let cache = PairedMacStore.Cache(
+            fleet: FleetSnapshot(macID: "test-mac", macName: "Studio", sessions: [], projects: [], catalog: .fallback),
+            transcripts: [sessionID: SessionTranscript()],
+            fleetReceivedAt: fleetAt,
+            transcriptsReceivedAt: [sessionID: transcriptAt]
+        )
+        await writer.flush(cache, revision: 1)
+
+        let loaded = store.loadCache("test-mac")
+        XCTAssertEqual(loaded?.fleetReceivedAt, fleetAt)
+        XCTAssertEqual(loaded?.transcriptsReceivedAt[sessionID], transcriptAt)
+    }
+
     func testSessionCreatedBeforeFleetUpdateStillSubscribesWhenItAppears() async throws {
         let mac = FakeMac(sessions: [])
         try await mac.start()

@@ -86,6 +86,10 @@ struct StatusDot: View {
 /// Sticky notice over a Mac's cached, read-only content.
 struct UnreachableBanner: View {
     let mac: MacHost
+    /// When the content shown beneath this banner was actually received —
+    /// `nil` means a legacy cache with no such record, which reads as
+    /// unknown rather than guessing "now".
+    var asOf: Date? = nil
     @Environment(CompanionStore.self) private var store
     @State private var isPairing = false
 
@@ -119,10 +123,17 @@ struct UnreachableBanner: View {
 
     private var text: String {
         switch mac.connection {
-        case .connecting: "Connecting to \(mac.name)…"
+        case .connecting: "Connecting to \(mac.name)… showing \(asOfPhrase)"
         case .needsRepairing(let reason): reason.message
-        default: "\(mac.name) is unreachable · last seen \(mac.lastSeen.formatted(date: .omitted, time: .shortened))"
+        default: "\(mac.name) is unreachable · last seen \(mac.lastSeen.formatted(date: .omitted, time: .shortened)) · showing \(asOfPhrase)"
         }
+    }
+
+    /// Never claims cached content is live: an unknown snapshot time says so
+    /// plainly instead of falling back to "now".
+    private var asOfPhrase: String {
+        guard let asOf else { return "content as of an unknown time" }
+        return "content as of \(asOf.formatted(date: .omitted, time: .shortened))"
     }
 
     private var icon: String {

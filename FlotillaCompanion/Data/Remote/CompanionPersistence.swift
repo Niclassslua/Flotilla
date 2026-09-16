@@ -96,6 +96,11 @@ struct PairedMacStore: Sendable {
     struct Cache: Codable, Sendable {
         var fleet: FleetSnapshot?
         var transcripts: [UUID: SessionTranscript]
+        /// When the phone received this content, not when the Mac produced
+        /// it. Absent on caches written before this existed — that reads as
+        /// an unknown time, never as "now".
+        var fleetReceivedAt: Date? = nil
+        var transcriptsReceivedAt: [UUID: Date] = [:]
     }
 
     func loadMacs() -> [PairedMacRecord] {

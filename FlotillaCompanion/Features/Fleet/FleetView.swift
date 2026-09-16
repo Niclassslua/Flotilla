@@ -50,7 +50,7 @@ struct FleetView: View {
         .animation(.snappy, value: needsYou.map(\.id))
         .safeAreaInset(edge: .top, spacing: 0) {
             if let mac, !mac.isReachable {
-                UnreachableBanner(mac: mac)
+                UnreachableBanner(mac: mac, asOf: store.fleetReceivedAt(macID))
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }

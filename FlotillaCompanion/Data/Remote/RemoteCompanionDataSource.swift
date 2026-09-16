@@ -116,6 +116,14 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         connection(forSession: sessionID)?.pending(for: sessionID) ?? []
     }
 
+    func fleetReceivedAt(_ macID: MacHost.ID) -> Date? {
+        connection(macID)?.fleetReceivedAt
+    }
+
+    func transcriptReceivedAt(_ sessionID: CompanionSession.ID) -> Date? {
+        connection(forSession: sessionID)?.transcriptsReceivedAt[sessionID]
+    }
+
     func diff(for sessionID: CompanionSession.ID, commitHash: String?) -> Remote<[FileDiff]> {
         connection(forSession: sessionID)?.diff(for: sessionID, commitHash: commitHash) ?? .failed("The session isn't available.")
     }

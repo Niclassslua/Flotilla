@@ -80,6 +80,11 @@ final class MockCompanionDataSource: CompanionDataSource {
         pending[sessionID] ?? []
     }
 
+    /// The demo has no real cache to be honest about — it never claims a
+    /// snapshot time it doesn't have.
+    func fleetReceivedAt(_ macID: MacHost.ID) -> Date? { nil }
+    func transcriptReceivedAt(_ sessionID: CompanionSession.ID) -> Date? { nil }
+
     var supportsPairing: Bool { false }
 
     func diff(for sessionID: CompanionSession.ID, commitHash: String?) -> Remote<[FileDiff]> {

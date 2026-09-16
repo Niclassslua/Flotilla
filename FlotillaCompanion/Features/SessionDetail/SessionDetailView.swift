@@ -79,7 +79,7 @@ struct SessionDetailView: View {
                     inFlight: TranscriptLayout.inFlightCall(in: transcript.events),
                     diffStat: headerDiffStat(session)
                 )
-                if let mac, !mac.isReachable { UnreachableBanner(mac: mac) }
+                if let mac, !mac.isReachable { UnreachableBanner(mac: mac, asOf: store.transcriptReceivedAt(sessionID)) }
                 if isSearching {
                     TranscriptSearchBar(
                         query: $searchQuery,

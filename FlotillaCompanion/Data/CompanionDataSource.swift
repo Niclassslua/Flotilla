@@ -23,6 +23,12 @@ protocol CompanionDataSource: AnyObject, Observable {
     func transcript(for sessionID: CompanionSession.ID) -> SessionTranscript
     func pendingInteractions(for sessionID: CompanionSession.ID) -> [PendingInteraction]
 
+    /// When the phone received the fleet/transcript it's currently showing
+    /// for this Mac/session — `nil` for a legacy cache with no such record,
+    /// which reads as an unknown time, never as live.
+    func fleetReceivedAt(_ macID: MacHost.ID) -> Date?
+    func transcriptReceivedAt(_ sessionID: CompanionSession.ID) -> Date?
+
     func diff(for sessionID: CompanionSession.ID, commitHash: String?) -> Remote<[FileDiff]>
     func commits(for sessionID: CompanionSession.ID) -> Remote<[CommitSummary]>
     func fileContents(at path: String, in sessionID: CompanionSession.ID) -> Remote<String?>

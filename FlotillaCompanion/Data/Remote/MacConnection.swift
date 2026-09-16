@@ -12,6 +12,11 @@ final class MacConnection {
     private(set) var state: MacConnectionState = .unreachable
     private(set) var fleet: FleetSnapshot?
     private(set) var transcripts: [UUID: SessionTranscript] = [:]
+    /// When the phone received the current `fleet`/each transcript — never
+    /// when the Mac produced it — so a cached view can say honestly "as of
+    /// <time>" instead of presenting stale content as live.
+    private(set) var fleetReceivedAt: Date?
+    private(set) var transcriptsReceivedAt: [UUID: Date] = [:]
     private(set) var diffs: [String: Remote<[FileDiff]>] = [:]
     private(set) var commits: [UUID: Remote<[CommitSummary]>] = [:]
     private(set) var files: [String: Remote<String?>] = [:]
@@ -63,6 +68,8 @@ final class MacConnection {
         self.record = record
         self.fleet = cache?.fleet
         self.transcripts = cache?.transcripts ?? [:]
+        self.fleetReceivedAt = cache?.fleetReceivedAt
+        self.transcriptsReceivedAt = cache?.transcriptsReceivedAt ?? [:]
         self.identityStore = identityStore
         self.browser = browser
         self.deviceName = deviceName
@@ -84,7 +91,7 @@ final class MacConnection {
             if case .needsRepairing = state { return }
             if !isConnected { connect() }
         } else {
-            onCacheFlush(PairedMacStore.Cache(fleet: fleet, transcripts: transcripts), cacheRevision)
+            onCacheFlush(currentCache(), cacheRevision)
             connectTask?.cancel()
             disconnect()
         }
@@ -271,6 +278,7 @@ final class MacConnection {
             applyFleet(updated)
         case .transcript(let sessionID, let transcript):
             transcripts[sessionID] = transcript
+            transcriptsReceivedAt[sessionID] = .now
             pruneQueuedPrompts(sessionID)
             saveCache()
         case .transcriptSnapshot(let sessionID, let revision, let transcript):
@@ -281,6 +289,7 @@ final class MacConnection {
             }
             transcriptRevisions[sessionID] = revision
             transcripts[sessionID] = transcript
+            transcriptsReceivedAt[sessionID] = .now
             pruneQueuedPrompts(sessionID)
             saveCache()
         case .transcriptDelta(let sessionID, let delta):
@@ -292,6 +301,7 @@ final class MacConnection {
             }
             transcriptRevisions[sessionID] = delta.revision
             transcripts[sessionID] = updated
+            transcriptsReceivedAt[sessionID] = .now
             pruneQueuedPrompts(sessionID)
             saveCache()
         case .response(let id, let response):
@@ -318,6 +328,7 @@ final class MacConnection {
             }, in: sessionID)
         }
         fleet = snapshot
+        fleetReceivedAt = .now
         onFleetChange()
         if case .connected = state, snapshot.macName != record.name {
             record.name = snapshot.macName
@@ -345,7 +356,11 @@ final class MacConnection {
 
     private func saveCache() {
         cacheRevision += 1
-        onCacheChange(PairedMacStore.Cache(fleet: fleet, transcripts: transcripts), cacheRevision)
+        onCacheChange(currentCache(), cacheRevision)
+    }
+
+    private func currentCache() -> PairedMacStore.Cache {
+        PairedMacStore.Cache(fleet: fleet, transcripts: transcripts, fleetReceivedAt: fleetReceivedAt, transcriptsReceivedAt: transcriptsReceivedAt)
     }
 
     // MARK: - Reads
