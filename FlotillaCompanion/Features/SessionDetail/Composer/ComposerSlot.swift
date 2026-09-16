@@ -183,7 +183,10 @@ private struct PromptComposer: View {
                     Button {
                         let prompt = trimmed
                         text = ""
-                        Task { await store.sendPrompt(prompt, to: session.id) }
+                        Task {
+                            let sent = await store.sendPrompt(prompt, to: session.id)
+                            if !sent { text = prompt }
+                        }
                     } label: {
                         Image(systemName: "arrow.up")
                     }
@@ -201,6 +204,8 @@ private struct PromptComposer: View {
         }
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .disabled(!isActionable)
+        .onAppear { text = store.promptDraft(for: session.id) }
+        .onChange(of: text) { _, newValue in store.savePromptDraft(newValue, for: session.id) }
     }
 
     private var placeholder: String {

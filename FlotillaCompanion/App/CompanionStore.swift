@@ -36,6 +36,14 @@ final class CompanionStore {
     private enum Key {
         static let lastMac = "companion.lastMacID"
         static func choice(_ project: UUID?) -> String { "companion.choice.\(project?.uuidString ?? "general")" }
+        static func promptDraft(_ macID: MacHost.ID, _ sessionID: CompanionSession.ID) -> String {
+            "companion.draft.prompt.\(macID).\(sessionID.uuidString)"
+        }
+        static func planRevisionDraft(_ macID: MacHost.ID, _ sessionID: CompanionSession.ID) -> String {
+            "companion.draft.planRevision.\(macID).\(sessionID.uuidString)"
+        }
+        static let draftPromptPrefix = "companion.draft.prompt."
+        static let draftPlanRevisionPrefix = "companion.draft.planRevision."
     }
 
     init(data: any CompanionDataSource, defaults: UserDefaults = .standard) {
@@ -124,9 +132,10 @@ final class CompanionStore {
         return await perform { try await data.answer(interaction, in: session, with: answer) }
     }
 
-    func sendPrompt(_ text: String, to session: CompanionSession.ID) async {
-        guard isActionable(sessionID: session) else { return }
-        await perform { try await data.sendPrompt(text, to: session) }
+    @discardableResult
+    func sendPrompt(_ text: String, to session: CompanionSession.ID) async -> Bool {
+        guard isActionable(sessionID: session) else { return false }
+        return await perform { try await data.sendPrompt(text, to: session) } != nil
     }
 
     func stop(_ session: CompanionSession.ID) async {
@@ -152,8 +161,13 @@ final class CompanionStore {
 
     func delete(_ session: CompanionSession.ID, removeWorktree: Bool) async {
         guard isActionable(sessionID: session) else { return }
+        let macID = data.macID(for: session)
         let succeeded = await perform { try await data.delete(session, removeWorktree: removeWorktree) } != nil
         guard succeeded else { return }
+        if let macID {
+            defaults.removeObject(forKey: Key.promptDraft(macID, session))
+            defaults.removeObject(forKey: Key.planRevisionDraft(macID, session))
+        }
         path.removeAll { route in
             switch route {
             case .session(let id), .diff(let id, _, _), .commits(let id), .file(let id, _): id == session
@@ -175,11 +189,44 @@ final class CompanionStore {
     func removeMac(_ macID: MacHost.ID) {
         // Everything on the stack below a Mac's fleet belongs to that Mac.
         if case .fleet(macID)? = path.first { path = [] }
+        purgeDrafts(forMac: macID)
         data.removeMac(macID)
+    }
+
+    private func purgeDrafts(forMac macID: MacHost.ID) {
+        let promptPrefix = Key.draftPromptPrefix + macID + "."
+        let planPrefix = Key.draftPlanRevisionPrefix + macID + "."
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(promptPrefix) || key.hasPrefix(planPrefix) {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     func reconnect(_ macID: MacHost.ID) {
         data.reconnect(macID)
+    }
+
+    // MARK: - Drafts (per Mac + session, phone-local; survive navigation and relaunch)
+
+    func promptDraft(for sessionID: CompanionSession.ID) -> String {
+        guard let macID = data.macID(for: sessionID) else { return "" }
+        return defaults.string(forKey: Key.promptDraft(macID, sessionID)) ?? ""
+    }
+
+    func savePromptDraft(_ text: String, for sessionID: CompanionSession.ID) {
+        guard let macID = data.macID(for: sessionID) else { return }
+        let key = Key.promptDraft(macID, sessionID)
+        if text.isEmpty { defaults.removeObject(forKey: key) } else { defaults.set(text, forKey: key) }
+    }
+
+    func planRevisionDraft(for sessionID: CompanionSession.ID) -> String {
+        guard let macID = data.macID(for: sessionID) else { return "" }
+        return defaults.string(forKey: Key.planRevisionDraft(macID, sessionID)) ?? ""
+    }
+
+    func savePlanRevisionDraft(_ text: String, for sessionID: CompanionSession.ID) {
+        guard let macID = data.macID(for: sessionID) else { return }
+        let key = Key.planRevisionDraft(macID, sessionID)
+        if text.isEmpty { defaults.removeObject(forKey: key) } else { defaults.set(text, forKey: key) }
     }
 
     // MARK: - Remembered create-session choices (per project, like the Mac)

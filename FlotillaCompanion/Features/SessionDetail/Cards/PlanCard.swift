@@ -58,62 +58,73 @@ private struct PlanActions: View {
     @State private var isSending = false
 
     var body: some View {
-        if isRevising {
-            VStack(spacing: 8) {
-                TextField("What should change?", text: $revision, axis: .vertical)
-                    .lineLimit(1...5)
-                    .padding(10)
-                    .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-                HStack(spacing: 8) {
-                    Button { isRevising = false } label: { Text("Cancel").frame(maxWidth: .infinity) }
-                        .buttonStyle(.glass)
-                    Button {
-                        send(.revisePlan(revision.trimmingCharacters(in: .whitespacesAndNewlines)))
-                    } label: {
-                        Text("Send Revision").frame(maxWidth: .infinity)
+        Group {
+            if isRevising {
+                VStack(spacing: 8) {
+                    TextField("What should change?", text: $revision, axis: .vertical)
+                        .lineLimit(1...5)
+                        .padding(10)
+                        .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+                    HStack(spacing: 8) {
+                        Button {
+                            revision = ""
+                            isRevising = false
+                        } label: { Text("Cancel").frame(maxWidth: .infinity) }
+                            .buttonStyle(.glass)
+                        Button {
+                            send(.revisePlan(revision.trimmingCharacters(in: .whitespacesAndNewlines)))
+                        } label: {
+                            Text("Send Revision").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .tint(FlotillaColors.accent)
+                        .disabled(revision.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .controlSize(.large)
+                }
+            } else if context.capabilities.planApprovalHasModeSplit {
+                VStack(spacing: 8) {
+                    Button { send(.approvePlan(.autoAccept)) } label: {
+                        Text("Approve & Auto-Accept Edits").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassProminent)
                     .tint(FlotillaColors.accent)
-                    .disabled(revision.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    HStack(spacing: 8) {
+                        Button { send(.approvePlan(.askForEdits)) } label: {
+                            Text("Approve & Ask for Edits").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.glass)
+                        Button { isRevising = true } label: { Text("Revise") }
+                            .buttonStyle(.glass)
+                    }
                 }
                 .controlSize(.large)
-            }
-        } else if context.capabilities.planApprovalHasModeSplit {
-            VStack(spacing: 8) {
-                Button { send(.approvePlan(.autoAccept)) } label: {
-                    Text("Approve & Auto-Accept Edits").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(FlotillaColors.accent)
+                .disabled(isSending)
+            } else {
                 HStack(spacing: 8) {
-                    Button { send(.approvePlan(.askForEdits)) } label: {
-                        Text("Approve & Ask for Edits").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glass)
-                    Button { isRevising = true } label: { Text("Revise") }
+                    Button { isRevising = true } label: { Text("Revise").frame(maxWidth: .infinity) }
                         .buttonStyle(.glass)
+                    Button { send(.approvePlan(nil)) } label: { Text("Approve").frame(maxWidth: .infinity) }
+                        .buttonStyle(.glassProminent)
+                        .tint(FlotillaColors.accent)
                 }
+                .controlSize(.large)
+                .disabled(isSending)
             }
-            .controlSize(.large)
-            .disabled(isSending)
-        } else {
-            HStack(spacing: 8) {
-                Button { isRevising = true } label: { Text("Revise").frame(maxWidth: .infinity) }
-                    .buttonStyle(.glass)
-                Button { send(.approvePlan(nil)) } label: { Text("Approve").frame(maxWidth: .infinity) }
-                    .buttonStyle(.glassProminent)
-                    .tint(FlotillaColors.accent)
-            }
-            .controlSize(.large)
-            .disabled(isSending)
         }
+        .onAppear { revision = store.planRevisionDraft(for: context.sessionID) }
+        .onChange(of: revision) { _, newValue in store.savePlanRevisionDraft(newValue, for: context.sessionID) }
     }
 
     private func send(_ answer: InteractionAnswer) {
         isSending = true
         onAnswered()
         Task {
-            _ = await store.answer(context.interaction.id, in: context.sessionID, with: answer)
+            let outcome = await store.answer(context.interaction.id, in: context.sessionID, with: answer)
+            if outcome != nil {
+                store.savePlanRevisionDraft("", for: context.sessionID)
+                revision = ""
+            }
             isSending = false
         }
     }
