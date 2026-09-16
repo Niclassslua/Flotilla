@@ -316,6 +316,27 @@ final class CodexTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(try codec.readNative(at: url), [.assistantMessage(text: "answer", timestamp: Self.writeTime)])
     }
 
+    /// Codex injects `<turn_aborted>…</turn_aborted>` as a plain user-role
+    /// message after a stop. Read literally it would render as if the human
+    /// typed raw XML tags; it must come back as a system note instead.
+    func testTurnAbortedControlMessageIsReadAsASystemNote() async throws {
+        let handle = try await codec.writeNative(
+            [.userMessage(text: "ignored", timestamp: Self.writeTime)],
+            workingDirectory: workingDirectory,
+            sessionID: sessionID
+        )
+        let url = try XCTUnwrap(handle.transcriptURL)
+
+        let record = #"{"timestamp":"2026-09-08T01:18:36Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<turn_aborted> The previous turn was interrupted on purpose. </turn_aborted>"}]}}"#
+        let injected = try String(contentsOf: url, encoding: .utf8) + "\n" + record
+        try injected.write(to: url, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(try codec.readNative(at: url), [
+            .userMessage(text: "ignored", timestamp: Self.writeTime),
+            .systemNote(text: "The previous turn was interrupted on purpose.", timestamp: Self.writeTime)
+        ])
+    }
+
     // MARK: - Location
 
     func testLocatesAndIdentifiesAWrittenTranscript() async throws {
