@@ -11,6 +11,8 @@ struct SessionRowView: View {
     /// The latest complete line of assistant text, for working rows.
     let latestLine: String?
 
+    private var isWorking: Bool { session.status == .working }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ProviderLogo(agent: session.agent)
@@ -24,14 +26,18 @@ struct SessionRowView: View {
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
-                    Text(session.updatedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
-                        .font(.caption2)
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                        .monospacedDigit()
+                    if ProtoFlags.isOn("elapsedTimer"), isWorking {
+                        ElapsedTimer(since: session.updatedAt)
+                    } else {
+                        Text(session.updatedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
+                            .font(.caption2)
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                            .monospacedDigit()
+                    }
                 }
 
                 HStack(spacing: 5) {
-                    StatusDot(status: session.status)
+                    StatusDot(status: session.status, isPulsing: ProtoFlags.isOn("pulsingStatusDot") && isWorking)
                     Text(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
                         .foregroundStyle(StatusPresentation.color(for: session.status))
                     Text("·").foregroundStyle(FlotillaColors.textTertiary)
@@ -39,6 +45,12 @@ struct SessionRowView: View {
                         .foregroundStyle(FlotillaColors.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    if ProtoFlags.isOn("diffPills"), let diffStat = session.diffStat, diffStat.hasChanges {
+                        Text("·").foregroundStyle(FlotillaColors.textTertiary)
+                        Text(diffStat.compactSummary)
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                            .monospacedDigit()
+                    }
                 }
                 .font(.caption)
 
@@ -48,9 +60,25 @@ struct SessionRowView: View {
                         .foregroundStyle(subtitle.color)
                         .lineLimit(1)
                 }
+
+                if ProtoFlags.isOn("progressBar"), isWorking {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                        .tint(session.agent.accentColor)
+                        .frame(height: 2)
+                        .padding(.top, 1)
+                }
             }
         }
         .padding(.vertical, 2)
+        .padding(.leading, ProtoFlags.isOn("agentAccentBar") ? 6 : 0)
+        .background(alignment: .leading) {
+            if ProtoFlags.isOn("agentAccentBar") {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(session.agent.accentColor)
+                    .frame(width: 3)
+            }
+        }
         .accessibilityElement(children: .combine)
     }
 
@@ -74,12 +102,67 @@ struct SessionRowView: View {
 struct StatusDot: View {
     let status: SessionStatus?
     var size: CGFloat = 7
+    /// -proto pulsingStatusDot
+    var isPulsing: Bool = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let color = StatusPresentation.color(for: status)
         Circle()
-            .fill(StatusPresentation.color(for: status))
+            .fill(color)
             .frame(width: size, height: size)
+            .modifier(PulsingGlow(color: color, size: size, isActive: isPulsing && !reduceMotion))
             .accessibilityHidden(true)
+    }
+}
+
+/// -proto pulsingStatusDot: a soft glow that breathes behind the dot while a
+/// session is working, so an active row reads as "alive" from a glance.
+private struct PulsingGlow: ViewModifier {
+    let color: Color
+    let size: CGFloat
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        if isActive {
+            content.background {
+                PhaseAnimator([false, true]) { phase in
+                    Circle()
+                        .fill(color)
+                        .frame(width: size, height: size)
+                        .scaleEffect(phase ? 2.4 : 1)
+                        .opacity(phase ? 0 : 0.55)
+                } animation: { _ in
+                    .easeOut(duration: 1.4)
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// -proto elapsedTimer: a live "1m 42s" ticker. `since` is the session's
+/// `updatedAt` — the closest signal available on the phone to when the
+/// current turn started, since `CompanionSession` doesn't carry a separate
+/// turn-start timestamp.
+private struct ElapsedTimer: View {
+    let since: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: since, by: 1)) { context in
+            Text(elapsed(at: context.date))
+                .font(.caption2)
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .monospacedDigit()
+        }
+    }
+
+    private func elapsed(at now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(since)))
+        let minutes = seconds / 60
+        return minutes > 0 ? "\(minutes)m \(seconds % 60)s" : "\(seconds)s"
     }
 }
 
