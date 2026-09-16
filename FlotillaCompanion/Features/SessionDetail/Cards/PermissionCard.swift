@@ -65,7 +65,24 @@ struct PermissionCard: View {
 
     private var actions: some View {
         Group {
-            if ProtoFlags.isOn("thumbCardActions") {
+            if ProtoFlags.isOn("thumbCardActionsOneLine") {
+                HStack(spacing: 8) {
+                    Button { denyCount += 1; send(.deny) } label: {
+                        Text("Deny").frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("PermissionCard.Deny")
+
+                    Button { send(.allow) } label: {
+                        Text("Allow").frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(FlotillaColors.accent)
+                    .accessibilityIdentifier("PermissionCard.Allow")
+
+                    moreMenu(expandsToFill: false)
+                }
+            } else if ProtoFlags.isOn("thumbCardActions") {
                 VStack(spacing: 8) {
                     Button { send(.allow) } label: {
                         Text("Allow").frame(maxWidth: .infinity, minHeight: 50)
