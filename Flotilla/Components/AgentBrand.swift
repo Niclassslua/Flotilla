@@ -2,13 +2,39 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 
-/// Skill-framework brand colors. The per-`AgentKind` half of this lives in
-/// `DesignSystem.AgentBrand`, shared with the iOS companion; `SkillFramework`
-/// itself (Projects ▸ Knowledge) is macOS-only, so its accent/background
-/// mapping stays here rather than in the shared package. Named distinctly
-/// from `DesignSystem.AgentBrand` so both are usable, unqualified, in this
-/// target without one shadowing the other.
-enum SkillFrameworkBrand {
+/// Real per-agent brand colors, distinct from `FlotillaColors`' semantic
+/// status palette (which was only ever a stand-in here). Fixed hex values
+/// rather than adaptive tokens — brand marks don't shift for light/dark the
+/// way UI chrome does.
+enum AgentBrand {
+    /// The flat blue the home composer's Antigravity wash paints
+    /// (`LaunchpadDesign.backdrop`), in place of the brand gradient.
+    static let antigravityBackground = Color(red: 0x44 / 255, green: 0x7F / 255, blue: 0xED / 255) // #447FED
+
+    /// Antigravity's 5-stop loop — first and last stop match, so it closes
+    /// cleanly as a sweep. Nothing paints this as a sweep any more; it
+    /// survives as the source of the individual brand stops that
+    /// `accentColor` hands out.
+    static let antigravityGradientColors: [Color] = [
+        Color(red: 0x49 / 255, green: 0x86 / 255, blue: 0xF2 / 255), // #4986F2
+        Color(red: 0x80 / 255, green: 0xBB / 255, blue: 0x74 / 255), // #80BB74
+        Color(red: 0xE8 / 255, green: 0x8A / 255, blue: 0x3F / 255), // #E88A3F
+        Color(red: 0xDB / 255, green: 0x5F / 255, blue: 0x4E / 255), // #DB5F4E
+        Color(red: 0x49 / 255, green: 0x86 / 255, blue: 0xF2 / 255)  // #4986F2 — closes the loop
+    ]
+
+    /// A single representative color per agent — usable as a gradient stop,
+    /// a wash, or anywhere a flat `Color` is required. For Antigravity this
+    /// is the anchor color its full gradient starts and ends on.
+    static func accentColor(for kind: AgentKind) -> Color {
+        switch kind {
+        case .claudeCode: FlotillaColors.accent
+        case .codexCLI: Color(red: 0x40 / 255, green: 0x43 / 255, blue: 0xF5 / 255) // #4043F5
+        case .openCode: .white // #FFFFFF
+        case .antigravity: antigravityGradientColors[0]
+        }
+    }
+
     /// Accent color for a skill framework, matching agent brand colors where
     /// applicable.
     ///
@@ -23,7 +49,7 @@ enum SkillFrameworkBrand {
         case .gemini:
             // Still an Antigravity brand color, just not the one a glance
             // confuses with Codex.
-            return DesignSystem.AgentBrand.antigravityGradientColors[1]
+            return antigravityGradientColors[1]
         case .custom:
             return Color(white: 0.55)
         case .cursor:
@@ -31,7 +57,7 @@ enum SkillFrameworkBrand {
         case .agents:
             return Color(red: 0.40, green: 0.70, blue: 0.65)
         case .claude, .codex:
-            return framework.agentKind.map(DesignSystem.AgentBrand.accentColor(for:)) ?? FlotillaColors.accent
+            return framework.agentKind.map(accentColor(for:)) ?? FlotillaColors.accent
         }
     }
 
@@ -48,12 +74,18 @@ enum SkillFrameworkBrand {
     }
 }
 
+extension AgentKind {
+    var accentColor: Color {
+        AgentBrand.accentColor(for: self)
+    }
+}
+
 extension SkillFramework {
     var accentColor: Color {
-        SkillFrameworkBrand.accentColor(for: self)
+        AgentBrand.accentColor(for: self)
     }
 
     func iconBackgroundColor(isHovered: Bool = false) -> Color {
-        SkillFrameworkBrand.iconBackgroundColor(for: self, isHovered: isHovered)
+        AgentBrand.iconBackgroundColor(for: self, isHovered: isHovered)
     }
 }
