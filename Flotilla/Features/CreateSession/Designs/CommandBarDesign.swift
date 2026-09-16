@@ -304,14 +304,17 @@ struct CommandBarDesign: View {
             .controlSize(.small)
             .fixedSize()
             .accessibilityIdentifier("CreateSession.ModelField")
-            if antigravityCoordinator.supportsEffort(for: draft) {
-                EffortLevelPicker(
-                    agent: draft.agent,
-                    model: draft.model,
-                    effort: antigravityCoordinator.effortBinding(for: draft),
-                    accessibilityIdentifier: "CreateSession.EffortPicker"
-                )
-            }
+            // Kept permanently mounted (visibility toggled via `isVisible`,
+            // not `if`): unmounting this view while its `.popover` is open
+            // or mid-close races AppKit's window ordering and has crashed
+            // with a ViewBridge NSRemoteView assertion in the wild.
+            EffortLevelPicker(
+                agent: draft.agent,
+                model: draft.model,
+                effort: antigravityCoordinator.effortBinding(for: draft),
+                accessibilityIdentifier: "CreateSession.EffortPicker",
+                isVisible: antigravityCoordinator.supportsEffort(for: draft)
+            )
             Spacer(minLength: 0)
             // Grouped with the isolation toggle rather than the left-hand
             // picker chips: both are binary switches, not choices from an

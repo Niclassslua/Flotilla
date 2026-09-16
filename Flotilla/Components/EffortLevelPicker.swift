@@ -22,6 +22,17 @@ struct EffortLevelPicker: View {
     var model: String = ""
     @Binding var effort: AgentEffort
     var accessibilityIdentifier: String? = nil
+    /// Additional caller-side condition (e.g. "does this model have more
+    /// than one effort variant") layered on top of `agent.supportsEffortSelection`.
+    ///
+    /// This is read, not used to unmount the view: callers must keep this
+    /// view permanently mounted rather than wrapping it in `if isVisible`.
+    /// Structurally removing a view while its `.popover` is open or mid
+    /// transition races AppKit's window-ordering machinery and can crash
+    /// (a ViewBridge `NSRemoteView` assertion has been observed here in the
+    /// wild). Collapsing to zero size instead keeps the popover's anchor
+    /// NSView alive so it can close itself cleanly first.
+    var isVisible: Bool = true
 
     @State private var options: [AgentEffortOption]
     @State private var isPresented = false
@@ -32,12 +43,14 @@ struct EffortLevelPicker: View {
         agent: AgentKind,
         model: String = "",
         effort: Binding<AgentEffort>,
-        accessibilityIdentifier: String? = nil
+        accessibilityIdentifier: String? = nil,
+        isVisible: Bool = true
     ) {
         self.agent = agent
         self.model = model
         _effort = effort
         self.accessibilityIdentifier = accessibilityIdentifier
+        self.isVisible = isVisible
         // Seeded synchronously from the offline catalog so the first frame
         // already shows a plausible set; the CLI query below refines it.
         _options = State(initialValue: AgentEffortCatalog.options(
@@ -55,38 +68,53 @@ struct EffortLevelPicker: View {
         selected?.label ?? AgentEffortCatalog.label(for: effort, agent: agent)
     }
 
+    /// Gated on the agent (not on `options`) so the control's presence never
+    /// depends on the CLI query having finished — and so the task below
+    /// always has a live view to attach to.
+    private var isSupported: Bool {
+        agent.supportsEffortSelection && isVisible
+    }
+
     var body: some View {
-        // Gated on the agent (not on `options`) so the control's presence
-        // never depends on the CLI query having finished — and so the task
-        // below always has a live view to attach to.
-        if agent.supportsEffortSelection {
-            chip
-                .help("Reasoning effort: \(selectedLabel). \(selected?.summary ?? "")")
-                .accessibilityElement(children: .contain)
-                // The current level is folded into the label (rather than
-                // relying solely on `.accessibilityValue`) because this
-                // custom control's AX value isn't reliably surfaced to
-                // assistive clients on macOS.
-                .accessibilityLabel("Reasoning effort: \(selectedLabel)")
-                .accessibilityValue(selectedLabel)
-                .accessibilityHint("Choose how much reasoning the coding agent should use.")
-                .accessibilityAdjustableAction(adjust)
-                .accessibilityIdentifier(accessibilityIdentifier ?? "EffortLevelPicker")
-                // Re-seed from the static table (the agent or model may have
-                // changed since init), then refine with the live per-model
-                // set. `.task(id:)` re-runs — cancelling any in-flight fetch —
-                // whenever either half of the key changes.
-                .task(id: CatalogKey(agent: agent, model: model)) {
-                    apply(AgentEffortCatalog.options(
-                        for: agent,
-                        model: model,
-                        profiles: ModelCatalog.staticFallbackProfiles(for: agent)
-                    ))
-                    let profiles = await ModelCatalogCache.shared.profiles(for: agent)
-                    guard !Task.isCancelled else { return }
-                    apply(AgentEffortCatalog.options(for: agent, model: model, profiles: profiles))
-                }
-        }
+        // Always mounted — visibility is expressed with size/opacity, not by
+        // adding/removing the view. See `isVisible`'s doc comment: unmounting
+        // this view while its `.popover` is open races AppKit and can crash.
+        chip
+            .help("Reasoning effort: \(selectedLabel). \(selected?.summary ?? "")")
+            .accessibilityElement(children: .contain)
+            // The current level is folded into the label (rather than
+            // relying solely on `.accessibilityValue`) because this
+            // custom control's AX value isn't reliably surfaced to
+            // assistive clients on macOS.
+            .accessibilityLabel("Reasoning effort: \(selectedLabel)")
+            .accessibilityValue(selectedLabel)
+            .accessibilityHint("Choose how much reasoning the coding agent should use.")
+            .accessibilityAdjustableAction(adjust)
+            .accessibilityIdentifier(accessibilityIdentifier ?? "EffortLevelPicker")
+            .opacity(isSupported ? 1 : 0)
+            .allowsHitTesting(isSupported)
+            .frame(width: isSupported ? nil : 0, height: isSupported ? nil : 0)
+            .clipped()
+            .accessibilityHidden(!isSupported)
+            // Close the popover ourselves before we collapse to zero size,
+            // rather than letting it get torn down mid-transition.
+            .onChange(of: isSupported) { _, supported in
+                if !supported { isPresented = false }
+            }
+            // Re-seed from the static table (the agent or model may have
+            // changed since init), then refine with the live per-model
+            // set. `.task(id:)` re-runs — cancelling any in-flight fetch —
+            // whenever either half of the key changes.
+            .task(id: CatalogKey(agent: agent, model: model)) {
+                apply(AgentEffortCatalog.options(
+                    for: agent,
+                    model: model,
+                    profiles: ModelCatalog.staticFallbackProfiles(for: agent)
+                ))
+                let profiles = await ModelCatalogCache.shared.profiles(for: agent)
+                guard !Task.isCancelled else { return }
+                apply(AgentEffortCatalog.options(for: agent, model: model, profiles: profiles))
+            }
     }
 
     private func apply(_ newOptions: [AgentEffortOption]) {
