@@ -30,6 +30,15 @@ struct PermissionCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                     .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+                if request.detail != nil, request.detail != request.summary {
+                    Text("Target: \(request.summary)")
+                        .font(.caption)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                }
+                Text(scopeCaption)
+                    .font(.caption)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .accessibilityIdentifier("PermissionCard.Scope")
             }
 
             if let noteMode {
@@ -39,6 +48,17 @@ struct PermissionCard: View {
             }
         }
         .sensoryFeedback(trigger: isSending) { _, sending in sending ? .success : nil }
+    }
+
+    /// What Allow covers versus what the broader Always-Allow option (when
+    /// offered) would remember, so the decision's scope sits next to it
+    /// instead of only inside the overflow menu.
+    private var scopeCaption: String {
+        guard request.allowsAlwaysAllow != false else {
+            return "This tool only supports one-time approval here — there's no broader option to grant."
+        }
+        let label = context.capabilities.alwaysAllowLabel(for: request)
+        return "Allow approves this one request. \(label.prefix(1).uppercased() + label.dropFirst()) remembers the choice — see More."
     }
 
     private var actions: some View {
