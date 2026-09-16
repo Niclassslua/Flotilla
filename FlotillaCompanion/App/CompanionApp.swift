@@ -83,6 +83,13 @@ enum AppearanceSetting: String, CaseIterable, Identifiable {
 struct RootView: View {
     @Environment(CompanionStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
+    @State private var disconnectTask: Task<Void, Never>?
+
+    /// Interactive app-switch gestures (home-indicator drag, Control Center,
+    /// app-switcher peek) round-trip through `.background` in well under a
+    /// second. Only tear down the Mac connection once we've stayed away long
+    /// enough that this is a real backgrounding, not a passing gesture.
+    private static let disconnectGrace: Duration = .seconds(2.5)
 
     var body: some View {
         @Bindable var store = store
@@ -105,7 +112,25 @@ struct RootView: View {
         }
         .background(FlotillaColors.canvas)
         .onChange(of: scenePhase, initial: true) { _, phase in
-            store.setActive(phase == .active)
+            switch phase {
+            case .active:
+                disconnectTask?.cancel()
+                disconnectTask = nil
+                store.setActive(true)
+            case .background:
+                disconnectTask?.cancel()
+                disconnectTask = Task {
+                    try? await Task.sleep(for: Self.disconnectGrace)
+                    guard !Task.isCancelled else { return }
+                    store.setActive(false)
+                }
+            case .inactive:
+                // Transient: gestures like a home-indicator drag pass through
+                // here without ever backgrounding the app. Ignore.
+                break
+            @unknown default:
+                break
+            }
         }
         .onOpenURL { url in
             guard url.scheme == PairingPayload.scheme, store.supportsPairing else { return }
