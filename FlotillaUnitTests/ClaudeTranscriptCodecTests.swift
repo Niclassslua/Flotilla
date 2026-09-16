@@ -178,6 +178,28 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(text, "real question")
     }
 
+    /// Claude adds image dimensions and coordinate scaling as a synthetic
+    /// companion turn after image inspection. It is useful to the model, but
+    /// must not appear as a message from the person using Flotilla.
+    func testImageCoordinateCompanionTurnIsExcluded() throws {
+        let imageMetadata = "[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]"
+        let url = try writeTranscript([
+            #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
+            #"{"type":"user","isMeta":true,"turnCompanion":true,"timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"\#(imageMetadata)"}}"#,
+            #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":"\#(imageMetadata)"}}"#
+        ])
+
+        let entries = try codec.readNative(at: url)
+
+        XCTAssertEqual(entries.count, 2)
+        guard case let .userMessage(first, _) = entries[0],
+              case let .userMessage(second, _) = entries[1] else {
+            return XCTFail("expected the real and unmarked messages, got \(entries)")
+        }
+        XCTAssertEqual(first, "real question")
+        XCTAssertEqual(second, imageMetadata)
+    }
+
     /// `--resume` makes the CLI nudge itself with an `isMeta` "Continue from
     /// where you left off." turn; when nothing was pending it answers itself
     /// client-side with "No response requested." (model `<synthetic>`, zero

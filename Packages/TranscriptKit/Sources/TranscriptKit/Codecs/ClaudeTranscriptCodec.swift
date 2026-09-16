@@ -127,9 +127,16 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
             // than rendered as a real exchange.
             if (message["model"] as? String) == Self.syntheticNoOpModel { continue }
             let isMeta = record["isMeta"] as? Bool == true
+            let isTurnCompanion = record["turnCompanion"] as? Bool == true
 
             let timestamp = Self.parseTimestamp(record["timestamp"] as? String)
-            entries.append(contentsOf: Self.entries(from: message, type: type, isMeta: isMeta, timestamp: timestamp))
+            entries.append(contentsOf: Self.entries(
+                from: message,
+                type: type,
+                isMeta: isMeta,
+                isTurnCompanion: isTurnCompanion,
+                timestamp: timestamp
+            ))
         }
 
         return Self.dedupingImages(entries)
@@ -158,13 +165,18 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
         from message: [String: Any],
         type: String,
         isMeta: Bool,
+        isTurnCompanion: Bool,
         timestamp: Date
     ) -> [CanonicalEntry] {
         // Claude writes user text as a bare string and everything richer as an
         // array of typed blocks.
         if let text = message["content"] as? String {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed, isMeta: isMeta)) else { return [] }
+            guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(
+                trimmed,
+                isMeta: isMeta,
+                isTurnCompanion: isTurnCompanion
+            )) else { return [] }
             return [type == "user"
                 ? .userMessage(text: text, timestamp: timestamp)
                 : .assistantMessage(text: text, timestamp: timestamp)]
@@ -179,7 +191,11 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
             case "text":
                 guard let text = block["text"] as? String else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed, isMeta: isMeta)) else { continue }
+                guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(
+                    trimmed,
+                    isMeta: isMeta,
+                    isTurnCompanion: isTurnCompanion
+                )) else { continue }
                 entries.append(type == "user"
                     ? .userMessage(text: text, timestamp: timestamp)
                     : .assistantMessage(text: text, timestamp: timestamp))
@@ -298,12 +314,19 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
     /// The resume nudge is only filtered when `isMeta` marks it as harness
     /// plumbing: `isMeta` also covers legitimate content (e.g. another
     /// Claude session handing back a message), so it isn't a synthetic
-    /// marker on its own, and a real user could type this exact sentence.
-    private static func isSyntheticUserText(_ trimmed: String, isMeta: Bool) -> Bool {
+    /// marker on its own, and a real user could type this exact sentence. The
+    /// image-coordinate instruction has its own `turnCompanion` marker, so it
+    /// can be dropped without hiding a user-authored lookalike.
+    private static func isSyntheticUserText(
+        _ trimmed: String,
+        isMeta: Bool,
+        isTurnCompanion: Bool
+    ) -> Bool {
         trimmed.hasPrefix("<system-reminder")
             || trimmed.hasPrefix("<task-notification")
             || trimmed.hasPrefix("[SYSTEM NOTIFICATION")
             || (isMeta && trimmed == "Continue from where you left off.")
+            || (isTurnCompanion && trimmed.hasPrefix("[Image: original "))
     }
 
     /// A tool result's content is a string, or blocks, or occasionally neither.
