@@ -43,6 +43,11 @@ public enum AXID: String, Sendable {
     /// one needs no title.
     case sessionBarGitSidebarToggle = "SessionBar.GitSidebarToggle"
 
+    // MARK: - Agent Screenshot Panel
+    case agentScreenshotPanel = "AgentScreenshotPanel"
+    case agentScreenshotPanelClose = "AgentScreenshotPanel.Close"
+    case agentScreenshotPanelImage = "AgentScreenshotPanel.Image"
+
     // MARK: - Git Sidebar
     case gitSidebar = "GitSidebar"
     case gitSidebarClose = "GitSidebar.Close"

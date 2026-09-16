@@ -19,6 +19,7 @@ struct DetailColumn: View {
 
     @State private var activeGridSessionID: UUID?
     @State private var gitSidebarSessionID: UUID?
+    @State private var screenshotMonitor = AgentScreenshotMonitor()
 
     var body: some View {
         let _ = navigator.presentedSheet
@@ -38,8 +39,8 @@ struct DetailColumn: View {
         .navigationTitle(scopeTitle)
         .navigationSubtitle(scopeSubtitle)
         .background(FlotillaColors.canvas)
-        .inspector(isPresented: gitSidebarPresented) {
-            gitSidebarContent
+        .inspector(isPresented: inspectorPresented) {
+            inspectorContent
                 .inspectorColumnWidth(
                     min: FlotillaLayoutWidth.inspectorMin,
                     ideal: FlotillaLayoutWidth.inspectorIdeal,
@@ -49,6 +50,9 @@ struct DetailColumn: View {
         .onChange(of: activeGitSidebarSession?.id) { _, sessionID in
             guard gitSidebarSessionID != nil else { return }
             gitSidebarSessionID = sessionID
+        }
+        .onChange(of: activeSession?.id, initial: true) {
+            screenshotMonitor.focus(activeSession)
         }
     }
 
@@ -156,7 +160,14 @@ struct DetailColumn: View {
         SessionBarActions(
             onRename: { store.renameSession(sessionID: session.id, newTitle: $0) },
             onToggleGitSidebar: {
-                gitSidebarSessionID = gitSidebarSessionID == session.id ? nil : session.id
+                // With a screenshot covering it, the button reveals Git
+                // rather than closing a sidebar the user can't see.
+                if !screenshotMonitor.pending.isEmpty {
+                    screenshotMonitor.dismiss()
+                    gitSidebarSessionID = session.id
+                } else {
+                    gitSidebarSessionID = gitSidebarSessionID == session.id ? nil : session.id
+                }
             },
             onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
             handoffTargets: store.handoffTargets(for: session),
@@ -165,8 +176,9 @@ struct DetailColumn: View {
         )
     }
 
-    private var activeGitSidebarSession: Session? {
-        let session: Session? = switch navigator.selection {
+    /// The one session shown full-size, if any. Agent screenshots follow it.
+    private var activeSession: Session? {
+        switch navigator.selection {
         case .session(let sessionID):
             store.sessions.first { $0.id == sessionID }
         case .allSessions, .smartList:
@@ -174,16 +186,40 @@ struct DetailColumn: View {
         case .overview, .project:
             nil
         }
+    }
+
+    private var activeGitSidebarSession: Session? {
+        let session = activeSession
         return session?.projectID == nil ? nil : session
     }
 
-    private var gitSidebarPresented: Binding<Bool> {
+    private var showsScreenshots: Bool {
+        !screenshotMonitor.pending.isEmpty && activeSession != nil
+    }
+
+    /// Screenshots are a temporary layer over the inspector: they open it on
+    /// their own, and once dismissed it returns to Git or closes.
+    private var inspectorPresented: Binding<Bool> {
         Binding(
-            get: { gitSidebarSessionID != nil && activeGitSidebarSession != nil },
+            get: { showsScreenshots || (gitSidebarSessionID != nil && activeGitSidebarSession != nil) },
             set: { isPresented in
-                gitSidebarSessionID = isPresented ? activeGitSidebarSession?.id : nil
+                guard !isPresented else { return }
+                screenshotMonitor.dismiss()
+                gitSidebarSessionID = nil
             }
         )
+    }
+
+    @ViewBuilder
+    private var inspectorContent: some View {
+        if showsScreenshots {
+            AgentScreenshotPanel(
+                screenshots: screenshotMonitor.pending,
+                onClose: { screenshotMonitor.dismiss() }
+            )
+        } else {
+            gitSidebarContent
+        }
     }
 
     @ViewBuilder
