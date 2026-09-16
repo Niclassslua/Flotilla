@@ -54,7 +54,7 @@ final class AppStore {
     private let nameGenerator: (any SessionNameGenerating)?
     private let supportDirectory: URL
     private let worktreePlanner = WorktreePlanner()
-    var worktreeNamingSource: WorktreeNamingSource { settingsProvider().git.worktreeNamingSource }
+    var namingSource: SessionNamingSource { settingsProvider().sessionDefaults.namingSource }
     private let statusMachine = SessionStatusMachine()
     private let scrollbackStore = SessionScrollbackStore()
     private let metadataMonitor: SessionMetadataMonitor
@@ -557,7 +557,7 @@ final class AppStore {
             // Apple Intelligence and our agent setup-step titles are authoritative.
             // A native title discovered later must not clobber them and create
             // a title/worktree mismatch.
-            guard settingsProvider().sessionDefaults.titleNamingSource == .promptDerived else { return }
+            guard settingsProvider().sessionDefaults.namingSource == .promptDerived else { return }
 
             let discoveredTitle = discovered.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !discoveredTitle.isEmpty else { return }
@@ -1182,26 +1182,29 @@ final class AppStore {
         let settings = settingsProvider()
         let agentDescriptor = AgentCatalog.descriptor(for: agent)
 
-        let usesAppleTitle = settings.sessionDefaults.titleNamingSource == .appleIntelligence
-        let usesAppleBranch = settings.git.worktreeNamingSource == .appleIntelligence
-            && checkoutMode == .newWorktree && projectFolder != nil
+        // One naming source drives title, branch, and worktree together (see
+        // `SessionNamingSource`'s doc comment). `.appleIntelligence` and
+        // `.promptDerived` both resolve a name synchronously, right here,
+        // before the worktree exists or the agent is spawned — so the same
+        // `resolvedTitle` feeds both the session title and the branch slug
+        // below. Only `.agentManaged` defers naming to the agent itself.
+        let namingSource = settings.sessionDefaults.namingSource
+        let usesAppleIntelligence = namingSource == .appleIntelligence
         let suggestedName: String?
-        if (usesAppleTitle || usesAppleBranch), let nameGenerator {
+        if usesAppleIntelligence, let nameGenerator {
             suggestedName = await nameGenerator.name(for: goal)
         } else {
             suggestedName = nil
         }
-        let resolvedTitle = usesAppleTitle ? (suggestedName ?? title) : title
-        let branchTitle = usesAppleBranch ? (suggestedName ?? title) : title
+        let resolvedTitle = usesAppleIntelligence ? (suggestedName ?? title) : title
 
         // Determine whether agent-managed features should activate.
-        // The naming sources apply uniformly regardless of whether the agent
-        // has its own native title feature. Only prompt-derived titles may be
-        // replaced by native discovery; see `syncAgentSessionMetadata`.
+        // Only prompt-derived titles may be replaced by native discovery
+        // later; see `syncAgentSessionMetadata`.
         let wantsAgentWorktree = checkoutMode == .newWorktree
             && projectFolder != nil
-            && settings.git.worktreeNamingSource == .agentManaged
-        let wantsAgentTitle = settings.sessionDefaults.titleNamingSource == .agentManaged
+            && namingSource == .agentManaged
+        let wantsAgentTitle = namingSource == .agentManaged
 
         do {
             var projectID: UUID?
@@ -1226,7 +1229,7 @@ final class AppStore {
                         useNewWorktree: checkoutMode == .newWorktree,
                         projectRoot: projectFolder,
                         worktreeBaseDirectory: worktreeBaseDirectoryProvider(),
-                        branchName: BranchNaming.generate(from: branchTitle)
+                        branchName: BranchNaming.generate(from: resolvedTitle)
                     )
                     switch decision {
                     case .useExistingCheckout(let path):

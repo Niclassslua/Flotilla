@@ -145,28 +145,47 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.agentOverrides.arguments["openCode"], ["--log-level", "debug"])
     }
 
-    func testSettingsWrittenBeforeWorktreeNamingSourceAndAgentManagedTitlesStillDecode() throws {
+    func testSettingsWrittenBeforeNamingSourcesWereMergedStillDecode() throws {
         let oldJSON = Data(
             #"{"worktreeBaseDirectory":"/tmp/worktrees","sessionDefaults":{"createWorktreeByDefault":false},"git":{"deleteBranchWithWorktree":false}}"#.utf8
         )
 
         let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
 
-        XCTAssertEqual(decoded.git.worktreeNamingSource, .promptDerived)
-        XCTAssertEqual(decoded.sessionDefaults.agentManagedTitleEnabled, true)
+        // Neither the new merged key nor either legacy naming key is present
+        // anywhere, so this falls through to the oldest default (the
+        // pre-enum boolean's default of `true`, i.e. agent-managed).
+        XCTAssertEqual(decoded.sessionDefaults.namingSource, .agentManaged)
         XCTAssertEqual(decoded.sessionDefaults.createWorktreeByDefault, false)
         XCTAssertEqual(decoded.git.deleteBranchWithWorktree, false)
     }
 
-    func testNewSettingsDefaultToAppleIntelligenceWithoutChangingSavedNamingChoices() throws {
+    func testNewSettingsDefaultToAppleIntelligence() throws {
         let fresh = AppSettings()
-        XCTAssertEqual(fresh.sessionDefaults.titleNamingSource, .appleIntelligence)
-        XCTAssertEqual(fresh.git.worktreeNamingSource, .appleIntelligence)
+        XCTAssertEqual(fresh.sessionDefaults.namingSource, .appleIntelligence)
+    }
 
+    /// Before the merge, title and worktree naming were two independent
+    /// settings that could disagree — e.g. an Apple-Intelligence title next
+    /// to an agent-managed worktree. Flotilla would resolve the title
+    /// synchronously before spawning the agent, then discard it and have the
+    /// agent invent an unrelated slug for the worktree it created itself.
+    /// The merge collapses both into one setting; when an old settings file
+    /// has both legacy keys and they disagree, the title's value wins.
+    func testExplicitTitleNamingSourceWinsOverDisagreeingLegacyWorktreeNamingSource() throws {
         let saved = Data(#"{"sessionDefaults":{"agentManagedTitleEnabled":false},"git":{"worktreeNamingSource":"agentManaged"}}"#.utf8)
         let decoded = try JSONDecoder().decode(AppSettings.self, from: saved)
-        XCTAssertEqual(decoded.sessionDefaults.titleNamingSource, .promptDerived)
-        XCTAssertEqual(decoded.git.worktreeNamingSource, .agentManaged)
+        XCTAssertEqual(decoded.sessionDefaults.namingSource, .promptDerived)
+    }
+
+    /// When the old settings file has no title-naming signal at all — not
+    /// even the oldest boolean toggle — but does have the legacy worktree
+    /// key, that value carries over instead of silently reverting to the
+    /// fresh default.
+    func testLegacyWorktreeNamingSourceCarriesOverWhenTitleWasNeverSet() throws {
+        let saved = Data(#"{"git":{"worktreeNamingSource":"agentManaged"}}"#.utf8)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: saved)
+        XCTAssertEqual(decoded.sessionDefaults.namingSource, .agentManaged)
     }
 
     func testNotificationDeliveryDefaultsAndDisplayName() {

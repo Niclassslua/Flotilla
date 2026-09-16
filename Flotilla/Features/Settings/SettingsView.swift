@@ -338,12 +338,12 @@ private struct SessionSettingsPane: View {
 
                 Toggle("Create a worktree for project sessions", isOn: $viewModel.settings.sessionDefaults.createWorktreeByDefault)
                     .toggleStyle(.switch)
-                Picker("Session title", selection: $viewModel.settings.sessionDefaults.titleNamingSource) {
-                    ForEach(SessionTitleNamingSource.allCases) { source in
+                Picker("Session naming", selection: $viewModel.settings.sessionDefaults.namingSource) {
+                    ForEach(SessionNamingSource.allCases) { source in
                         Text(source.displayName).tag(source)
                     }
                 }
-                .accessibilityIdentifier("Settings.SessionTitleNamingSource")
+                .accessibilityIdentifier("Settings.SessionNamingSource")
             } header: {
                 SettingsSectionHeader("Defaults", systemImage: "slider.horizontal.3")
             } footer: {
@@ -351,7 +351,7 @@ private struct SessionSettingsPane: View {
                     Text("New sessions open with this agent preselected.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Apple Intelligence names the session before launch on supported Macs, falling back to your prompt when unavailable. The agent's larger model and full task context usually produce a more accurate name, but that name arrives later. Claude Code and Antigravity also provide native titles.")
+                    Text("This names the session's title and, when a worktree is created for it, its branch and folder — all from the same choice. Apple Intelligence resolves a name before launch on supported Macs, falling back to your prompt when unavailable. The agent can choose a more accurate name using its larger model and full task context, but only creates the worktree once it does — so the session launches straight into the project's main checkout until then. Claude Code and Antigravity also provide native titles, used only when this is set to prompt-derived.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -434,13 +434,7 @@ private struct GitSettingsPane: View {
             }
 
             Section {
-                Picker("Branch naming", selection: $viewModel.settings.git.worktreeNamingSource) {
-                    ForEach(WorktreeNamingSource.allCases) { source in
-                        Text(source.displayName).tag(source)
-                    }
-                }
-                .accessibilityIdentifier("Settings.WorktreeNamingSource")
-                Text("Apple Intelligence names the branch and worktree before launch on supported Macs; if unavailable, Flotilla derives the name from your prompt. The agent can choose a more accurate name using its larger model and full task context, but creates the worktree later. If it doesn't respond in time, Flotilla falls back to prompt-derived naming.")
+                Text("Branch and worktree naming follows the same choice as session naming, in Session settings, so a session's title and its worktree never diverge.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

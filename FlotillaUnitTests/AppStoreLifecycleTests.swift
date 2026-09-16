@@ -28,7 +28,7 @@ final class AppStoreLifecycleTests: XCTestCase {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()
         var settings = AppSettings()
-        settings.sessionDefaults.titleNamingSource = .agentManaged
+        settings.sessionDefaults.namingSource = .agentManaged
         let store = AppStore(
             repository: repository,
             gitService: MockGitService(),

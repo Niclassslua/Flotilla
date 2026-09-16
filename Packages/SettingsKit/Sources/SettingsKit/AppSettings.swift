@@ -132,23 +132,19 @@ public enum OpenCodeSubscription: String, Codable, CaseIterable, Sendable, Ident
 
 }
 
-public enum WorktreeNamingSource: String, Codable, CaseIterable, Sendable, Identifiable {
-    case appleIntelligence
-    case promptDerived
-    case agentManaged
-
-    public var id: Self { self }
-
-    public var displayName: String {
-        switch self {
-        case .appleIntelligence: "Apple Intelligence"
-        case .promptDerived: "Derived from prompt"
-        case .agentManaged: "Chosen by the agent"
-        }
-    }
-}
-
-public enum SessionTitleNamingSource: String, Codable, CaseIterable, Sendable, Identifiable {
+/// Where a session's title, branch name, and worktree path all come from.
+///
+/// These three used to be two independently-configured settings (title vs.
+/// worktree/branch). Splitting them let a session end up with, say, an
+/// Apple-Intelligence title but an agent-managed worktree — Flotilla would
+/// resolve the title synchronously before spawning the agent, then throw it
+/// away and have the agent invent an unrelated slug for the worktree it
+/// created itself. One setting drives all three together so that never
+/// happens: `.appleIntelligence`/`.promptDerived` always resolve a name
+/// synchronously and let Flotilla create the worktree from it before the
+/// agent is spawned; only `.agentManaged` defers naming (of the title, and
+/// the worktree/branch when one is being created) to the agent itself.
+public enum SessionNamingSource: String, Codable, CaseIterable, Sendable, Identifiable {
     case appleIntelligence
     case promptDerived
     case agentManaged
@@ -188,23 +184,24 @@ public enum CommitAttributionMode: String, Codable, CaseIterable, Sendable, Iden
 public struct SessionDefaults: Codable, Equatable, Sendable {
     public var createWorktreeByDefault: Bool
     public var defaultAgentRawValue: String = "claudeCode"
-    public var titleNamingSource: SessionTitleNamingSource
+    /// Drives session title, branch name, and worktree path together. See
+    /// `SessionNamingSource`'s doc comment for why this used to be two
+    /// settings and isn't anymore.
+    public var namingSource: SessionNamingSource
 
-    /// Compatibility for callers that still set the former two-state preference.
-    public var agentManagedTitleEnabled: Bool {
-        get { titleNamingSource == .agentManaged }
-        set { titleNamingSource = newValue ? .agentManaged : .promptDerived }
-    }
-
-    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: String = "claudeCode", titleNamingSource: SessionTitleNamingSource = .appleIntelligence) {
+    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: String = "claudeCode", namingSource: SessionNamingSource = .appleIntelligence) {
         self.createWorktreeByDefault = createWorktreeByDefault
         self.defaultAgentRawValue = defaultAgentRawValue
-        self.titleNamingSource = titleNamingSource
+        self.namingSource = namingSource
     }
 
-    private enum CodingKeys: String, CodingKey {
+    /// Not `private`: `AppSettings.init(from:)` reads `.namingSource` and
+    /// `.titleNamingSource` from a nested container keyed by this type to
+    /// migrate a pre-merge settings file — see its doc comment.
+    enum CodingKeys: String, CodingKey {
         case createWorktreeByDefault
         case defaultAgentRawValue
+        case namingSource
         case titleNamingSource
         case agentManagedTitleEnabled
     }
@@ -214,15 +211,24 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
     // key added after a user's settings file was already written would
     // silently reset every setting. `decodeIfPresent` with an explicit
     // default keeps old files decoding successfully.
+    //
+    // `titleNamingSource`/`agentManagedTitleEnabled` are the pre-merge keys
+    // (back when title and worktree naming were separate settings). A file
+    // written by an older build is decoded here on its own terms; the
+    // cross-struct case where it disagreed with the old `git.worktreeNamingSource`
+    // is resolved afterwards, in `AppSettings.init(from:)`, which prefers this
+    // struct's value.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         createWorktreeByDefault = try container.decodeIfPresent(Bool.self, forKey: .createWorktreeByDefault) ?? true
-        if let source = try container.decodeIfPresent(SessionTitleNamingSource.self, forKey: .titleNamingSource) {
-            titleNamingSource = source
+        if let source = try container.decodeIfPresent(SessionNamingSource.self, forKey: .namingSource) {
+            namingSource = source
+        } else if let legacyTitle = try container.decodeIfPresent(SessionNamingSource.self, forKey: .titleNamingSource) {
+            namingSource = legacyTitle
         } else {
             // Preserve existing users' choice; only fresh settings default to AI.
             let legacy = try container.decodeIfPresent(Bool.self, forKey: .agentManagedTitleEnabled) ?? true
-            titleNamingSource = legacy ? .agentManaged : .promptDerived
+            namingSource = legacy ? .agentManaged : .promptDerived
         }
         if let stringValue = try? container.decode(String.self, forKey: .defaultAgentRawValue) {
             defaultAgentRawValue = stringValue
@@ -242,7 +248,7 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(createWorktreeByDefault, forKey: .createWorktreeByDefault)
         try container.encode(defaultAgentRawValue, forKey: .defaultAgentRawValue)
-        try container.encode(titleNamingSource, forKey: .titleNamingSource)
+        try container.encode(namingSource, forKey: .namingSource)
     }
 }
 
@@ -387,22 +393,19 @@ public struct GitPreferences: Codable, Equatable, Sendable {
     /// Per-project choices, keyed by the project's UUID string. A project
     /// without an entry follows `defaultCommitAttribution`.
     public var projectCommitAttribution: [String: CommitAttributionMode]
-    public var worktreeNamingSource: WorktreeNamingSource
 
     public init(
         deleteBranchWithWorktree: Bool = true,
         fetchBeforeCreatingWorktree: Bool = false,
         highlightUnseenCommits: Bool = true,
         defaultCommitAttribution: CommitAttributionMode = .local,
-        projectCommitAttribution: [String: CommitAttributionMode] = [:],
-        worktreeNamingSource: WorktreeNamingSource = .appleIntelligence
+        projectCommitAttribution: [String: CommitAttributionMode] = [:]
     ) {
         self.deleteBranchWithWorktree = deleteBranchWithWorktree
         self.fetchBeforeCreatingWorktree = fetchBeforeCreatingWorktree
         self.highlightUnseenCommits = highlightUnseenCommits
         self.defaultCommitAttribution = defaultCommitAttribution
         self.projectCommitAttribution = projectCommitAttribution
-        self.worktreeNamingSource = worktreeNamingSource
     }
 
     /// The mode that applies to a project: its own choice, else the default.
@@ -419,14 +422,20 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         case highlightUnseenCommits
         case defaultCommitAttribution
         case projectCommitAttribution
-        case worktreeNamingSource
     }
 
-    /// The on/off toggle that attribution modes replaced. Read only to seed
-    /// `defaultCommitAttribution`, so someone who had turned attribution off
-    /// doesn't find it switched back on.
-    private enum LegacyCodingKeys: String, CodingKey {
+    /// `stampAgentTrailer` is the on/off toggle attribution modes replaced —
+    /// read only to seed `defaultCommitAttribution`, so someone who had
+    /// turned attribution off doesn't find it switched back on.
+    ///
+    /// `worktreeNamingSource` is the pre-merge worktree-naming key (back
+    /// when it was independent of `SessionDefaults.namingSource`). It isn't
+    /// read here — `AppSettings.init(from:)` reads it directly, using this
+    /// type, to migrate a file that still has it. See that type's doc
+    /// comment.
+    enum LegacyCodingKeys: String, CodingKey {
         case stampAgentTrailer
+        case worktreeNamingSource
     }
 
     /// Decoded key by key rather than by the synthesized initializer: a
@@ -450,7 +459,6 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         // instead of failing the whole settings file.
         let rawProjectModes = (try? container.decodeIfPresent([String: String].self, forKey: .projectCommitAttribution)) ?? [:]
         projectCommitAttribution = rawProjectModes.compactMapValues(CommitAttributionMode.init(rawValue:))
-        worktreeNamingSource = try container.decodeIfPresent(WorktreeNamingSource.self, forKey: .worktreeNamingSource) ?? .promptDerived
     }
 }
 
@@ -687,6 +695,31 @@ public struct AppSettings: Codable, Equatable, Sendable {
         terminal = try container.decodeIfPresent(TerminalPreferences.self, forKey: .terminal) ?? TerminalPreferences()
         notifications = try container.decodeIfPresent(NotificationPreferences.self, forKey: .notifications) ?? NotificationPreferences()
         git = try container.decodeIfPresent(GitPreferences.self, forKey: .git) ?? GitPreferences()
+
+        // Migrate a settings file from before title and worktree naming were
+        // merged into `sessionDefaults.namingSource`. `SessionDefaults` above
+        // already resolved its own legacy `titleNamingSource`/
+        // `agentManagedTitleEnabled` keys in isolation; the one thing it
+        // can't see from there is `git`'s legacy `worktreeNamingSource`. A
+        // user who had explicitly set a title-naming preference keeps it
+        // (title always won when the two could disagree); one who hadn't —
+        // an old file with only `worktreeNamingSource` set — has that value
+        // carried over instead of silently reverting to the fresh default.
+        let sessionDefaultsHadExplicitValue: Bool = {
+            guard let raw = try? container.nestedContainer(keyedBy: SessionDefaults.CodingKeys.self, forKey: .sessionDefaults) else { return false }
+            if (try? raw.decodeIfPresent(SessionNamingSource.self, forKey: .namingSource)) != nil { return true }
+            if (try? raw.decodeIfPresent(SessionNamingSource.self, forKey: .titleNamingSource)) != nil { return true }
+            // The oldest format: a plain on/off toggle, from before naming
+            // sources were even a three-way enum. Still an explicit title
+            // choice, so it counts here too.
+            if (try? raw.decodeIfPresent(Bool.self, forKey: .agentManagedTitleEnabled)) != nil { return true }
+            return false
+        }()
+        if !sessionDefaultsHadExplicitValue,
+           let gitContainer = try? container.nestedContainer(keyedBy: GitPreferences.LegacyCodingKeys.self, forKey: .git),
+           let legacyWorktreeSource = try? gitContainer.decodeIfPresent(SessionNamingSource.self, forKey: .worktreeNamingSource) {
+            sessionDefaults.namingSource = legacyWorktreeSource
+        }
     }
 
     public func encode(to encoder: any Encoder) throws {

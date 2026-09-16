@@ -49,7 +49,7 @@ struct SessionLaunchPreview: Equatable {
         model: String?,
         effort: AgentEffort?,
         createWorktree: Bool,
-        worktreeNamingSource: WorktreeNamingSource = .promptDerived,
+        namingSource: SessionNamingSource = .promptDerived,
         worktreeBaseDirectory: URL,
         generalSessionDirectory: URL
     ) -> SessionLaunchPreview {
@@ -58,7 +58,11 @@ struct SessionLaunchPreview: Equatable {
         var branchSlug: String?
         var workingDirectory = generalSessionDirectory
         var warning: String?
-        let namingPending = createWorktree && worktreeNamingSource == .appleIntelligence
+        // Apple Intelligence resolves its name at launch; agent-managed
+        // naming is decided by the agent itself once it's running — in both
+        // cases nothing about the eventual title, branch, or destination is
+        // knowable yet, so the preview shows a placeholder for either.
+        let namingPending = createWorktree && namingSource != .promptDerived
 
         if let folder = projectChoice.folder {
             // The same planner the creation path uses. Its branch argument is

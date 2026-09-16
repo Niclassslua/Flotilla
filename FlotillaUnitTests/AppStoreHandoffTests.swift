@@ -169,7 +169,7 @@ final class AppStoreHandoffTests: XCTestCase {
         let gate = Gate()
 
         var settings = AppSettings()
-        settings.sessionDefaults.agentManagedTitleEnabled = true
+        settings.sessionDefaults.namingSource = .agentManaged
 
         let monitor = SessionMetadataMonitor(
             dependencies: .init(

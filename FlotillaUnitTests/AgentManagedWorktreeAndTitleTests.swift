@@ -117,8 +117,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()
         var settings = AppSettings()
-        settings.git.worktreeNamingSource = .agentManaged
-        settings.sessionDefaults.titleNamingSource = .agentManaged
+        settings.sessionDefaults.namingSource = .agentManaged
         let gitService = MockGitService()
 
         let store = AppStore(
@@ -196,8 +195,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()
         var settings = AppSettings()
-        settings.git.worktreeNamingSource = .agentManaged
-        settings.sessionDefaults.titleNamingSource = .agentManaged
+        settings.sessionDefaults.namingSource = .agentManaged
         let gitService = MockGitService()
 
         let store = AppStore(
@@ -268,14 +266,13 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
     /// Claude Code and Antigravity also generate a title natively, on their
     /// own schedule, well after the setup step — but that title can diverge
     /// from ours, reintroducing the title/worktree mismatch. So when
-    /// `agentManagedTitleEnabled` is on, our setup-step title instructions
+    /// `namingSource` is `.agentManaged`, our setup-step title instructions
     /// apply uniformly to every agent, native title generation or not.
     func testAppStoreClaudeCodeAddsTitleInstructionsWhenSettingEnabled() async throws {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()
         var settings = AppSettings()
-        settings.sessionDefaults.agentManagedTitleEnabled = true
-        settings.git.worktreeNamingSource = .promptDerived
+        settings.sessionDefaults.namingSource = .agentManaged
 
         let store = AppStore(
             repository: repository,
@@ -306,8 +303,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         let factory = RecordingProcessFactory()
         let gitService = MockGitService()
         var settings = AppSettings()
-        settings.sessionDefaults.agentManagedTitleEnabled = true
-        settings.git.worktreeNamingSource = .agentManaged
+        settings.sessionDefaults.namingSource = .agentManaged
 
         let projectFolder = URL(fileURLWithPath: "/tmp/safe-project")
         // Main checkout is main worktree
