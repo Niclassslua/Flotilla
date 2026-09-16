@@ -98,7 +98,7 @@ struct SessionDetailView: View {
                     .background(FlotillaColors.canvas)
                 }
             }
-            .background(FlotillaColors.canvas)
+            .background(alignment: .top) { statusTintBackground(for: session.status) }
         }
         .onChange(of: searchQuery) { _, _ in
             currentMatchIndex = 0
@@ -125,6 +125,7 @@ struct SessionDetailView: View {
         }
         .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
+        .modifier(NavBarStatusTint(status: session.status))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Search Transcript", systemImage: "magnifyingglass") {
@@ -293,6 +294,37 @@ struct SessionDetailView: View {
     private func headerDiffStat(_ session: CompanionSession) -> DiffStat? {
         guard let diff = store.diff(for: sessionID, commitHash: nil).value, !diff.isEmpty else { return session.diffStat }
         return diff.stat
+    }
+
+    /// -proto statusTint: a soft gradient behind the header, following
+    /// `StatusPresentation.color` — amber while waiting, emerald when ready.
+    @ViewBuilder
+    private func statusTintBackground(for status: SessionStatus?) -> some View {
+        if ProtoFlags.isOn("statusTint"), status == .waitingForInput || status == .readyForReview {
+            LinearGradient(
+                colors: [StatusPresentation.color(for: status).opacity(0.22), FlotillaColors.canvas],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 160)
+            .allowsHitTesting(false)
+        } else {
+            FlotillaColors.canvas
+        }
+    }
+}
+
+/// -proto statusTint: tints the navigation bar itself to match, since the
+/// header's gradient alone leaves the system bar untouched above it.
+private struct NavBarStatusTint: ViewModifier {
+    let status: SessionStatus?
+
+    func body(content: Content) -> some View {
+        if ProtoFlags.isOn("statusTint"), status == .waitingForInput || status == .readyForReview {
+            content.toolbarBackground(StatusPresentation.color(for: status).opacity(0.18), for: .navigationBar)
+        } else {
+            content
+        }
     }
 }
 
