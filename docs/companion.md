@@ -80,11 +80,13 @@ Screenshot-review scaffolding for UI ideas not yet shipped, gated behind
 |---|---|
 | `approveSwipe` | Fleet row: leading swipe action to allow a pending permission |
 | `pulsingStatusDot` | Fleet row: glowing status dot while working |
-| `diffPills` | Fleet row: +N −N diff summary next to the branch |
-| `agentAccentBar` | Fleet row: 3pt leading bar in the agent's brand color |
-| `agentAccentTint` | Fleet row: 4% background tint in the agent's brand color |
+| `diffPills` | Fleet row: colored +N/−N diff summary (placement depends on `logoStatusBadge`) |
 | `elapsedTimer` | Fleet row: live "1m 42s" ticker since the row last updated |
-| `progressBar` | Fleet row: indeterminate progress bar under the title while working |
+| `logoStatusBadge` | Fleet row: status dot as a corner badge on the provider logo, drops the text status label, moves the diff pill next to the branch |
+
+Dropped after the first review pass: `agentAccentBar`/`agentAccentTint`
+(illegible against the black background, especially Codex's white) and
+`progressBar` (read poorly at row scale).
 
 Remove a row here once its feature ships (drops the flag) or is dropped
 (deletes the code).
