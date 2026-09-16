@@ -208,6 +208,14 @@ final class CompanionStore {
         data.reconnect(macID)
     }
 
+    func clearCachedTranscripts(on macID: MacHost.ID) {
+        data.clearCachedTranscripts(on: macID)
+    }
+
+    func clearAllCachedTranscripts() {
+        data.clearAllCachedTranscripts()
+    }
+
     // MARK: - Drafts (per Mac + session, phone-local; survive navigation and relaunch)
 
     func promptDraft(for sessionID: CompanionSession.ID) -> String {

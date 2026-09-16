@@ -108,6 +108,14 @@ final class MockCompanionDataSource: CompanionDataSource {
     func focus(on sessionID: CompanionSession.ID?) {}
     func setActive(_ isActive: Bool) {}
 
+    func clearCachedTranscripts(on macID: MacHost.ID) {
+        for session in sessionsByMac[macID] ?? [] { transcripts.removeValue(forKey: session.id) }
+    }
+
+    func clearAllCachedTranscripts() {
+        transcripts.removeAll()
+    }
+
     func pair(with payload: PairingPayload, progress: @escaping @MainActor (ConnectTarget, AttemptStatus) -> Void) async throws -> MacHost.ID {
         throw CompanionActionError(message: "The demo can't pair with a Mac. Launch the app without -demo.")
     }

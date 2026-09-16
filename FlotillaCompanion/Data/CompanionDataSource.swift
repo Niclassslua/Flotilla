@@ -60,6 +60,8 @@ protocol CompanionDataSource: AnyObject, Observable {
     func pair(with payload: PairingPayload, progress: @escaping @MainActor (ConnectTarget, AttemptStatus) -> Void) async throws -> MacHost.ID
     func removeMac(_ macID: MacHost.ID)
     func reconnect(_ macID: MacHost.ID)
+    func clearCachedTranscripts(on macID: MacHost.ID)
+    func clearAllCachedTranscripts()
 }
 
 struct CompanionActionError: LocalizedError, Equatable {

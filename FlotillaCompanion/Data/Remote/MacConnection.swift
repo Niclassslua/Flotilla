@@ -88,6 +88,7 @@ final class MacConnection {
     func setActive(_ active: Bool) {
         isActive = active
         if active {
+            expireCachedTranscripts()
             if case .needsRepairing = state { return }
             if !isConnected { connect() }
         } else {
@@ -373,6 +374,34 @@ final class MacConnection {
 
     private func currentCache() -> PairedMacStore.Cache {
         PairedMacStore.Cache(fleet: fleet, transcripts: transcripts, fleetReceivedAt: fleetReceivedAt, transcriptsReceivedAt: transcriptsReceivedAt)
+    }
+
+    /// Replace the persisted snapshot immediately. Its higher revision also
+    /// invalidates any older debounced snapshot still waiting in the writer.
+    func clearCachedTranscripts() {
+        guard !transcripts.isEmpty || !transcriptsReceivedAt.isEmpty else { return }
+        transcripts.removeAll()
+        transcriptsReceivedAt.removeAll()
+        transcriptRevisions.removeAll()
+        cacheRevision += 1
+        onCacheFlush(currentCache(), cacheRevision)
+    }
+
+    func expireCachedTranscripts(now: Date = .now) {
+        let cutoff = now.addingTimeInterval(-7 * 24 * 60 * 60)
+        let expired = Set(transcripts.keys).union(transcriptsReceivedAt.keys).filter { sessionID in
+            guard transcripts[sessionID] != nil else { return true }
+            guard let receivedAt = transcriptsReceivedAt[sessionID] else { return true }
+            return receivedAt <= cutoff
+        }
+        guard !expired.isEmpty else { return }
+        for sessionID in expired {
+            transcripts.removeValue(forKey: sessionID)
+            transcriptsReceivedAt.removeValue(forKey: sessionID)
+            transcriptRevisions.removeValue(forKey: sessionID)
+        }
+        cacheRevision += 1
+        onCacheFlush(currentCache(), cacheRevision)
     }
 
     // MARK: - Reads

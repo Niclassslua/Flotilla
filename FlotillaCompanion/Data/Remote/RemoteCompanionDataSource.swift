@@ -284,6 +284,14 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         connection(macID)?.reconnectNow()
     }
 
+    func clearCachedTranscripts(on macID: MacHost.ID) {
+        connection(macID)?.clearCachedTranscripts()
+    }
+
+    func clearAllCachedTranscripts() {
+        connections.forEach { $0.clearCachedTranscripts() }
+    }
+
     /// Connection details for the diagnostics screen.
     func diagnostics(for macID: MacHost.ID) -> (attempts: [ConnectTarget: AttemptStatus], diagnosis: ConnectionDiagnosis?, record: PairedMacRecord)? {
         guard let connection = connection(macID) else { return nil }

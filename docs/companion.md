@@ -131,6 +131,15 @@ transcript deltas carry appended events, sliding-window eviction and live-field
 changes when existing events overlap. A gap or rewritten history requests a new
 full snapshot. The phone preserves its cached content during reconnection.
 
+The phone stores paired-Mac records separately from each Mac's fleet and
+transcript cache. On launch and each foreground activation, it removes cached
+transcripts whose last received update is at least seven days old (including
+legacy entries with no receipt time). iPhone Settings can clear transcripts for
+one Mac or all Macs after confirmation. Both actions retain paired-Mac records,
+fleet summaries, and unsent prompt/plan-revision drafts. A cleared or expired
+snapshot replaces any pending debounced cache write so stale transcripts cannot
+return from local persistence. Removing a Mac also discards its drafts.
+
 ## Error surfaces on the phone
 
 | Where | Condition | Shown as |

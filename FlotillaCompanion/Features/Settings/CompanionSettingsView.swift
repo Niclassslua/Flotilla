@@ -7,6 +7,7 @@ struct CompanionSettingsView: View {
     @Environment(CompanionStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
+    @State private var isConfirmingClearAll = false
 
     var body: some View {
         NavigationStack {
@@ -37,6 +38,14 @@ struct CompanionSettingsView: View {
                             .listRowBackground(FlotillaColors.surface)
                         }
                     }
+                    Section {
+                        Button("Clear Cached Transcripts for All Macs", role: .destructive) {
+                            isConfirmingClearAll = true
+                        }
+                        .disabled(store.macs.isEmpty)
+                    } footer: {
+                        Text("Removes transcripts stored on this iPhone. Paired Macs, fleet summaries, and unsent drafts stay available. Drafts are discarded separately.")
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -50,6 +59,12 @@ struct CompanionSettingsView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .confirmationDialog("Clear cached transcripts for all Macs?", isPresented: $isConfirmingClearAll, titleVisibility: .visible) {
+            Button("Clear Cached Transcripts", role: .destructive) { store.clearAllCachedTranscripts() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Transcripts stored on this iPhone will be removed. Paired Macs, fleet summaries, and unsent drafts will remain.")
+        }
     }
 
     private func connectionLabel(_ state: MacConnectionState) -> String {
@@ -68,6 +83,7 @@ struct MacConnectionDetailView: View {
     @Environment(CompanionStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var isConfirmingRemove = false
+    @State private var isConfirmingClear = false
 
     var body: some View {
         let mac = store.mac(macID)
@@ -111,12 +127,24 @@ struct MacConnectionDetailView: View {
             }
 
             Section {
+                Button("Clear Cached Transcripts", role: .destructive) { isConfirmingClear = true }
+            } footer: {
+                Text("Removes this Mac's transcripts from this iPhone. Its fleet summary and unsent drafts remain.")
+            }
+
+            Section {
                 Button("Remove Mac", role: .destructive) { isConfirmingRemove = true }
             } footer: {
                 Text("To stop this Mac accepting the iPhone as well, remove the iPhone in Flotilla ▸ Settings ▸ iPhone Companion.")
             }
         }
         .navigationTitle(mac?.name ?? "Mac")
+        .confirmationDialog("Clear cached transcripts for \(mac?.name ?? "this Mac")?", isPresented: $isConfirmingClear, titleVisibility: .visible) {
+            Button("Clear Cached Transcripts", role: .destructive) { store.clearCachedTranscripts(on: macID) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Transcripts stored on this iPhone will be removed. The paired Mac, fleet summary, and unsent drafts will remain.")
+        }
         .confirmationDialog("Remove \(mac?.name ?? "this Mac")?", isPresented: $isConfirmingRemove, titleVisibility: .visible) {
             Button("Remove", role: .destructive) {
                 store.removeMac(macID)

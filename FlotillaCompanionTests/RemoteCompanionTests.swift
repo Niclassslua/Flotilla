@@ -142,6 +142,91 @@ final class RemoteCompanionTests: XCTestCase {
         XCTAssertEqual(loaded?.transcriptsReceivedAt[sessionID], transcriptAt)
     }
 
+    func testPurgedSnapshotCannotBeRestoredByPendingOrLateCacheWrite() async {
+        let persistence = PairedMacStore.temporary()
+        let writer = CompanionCacheWriter(store: persistence, macID: "mac")
+        let sessionID = UUID()
+        let fleet = FleetSnapshot(macID: "mac", macName: "Still Paired", sessions: [], projects: [], catalog: .fallback)
+        let stale = PairedMacStore.Cache(fleet: fleet, transcripts: [sessionID: SessionTranscript()])
+        let cleared = PairedMacStore.Cache(fleet: fleet, transcripts: [:])
+        await writer.schedule(stale, revision: 1)
+        await writer.flush(cleared, revision: 2)
+        await writer.schedule(stale, revision: 1)
+        try? await Task.sleep(for: .milliseconds(450))
+        XCTAssertEqual(persistence.loadCache("mac")?.transcripts.count, 0)
+        XCTAssertEqual(persistence.loadCache("mac")?.fleet?.macName, "Still Paired")
+    }
+
+    func testClearingOneMacThenAllPreservesFleetPairingAndDrafts() async throws {
+        let persistence = PairedMacStore.temporary()
+        let firstID = UUID()
+        let secondID = UUID()
+        let now = Date()
+        let records = ["first", "second"].map { id in
+            PairedMacRecord(macID: id, name: id, macKey: Data(), candidates: [], pairedAt: now, lastSeen: now)
+        }
+        persistence.saveMacs(records)
+        for (record, sessionID) in zip(records, [firstID, secondID]) {
+            let session = CompanionSession(id: sessionID, title: record.name, agent: .claudeCode, model: "opus", status: .working, hasWorktree: false, isProcessLive: true, updatedAt: now)
+            persistence.saveCache(.init(
+                fleet: FleetSnapshot(macID: record.macID, macName: record.name, sessions: [session], projects: [], catalog: .fallback),
+                transcripts: [sessionID: SessionTranscript(events: [.init(id: "1", content: .assistantMessage(text: record.name, timestamp: now))])],
+                fleetReceivedAt: now,
+                transcriptsReceivedAt: [sessionID: now]
+            ), for: record.macID)
+        }
+        let data = RemoteCompanionDataSource(store: persistence, identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
+        let domain = "CacheControlsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let companion = CompanionStore(data: data, defaults: defaults)
+        companion.savePromptDraft("unsent", for: firstID)
+        companion.savePlanRevisionDraft("revise", for: secondID)
+
+        companion.clearCachedTranscripts(on: "first")
+        await waitUntil { persistence.loadCache("first")?.transcripts.isEmpty == true }
+        XCTAssertTrue(companion.transcript(for: firstID).events.isEmpty)
+        XCTAssertEqual(companion.transcript(for: secondID).events.count, 1)
+        XCTAssertEqual(persistence.loadCache("first")?.fleet?.macName, "first")
+        XCTAssertNil(companion.transcriptReceivedAt(firstID))
+
+        companion.clearAllCachedTranscripts()
+        await waitUntil { persistence.loadCache("second")?.transcripts.isEmpty == true }
+        XCTAssertEqual(persistence.loadMacs().count, 2)
+        XCTAssertEqual(companion.sessions(on: "second").map(\.id), [secondID])
+        XCTAssertTrue(companion.transcript(for: secondID).events.isEmpty)
+        XCTAssertEqual(companion.promptDraft(for: firstID), "unsent")
+        XCTAssertEqual(companion.planRevisionDraft(for: secondID), "revise")
+    }
+
+    func testForegroundExpiresOnlyTranscriptsSevenDaysPastLastReceipt() async {
+        let persistence = PairedMacStore.temporary()
+        let now = Date()
+        let oldID = UUID()
+        let freshID = UUID()
+        let legacyID = UUID()
+        let record = PairedMacRecord(macID: "offline", name: "Offline", macKey: Data(), candidates: [], pairedAt: now, lastSeen: now)
+        persistence.saveMacs([record])
+        let fleet = FleetSnapshot(macID: "offline", macName: "Offline", sessions: [], projects: [], catalog: .fallback)
+        persistence.saveCache(.init(
+            fleet: fleet,
+            transcripts: [oldID: SessionTranscript(), freshID: SessionTranscript(), legacyID: SessionTranscript()],
+            fleetReceivedAt: now.addingTimeInterval(-30 * 24 * 60 * 60),
+            transcriptsReceivedAt: [oldID: now.addingTimeInterval(-8 * 24 * 60 * 60), freshID: now.addingTimeInterval(-2 * 24 * 60 * 60)]
+        ), for: record.macID)
+        let data = RemoteCompanionDataSource(store: persistence, identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
+
+        data.setActive(true)
+        await waitUntil { persistence.loadCache("offline")?.transcripts[oldID] == nil }
+        XCTAssertNil(data.connections[0].transcripts[oldID])
+        XCTAssertNil(data.connections[0].transcripts[legacyID])
+        XCTAssertNotNil(data.connections[0].transcripts[freshID])
+        XCTAssertNotNil(persistence.loadCache("offline")?.transcripts[freshID])
+        XCTAssertEqual(persistence.loadCache("offline")?.fleet?.macName, "Offline")
+        XCTAssertEqual(persistence.loadCache("offline")?.fleetReceivedAt?.timeIntervalSince1970 ?? 0,
+                       now.addingTimeInterval(-30 * 24 * 60 * 60).timeIntervalSince1970, accuracy: 0.001)
+    }
+
     func testSessionCreatedBeforeFleetUpdateStillSubscribesWhenItAppears() async throws {
         let mac = FakeMac(sessions: [])
         try await mac.start()
