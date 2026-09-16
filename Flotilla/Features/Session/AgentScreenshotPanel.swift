@@ -98,6 +98,14 @@ struct AgentScreenshotPanel: View {
     private func content(for screenshot: AgentScreenshot) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
+                if let filename = screenshot.filename {
+                    Text(filename)
+                        .font(FlotillaTypography.caption.weight(.medium))
+                        .foregroundStyle(FlotillaColors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
                 Button {
                     isViewerPresented = true
                 } label: {
@@ -137,34 +145,14 @@ struct AgentScreenshotPanel: View {
                 .accessibilityLabel("Screenshot from \(screenshot.agent.displayName), click to zoom")
                 .accessibilityIdentifier(AXID.agentScreenshotPanelImage.rawValue)
 
-                HStack(spacing: FlotillaSpacing.small) {
-                    Text("Sent by \(screenshot.agent.displayName) · \(screenshot.timestamp, style: .relative) ago")
-                        .font(FlotillaTypography.caption)
-                        .foregroundStyle(FlotillaColors.textSecondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Button("Copy") { copy(screenshot) }
-                    Button("Save…") { save(screenshot) }
-                }
-                .controlSize(.small)
+                Text("Sent by \(screenshot.agent.displayName) · \(screenshot.timestamp, style: .relative) ago")
+                    .font(FlotillaTypography.caption)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .lineLimit(1)
             }
             .padding(FlotillaSpacing.medium)
         }
         .id(screenshot.id)
-    }
-
-    private func copy(_ screenshot: AgentScreenshot) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([screenshot.image])
-    }
-
-    private func save(_ screenshot: AgentScreenshot) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.jpeg]
-        panel.nameFieldStringValue = "Screenshot.jpg"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? screenshot.data.write(to: url, options: .atomic)
     }
 }
 
@@ -210,9 +198,11 @@ struct AgentScreenshotViewerSheet: View {
                 ProviderLogo(agent: screenshot.agent)
                     .frame(width: 16, height: 16)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("\(screenshot.agent.displayName) Screenshot")
+                    Text(screenshot.filename ?? "\(screenshot.agent.displayName) Screenshot")
                         .font(FlotillaTypography.callout.weight(.semibold))
                         .foregroundStyle(FlotillaColors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                     HStack(spacing: 6) {
                         Text("\(screenshot.timestamp, style: .relative) ago")
                         if !pixelDimensions.isEmpty {
@@ -422,7 +412,7 @@ struct AgentScreenshotViewerSheet: View {
     private func save() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.jpeg, .png]
-        panel.nameFieldStringValue = "Screenshot-\(screenshot.agent.displayName).jpg"
+        panel.nameFieldStringValue = screenshot.filename ?? "Screenshot-\(screenshot.agent.displayName).jpg"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         try? screenshot.data.write(to: url, options: .atomic)
     }

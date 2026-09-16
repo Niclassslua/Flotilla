@@ -90,6 +90,12 @@ struct ImageRow: View {
         return cache
     }()
 
+    /// Shown as a small preview inline in the chat, matching a chat
+    /// attachment rather than filling the transcript column; full size is
+    /// still one tap away in the fullscreen viewer.
+    private static let maxThumbnailWidth: CGFloat = 110
+    private static let maxThumbnailHeight: CGFloat = 130
+
     private struct Prepared: @unchecked Sendable {
         let image: UIImage?
     }
@@ -105,6 +111,7 @@ struct ImageRow: View {
                     Image(uiImage: thumbnail)
                         .resizable()
                         .scaledToFit()
+                        .frame(maxWidth: Self.maxThumbnailWidth, maxHeight: Self.maxThumbnailHeight)
                         .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)

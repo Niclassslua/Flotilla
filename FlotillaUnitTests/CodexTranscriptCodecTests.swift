@@ -206,7 +206,7 @@ final class CodexTranscriptCodecTests: XCTestCase {
     func testSanitizeDropsImagesWhichCodexCannotRepresent() async {
         let entries: [CanonicalEntry] = [
             .userMessage(text: "look", timestamp: Self.writeTime),
-            .image(mimeType: "image/png", base64: "AAAA", timestamp: Self.writeTime)
+            .image(mimeType: "image/png", base64: "AAAA", filename: nil, timestamp: Self.writeTime)
         ]
 
         XCTAssertEqual(codec.sanitize(entries), [.userMessage(text: "look", timestamp: Self.writeTime)])
@@ -239,7 +239,7 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
         let recovered = try codec.readNative(at: url)
         XCTAssertEqual(recovered.count, 2)
-        guard case .image(let mimeType, let base64, _) = recovered.last else {
+        guard case .image(let mimeType, let base64, _, _) = recovered.last else {
             return XCTFail("expected the second entry to be an image")
         }
         XCTAssertEqual(mimeType, "image/jpeg")
@@ -284,7 +284,7 @@ final class CodexTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(recovered.count, 3)
         XCTAssertEqual(recovered[0], .userMessage(text: "take a screenshot", timestamp: Self.writeTime))
         XCTAssertEqual(recovered[1], .toolResult(toolUseID: "call_1", output: "Captured screen", isError: false, timestamp: Self.writeTime))
-        guard case .image(let mimeType, let base64, _) = recovered[2] else {
+        guard case .image(let mimeType, let base64, _, _) = recovered[2] else {
             return XCTFail("expected the third entry to be an image")
         }
         XCTAssertEqual(mimeType, "image/jpeg")

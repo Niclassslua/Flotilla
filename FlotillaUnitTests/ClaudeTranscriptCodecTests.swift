@@ -279,7 +279,7 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(output, "")
         XCTAssertFalse(isError)
 
-        guard case let .image(mimeType, base64, _) = entries[1] else {
+        guard case let .image(mimeType, base64, _, _) = entries[1] else {
             return XCTFail("expected image, got \(entries[1])")
         }
         XCTAssertEqual(mimeType, "image/jpeg")
@@ -307,11 +307,12 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(id, "call_send")
         XCTAssertEqual(tool, "SendUserFile")
 
-        guard case let .image(mimeType, base64, _) = entries[1] else {
+        guard case let .image(mimeType, base64, filename, _) = entries[1] else {
             return XCTFail("expected image, got \(entries[1])")
         }
         XCTAssertEqual(mimeType, "image/jpeg")
         XCTAssertFalse(base64.isEmpty)
+        XCTAssertEqual(filename, "screenshot.png")
     }
 
     func testSendUserFileWithMissingFileIsSkippedGracefully() throws {
@@ -363,7 +364,7 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
 
         let entries = try codec.readNative(at: url)
         XCTAssertEqual(entries.count, 1)
-        guard case let .image(mimeType, base64, _) = entries[0] else {
+        guard case let .image(mimeType, base64, _, _) = entries[0] else {
             return XCTFail("expected image, got \(entries[0])")
         }
         XCTAssertEqual(mimeType, "image/jpeg")

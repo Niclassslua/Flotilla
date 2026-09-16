@@ -145,7 +145,7 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
     private static func dedupingImages(_ entries: [CanonicalEntry]) -> [CanonicalEntry] {
         var seen = Set<String>()
         return entries.filter { entry in
-            guard case let .image(_, base64, _) = entry else { return true }
+            guard case let .image(_, base64, _, _) = entry else { return true }
             return seen.insert(base64).inserted
         }
     }
@@ -204,6 +204,7 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                                 entries.append(.image(
                                     mimeType: downsampled.mimeType,
                                     base64: downsampled.base64,
+                                    filename: (path as NSString).lastPathComponent,
                                     timestamp: timestamp
                                 ))
                             }
@@ -232,12 +233,14 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                                 entries.append(.image(
                                     mimeType: downsampled.mimeType,
                                     base64: downsampled.base64,
+                                    filename: nil,
                                     timestamp: timestamp
                                 ))
                             } else {
                                 entries.append(.image(
                                     mimeType: mime,
                                     base64: data,
+                                    filename: nil,
                                     timestamp: timestamp
                                 ))
                             }
@@ -254,12 +257,14 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                     entries.append(.image(
                         mimeType: downsampled.mimeType,
                         base64: downsampled.base64,
+                        filename: nil,
                         timestamp: timestamp
                     ))
                 } else {
                     entries.append(.image(
                         mimeType: mime,
                         base64: data,
+                        filename: nil,
                         timestamp: timestamp
                     ))
                 }
@@ -502,7 +507,7 @@ extension ClaudeTranscriptCodec {
                     "message": ["role": "user", "content": blocks]
                 ], at: timestamp)
 
-            case let .image(mimeType, base64, timestamp):
+            case let .image(mimeType, base64, _, timestamp):
                 appendChained([
                     "type": "user",
                     "message": [

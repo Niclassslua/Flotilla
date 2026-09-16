@@ -188,9 +188,9 @@ public struct CodexTranscriptCodec: TranscriptLineReading, TranscriptWriting {
 
         func appendImage(mimeType: String, data: Data) {
             if let downsampled = ImageDownsampler.downsample(data: data) {
-                images.append(.image(mimeType: downsampled.mimeType, base64: downsampled.base64, timestamp: timestamp))
+                images.append(.image(mimeType: downsampled.mimeType, base64: downsampled.base64, filename: nil, timestamp: timestamp))
             } else {
-                images.append(.image(mimeType: mimeType, base64: data.base64EncodedString(), timestamp: timestamp))
+                images.append(.image(mimeType: mimeType, base64: data.base64EncodedString(), filename: nil, timestamp: timestamp))
             }
         }
 
@@ -248,7 +248,7 @@ public struct CodexTranscriptCodec: TranscriptLineReading, TranscriptWriting {
 
         let url = rawPath.hasPrefix("file://") ? URL(string: rawPath) : URL(fileURLWithPath: rawPath)
         guard let url, let downsampled = ImageDownsampler.downsample(at: url) else { return nil }
-        return .image(mimeType: downsampled.mimeType, base64: downsampled.base64, timestamp: timestamp)
+        return .image(mimeType: downsampled.mimeType, base64: downsampled.base64, filename: url.lastPathComponent, timestamp: timestamp)
     }
 
     /// Codex injects a handful of its own control messages into the

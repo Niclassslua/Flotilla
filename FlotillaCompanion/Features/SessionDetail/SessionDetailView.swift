@@ -250,7 +250,7 @@ struct SessionDetailView: View {
                     )
                 case .system(_, let text):
                     SystemNoteRow(text: text)
-                case .image(_, let mimeType, let base64):
+                case .image(_, let mimeType, let base64, _):
                     ImageRow(id: "\(sessionID):\(item.id)", mimeType: mimeType, base64: base64)
                 case .handoff(_, let from, let to):
                     HandoffRow(from: from, to: to)

@@ -13,6 +13,9 @@ struct AgentScreenshot: Identifiable {
     let agent: AgentKind
     let image: NSImage
     let data: Data
+    /// The name the agent gave the file, when it sent one; `nil` for pasted
+    /// or tool-captured images.
+    let filename: String?
     let timestamp: Date
 }
 
@@ -105,6 +108,7 @@ final class AgentScreenshotMonitor {
                 agent: session.agent,
                 image: image,
                 data: data,
+                filename: item.filename,
                 timestamp: item.timestamp
             )
         }
@@ -148,6 +152,7 @@ final class AgentScreenshotMonitor {
         let id: String
         let position: EventPosition
         let base64: String
+        let filename: String?
         let timestamp: Date
     }
 
@@ -163,14 +168,14 @@ final class AgentScreenshotMonitor {
             return nil
         })
         return events.enumerated().compactMap { offset, event in
-            guard case .image(_, let base64, let timestamp) = event.content,
+            guard case .image(_, let base64, let filename, let timestamp) = event.content,
                   !userRecordIDs.contains(event.id.split(separator: ":", maxSplits: 1)[0]),
                   !userTimestamps.contains(timestamp) else { return nil }
             let parts = event.id.split(separator: ":", maxSplits: 1)
             let position = EventPosition(line: Int(parts[0]) ?? offset,
                                          entry: parts.count > 1 ? (Int(parts[1]) ?? 0) : 0)
             guard baseline.map({ position > $0 }) ?? true else { return nil }
-            return ImageEvent(id: event.id, position: position, base64: base64, timestamp: timestamp)
+            return ImageEvent(id: event.id, position: position, base64: base64, filename: filename, timestamp: timestamp)
         }
     }
 }

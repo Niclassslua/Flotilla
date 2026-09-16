@@ -8,7 +8,7 @@ enum TranscriptItem: Identifiable {
     case assistant(id: String, text: String)
     case toolGroup(id: String, calls: [ToolCall])
     case system(id: String, text: String)
-    case image(id: String, mimeType: String, base64: String)
+    case image(id: String, mimeType: String, base64: String, filename: String?)
     case handoff(id: String, from: AgentKind, to: AgentKind)
     case resolved(id: String, text: String, isPositive: Bool)
     case failed(id: String, message: String)
@@ -16,7 +16,7 @@ enum TranscriptItem: Identifiable {
     var id: String {
         switch self {
         case .user(let id, _), .assistant(let id, _), .toolGroup(let id, _), .system(let id, _),
-             .image(let id, _, _), .handoff(let id, _, _), .resolved(let id, _, _), .failed(let id, _):
+             .image(let id, _, _, _), .handoff(let id, _, _), .resolved(let id, _, _), .failed(let id, _):
             id
         }
     }
@@ -115,9 +115,9 @@ enum TranscriptLayout {
             case .systemNote(let text, _):
                 flush()
                 items.append(.system(id: event.id, text: text))
-            case .image(let mimeType, let base64, _):
+            case .image(let mimeType, let base64, let filename, _):
                 flush()
-                items.append(.image(id: event.id, mimeType: mimeType, base64: base64))
+                items.append(.image(id: event.id, mimeType: mimeType, base64: base64, filename: filename))
             case .handoff(let from, let to, _):
                 flush()
                 items.append(.handoff(id: event.id, from: from, to: to))
