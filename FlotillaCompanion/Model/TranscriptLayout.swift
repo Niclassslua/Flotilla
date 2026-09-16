@@ -41,7 +41,10 @@ struct ToolCall: Identifiable, Sendable {
 
     /// The command, path, or pattern the call acts on.
     var subject: String? {
-        input["command"] ?? input["cmd"] ?? input["file_path"] ?? input["path"] ?? input["pattern"] ?? input["url"] ?? input["query"] ?? input["description"]
+        if let path = input["file_path"] ?? input["path"] {
+            return (path as NSString).lastPathComponent
+        }
+        return input["command"] ?? input["cmd"] ?? input["pattern"] ?? input["url"] ?? input["query"] ?? input["description"]
     }
 
     /// A file the call touched, for opening the file viewer or diff.
