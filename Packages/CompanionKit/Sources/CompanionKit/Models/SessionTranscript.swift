@@ -66,6 +66,9 @@ public struct TranscriptEvent: Identifiable, Hashable, Codable, Sendable {
         case toolUse(id: String, tool: String, input: [String: String], timestamp: Date)
         case toolResult(toolUseID: String, output: String, isError: Bool, timestamp: Date)
         case systemNote(text: String, timestamp: Date)
+        /// A screenshot the agent took and looked at — Codex's `view_image`,
+        /// downsampled to a JPEG on the Mac before it travels.
+        case image(mimeType: String, base64: String, timestamp: Date)
         case handoff(from: AgentKind, to: AgentKind, timestamp: Date)
         /// The compact trace a resolved card leaves (`Allowed Bash: npm test`).
         case resolvedInteraction(text: String, isPositive: Bool)
@@ -95,8 +98,7 @@ public struct QueuedPrompt: Identifiable, Hashable, Codable, Sendable {
 }
 
 extension TranscriptEvent.Content {
-    /// Maps an agent-neutral transcript entry to its wire form. Images have no
-    /// place on the phone (spec: no images) and map to `nil`.
+    /// Maps an agent-neutral transcript entry to its wire form.
     public init?(_ entry: CanonicalEntry) {
         switch entry {
         case .userMessage(let text, let timestamp):
@@ -107,8 +109,8 @@ extension TranscriptEvent.Content {
             self = .toolUse(id: id, tool: tool, input: Self.scalarArguments(input), timestamp: timestamp)
         case .toolResult(let toolUseID, let output, let isError, let timestamp):
             self = .toolResult(toolUseID: toolUseID, output: output, isError: isError, timestamp: timestamp)
-        case .image:
-            return nil
+        case .image(let mimeType, let base64, let timestamp):
+            self = .image(mimeType: mimeType, base64: base64, timestamp: timestamp)
         case .handoffMarker(let from, let to, _, let timestamp):
             self = .handoff(from: from, to: to, timestamp: timestamp)
         case .systemNote(let text, let timestamp):

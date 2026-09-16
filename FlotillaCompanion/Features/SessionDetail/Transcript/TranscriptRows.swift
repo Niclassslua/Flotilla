@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import SessionKit
 import DesignSystem
 import Textual
@@ -49,6 +50,54 @@ struct AssistantMessageRow: View {
             .foregroundStyle(FlotillaColors.textPrimary)
             .tint(FlotillaColors.statusReady)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Antigravity's stand-in for live text: the tail of the Mac's terminal,
+/// replaced by the completed step.
+struct TerminalTailPreview: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Live from the terminal", systemImage: "terminal")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(FlotillaColors.textTertiary)
+            Text(text)
+                .font(.caption.monospaced())
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentTransition(.opacity)
+        }
+        .padding(10)
+        .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+    }
+}
+
+/// A screenshot the agent looked at — decoded once and cached for the row's
+/// lifetime rather than on every body evaluation.
+struct ImageRow: View {
+    let mimeType: String
+    let base64: String
+
+    var body: some View {
+        Group {
+            if let data = Data(base64Encoded: base64), let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
+                            .strokeBorder(FlotillaColors.separator, lineWidth: 1)
+                    }
+            } else {
+                Label("Image couldn't be shown", systemImage: "photo.badge.exclamationmark")
+                    .font(.footnote)
+                    .foregroundStyle(FlotillaColors.textTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

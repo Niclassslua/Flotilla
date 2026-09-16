@@ -219,4 +219,102 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
 
         XCTAssertFalse(try codec.readNative(at: url).hasConversationalContent)
     }
+
+    // MARK: - Images & Screenshots
+
+    func testToolResultWithInlineImageBlockIsReadAsInlineImage() throws {
+        let onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+        let url = try writeTranscript([
+            """
+            {"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"\(onePixelPNG)"}}]}]}}
+            """
+        ])
+
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 2)
+        guard case let .toolResult(toolUseID, output, isError, _) = entries[0] else {
+            return XCTFail("expected toolResult, got \(entries[0])")
+        }
+        XCTAssertEqual(toolUseID, "call_1")
+        XCTAssertEqual(output, "")
+        XCTAssertFalse(isError)
+
+        guard case let .image(mimeType, base64, _) = entries[1] else {
+            return XCTFail("expected image, got \(entries[1])")
+        }
+        XCTAssertEqual(mimeType, "image/jpeg")
+        XCTAssertFalse(base64.isEmpty)
+        XCTAssertNotNil(Data(base64Encoded: base64))
+    }
+
+    func testSendUserFileDeliversInlineImageFromDisk() throws {
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let pngPath = home.appendingPathComponent("screenshot.png")
+        let onePixelData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        try onePixelData.write(to: pngPath)
+
+        let url = try writeTranscript([
+            """
+            {"type":"assistant","timestamp":"2026-09-08T01:18:36Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_send","name":"SendUserFile","input":{"files":["\(pngPath.path)"],"caption":"sheet"}}]}}
+            """
+        ])
+
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 2)
+        guard case let .toolUse(id, tool, _, _) = entries[0] else {
+            return XCTFail("expected toolUse, got \(entries[0])")
+        }
+        XCTAssertEqual(id, "call_send")
+        XCTAssertEqual(tool, "SendUserFile")
+
+        guard case let .image(mimeType, base64, _) = entries[1] else {
+            return XCTFail("expected image, got \(entries[1])")
+        }
+        XCTAssertEqual(mimeType, "image/jpeg")
+        XCTAssertFalse(base64.isEmpty)
+    }
+
+    func testSendUserFileWithMissingFileIsSkippedGracefully() throws {
+        let url = try writeTranscript([
+            """
+            {"type":"assistant","timestamp":"2026-09-08T01:18:36Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_send","name":"SendUserFile","input":{"files":["/tmp/does-not-exist-\(UUID().uuidString).png"],"caption":"missing"}}]}}
+            """
+        ])
+
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 1)
+        guard case let .toolUse(id, tool, _, _) = entries[0] else {
+            return XCTFail("expected toolUse, got \(entries[0])")
+        }
+        XCTAssertEqual(id, "call_send")
+        XCTAssertEqual(tool, "SendUserFile")
+    }
+
+    func testDirectImageBlockIsDownsampled() throws {
+        let onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+        let url = try writeTranscript([
+            """
+            {"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"\(onePixelPNG)"}}]}}
+            """
+        ])
+
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 1)
+        guard case let .image(mimeType, base64, _) = entries[0] else {
+            return XCTFail("expected image, got \(entries[0])")
+        }
+        XCTAssertEqual(mimeType, "image/jpeg")
+        XCTAssertFalse(base64.isEmpty)
+    }
+
+    func testReadsRealPlanningSessionTranscript() throws {
+        let realURL = URL(fileURLWithPath: "/Users/dev/.claude/projects/-Users-dev-.flotilla-general-session/3378ed5a-d8b8-4ea7-9b93-8b503b811df7.jsonl")
+        guard FileManager.default.fileExists(atPath: realURL.path) else { return }
+        let entries = try codec.readNative(at: realURL)
+        let images = entries.filter {
+            if case .image = $0 { return true }
+            return false
+        }
+        XCTAssertGreaterThanOrEqual(images.count, 4)
+    }
 }

@@ -140,52 +140,112 @@ public struct ClaudeTranscriptCodec: TranscriptReading, TranscriptWriting {
 
         guard let blocks = message["content"] as? [[String: Any]] else { return [] }
 
-        return blocks.compactMap { block in
+        var entries: [CanonicalEntry] = []
+
+        for block in blocks {
             switch block["type"] as? String {
             case "text":
-                guard let text = block["text"] as? String else { return nil }
+                guard let text = block["text"] as? String else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed)) else { return nil }
-                return type == "user"
+                guard !trimmed.isEmpty, !(type == "user" && isSyntheticUserText(trimmed)) else { continue }
+                entries.append(type == "user"
                     ? .userMessage(text: text, timestamp: timestamp)
-                    : .assistantMessage(text: text, timestamp: timestamp)
+                    : .assistantMessage(text: text, timestamp: timestamp))
 
             case "tool_use":
                 guard let id = block["id"] as? String,
-                      let name = block["name"] as? String else { return nil }
+                      let name = block["name"] as? String else { continue }
                 let input = block["input"] ?? [String: Any]()
-                return .toolUse(
+                entries.append(.toolUse(
                     id: id,
                     tool: name,
                     input: Self.encodeJSON(input),
                     timestamp: timestamp
-                )
+                ))
+                if name == "SendUserFile",
+                   let dict = input as? [String: Any],
+                   let files = dict["files"] as? [String] {
+                    for path in files where isImagePath(path) {
+                        let url = path.hasPrefix("file://") ? URL(string: path) : URL(fileURLWithPath: path)
+                        if let url, let downsampled = ImageDownsampler.downsample(at: url) {
+                            entries.append(.image(
+                                mimeType: downsampled.mimeType,
+                                base64: downsampled.base64,
+                                timestamp: timestamp
+                            ))
+                        }
+                    }
+                }
 
             case "tool_result":
-                guard let toolUseID = block["tool_use_id"] as? String else { return nil }
-                return .toolResult(
+                guard let toolUseID = block["tool_use_id"] as? String else { continue }
+                entries.append(.toolResult(
                     toolUseID: toolUseID,
                     output: Self.flatten(block["content"]),
                     isError: block["is_error"] as? Bool ?? false,
                     timestamp: timestamp
-                )
+                ))
+                if let contentBlocks = block["content"] as? [[String: Any]] {
+                    for contentBlock in contentBlocks {
+                        if contentBlock["type"] as? String == "image",
+                           let source = contentBlock["source"] as? [String: Any],
+                           let data = source["data"] as? String {
+                            let mime = source["media_type"] as? String ?? "image/png"
+                            if let rawData = Data(base64Encoded: data),
+                               let downsampled = ImageDownsampler.downsample(data: rawData) {
+                                entries.append(.image(
+                                    mimeType: downsampled.mimeType,
+                                    base64: downsampled.base64,
+                                    timestamp: timestamp
+                                ))
+                            } else {
+                                entries.append(.image(
+                                    mimeType: mime,
+                                    base64: data,
+                                    timestamp: timestamp
+                                ))
+                            }
+                        }
+                    }
+                }
 
             case "image":
                 guard let source = block["source"] as? [String: Any],
-                      let data = source["data"] as? String else { return nil }
-                return .image(
-                    mimeType: source["media_type"] as? String ?? "image/png",
-                    base64: data,
-                    timestamp: timestamp
-                )
+                      let data = source["data"] as? String else { continue }
+                let mime = source["media_type"] as? String ?? "image/png"
+                if let rawData = Data(base64Encoded: data),
+                   let downsampled = ImageDownsampler.downsample(data: rawData) {
+                    entries.append(.image(
+                        mimeType: downsampled.mimeType,
+                        base64: downsampled.base64,
+                        timestamp: timestamp
+                    ))
+                } else {
+                    entries.append(.image(
+                        mimeType: mime,
+                        base64: data,
+                        timestamp: timestamp
+                    ))
+                }
 
             default:
                 // Thinking blocks and anything added upstream since. Skipping
                 // is deliberate: these formats gain block types between
                 // releases and a strict reader would break on each one.
-                return nil
+                continue
             }
         }
+
+        return entries
+    }
+
+    private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "heic"
+    ]
+
+    private static func isImagePath(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return imageExtensions.contains(ext)
     }
 
     /// Claude Code injects harness plumbing — background-task notifications,

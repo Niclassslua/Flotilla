@@ -1,5 +1,7 @@
 import Foundation
+import ImageIO
 import SessionKit
+import UniformTypeIdentifiers
 
 /// Reads and writes Codex CLI's rollout files under `~/.codex/sessions`.
 ///
@@ -99,11 +101,17 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
                 if let message = payload["message"] as? String {
                     entries.append(.systemNote(text: message, timestamp: timestamp))
                 }
+            case "event_msg":
+                // Most event_msg records mirror content already captured from
+                // response_item and would duplicate every turn if read too —
+                // except a viewed image, whose path exists only here (the
+                // response_item behind it is opaque, harness-specific JS).
+                if let entry = Self.entry(fromEventMsg: payload, timestamp: timestamp) {
+                    entries.append(entry)
+                }
             default:
-                // event_msg is the TUI's mirror of content already captured
-                // from response_item; reading it too would duplicate every
-                // turn. session_meta, turn_context and world_state are
-                // session bookkeeping, not conversation.
+                // session_meta, turn_context and world_state are session
+                // bookkeeping, not conversation.
                 continue
             }
         }
@@ -150,6 +158,19 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
             // as well as on the way out — see `sanitize(_:)`.
             return nil
         }
+    }
+
+    /// A viewed image's path, read off disk and downsampled for the wire.
+    private static func entry(fromEventMsg payload: [String: Any], timestamp: Date) -> CanonicalEntry? {
+        guard payload["type"] as? String == "item_completed",
+              let item = payload["item"] as? [String: Any],
+              item["type"] as? String == "ImageView",
+              let rawPath = item["path"] as? String
+        else { return nil }
+
+        let url = rawPath.hasPrefix("file://") ? URL(string: rawPath) : URL(fileURLWithPath: rawPath)
+        guard let url, let downsampled = ImageDownsampler.downsample(at: url) else { return nil }
+        return .image(mimeType: downsampled.mimeType, base64: downsampled.base64, timestamp: timestamp)
     }
 
     /// Codex content is an array of typed parts, but plain strings appear in
