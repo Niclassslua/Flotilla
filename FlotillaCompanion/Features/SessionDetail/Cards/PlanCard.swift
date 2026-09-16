@@ -96,8 +96,11 @@ private struct PlanActions: View {
                                 .frame(maxWidth: .infinity, minHeight: ProtoFlags.isOn("thumbCardActions") ? 50 : nil)
                         }
                         .buttonStyle(.glass)
-                        Button { isRevising = true } label: { Text("Revise") }
-                            .buttonStyle(.glass)
+                        Button { isRevising = true } label: {
+                            Text("Revise")
+                                .frame(maxWidth: .infinity, minHeight: ProtoFlags.isOn("thumbCardActions") ? 50 : nil)
+                        }
+                        .buttonStyle(.glass)
                     }
                 }
                 .controlSize(.large)
