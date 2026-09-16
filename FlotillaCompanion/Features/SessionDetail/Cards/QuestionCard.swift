@@ -84,7 +84,7 @@ struct QuestionCard: View {
                     Button {
                         withAnimation(.snappy) { stepIndex -= 1 }
                     } label: {
-                        Text("Back").frame(maxWidth: .infinity)
+                        Text("Back").frame(maxWidth: .infinity, minHeight: buttonRowHeight)
                     }
                     .buttonStyle(.glass)
                 }
@@ -92,13 +92,13 @@ struct QuestionCard: View {
                     Button {
                         withAnimation(.snappy) { stepIndex += 1 }
                     } label: {
-                        Text("Next").frame(maxWidth: .infinity)
+                        Text("Next").frame(maxWidth: .infinity, minHeight: buttonRowHeight)
                     }
                     .buttonStyle(.glass)
                     .disabled(!isAnswered(step))
                 } else {
                     Button(action: submit) {
-                        Text("Submit").frame(maxWidth: .infinity)
+                        Text("Submit").frame(maxWidth: .infinity, minHeight: buttonRowHeight)
                     }
                     .buttonStyle(.glassProminent)
                     .tint(FlotillaColors.accent)
@@ -110,6 +110,9 @@ struct QuestionCard: View {
         }
         .sensoryFeedback(.selection, trigger: selections)
     }
+
+    /// -proto thumbCardActions
+    private var buttonRowHeight: CGFloat? { ProtoFlags.isOn("thumbCardActions") ? 50 : nil }
 
     private func isAnswered(_ step: QuestionStep) -> Bool {
         let hasOther = otherEnabled.contains(step.id) && !otherText[step.id, default: ""].trimmingCharacters(in: .whitespaces).isEmpty

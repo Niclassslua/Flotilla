@@ -85,18 +85,30 @@ private struct PlanActions: View {
             } else if context.capabilities.planApprovalHasModeSplit {
                 VStack(spacing: 8) {
                     Button { send(.approvePlan(.autoAccept)) } label: {
-                        Text("Approve & Auto-Accept Edits").frame(maxWidth: .infinity)
+                        Text("Approve & Auto-Accept Edits")
+                            .frame(maxWidth: .infinity, minHeight: ProtoFlags.isOn("thumbCardActions") ? 50 : nil)
                     }
                     .buttonStyle(.glassProminent)
                     .tint(FlotillaColors.accent)
                     HStack(spacing: 8) {
                         Button { send(.approvePlan(.askForEdits)) } label: {
-                            Text("Approve & Ask for Edits").frame(maxWidth: .infinity)
+                            Text("Approve & Ask for Edits")
+                                .frame(maxWidth: .infinity, minHeight: ProtoFlags.isOn("thumbCardActions") ? 50 : nil)
                         }
                         .buttonStyle(.glass)
                         Button { isRevising = true } label: { Text("Revise") }
                             .buttonStyle(.glass)
                     }
+                }
+                .controlSize(.large)
+                .disabled(isSending)
+            } else if ProtoFlags.isOn("thumbCardActions") {
+                VStack(spacing: 8) {
+                    Button { send(.approvePlan(nil)) } label: { Text("Approve").frame(maxWidth: .infinity, minHeight: 50) }
+                        .buttonStyle(.glassProminent)
+                        .tint(FlotillaColors.accent)
+                    Button { isRevising = true } label: { Text("Revise").frame(maxWidth: .infinity, minHeight: 50) }
+                        .buttonStyle(.glass)
                 }
                 .controlSize(.large)
                 .disabled(isSending)

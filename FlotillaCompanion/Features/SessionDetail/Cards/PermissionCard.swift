@@ -62,40 +62,68 @@ struct PermissionCard: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 8) {
-            Button { send(.deny) } label: {
-                Text("Deny").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glass)
-            .accessibilityIdentifier("PermissionCard.Deny")
+        Group {
+            if ProtoFlags.isOn("thumbCardActions") {
+                VStack(spacing: 8) {
+                    Button { send(.allow) } label: {
+                        Text("Allow").frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(FlotillaColors.accent)
+                    .accessibilityIdentifier("PermissionCard.Allow")
 
-            Button { send(.allow) } label: {
-                Text("Allow").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(FlotillaColors.accent)
-            .accessibilityIdentifier("PermissionCard.Allow")
+                    HStack(spacing: 8) {
+                        Button { send(.deny) } label: {
+                            Text("Deny").frame(maxWidth: .infinity, minHeight: 50)
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("PermissionCard.Deny")
 
-            Menu {
-                if request.allowsAlwaysAllow != false {
-                    Button(context.capabilities.alwaysAllowLabel(for: request), systemImage: "checkmark.seal") { send(.alwaysAllow) }
+                        moreMenu
+                            .frame(width: 52, height: 50)
+                    }
                 }
-                Button("Allow with Note…", systemImage: "text.bubble") { beginNote(.allow) }
-                Button("Deny with Note…", systemImage: "text.bubble") { beginNote(.deny) }
-                if request.allowsDenyAndStop != false {
-                    Divider()
-                    Button("Deny and Stop", systemImage: "stop.circle", role: .destructive) { send(.denyAndStop) }
+            } else {
+                HStack(spacing: 8) {
+                    Button { send(.deny) } label: {
+                        Text("Deny").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("PermissionCard.Deny")
+
+                    Button { send(.allow) } label: {
+                        Text("Allow").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(FlotillaColors.accent)
+                    .accessibilityIdentifier("PermissionCard.Allow")
+
+                    moreMenu
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .frame(width: 22)
             }
-            .buttonStyle(.glass)
-            .accessibilityLabel("More")
-            .accessibilityIdentifier("PermissionCard.More")
         }
         .controlSize(.large)
         .disabled(isSending)
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            if request.allowsAlwaysAllow != false {
+                Button(context.capabilities.alwaysAllowLabel(for: request), systemImage: "checkmark.seal") { send(.alwaysAllow) }
+            }
+            Button("Allow with Note…", systemImage: "text.bubble") { beginNote(.allow) }
+            Button("Deny with Note…", systemImage: "text.bubble") { beginNote(.deny) }
+            if request.allowsDenyAndStop != false {
+                Divider()
+                Button("Deny and Stop", systemImage: "stop.circle", role: .destructive) { send(.denyAndStop) }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .frame(width: 22)
+        }
+        .buttonStyle(.glass)
+        .accessibilityLabel("More")
+        .accessibilityIdentifier("PermissionCard.More")
     }
 
     private func noteEditor(_ mode: NoteMode) -> some View {

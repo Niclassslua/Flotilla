@@ -87,6 +87,7 @@ Screenshot-review scaffolding for UI ideas not yet shipped, gated behind
 | `codeBlockHeader` | Transcript: language badge + Copy button above fenced code, via `MarkdownCodeFence` segment splitting (see note below) |
 | `toolChips` | Transcript: collapsed tool group header becomes a scrolling row of what each call touched, instead of just a count |
 | `jumpPillCount` | Transcript: the "New output" jump pill shows a live count instead of a bare label |
+| `thumbCardActions` | Cards (Permission/Plan/Question): primary action full-width ≥50pt at the bottom, secondary actions quieter, thumb-reachable |
 
 `codeBlockHeader`'s implementation note: `StructuredText`'s per-block style
 customization hooks (`.textual.codeBlockStyle(_:)`, `.textual.paragraphStyle(_:)`)
