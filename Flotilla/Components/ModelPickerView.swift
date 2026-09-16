@@ -136,7 +136,6 @@ struct ModelPickerView: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovering)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             popoverContent
         }

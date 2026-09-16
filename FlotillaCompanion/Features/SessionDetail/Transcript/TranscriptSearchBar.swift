@@ -48,6 +48,8 @@ struct TranscriptSearchBar: View {
         .foregroundStyle(FlotillaColors.textSecondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .onAppear { isFocused = true }
+        .onAppear {
+            DispatchQueue.main.async { isFocused = true }
+        }
     }
 }
