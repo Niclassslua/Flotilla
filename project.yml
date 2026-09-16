@@ -116,6 +116,9 @@ targets:
           - CFBundleURLName: com.niclassslua.flotilla.companion.pairing
             CFBundleURLSchemes:
               - flotilla
+        # -proto liveActivity: lets the app start/update a Live Activity.
+        # Local-only — see docs/companion.md decision #6.
+        NSSupportsLiveActivities: true
     configFiles:
       Debug: Config/CompanionSigning.xcconfig
       Ephemeral: Config/CompanionSigning.xcconfig
@@ -142,6 +145,38 @@ targets:
       - package: CompanionKit
       - package: Textual
         product: Textual
+      - target: FlotillaCompanionWidget
+
+  # -proto liveActivity: Dynamic Island / Lock Screen presentation for a
+  # session's live status. See FlotillaCompanion/LiveActivity/SessionActivityAttributes.swift.
+  FlotillaCompanionWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: FlotillaCompanionWidget
+      - path: FlotillaCompanion/LiveActivity/SessionActivityAttributes.swift
+    info:
+      path: FlotillaCompanionWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Flotilla
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    configFiles:
+      Debug: Config/CompanionSigning.xcconfig
+      Ephemeral: Config/CompanionSigning.xcconfig
+      Release: Config/CompanionSigning.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.companion.widget
+        PRODUCT_NAME: FlotillaCompanionWidget
+        INFOPLIST_KEY_CFBundleDisplayName: Flotilla
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: DesignSystem
+      - package: SessionKit
 
   FlotillaCompanionTests:
     type: bundle.unit-test

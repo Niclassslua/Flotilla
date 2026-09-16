@@ -90,6 +90,7 @@ Screenshot-review scaffolding for UI ideas not yet shipped, gated behind
 | `thumbCardActions` | Cards (Permission/Plan/Question): primary action full-width ≥50pt at the bottom, secondary actions quieter, thumb-reachable |
 | `haptics` | Fills gaps in the existing `.sensoryFeedback` usage: `.impact(.light)` on expand/collapse (tool groups, project headers), `.impact(.medium)` on Send, `.warning` on Stop and Deny, `.success` on entering waiting-for-input/ready-for-review. Device-only, nothing to screenshot — verify with `make run-companion-device`. |
 | `statusTint` | Session detail: soft gradient behind the header and nav bar, following `StatusPresentation.color` — amber while waiting, emerald when ready |
+| `liveActivity` | Starts a Live Activity (Dynamic Island + Lock Screen) for the open session, updated on status change, ended on leaving the screen. Local-only — no push token requested, so it only reflects reality while the app is open (decision #6). Needs `FlotillaCompanionWidget` (new widget-extension target, `SessionActivityAttributes` shared between it and the app). |
 
 `codeBlockHeader`'s implementation note: `StructuredText`'s per-block style
 customization hooks (`.textual.codeBlockStyle(_:)`, `.textual.paragraphStyle(_:)`)
