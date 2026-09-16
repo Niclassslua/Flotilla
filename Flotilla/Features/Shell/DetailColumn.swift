@@ -20,6 +20,7 @@ struct DetailColumn: View {
     @State private var activeGridSessionID: UUID?
     @State private var gitSidebarSessionID: UUID?
     @State private var screenshotMonitor = AgentScreenshotMonitor()
+    @State private var isScreenshotsExplicitlyPresented = false
 
     var body: some View {
         let _ = navigator.presentedSheet
@@ -52,6 +53,7 @@ struct DetailColumn: View {
             gitSidebarSessionID = sessionID
         }
         .onChange(of: activeSession?.id, initial: true) {
+            isScreenshotsExplicitlyPresented = false
             screenshotMonitor.focus(activeSession)
         }
     }
@@ -162,13 +164,24 @@ struct DetailColumn: View {
             onToggleGitSidebar: {
                 // With a screenshot covering it, the button reveals Git
                 // rather than closing a sidebar the user can't see.
-                if !screenshotMonitor.pending.isEmpty {
+                if showsScreenshots {
+                    isScreenshotsExplicitlyPresented = false
                     screenshotMonitor.dismiss()
                     gitSidebarSessionID = session.id
                 } else {
                     gitSidebarSessionID = gitSidebarSessionID == session.id ? nil : session.id
                 }
             },
+            onToggleScreenshots: {
+                if showsScreenshots {
+                    isScreenshotsExplicitlyPresented = false
+                    screenshotMonitor.dismiss()
+                } else {
+                    isScreenshotsExplicitlyPresented = true
+                    gitSidebarSessionID = nil
+                }
+            },
+            hasScreenshots: !screenshotMonitor.screenshots.isEmpty,
             onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
             handoffTargets: store.handoffTargets(for: session),
             onHandoff: { target in Task { await store.handoffSession(sessionID: session.id, to: target) } },
@@ -194,7 +207,7 @@ struct DetailColumn: View {
     }
 
     private var showsScreenshots: Bool {
-        !screenshotMonitor.pending.isEmpty && activeSession != nil
+        activeSession != nil && (!screenshotMonitor.pending.isEmpty || (isScreenshotsExplicitlyPresented && !screenshotMonitor.screenshots.isEmpty))
     }
 
     /// Screenshots are a temporary layer over the inspector: they open it on
@@ -205,6 +218,7 @@ struct DetailColumn: View {
             set: { isPresented in
                 guard !isPresented else { return }
                 screenshotMonitor.dismiss()
+                isScreenshotsExplicitlyPresented = false
                 gitSidebarSessionID = nil
             }
         )
@@ -214,8 +228,11 @@ struct DetailColumn: View {
     private var inspectorContent: some View {
         if showsScreenshots {
             AgentScreenshotPanel(
-                screenshots: screenshotMonitor.pending,
-                onClose: { screenshotMonitor.dismiss() }
+                screenshots: screenshotMonitor.pending.isEmpty ? screenshotMonitor.screenshots : screenshotMonitor.pending,
+                onClose: {
+                    isScreenshotsExplicitlyPresented = false
+                    screenshotMonitor.dismiss()
+                }
             )
         } else {
             gitSidebarContent

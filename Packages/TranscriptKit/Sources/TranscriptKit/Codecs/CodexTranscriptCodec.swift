@@ -94,9 +94,7 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
 
             switch record["type"] as? String {
             case "response_item":
-                if let entry = Self.entry(fromResponseItem: payload, timestamp: timestamp) {
-                    entries.append(entry)
-                }
+                entries.append(contentsOf: Self.entries(fromResponseItem: payload, timestamp: timestamp))
             case "compacted":
                 if let message = payload["message"] as? String {
                     entries.append(.systemNote(text: message, timestamp: timestamp))
@@ -119,48 +117,121 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
         return entries
     }
 
-    private static func entry(
+    private static func entries(
         fromResponseItem payload: [String: Any],
         timestamp: Date
-    ) -> CanonicalEntry? {
+    ) -> [CanonicalEntry] {
         switch payload["type"] as? String {
         case "message":
             let text = flattenContent(payload["content"])
-            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
             if let note = systemNoteText(unwrapping: text) {
-                return .systemNote(text: note, timestamp: timestamp)
+                return [.systemNote(text: note, timestamp: timestamp)]
             }
-            return payload["role"] as? String == "user"
+            return [payload["role"] as? String == "user"
                 ? .userMessage(text: text, timestamp: timestamp)
-                : .assistantMessage(text: text, timestamp: timestamp)
+                : .assistantMessage(text: text, timestamp: timestamp)]
 
         case "function_call":
             guard let callID = payload["call_id"] as? String,
-                  let name = payload["name"] as? String else { return nil }
+                  let name = payload["name"] as? String else { return [] }
             // Codex stores arguments as a JSON *string*, not an object.
             let arguments = payload["arguments"] as? String ?? "{}"
-            return .toolUse(id: callID, tool: name, input: Data(arguments.utf8), timestamp: timestamp)
+            return [.toolUse(id: callID, tool: name, input: Data(arguments.utf8), timestamp: timestamp)]
 
         case "custom_tool_call":
             guard let callID = payload["call_id"] as? String,
-                  let name = payload["name"] as? String else { return nil }
+                  let name = payload["name"] as? String else { return [] }
             let input = payload["input"] as? String ?? "{}"
-            return .toolUse(id: callID, tool: name, input: Data(input.utf8), timestamp: timestamp)
+            return [.toolUse(id: callID, tool: name, input: Data(input.utf8), timestamp: timestamp)]
 
         case "function_call_output", "custom_tool_call_output":
-            guard let callID = payload["call_id"] as? String else { return nil }
-            return .toolResult(
-                toolUseID: callID,
-                output: flattenContent(payload["output"]),
-                isError: false,
-                timestamp: timestamp
-            )
+            guard let callID = payload["call_id"] as? String else { return [] }
+            var result: [CanonicalEntry] = [
+                .toolResult(
+                    toolUseID: callID,
+                    output: flattenContent(payload["output"]),
+                    isError: false,
+                    timestamp: timestamp
+                )
+            ]
+            result.append(contentsOf: extractImages(from: payload["output"], timestamp: timestamp))
+            return result
 
         default:
             // `reasoning` lands here and is deliberately dropped on the way in
             // as well as on the way out — see `sanitize(_:)`.
-            return nil
+            return []
         }
+    }
+
+    private static func extractImages(from raw: Any?, timestamp: Date) -> [CanonicalEntry] {
+        var images: [CanonicalEntry] = []
+
+        func parseDataURI(_ str: String) -> (mimeType: String, data: Data)? {
+            guard str.hasPrefix("data:") else { return nil }
+            guard let commaIndex = str.firstIndex(of: ",") else { return nil }
+            let header = String(str[str.startIndex..<commaIndex])
+            let base64Part = String(str[str.index(after: commaIndex)...])
+            guard header.contains(";base64") else { return nil }
+            let mime = header
+                .replacingOccurrences(of: "data:", with: "")
+                .replacingOccurrences(of: ";base64", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            guard let data = Data(base64Encoded: base64Part, options: [.ignoreUnknownCharacters]) else { return nil }
+            return (mime.isEmpty ? "image/jpeg" : mime, data)
+        }
+
+        func appendImage(mimeType: String, data: Data) {
+            if let downsampled = ImageDownsampler.downsample(data: data) {
+                images.append(.image(mimeType: downsampled.mimeType, base64: downsampled.base64, timestamp: timestamp))
+            } else {
+                images.append(.image(mimeType: mimeType, base64: data.base64EncodedString(), timestamp: timestamp))
+            }
+        }
+
+        func inspectItem(_ item: Any?) {
+            guard let item else { return }
+
+            if let dict = item as? [String: Any] {
+                let type = dict["type"] as? String
+                if type == "input_image" {
+                    if let imageURL = dict["image_url"] as? String,
+                       let parsed = parseDataURI(imageURL) {
+                        appendImage(mimeType: parsed.mimeType, data: parsed.data)
+                    } else if let imageURLDict = dict["image_url"] as? [String: Any],
+                              let url = imageURLDict["url"] as? String,
+                              let parsed = parseDataURI(url) {
+                        appendImage(mimeType: parsed.mimeType, data: parsed.data)
+                    }
+                } else if type == "image" {
+                    if let source = dict["source"] as? [String: Any],
+                       let base64 = source["data"] as? String,
+                       let data = Data(base64Encoded: base64) {
+                        let mime = source["media_type"] as? String ?? "image/jpeg"
+                        appendImage(mimeType: mime, data: data)
+                    } else if let base64 = dict["data"] as? String,
+                              let data = Data(base64Encoded: base64) {
+                        let mime = dict["mime_type"] as? String ?? dict["media_type"] as? String ?? "image/jpeg"
+                        appendImage(mimeType: mime, data: data)
+                    }
+                }
+            } else if let list = item as? [Any] {
+                for element in list {
+                    inspectItem(element)
+                }
+            } else if let str = item as? String, str.contains("data:image/") {
+                if let data = str.data(using: .utf8),
+                   let parsed = try? JSONSerialization.jsonObject(with: data) {
+                    inspectItem(parsed)
+                } else if let parsed = parseDataURI(str) {
+                    appendImage(mimeType: parsed.mimeType, data: parsed.data)
+                }
+            }
+        }
+
+        inspectItem(raw)
+        return images
     }
 
     /// A viewed image's path, read off disk and downsampled for the wire.

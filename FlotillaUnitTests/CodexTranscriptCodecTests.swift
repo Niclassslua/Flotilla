@@ -264,6 +264,33 @@ final class CodexTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(try codec.readNative(at: url), [.userMessage(text: "take a look", timestamp: Self.writeTime)])
     }
 
+    func testFunctionCallOutputWithInputImageIsReadAsToolResultAndImage() async throws {
+        let handle = try await codec.writeNative(
+            [.userMessage(text: "take a screenshot", timestamp: Self.writeTime)],
+            workingDirectory: workingDirectory,
+            sessionID: sessionID
+        )
+        let url = try XCTUnwrap(handle.transcriptURL)
+
+        // Minimal 1x1 PNG data URI
+        let dataURI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+        let record = """
+        {"timestamp":"2026-09-08T01:18:36Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"\(dataURI)"},{"type":"text","text":"Captured screen"}]}}
+        """
+        let injected = try String(contentsOf: url, encoding: .utf8) + "\n" + record
+        try injected.write(to: url, atomically: true, encoding: .utf8)
+
+        let recovered = try codec.readNative(at: url)
+        XCTAssertEqual(recovered.count, 3)
+        XCTAssertEqual(recovered[0], .userMessage(text: "take a screenshot", timestamp: Self.writeTime))
+        XCTAssertEqual(recovered[1], .toolResult(toolUseID: "call_1", output: "Captured screen", isError: false, timestamp: Self.writeTime))
+        guard case .image(let mimeType, let base64, _) = recovered[2] else {
+            return XCTFail("expected the third entry to be an image")
+        }
+        XCTAssertEqual(mimeType, "image/jpeg")
+        XCTAssertFalse(base64.isEmpty)
+    }
+
     // MARK: - Reading back
 
     func testRoundTripsItsOwnOutput() async throws {

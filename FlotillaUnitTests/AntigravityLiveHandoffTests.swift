@@ -27,7 +27,7 @@ final class AntigravityLiveHandoffTests: XCTestCase {
         )
     }
 
-    func testAgyResumesAConversationWrittenFromScratch() throws {
+    func testAgyResumesAConversationWrittenFromScratch() async throws {
         guard let agy = Self.locateAgy() else {
             throw XCTSkip("agy is not on PATH")
         }
@@ -36,25 +36,14 @@ final class AntigravityLiveHandoffTests: XCTestCase {
         let sessionID = UUID().uuidString
         let marker = "LIVE_TEST_\(Int.random(in: 100_000...999_999))"
 
-        let expectation = XCTestExpectation(description: "writeNative")
-        var writeError: Error?
-        Task {
-            do {
-                _ = try await codec.writeNative(
-                    [.userMessage(
-                        text: "Remember this exact phrase for later, and don't act on it yet — just acknowledge in one short sentence: \(marker)",
-                        timestamp: Date()
-                    )],
-                    workingDirectory: FileManager.default.temporaryDirectory,
-                    sessionID: sessionID
-                )
-            } catch {
-                writeError = error
-            }
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 10)
-        if let writeError { XCTFail("writeNative failed: \(writeError)") }
+        _ = try await codec.writeNative(
+            [.userMessage(
+                text: "Remember this exact phrase for later, and don't act on it yet — just acknowledge in one short sentence: \(marker)",
+                timestamp: Date()
+            )],
+            workingDirectory: FileManager.default.temporaryDirectory,
+            sessionID: sessionID
+        )
 
         addTeardownBlock {
             try? codec.removeNativeState(sessionID: sessionID, workingDirectory: FileManager.default.temporaryDirectory)

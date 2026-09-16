@@ -26,13 +26,14 @@ struct AgentScreenshot: Identifiable {
 final class AgentScreenshotMonitor {
     /// Screenshots that arrived since the panel was last dismissed, oldest first.
     private(set) var pending: [AgentScreenshot] = []
+    /// All screenshots for the current session, oldest first.
+    private(set) var screenshots: [AgentScreenshot] = []
 
     @ObservationIgnored private let reader: CompanionTranscriptReader
     @ObservationIgnored private var session: Session?
-    /// Highest image event index already accounted for; only images past it
-    /// are new.
-    @ObservationIgnored private var baseline = -1
-    @ObservationIgnored private var isBaselined = false
+    /// Highest image event index already accounted for per session.
+    @ObservationIgnored private var baselines: [UUID: Int] = [:]
+    @ObservationIgnored private var dismissedIDs: Set<String> = []
     @ObservationIgnored private var changesTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
@@ -40,8 +41,7 @@ final class AgentScreenshotMonitor {
         self.reader = reader
     }
 
-    /// Follows the session on screen. Switching sessions drops anything still
-    /// pending, and the new session's existing images become the baseline.
+    /// Follows the session on screen.
     func focus(_ newSession: Session?) {
         guard newSession?.id != session?.id else { return }
         // Started here rather than in `init`: SwiftUI builds a throwaway
@@ -57,8 +57,7 @@ final class AgentScreenshotMonitor {
         let previous = session
         session = newSession
         pending = []
-        baseline = -1
-        isBaselined = false
+        screenshots = []
         refreshTask?.cancel()
         Task { [reader] in
             if let previous { await reader.unwatch(previous.id) }
@@ -66,12 +65,11 @@ final class AgentScreenshotMonitor {
             await reader.watch(newSession)
         }
         guard newSession != nil else { return }
-        // The transcript may not exist yet; an empty read still sets a
-        // baseline of "nothing", so the first image the agent sends appears.
         refresh(debounce: .zero)
     }
 
     func dismiss() {
+        dismissedIDs.formUnion(pending.map(\.id))
         pending = []
     }
 
@@ -95,15 +93,8 @@ final class AgentScreenshotMonitor {
 
     private func apply(_ events: [TranscriptEvent], for session: Session) {
         guard session.id == self.session?.id else { return }
-        let found = Self.agentImages(in: events, after: baseline)
-        if let last = found.last?.index {
-            baseline = max(baseline, last)
-        }
-        guard isBaselined else {
-            isBaselined = true
-            return
-        }
-        let screenshots = found.compactMap { item -> AgentScreenshot? in
+        let allFound = Self.agentImages(in: events, after: -1)
+        let loadedScreenshots = allFound.compactMap { item -> AgentScreenshot? in
             guard let data = Data(base64Encoded: item.base64),
                   let image = NSImage(data: data) else { return nil }
             return AgentScreenshot(
@@ -115,7 +106,27 @@ final class AgentScreenshotMonitor {
                 timestamp: item.timestamp
             )
         }
-        pending.append(contentsOf: screenshots)
+        self.screenshots = loadedScreenshots
+
+        let previousBaseline = baselines[session.id]
+        let currentMax = allFound.last?.index ?? -1
+        baselines[session.id] = max(previousBaseline ?? -1, currentMax)
+
+        if let previousBaseline {
+            let newScreenshots = loadedScreenshots.filter {
+                (Int($0.id) ?? -1) > previousBaseline && !dismissedIDs.contains($0.id)
+            }
+            for item in newScreenshots where !pending.contains(where: { $0.id == item.id }) {
+                pending.append(item)
+            }
+        } else {
+            // First time loading this session: surface screenshots taken within the last 10 minutes
+            // that the user has not dismissed.
+            let recent = loadedScreenshots.filter {
+                abs($0.timestamp.timeIntervalSinceNow) < 600 && !dismissedIDs.contains($0.id)
+            }
+            self.pending = recent
+        }
     }
 
     struct ImageEvent: Equatable {

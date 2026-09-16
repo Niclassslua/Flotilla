@@ -7,6 +7,8 @@ import DesignSystem
 struct SessionBarActions {
     var onRename: (String) -> Void = { _ in }
     var onToggleGitSidebar: () -> Void = {}
+    var onToggleScreenshots: () -> Void = {}
+    var hasScreenshots: Bool = false
     var onBrowseFiles: () -> Void = {}
     var onFocus: () -> Void = {}
     var onRemoveFromGrid: () -> Void = {}
@@ -311,6 +313,16 @@ struct SessionBar: View {
             // The sidebar toggle sits last, against the bar's trailing edge,
             // because that is the edge the sidebar itself opens from.
             HStack(spacing: 2) {
+                if actions.hasScreenshots {
+                    barButton(
+                        "photo",
+                        help: "View screenshots captured by \(session.agent.displayName)",
+                        action: actions.onToggleScreenshots
+                    )
+                    .accessibilityLabel("Agent screenshots")
+                    .accessibilityIdentifier(AXID.sessionBarScreenshotsToggle.rawValue)
+                }
+
                 barButton(
                     "text.page.badge.magnifyingglass",
                     help: isReviewable
