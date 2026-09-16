@@ -242,6 +242,7 @@ struct ConnectionDiagnosis: Equatable {
         case .closed: "connection closed"
         case .localNetworkDenied: "Local Network access denied"
         case .frameTooLarge: "unexpected data"
+        case .backpressure: "connection busy"
         case .unreachable(let detail):
             if detail.localizedCaseInsensitiveContains("refused") { "connection refused" }
             else if detail.localizedCaseInsensitiveContains("unreachable") || detail.localizedCaseInsensitiveContains("no route") { "no route to host" }
