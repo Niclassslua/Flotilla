@@ -80,7 +80,7 @@ struct PermissionCard: View {
                     .tint(FlotillaColors.accent)
                     .accessibilityIdentifier("PermissionCard.Allow")
 
-                    moreMenu(expandsToFill: false)
+                    moreMenu(expandsToFill: false, matchesRowHeight: true)
                 }
             } else if ProtoFlags.isOn("thumbCardActions") {
                 VStack(spacing: 8) {
@@ -124,7 +124,10 @@ struct PermissionCard: View {
         .disabled(isSending)
     }
 
-    private func moreMenu(expandsToFill: Bool) -> some View {
+    /// `expandsToFill` splits the row width evenly with its neighbor;
+    /// otherwise it hugs its content. `matchesRowHeight` sets minHeight to
+    /// 50 either way, so it never reads shorter than buttons beside it.
+    private func moreMenu(expandsToFill: Bool, matchesRowHeight: Bool = false) -> some View {
         Menu {
             if request.allowsAlwaysAllow != false {
                 Button(context.capabilities.alwaysAllowLabel(for: request), systemImage: "checkmark.seal") { send(.alwaysAllow) }
@@ -138,7 +141,10 @@ struct PermissionCard: View {
         } label: {
             Image(systemName: "ellipsis")
                 .frame(width: 22)
-                .frame(maxWidth: expandsToFill ? .infinity : nil, minHeight: expandsToFill ? 50 : nil)
+                .frame(
+                    maxWidth: expandsToFill ? .infinity : nil,
+                    minHeight: (expandsToFill || matchesRowHeight) ? 50 : nil
+                )
         }
         .buttonStyle(.glass)
         .accessibilityLabel("More")
