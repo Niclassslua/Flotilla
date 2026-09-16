@@ -114,6 +114,29 @@ struct MockFixtures {
             t.tool("Edit", ["file_path": "FlotillaCompanion/Features/Fleet/FleetView.swift"], output: "Applied")
             t.assistant("The banner is in. Now wiring the disabled state into swipe actions and the **+** button.")
             t.tool("Bash", ["command": "xcodebuild -scheme FlotillaCompanion build"], output: nil)
+            t.assistant("""
+                Build's green. Here's the view, the payload shape it reads, and the command I ran:
+
+                ```swift
+                struct UnreachableBanner: View {
+                    let mac: MacHost
+                    var asOf: Date? = nil
+                    var body: some View {
+                        Label(text, systemImage: icon)
+                    }
+                }
+                ```
+
+                ```json
+                { "reachable": false, "lastSeen": "2026-09-16T21:00:00Z" }
+                ```
+
+                ```sh
+                xcodebuild -scheme FlotillaCompanion -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+                ```
+
+                Next up: the disabled-state wiring.
+                """)
         }.transcript
         fixtures.diffs[SessionID.offlineBanner] = bannerDiff
         fixtures.commits[SessionID.offlineBanner] = sampleCommits(now: now)

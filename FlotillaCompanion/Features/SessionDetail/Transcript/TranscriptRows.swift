@@ -21,7 +21,7 @@ struct UserMessageRow: View {
                     .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(isQueued ? Color.clear : FlotillaColors.surfaceElevated)
+                            .fill(bubbleFill)
                     )
                     .overlay {
                         if isQueued {
@@ -38,19 +38,125 @@ struct UserMessageRow: View {
         }
         .accessibilityElement(children: .combine)
     }
+
+    /// -proto userBubbleAccentTint
+    private var bubbleFill: Color {
+        guard !isQueued else { return .clear }
+        guard ProtoFlags.isOn("userBubbleAccentTint") else { return FlotillaColors.surfaceElevated }
+        return FlotillaColors.accent.opacity(0.14)
+    }
 }
 
 struct AssistantMessageRow: View {
     let markdown: String
 
     var body: some View {
-        StructuredText(markdown: markdown)
+        Group {
+            if ProtoFlags.isOn("codeBlockHeader") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(MarkdownCodeFence.segments(in: markdown).enumerated()), id: \.offset) { _, segment in
+                        switch segment {
+                        case .prose(let text):
+                            structuredText(text)
+                        case .code(let language, let code):
+                            CodeBlockView(language: language, code: code)
+                        }
+                    }
+                }
+            } else {
+                structuredText(markdown)
+            }
+        }
+        .font(.body)
+        .foregroundStyle(FlotillaColors.textPrimary)
+        .tint(FlotillaColors.statusReady)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func structuredText(_ text: String) -> some View {
+        StructuredText(markdown: text)
             .textual.structuredTextStyle(.gitHub)
             .textual.textSelection(.enabled)
-            .font(.body)
-            .foregroundStyle(FlotillaColors.textPrimary)
-            .tint(FlotillaColors.statusReady)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// -proto codeBlockHeader: splits a message's markdown into prose and fenced
+/// code segments, so code segments can get a header the default `.gitHub`
+/// code block style doesn't offer — `StructuredText`'s per-block style
+/// customization hooks (`.textual.codeBlockStyle(_:)`) didn't take effect in
+/// this app despite matching the documented usage, so this sidesteps that
+/// API rather than depend on it.
+enum MarkdownCodeFence {
+    enum Segment {
+        case prose(String)
+        case code(language: String?, code: String)
+    }
+
+    static func segments(in markdown: String) -> [Segment] {
+        var result: [Segment] = []
+        var prose: [Substring] = []
+        var lines = markdown.split(separator: "\n", omittingEmptySubsequences: false)[...]
+
+        func flushProse() {
+            let text = prose.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty { result.append(.prose(text)) }
+            prose = []
+        }
+
+        while let line = lines.first {
+            lines = lines.dropFirst()
+            if let fenceStart = line.range(of: "```"), line[..<fenceStart.lowerBound].allSatisfy(\.isWhitespace) {
+                flushProse()
+                let language = line[fenceStart.upperBound...].trimmingCharacters(in: .whitespaces)
+                var code: [Substring] = []
+                while let codeLine = lines.first {
+                    lines = lines.dropFirst()
+                    if codeLine.trimmingCharacters(in: .whitespaces) == "```" { break }
+                    code.append(codeLine)
+                }
+                result.append(.code(language: language.isEmpty ? nil : language, code: code.joined(separator: "\n")))
+            } else {
+                prose.append(line)
+            }
+        }
+        flushProse()
+        return result
+    }
+}
+
+/// -proto codeBlockHeader: a language badge and Copy button above the code.
+/// Reuses `.gitHub`'s code block rendering (syntax highlighting included)
+/// for the code itself, nested one level down — see `MarkdownCodeFence`.
+private struct CodeBlockView: View {
+    let language: String?
+    let code: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text((language ?? "code").uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = code
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .font(.caption2.weight(.medium))
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .accessibilityLabel("Copy code")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+
+            StructuredText(markdown: "```\(language ?? "")\n\(code)\n```")
+                .textual.structuredTextStyle(.gitHub)
+        }
+        .background(FlotillaColors.surfaceElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
@@ -316,11 +422,15 @@ struct ToolGroupRow: View {
                         Image(systemName: "chevron.right")
                             .font(.caption2.weight(.semibold))
                             .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        Text(title)
-                        if calls.contains(where: \.isError) {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(FlotillaColors.danger)
+                        if ProtoFlags.isOn("toolChips"), !isExpanded {
+                            toolChips
+                        } else {
+                            Text(title)
+                            if calls.contains(where: \.isError) {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(FlotillaColors.danger)
+                            }
+                            Spacer()
                         }
-                        Spacer()
                     }
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(FlotillaColors.textSecondary)
@@ -345,6 +455,25 @@ struct ToolGroupRow: View {
     private var title: String {
         let running = calls.contains(where: \.isRunning)
         return running ? "Running tools · \(calls.count)" : "Ran \(calls.count) tools"
+    }
+
+    /// -proto toolChips: the collapsed header as a scrolling row of what
+    /// each call touched, instead of just a count.
+    private var toolChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(calls) { call in
+                    Text(call.subject ?? call.tool)
+                        .font(.caption2.monospaced())
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(FlotillaColors.surfaceElevated, in: Capsule())
+                        .opacity(call.isError ? 1 : (call.isRunning ? 0.6 : 0.85))
+                }
+            }
+        }
+        .scrollClipDisabled()
     }
 }
 
