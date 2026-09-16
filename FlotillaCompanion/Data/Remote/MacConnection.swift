@@ -105,6 +105,18 @@ final class MacConnection {
         scheduleConnect(after: 0)
     }
 
+    /// The user asked for it explicitly: cancels a pending backoff delay
+    /// (`connect()` alone is a no-op while one is scheduled) and attempts
+    /// right away. Identity mismatch and revocation still require re-pairing.
+    func reconnectNow() {
+        if case .needsRepairing = state { return }
+        guard !isConnected else { return }
+        connectTask?.cancel()
+        connectTask = nil
+        retryAttempt = 0
+        scheduleConnect(after: 0)
+    }
+
     private func scheduleConnect(after delay: Double) {
         connectTask?.cancel()
         connectTask = Task { [weak self] in

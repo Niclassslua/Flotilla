@@ -117,7 +117,13 @@ final class MockCompanionDataSource: CompanionDataSource {
     }
 
     func reconnect(_ macID: MacHost.ID) {
-        setReachable(true, macID: macID)
+        guard let index = macs.firstIndex(where: { $0.id == macID }) else { return }
+        if case .needsRepairing = macs[index].connection { return }
+        macs[index].connection = .connecting
+        Task {
+            try? await Task.sleep(for: .seconds(0.6))
+            self.setReachable(true, macID: macID)
+        }
     }
 
     // MARK: - Intents

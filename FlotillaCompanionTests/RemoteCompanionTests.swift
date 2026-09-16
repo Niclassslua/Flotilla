@@ -272,6 +272,26 @@ final class RemoteCompanionTests: XCTestCase {
         XCTAssertEqual(data.macs.first { $0.id == macID }?.connection, .needsRepairing(.revoked))
     }
 
+    func testReconnectCancelsPendingBackoffAndRetriesImmediately() async throws {
+        let mac = FakeMac(sessions: [])
+        try await mac.start()
+        let data = RemoteCompanionDataSource(store: .temporary(), identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
+        data.setActive(true)
+        let macID = try await data.pair(with: mac.payload) { _, _ in }
+        await waitUntil { data.macs.first?.isReachable == true }
+
+        // Dropping the peer without revoking anything schedules the normal
+        // ~1s backoff retry (sessionClosed's first retryDelays entry).
+        mac.lock.withLock { mac.peers }.forEach { $0.close() }
+        await waitUntil { data.macs.first?.connection == .unreachable }
+
+        data.reconnect(macID)
+        // A manual reconnect must land well inside the natural backoff
+        // window, proving it didn't just wait the delay out.
+        await waitUntil(0.5) { data.macs.first?.isReachable == true }
+        XCTAssertEqual(data.macs.first { $0.id == macID }?.isReachable, true)
+    }
+
     func testExpiredCodeIsDiagnosedWithoutConnecting() async {
         let data = RemoteCompanionDataSource(store: .temporary(), identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
         var payload = FakeMac(sessions: []).payload

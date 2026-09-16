@@ -106,6 +106,11 @@ struct UnreachableBanner: View {
                 Button("Pair Again") { isPairing = true }
                     .buttonStyle(.glass)
                     .controlSize(.small)
+            } else if case .unreachable = mac.connection {
+                Button("Reconnect Now") { store.reconnect(mac.id) }
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("UnreachableBanner.ReconnectNow")
             }
         }
         .font(.footnote.weight(.medium))

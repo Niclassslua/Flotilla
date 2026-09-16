@@ -281,7 +281,7 @@ final class RemoteCompanionDataSource: CompanionDataSource {
     }
 
     func reconnect(_ macID: MacHost.ID) {
-        connection(macID)?.connect()
+        connection(macID)?.reconnectNow()
     }
 
     /// Connection details for the diagnostics screen.
