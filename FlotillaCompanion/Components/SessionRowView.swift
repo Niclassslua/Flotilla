@@ -26,13 +26,18 @@ struct SessionRowView: View {
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
-                    if ProtoFlags.isOn("elapsedTimer"), isWorking {
-                        ElapsedTimer(since: session.updatedAt)
-                    } else {
-                        Text(session.updatedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
-                            .font(.caption2)
-                            .foregroundStyle(FlotillaColors.textTertiary)
-                            .monospacedDigit()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if ProtoFlags.isOn("elapsedTimer"), isWorking {
+                            ElapsedTimer(since: session.updatedAt)
+                        } else {
+                            Text(session.updatedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
+                                .font(.caption2)
+                                .foregroundStyle(FlotillaColors.textTertiary)
+                                .monospacedDigit()
+                        }
+                        if ProtoFlags.isOn("diffPills"), let diffStat = session.diffStat, diffStat.hasChanges {
+                            DiffPill(diffStat: diffStat)
+                        }
                     }
                 }
 
@@ -45,12 +50,6 @@ struct SessionRowView: View {
                         .foregroundStyle(FlotillaColors.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    if ProtoFlags.isOn("diffPills"), let diffStat = session.diffStat, diffStat.hasChanges {
-                        Text("·").foregroundStyle(FlotillaColors.textTertiary)
-                        Text(diffStat.compactSummary)
-                            .foregroundStyle(FlotillaColors.textTertiary)
-                            .monospacedDigit()
-                    }
                 }
                 .font(.caption)
 
@@ -60,25 +59,9 @@ struct SessionRowView: View {
                         .foregroundStyle(subtitle.color)
                         .lineLimit(1)
                 }
-
-                if ProtoFlags.isOn("progressBar"), isWorking {
-                    ProgressView()
-                        .progressViewStyle(.linear)
-                        .tint(session.agent.accentColor)
-                        .frame(height: 2)
-                        .padding(.top, 1)
-                }
             }
         }
         .padding(.vertical, 2)
-        .padding(.leading, ProtoFlags.isOn("agentAccentBar") ? 6 : 0)
-        .background(alignment: .leading) {
-            if ProtoFlags.isOn("agentAccentBar") {
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(session.agent.accentColor)
-                    .frame(width: 3)
-            }
-        }
         .accessibilityElement(children: .combine)
     }
 
@@ -163,6 +146,24 @@ private struct ElapsedTimer: View {
         let seconds = max(0, Int(now.timeIntervalSince(since)))
         let minutes = seconds / 60
         return minutes > 0 ? "\(minutes)m \(seconds % 60)s" : "\(seconds)s"
+    }
+}
+
+/// -proto diffPills: additions/deletions colored the way a diff reads
+/// everywhere else, sitting under the timestamp rather than jammed into the
+/// status line next to the branch.
+private struct DiffPill: View {
+    let diffStat: DiffStat
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("+\(diffStat.additions)")
+                .foregroundStyle(FlotillaColors.success)
+            Text("−\(diffStat.deletions)")
+                .foregroundStyle(FlotillaColors.danger)
+        }
+        .font(.caption2)
+        .monospacedDigit()
     }
 }
 
