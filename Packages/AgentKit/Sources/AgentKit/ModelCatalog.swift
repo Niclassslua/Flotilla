@@ -236,7 +236,14 @@ public struct ModelCatalogFetcher: Sendable {
             }
         } ?? AgentEffortCatalog.staticOptions(for: .claudeCode)
 
-        return models.map { AgentModelProfile(slug: $0, effortOptions: options) }
+        return models.map { slug in
+            AgentModelProfile(
+                slug: slug,
+                displayName: ModelCatalog.claudeModelDisplayName(for: slug),
+                description: ModelCatalog.claudeModelDescription(for: slug),
+                effortOptions: options
+            )
+        }
     }
 
     private func fetchClaudeEffortLevels(executable: URL) async throws -> [AgentEffort]? {
@@ -534,21 +541,67 @@ public enum ModelCatalog {
         }
         let slugs = staticFallback(for: agent, openCodeSubscription: openCodeSubscription)
         return slugs.map { slug in
-            AgentModelProfile(slug: slug, effortOptions: fallbackEffortOptions(for: agent, slug: slug))
+            AgentModelProfile(
+                slug: slug,
+                displayName: agent == .claudeCode ? claudeModelDisplayName(for: slug) : nil,
+                description: agent == .claudeCode ? claudeModelDescription(for: slug) : nil,
+                effortOptions: fallbackEffortOptions(for: agent, slug: slug)
+            )
         }
+    }
+
+    /// Claude Code's CLI has no per-model metadata query — `claude --print
+    /// "/model"` only lists bare ids like `sonnet` or `opusplan`, unlike
+    /// Codex's `debug models` JSON or OpenCode's `--verbose` listing. This
+    /// static table supplies the human-facing name and description the model
+    /// picker shows, keyed by the ids that command emits. A slug missing here
+    /// (a newer CLI's model) falls back to showing its raw id, same as before.
+    private static let claudeModelMetadata: [String: (displayName: String, description: String)] = [
+        "sonnet": ("Sonnet", "Balanced speed and capability for everyday coding tasks."),
+        "opus": ("Opus", "Most capable model — best for complex reasoning and hard problems."),
+        "haiku": ("Haiku", "Fastest and most lightweight — best for quick, simple tasks."),
+        "fable": ("Fable", "Fast, creative model tuned for writing and ideation."),
+        "best": ("Best", "Automatically uses the strongest model available."),
+        "opusplan": ("Opus Plan", "Plans with Opus, then executes with Sonnet."),
+    ]
+
+    static func claudeModelDisplayName(for slug: String) -> String? {
+        claudeModelMetadata[slug]?.displayName
+    }
+
+    static func claudeModelDescription(for slug: String) -> String? {
+        claudeModelMetadata[slug]?.description
     }
 
     public static func staticAntigravityGroups() -> [AntigravityModelGroup] {
         groupAntigravityModels(antigravityFallbackModels.map { ($0.slug, $0.displayName) })
     }
 
+    /// The trailing `" (low)"`/`" (medium)"`/`" (high)"` a display name uses
+    /// to spell out its effort, matched case-insensitively since the CLI's
+    /// casing isn't guaranteed. Stripped independent of whether the *slug*
+    /// also carries a recognized suffix: a model whose reasoning level is
+    /// fixed (no `-low`/`-medium`/`-high` slug variant at all) can still have
+    /// this baked into its display name, and leaving it there would show
+    /// e.g. "Gemini 3 Flash (high)" as a single, uneditable model name with
+    /// no separate effort control to match it.
+    private static let displayNameEffortSuffixes = [" (low)", " (medium)", " (high)"]
+
+    private static func stripDisplayNameEffortSuffix(from name: String) -> String {
+        let lowercased = name.lowercased()
+        guard let suffix = displayNameEffortSuffixes.first(where: lowercased.hasSuffix) else { return name }
+        return String(name.dropLast(suffix.count))
+    }
+
     /// Groups Antigravity model entries by base name, splitting off a
-    /// recognized trailing `-low`/`-medium`/`-high` slug suffix (and its
-    /// `" (Low)"`/`" (Medium)"`/`" (High)"` display-name counterpart). An
-    /// entry with no recognized suffix becomes its own single-variant group.
+    /// recognized trailing `-low`/`-medium`/`-high` slug suffix. The display
+    /// name's own effort suffix (see `stripDisplayNameEffortSuffix`) is
+    /// always cleaned up, whether or not the slug carries one. An entry
+    /// whose slug has no recognized suffix becomes its own single-variant
+    /// group — it offers no effort picker, since there's nothing to pick
+    /// between, but still gets a clean name.
     public static func groupAntigravityModels(_ entries: [(slug: String, displayName: String?)]) -> [AntigravityModelGroup] {
         let slugSuffixes: [(String, AgentEffort)] = [("-low", .low), ("-medium", .medium), ("-high", .high)]
-        let nameSuffixes: [(String, AgentEffort)] = [(" (Low)", .low), (" (Medium)", .medium), (" (High)", .high)]
 
         struct Parsed {
             let baseSlug: String
@@ -558,18 +611,12 @@ public enum ModelCatalog {
         }
 
         let parsed: [Parsed] = entries.map { entry in
-            let name = entry.displayName ?? entry.slug
+            let name = stripDisplayNameEffortSuffix(from: entry.displayName ?? entry.slug)
             guard let (slugSuffix, effort) = slugSuffixes.first(where: { entry.slug.hasSuffix($0.0) }) else {
                 return Parsed(baseSlug: entry.slug, baseDisplayName: name, effort: nil, slug: entry.slug)
             }
             let base = String(entry.slug.dropLast(slugSuffix.count))
-            let baseName: String
-            if let (nameSuffix, _) = nameSuffixes.first(where: { name.hasSuffix($0.0) }) {
-                baseName = String(name.dropLast(nameSuffix.count))
-            } else {
-                baseName = name
-            }
-            return Parsed(baseSlug: base, baseDisplayName: baseName, effort: effort, slug: entry.slug)
+            return Parsed(baseSlug: base, baseDisplayName: name, effort: effort, slug: entry.slug)
         }
 
         var order: [String] = []

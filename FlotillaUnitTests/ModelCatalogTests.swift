@@ -169,6 +169,44 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(profiles.first?.effortOptions.map(\.level), [.low, .medium, .max])
     }
 
+    // MARK: - Claude Code display names/descriptions
+    //
+    // `claude --print "/model"` only lists bare ids (`sonnet`, `opusplan`,
+    // …) with no metadata, unlike Codex's `debug models` JSON or OpenCode's
+    // `--verbose` listing. A static table fills in the human-facing name and
+    // description the model picker shows.
+
+    func testClaudeProfilesGetDisplayNamesAndDescriptionsFromTheStaticTable() async {
+        let runner = ScriptedCommandRunner(responses: [
+            "/model": "Usage: /model <name>. Available: sonnet, opus, haiku, fable, best, opusplan, default, or a full model ID.",
+            "/effort": "Usage: /effort <low|medium|high|xhigh|max|auto>",
+        ])
+        let fetcher = ModelCatalogFetcher(
+            locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
+            runner: runner
+        )
+
+        let profiles = await fetcher.fetchProfiles(for: .claudeCode)
+
+        let sonnet = profiles.first { $0.slug == "sonnet" }
+        XCTAssertEqual(sonnet?.displayName, "Sonnet")
+        XCTAssertNotNil(sonnet?.description)
+        for profile in profiles {
+            XCTAssertNotNil(profile.displayName, "\(profile.slug) is missing a display name")
+            XCTAssertNotNil(profile.description, "\(profile.slug) is missing a description")
+        }
+    }
+
+    func testClaudeStaticFallbackProfilesAlsoCarryDisplayNamesAndDescriptions() {
+        let profiles = ModelCatalog.staticFallbackProfiles(for: .claudeCode)
+
+        XCTAssertFalse(profiles.isEmpty)
+        for profile in profiles {
+            XCTAssertNotNil(profile.displayName, "\(profile.slug) is missing a display name")
+            XCTAssertNotNil(profile.description, "\(profile.slug) is missing a description")
+        }
+    }
+
     func testClaudeFallsBackToTheStaticLevelTableWhenTheEffortQueryFails() async {
         let fetcher = ModelCatalogFetcher(
             locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
@@ -361,6 +399,38 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(gptOss?.displayName, "GPT-OSS 120B")
         XCTAssertEqual(gptOss?.variants, [.medium: "gpt-oss-120b-medium"])
         XCTAssertNil(gptOss?.soleSlug)
+    }
+
+    // A model with a fixed reasoning level (no `-low`/`-medium`/`-high` slug
+    // variant) can still have its effort spelled out in the display name the
+    // CLI reports. Left unstripped, that model shows up as a single,
+    // uneditable "Name (high)" chip with no separate effort picker to match —
+    // the model name and the effort control's job overlapping in one string.
+    func testAntigravityGroupingStripsEffortSuffixFromDisplayNameEvenWithoutASlugSuffix() {
+        let entries: [(slug: String, displayName: String?)] = [
+            ("gemini-3-flash-native", "Gemini 3 Flash Native (high)"),
+        ]
+
+        let groups = ModelCatalog.groupAntigravityModels(entries)
+
+        let group = groups.first { $0.baseSlug == "gemini-3-flash-native" }
+        XCTAssertEqual(group?.displayName, "Gemini 3 Flash Native")
+        XCTAssertTrue(group?.variants.isEmpty ?? false)
+        XCTAssertEqual(group?.soleSlug, "gemini-3-flash-native")
+    }
+
+    // The CLI's casing on the effort suffix isn't guaranteed; grouping
+    // shouldn't depend on it matching "(High)" exactly.
+    func testAntigravityGroupingStripsDisplayNameEffortSuffixCaseInsensitively() {
+        let entries: [(slug: String, displayName: String?)] = [
+            ("gemini-3.7-flash-high", "Gemini 3.7 Flash (high)"),
+            ("gemini-3.7-flash-medium", "Gemini 3.7 Flash (MEDIUM)"),
+        ]
+
+        let groups = ModelCatalog.groupAntigravityModels(entries)
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].displayName, "Gemini 3.7 Flash")
     }
 
     func testAntigravityStaticGroupsResolveEveryVariant() {
