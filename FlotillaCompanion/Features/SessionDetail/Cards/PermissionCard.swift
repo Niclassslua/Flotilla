@@ -81,8 +81,7 @@ struct PermissionCard: View {
                         .buttonStyle(.glass)
                         .accessibilityIdentifier("PermissionCard.Deny")
 
-                        moreMenu
-                            .frame(width: 52, height: 50)
+                        moreMenu(expandsToFill: true)
                     }
                 }
             } else {
@@ -100,7 +99,7 @@ struct PermissionCard: View {
                     .tint(FlotillaColors.accent)
                     .accessibilityIdentifier("PermissionCard.Allow")
 
-                    moreMenu
+                    moreMenu(expandsToFill: false)
                 }
             }
         }
@@ -108,7 +107,7 @@ struct PermissionCard: View {
         .disabled(isSending)
     }
 
-    private var moreMenu: some View {
+    private func moreMenu(expandsToFill: Bool) -> some View {
         Menu {
             if request.allowsAlwaysAllow != false {
                 Button(context.capabilities.alwaysAllowLabel(for: request), systemImage: "checkmark.seal") { send(.alwaysAllow) }
@@ -122,6 +121,7 @@ struct PermissionCard: View {
         } label: {
             Image(systemName: "ellipsis")
                 .frame(width: 22)
+                .frame(maxWidth: expandsToFill ? .infinity : nil, minHeight: expandsToFill ? 50 : nil)
         }
         .buttonStyle(.glass)
         .accessibilityLabel("More")
