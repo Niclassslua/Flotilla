@@ -19,18 +19,18 @@ struct SessionActivityWidget: Widget {
                         .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.statusLabel)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(context.state.statusKind.color)
+                    Text(context.state.startedAt, style: .timer)
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(context.attributes.title)
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
-                        Text(context.attributes.agentDisplayName)
+                        Text("\(context.state.statusLabel) · \(context.attributes.agentDisplayName)")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(context.state.statusKind.color)
                     }
                 }
             } compactLeading: {
@@ -38,8 +38,9 @@ struct SessionActivityWidget: Widget {
                     .fill(context.state.statusKind.color)
                     .frame(width: 10, height: 10)
             } compactTrailing: {
-                Image(systemName: context.state.statusKind.symbol)
-                    .foregroundStyle(context.state.statusKind.color)
+                Text(context.state.startedAt, style: .timer)
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.white)
             } minimal: {
                 Circle()
                     .fill(context.state.statusKind.color)
@@ -67,6 +68,9 @@ private struct LockScreenView: View {
                     .foregroundStyle(FlotillaColors.textSecondary)
             }
             Spacer()
+            Text(state.startedAt, style: .timer)
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(state.statusKind.color)
         }
         .padding(16)
     }
@@ -82,12 +86,4 @@ private extension SessionActivityAttributes.StatusKind {
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .working: "gearshape.2"
-        case .waitingForInput: "exclamationmark.circle"
-        case .readyForReview: "checkmark.circle"
-        case .crashed: "xmark.octagon"
-        }
-    }
 }
