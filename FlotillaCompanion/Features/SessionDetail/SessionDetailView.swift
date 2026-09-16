@@ -18,6 +18,9 @@ struct SessionDetailView: View {
     private static let nearBottomThreshold: CGFloat = 80
     @State private var isNearBottom = true
     @State private var hasNewOutputWhileScrolledUp = false
+    /// -proto jumpPillCount: how many new-content events landed while
+    /// scrolled up, shown on the jump pill instead of a bare arrow.
+    @State private var newOutputCount = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSearching = false
     @State private var searchQuery = ""
@@ -52,7 +55,10 @@ struct SessionDetailView: View {
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - Self.nearBottomThreshold
             } action: { _, isNear in
                 isNearBottom = isNear
-                if isNear { hasNewOutputWhileScrolledUp = false }
+                if isNear {
+                    hasNewOutputWhileScrolledUp = false
+                    newOutputCount = 0
+                }
             }
             .onChange(of: transcript.events.count) { _, _ in handleNewContent(proxy) }
             .onChange(of: transcript.queuedPrompts.count) { _, _ in handleNewContent(proxy) }
@@ -162,6 +168,7 @@ struct SessionDetailView: View {
             scrollToBottom(proxy)
         } else {
             hasNewOutputWhileScrolledUp = true
+            newOutputCount += 1
         }
     }
 
@@ -178,10 +185,19 @@ struct SessionDetailView: View {
     private func newOutputButton(_ proxy: ScrollViewProxy) -> some View {
         Button {
             hasNewOutputWhileScrolledUp = false
+            newOutputCount = 0
             scrollToBottom(proxy)
         } label: {
-            Label("New output", systemImage: "arrow.down")
-                .font(.caption.weight(.semibold))
+            Group {
+                if ProtoFlags.isOn("jumpPillCount"), newOutputCount > 0 {
+                    Label("\(newOutputCount) new", systemImage: "arrow.down")
+                } else {
+                    Label("New output", systemImage: "arrow.down")
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .contentTransition(.numericText())
+            .animation(reduceMotion ? nil : .bouncy, value: newOutputCount)
         }
         .buttonStyle(.glassProminent)
         .tint(FlotillaColors.accent)
