@@ -50,6 +50,12 @@ struct DiffView: View {
                     if let commit {
                         CommitHeader(commit: commit)
                     }
+                    if files.count > 1 {
+                        ChangedFilesOverview(files: files) { file in
+                            collapsed.remove(file.path)
+                            withAnimation(.snappy) { scrollTarget = file.path }
+                        }
+                    }
                     ForEach(files) { file in
                         Section {
                             if !collapsed.contains(file.path) {
@@ -102,7 +108,10 @@ struct DiffView: View {
         .task {
             if commitHash == nil { store.acknowledgeReview(sessionID) }
             await load()
-            if let focusPath { scrollTarget = focusPath }
+            if let focusPath {
+                collapsed.remove(focusPath)
+                scrollTarget = focusPath
+            }
         }
     }
 
@@ -125,6 +134,66 @@ private struct CommitHeader: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
+    }
+}
+
+/// A scannable list of every changed file — type, path, and line counts —
+/// above the detailed per-file sections. Tapping a row jumps to that
+/// file's existing section instead of opening anything new.
+private struct ChangedFilesOverview: View {
+    let files: [FileDiff]
+    let onSelect: (FileDiff) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(files) { file in
+                Button { onSelect(file) } label: {
+                    HStack(spacing: 8) {
+                        changeMarker(for: file.change)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(file.fileName)
+                                .font(.subheadline)
+                                .foregroundStyle(FlotillaColors.textPrimary)
+                                .lineLimit(1)
+                            Text(file.path)
+                                .font(.caption2)
+                                .foregroundStyle(FlotillaColors.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
+                        }
+                        Spacer(minLength: 8)
+                        Text("+\(file.additions)").foregroundStyle(FlotillaColors.diffAdded)
+                        Text("−\(file.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
+                    }
+                    .font(.caption.monospacedDigit())
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("DiffView.Overview.Row")
+                if file.id != files.last?.id {
+                    Divider().padding(.leading, 34)
+                }
+            }
+        }
+        .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+        .padding(.horizontal, 16)
+        .accessibilityIdentifier("DiffView.Overview")
+    }
+
+    @ViewBuilder
+    private func changeMarker(for change: FileDiff.Change) -> some View {
+        Group {
+            switch change {
+            case .added: Text("A").foregroundStyle(FlotillaColors.diffAdded)
+            case .deleted: Text("D").foregroundStyle(FlotillaColors.diffRemoved)
+            case .renamed: Text("R").foregroundStyle(FlotillaColors.textSecondary)
+            case .modified: Text("M").foregroundStyle(FlotillaColors.textSecondary)
+            }
+        }
+        .font(.caption2.weight(.bold).monospaced())
+        .frame(width: 16)
     }
 }
 
