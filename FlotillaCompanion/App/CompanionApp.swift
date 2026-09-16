@@ -26,6 +26,8 @@ struct CompanionApp: App {
 ///   implies the demo and boots into a scripted state.
 /// - `-pairingLink <link>` (DEBUG): opens pairing with that link, for
 ///   end-to-end runs in the simulator, which has no camera.
+/// - `-openFirstMac` / `-openSession <uuid>` (DEBUG): jumps straight to the
+///   fleet or a session on launch, for screenshotting without navigating by hand.
 @MainActor
 enum CompanionEnvironment {
     static func makeStore(arguments: [String] = ProcessInfo.processInfo.arguments) -> CompanionStore {
@@ -43,6 +45,10 @@ enum CompanionEnvironment {
         store.incomingPairingLink = value(after: "-pairingLink", in: arguments)
         if arguments.contains("-openFirstMac"), let first = store.macs.first {
             store.path = [.fleet(first.id)]
+        }
+        if let sessionIDString = value(after: "-openSession", in: arguments), let sessionID = UUID(uuidString: sessionIDString),
+           let macID = store.mac(forSession: sessionID)?.id {
+            store.path = [.fleet(macID), .session(sessionID)]
         }
         ProtoFlags.enabled = Set(values(after: "-proto", in: arguments))
         #endif

@@ -83,6 +83,21 @@ Screenshot-review scaffolding for UI ideas not yet shipped, gated behind
 | `diffPills` | Fleet row: colored +N/−N diff summary (placement depends on `logoStatusBadge`) |
 | `elapsedTimer` | Fleet row: live "1m 42s" ticker since the row last updated |
 | `logoStatusBadge` | Fleet row: status dot as a corner badge on the provider logo, drops the text status label, moves the diff pill next to the branch |
+| `userBubbleAccentTint` | Transcript: accent-tinted user message bubble instead of flat `surfaceElevated` |
+| `codeBlockHeader` | Transcript: language badge + Copy button above fenced code, via `MarkdownCodeFence` segment splitting (see note below) |
+| `toolChips` | Transcript: collapsed tool group header becomes a scrolling row of what each call touched, instead of just a count |
+| `jumpPillCount` | Transcript: the "New output" jump pill shows a live count instead of a bare label |
+
+`codeBlockHeader`'s implementation note: `StructuredText`'s per-block style
+customization hooks (`.textual.codeBlockStyle(_:)`, `.textual.paragraphStyle(_:)`)
+did not take effect in this app despite matching the package's documented
+usage exactly — verified by swapping a style's entire body for an unmissable
+debug marker, which never rendered. `AssistantMessageRow` works around this
+by splitting a message's markdown into prose/code segments itself
+(`MarkdownCodeFence`) and rendering each code segment as its own nested
+`StructuredText` wrapped in a custom header, rather than depending on the
+override API. Worth revisiting if a Textual version bump fixes the
+underlying issue.
 
 Dropped after the first review pass: `agentAccentBar`/`agentAccentTint`
 (illegible against the black background, especially Codex's white) and
