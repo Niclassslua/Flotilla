@@ -134,21 +134,41 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
         var note: String?
         switch request.card.kind {
         case .permission(let permission):
-            let decision: String
-            switch answer {
-            case .allow: decision = "accept"
-            case .alwaysAllow:
-                guard permission.allowsAlwaysAllow != false else { throw ProviderConnectionError.invalidResponse }
-                decision = "acceptForSession"
-            case .deny: decision = "decline"
-            case .denyAndStop:
-                guard permission.allowsDenyAndStop != false else { throw ProviderConnectionError.invalidResponse }
-                decision = "cancel"
-            case .allowWithNote(let text): decision = "accept"; note = text
-            case .denyWithNote(let text): decision = "decline"; note = text
-            default: throw ProviderConnectionError.rejected("That answer doesn't match this permission request.")
+            if ["applyPatchApproval", "execCommandApproval"].contains(request.method) {
+                // Legacy v1 `ReviewDecision`: a plain string for the simple
+                // cases, an object for a denial that carries a reason.
+                let decision: Any
+                switch answer {
+                case .allow: decision = "approved"
+                case .alwaysAllow:
+                    guard permission.allowsAlwaysAllow != false else { throw ProviderConnectionError.invalidResponse }
+                    decision = "approved_for_session"
+                case .deny: decision = ["denied": ["rejection": ""]]
+                case .denyAndStop:
+                    guard permission.allowsDenyAndStop != false else { throw ProviderConnectionError.invalidResponse }
+                    decision = "abort"
+                case .allowWithNote(let text): decision = "approved"; note = text
+                case .denyWithNote(let text): decision = ["denied": ["rejection": text]]
+                default: throw ProviderConnectionError.rejected("That answer doesn't match this permission request.")
+                }
+                result = ["decision": decision]
+            } else {
+                let decision: String
+                switch answer {
+                case .allow: decision = "accept"
+                case .alwaysAllow:
+                    guard permission.allowsAlwaysAllow != false else { throw ProviderConnectionError.invalidResponse }
+                    decision = "acceptForSession"
+                case .deny: decision = "decline"
+                case .denyAndStop:
+                    guard permission.allowsDenyAndStop != false else { throw ProviderConnectionError.invalidResponse }
+                    decision = "cancel"
+                case .allowWithNote(let text): decision = "accept"; note = text
+                case .denyWithNote(let text): decision = "decline"; note = text
+                default: throw ProviderConnectionError.rejected("That answer doesn't match this permission request.")
+                }
+                result = ["decision": decision]
             }
-            result = ["decision": decision]
         case .question(let steps):
             guard case .questionAnswers(let answers) = answer else { throw ProviderConnectionError.invalidResponse }
             var mapped: [String: Any] = [:]
@@ -246,7 +266,9 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
         if method == "item/completed", let item = params["item"] as? [String: Any], let id = item["id"] as? String {
             editPreviews[.init(thread: thread, id: id)] = nil
         }
-        if let serverID = message["id"], method.hasSuffix("requestApproval") || method == "item/tool/requestUserInput" {
+        if let serverID = message["id"],
+           method.hasSuffix("requestApproval") || method == "item/tool/requestUserInput"
+               || method == "applyPatchApproval" || method == "execCommandApproval" {
             // A server is dedicated to this Flotilla session, so child-thread
             // requests are attributable even before the first subscription.
             let card: PendingInteraction
@@ -262,6 +284,22 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
                 // Codex 0.154 accepts and caches acceptForSession even when
                 // availableDecisions only advertises its TUI's policy choices.
                 card = .init(kind: .permission(.init(tool: method.contains("commandExecution") ? "Command" : "Edit", summary: summary, detail: edit?.detail ?? params["reason"] as? String)), subagent: threadID != nil && thread != threadID ? "Codex subagent" : nil)
+            } else if method == "applyPatchApproval" {
+                // Legacy v1 protocol: the TUI's own "Would you like to make the
+                // following edits?" dialog. Still sent by some approval paths
+                // even where `item/fileChange/requestApproval` normally fires.
+                let changes = params["fileChanges"] as? [String: Any] ?? [:]
+                let paths = changes.keys.sorted()
+                let detail = changes.compactMap { path, change -> String? in
+                    guard let diff = (change as? [String: Any])?["unified_diff"] as? String else { return nil }
+                    return "\(path)\n\(diff)"
+                }.joined(separator: "\n\n")
+                let summary = paths.isEmpty ? (params["reason"] as? String ?? "File changes") : paths.joined(separator: ", ")
+                card = .init(kind: .permission(.init(tool: "Edit", summary: summary, detail: detail.isEmpty ? params["reason"] as? String : detail)), subagent: threadID != nil && thread != threadID ? "Codex subagent" : nil)
+            } else if method == "execCommandApproval" {
+                // Legacy v1 protocol counterpart of `item/commandExecution/requestApproval`.
+                let summary = (params["command"] as? [String])?.joined(separator: " ") ?? params["reason"] as? String ?? "Command"
+                card = .init(kind: .permission(.init(tool: "Command", summary: summary, detail: params["reason"] as? String)), subagent: threadID != nil && thread != threadID ? "Codex subagent" : nil)
             } else {
                 // Other approval methods use different reply schemas. Keep
                 // their Mac dialog available instead of sending a wrong reply.
