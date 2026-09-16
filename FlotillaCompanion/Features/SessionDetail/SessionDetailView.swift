@@ -19,6 +19,10 @@ struct SessionDetailView: View {
     @State private var isNearBottom = true
     @State private var hasNewOutputWhileScrolledUp = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isSearching = false
+    @State private var searchQuery = ""
+    @State private var currentMatchIndex = 0
+    @State private var scrollProxy: ScrollViewProxy?
 
     var body: some View {
         if let session = store.session(sessionID), let macID = store.mac(forSession: sessionID)?.id {
@@ -32,14 +36,17 @@ struct SessionDetailView: View {
         let transcript = store.transcript(for: sessionID)
         let isActionable = store.isActionable(sessionID: sessionID)
         let mac = store.mac(macID)
+        let items = TranscriptLayout.items(from: transcript.events)
+        let matches = isSearching ? TranscriptSearch.matches(in: items, query: searchQuery) : []
 
         return ScrollViewReader { proxy in
             ScrollView {
-                transcriptContent(session: session, transcript: transcript)
+                transcriptContent(session: session, transcript: transcript, items: items)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 Color.clear.frame(height: 1).id(Self.bottomAnchorID)
             }
+            .task { scrollProxy = proxy }
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - Self.nearBottomThreshold
@@ -64,8 +71,23 @@ struct SessionDetailView: View {
             VStack(spacing: 0) {
                 SessionHeader(session: session, diffStat: headerDiffStat(session))
                 if let mac, !mac.isReachable { UnreachableBanner(mac: mac) }
+                if isSearching {
+                    TranscriptSearchBar(
+                        query: $searchQuery,
+                        matchCount: matches.count,
+                        currentIndex: currentMatchIndex,
+                        onNext: { advance(1, in: matches) },
+                        onPrevious: { advance(-1, in: matches) },
+                        onClose: { closeSearch() }
+                    )
+                    .background(FlotillaColors.canvas)
+                }
             }
             .background(FlotillaColors.canvas)
+        }
+        .onChange(of: searchQuery) { _, _ in
+            currentMatchIndex = 0
+            if let first = matches.first { jumpToMatch(first) }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
@@ -89,6 +111,12 @@ struct SessionDetailView: View {
         .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Search Transcript", systemImage: "magnifyingglass") {
+                    if isSearching { closeSearch() } else { isSearching = true }
+                }
+                .accessibilityIdentifier("Transcript.SearchToggle")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu("Session Actions", systemImage: "ellipsis") {
                     NavigationLink(value: Route.commits(sessionID)) {
@@ -154,8 +182,31 @@ struct SessionDetailView: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    private func transcriptContent(session: CompanionSession, transcript: SessionTranscript) -> some View {
-        let items = TranscriptLayout.items(from: transcript.events)
+    /// Advances by `delta` matches (wrapping) and scrolls to the result.
+    private func advance(_ delta: Int, in matches: [TranscriptSearchMatch]) {
+        guard !matches.isEmpty else { return }
+        currentMatchIndex = (currentMatchIndex + delta + matches.count) % matches.count
+        jumpToMatch(matches[currentMatchIndex])
+    }
+
+    /// Expands the match's tool group (if any) and scrolls it into view.
+    private func jumpToMatch(_ match: TranscriptSearchMatch) {
+        if let groupID = match.groupID { expandedGroups[groupID] = true }
+        guard let scrollProxy else { return }
+        if reduceMotion {
+            scrollProxy.scrollTo(match.itemID, anchor: .center)
+        } else {
+            withAnimation(.snappy) { scrollProxy.scrollTo(match.itemID, anchor: .center) }
+        }
+    }
+
+    private func closeSearch() {
+        isSearching = false
+        searchQuery = ""
+        currentMatchIndex = 0
+    }
+
+    private func transcriptContent(session: CompanionSession, transcript: SessionTranscript, items: [TranscriptItem]) -> some View {
         let lastGroupID = items.last(where: { if case .toolGroup = $0 { true } else { false } })?.id
         let isWorking = session.status == .working
         // A group whose last tool waits on an answer is still being worked through.

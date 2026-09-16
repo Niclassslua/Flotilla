@@ -332,3 +332,54 @@ final class TranscriptLayoutTests: XCTestCase {
         XCTAssertEqual(TranscriptLayout.inFlightCall(in: transcript)?.summary, "Bash · make test")
     }
 }
+
+final class TranscriptSearchTests: XCTestCase {
+    private func items(_ events: [TranscriptEvent.Content]) -> [TranscriptItem] {
+        TranscriptLayout.items(from: events.enumerated().map { TranscriptEvent(id: String($0.offset), content: $0.element) })
+    }
+
+    func testFindsMatchesAcrossMessageNoteFailureAndToolContent() {
+        let now = Date()
+        let items = items([
+            .userMessage(text: "Please clear the build cache", timestamp: now),
+            .assistantMessage(text: "Sure, removing it now.", timestamp: now),
+            .systemNote(text: "Retrying after a transient network error", timestamp: now),
+            .toolUse(id: "a", tool: "Bash", input: ["command": "rm -rf build"], timestamp: now),
+            .toolResult(toolUseID: "a", output: "build removed", isError: false, timestamp: now),
+            .turnFailed(message: "The build step failed"),
+        ])
+
+        XCTAssertEqual(TranscriptSearch.matches(in: items, query: "build").count, 4)
+        XCTAssertTrue(TranscriptSearch.matches(in: items, query: "BUILD").count > 0, "search is case-insensitive")
+        XCTAssertEqual(TranscriptSearch.matches(in: items, query: "").count, 0)
+        XCTAssertEqual(TranscriptSearch.matches(in: items, query: "no such text").count, 0)
+    }
+
+    func testToolMatchPointsAtItsGroupSoTheGroupCanBeExpanded() {
+        let now = Date()
+        let items = items([
+            .userMessage(text: "Go", timestamp: now),
+            .toolUse(id: "a", tool: "Read", input: ["file_path": "a.swift"], timestamp: now),
+            .toolResult(toolUseID: "a", output: "ok", isError: false, timestamp: now),
+        ])
+        guard case .toolGroup(let groupID, _) = items[1] else { return XCTFail("expected a tool group") }
+
+        let matches = TranscriptSearch.matches(in: items, query: "a.swift")
+        XCTAssertEqual(matches.count, 1)
+        XCTAssertEqual(matches.first?.itemID, groupID)
+        XCTAssertEqual(matches.first?.groupID, groupID)
+    }
+
+    func testExcerptTrimsSurroundingContextWithEllipses() {
+        let now = Date()
+        let longText = String(repeating: "x", count: 100) + "needle" + String(repeating: "y", count: 100)
+        let items = items([.userMessage(text: longText, timestamp: now)])
+
+        let excerpt = TranscriptSearch.matches(in: items, query: "needle").first?.excerpt
+        XCTAssertNotNil(excerpt)
+        XCTAssertTrue(excerpt!.hasPrefix("…"))
+        XCTAssertTrue(excerpt!.hasSuffix("…"))
+        XCTAssertTrue(excerpt!.contains("needle"))
+        XCTAssertLessThan(excerpt!.count, longText.count)
+    }
+}
