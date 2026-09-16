@@ -85,7 +85,7 @@ struct SessionDetailView: View {
         } message: {
             Text("The agent process is restarted and resumes this conversation.")
         }
-        .sessionDeleteDialog(session: $pendingDelete)
+        .sessionDeleteDialog(session: $pendingDelete, matching: session)
     }
 
     private static let bottomAnchorID = "bottom"

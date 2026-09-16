@@ -64,7 +64,6 @@ struct FleetView: View {
                 store.path.append(.session(newID))
             }
         }
-        .sessionDeleteDialog(session: $pendingDelete)
     }
 
     @ViewBuilder
@@ -78,6 +77,9 @@ struct FleetView: View {
             )
         }
         .listRowBackground(FlotillaColors.surface)
+        // Anchored to this row (not the List) so on iPad the dialog pops up
+        // over the row being deleted instead of near the top of the screen.
+        .sessionDeleteDialog(session: $pendingDelete, matching: session)
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             // Questions need their options and plans need reading, so only
             // permissions get swipe answers — and only plain Approve / Deny.
@@ -123,9 +125,16 @@ struct FleetView: View {
 }
 
 extension View {
-    /// The Mac's delete choices as an iOS confirmation dialog.
-    func sessionDeleteDialog(session: Binding<CompanionSession?>, onDeleted: @escaping () -> Void = {}) -> some View {
-        modifier(SessionDeleteDialog(session: session, onDeleted: onDeleted))
+    /// The Mac's delete choices as an iOS confirmation dialog, anchored to the
+    /// row it's attached to so it pops up over the session being deleted
+    /// (rather than at the top of the screen, which is what happens when the
+    /// dialog is anchored to a container like the enclosing `List`).
+    func sessionDeleteDialog(
+        session: Binding<CompanionSession?>,
+        matching rowSession: CompanionSession,
+        onDeleted: @escaping () -> Void = {}
+    ) -> some View {
+        modifier(SessionDeleteDialog(session: session, rowSession: rowSession, onDeleted: onDeleted))
     }
 }
 
@@ -133,13 +142,17 @@ extension View {
 /// worktree goes too, and a live agent is called out.
 private struct SessionDeleteDialog: ViewModifier {
     @Binding var session: CompanionSession?
+    let rowSession: CompanionSession
     let onDeleted: () -> Void
     @Environment(CompanionStore.self) private var store
 
     func body(content: Content) -> some View {
         content.confirmationDialog(
             session.map { "Delete “\($0.title)”?" } ?? "",
-            isPresented: Binding(get: { session != nil }, set: { if !$0 { session = nil } }),
+            isPresented: Binding(
+                get: { session?.id == rowSession.id },
+                set: { if !$0 { session = nil } }
+            ),
             titleVisibility: .visible,
             presenting: session
         ) { target in
