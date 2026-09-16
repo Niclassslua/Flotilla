@@ -23,6 +23,11 @@ enum TmuxSessionWrapping {
         if NSClassFromString("XCTestCase") != nil {
             return "flotilla-test-\(ProcessInfo.processInfo.processIdentifier)"
         }
+        // The demo fleet reaps every `flotilla-<UUID>` session it doesn't
+        // know at launch; on the shared socket that is the user's real fleet.
+        if ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1" {
+            return "flotilla-demo"
+        }
         return "flotilla"
     }
 

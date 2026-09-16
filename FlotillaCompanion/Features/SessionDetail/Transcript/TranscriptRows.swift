@@ -76,7 +76,7 @@ struct TerminalTailPreview: View {
 }
 
 /// A screenshot the agent looked at. Decode off the UI actor, and reuse the
-/// thumbnail when a lazy row is recycled while scrolling.
+/// thumbnail when a lazy row is recycled while scrolling. Tapping it opens fullscreen with zoom.
 struct ImageRow: View {
     let id: String
     let mimeType: String
@@ -94,17 +94,29 @@ struct ImageRow: View {
         let image: UIImage?
     }
 
+    @State private var isFullscreenPresented = false
+
     var body: some View {
         Group {
             if let thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                            .strokeBorder(FlotillaColors.separator, lineWidth: 1)
+                Button {
+                    isFullscreenPresented = true
+                } label: {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
+                                .strokeBorder(FlotillaColors.separator, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .fullScreenCover(isPresented: $isFullscreenPresented) {
+                    FullscreenImageViewer(uiImage: thumbnail) {
+                        isFullscreenPresented = false
                     }
+                }
             } else if failed {
                 Label("Image couldn't be shown", systemImage: "photo.badge.exclamationmark")
                     .font(.footnote)
@@ -138,6 +150,149 @@ struct ImageRow: View {
             thumbnail = prepared.image
             failed = prepared.image == nil
             if let image = prepared.image { Self.cache.setObject(image, forKey: key) }
+        }
+    }
+}
+
+/// Fullscreen zoomable and pannable image viewer with native gesture support.
+struct FullscreenImageViewer: View {
+    let uiImage: UIImage
+    let onDismiss: () -> Void
+
+    @State private var showsControls = true
+
+    var body: some View {
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
+
+            ZoomableScrollView(image: uiImage) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showsControls.toggle()
+                }
+            }
+            .ignoresSafeArea()
+
+            if showsControls {
+                VStack {
+                    HStack {
+                        Button(action: onDismiss) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close")
+
+                        Spacer()
+
+                        ShareLink(
+                            item: Image(uiImage: uiImage),
+                            preview: SharePreview("Screenshot", image: Image(uiImage: uiImage))
+                        ) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Share image")
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+
+                    Spacer()
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+}
+
+private struct ZoomableScrollView: UIViewRepresentable {
+    let image: UIImage
+    var onSingleTap: (() -> Void)? = nil
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.delegate = context.coordinator
+        scrollView.maximumZoomScale = 5.0
+        scrollView.minimumZoomScale = 1.0
+        scrollView.bouncesZoom = true
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.backgroundColor = .clear
+
+        let imageView = UIImageView(image: image)
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(imageView)
+        context.coordinator.imageView = imageView
+
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            imageView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+            imageView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor),
+        ])
+
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        scrollView.addGestureRecognizer(doubleTap)
+
+        let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleSingleTap(_:)))
+        singleTap.numberOfTapsRequired = 1
+        singleTap.require(toFail: doubleTap)
+        scrollView.addGestureRecognizer(singleTap)
+
+        return scrollView
+    }
+
+    func updateUIView(_ uiView: UIScrollView, context: Context) {
+        context.coordinator.imageView?.image = image
+        context.coordinator.onSingleTap = onSingleTap
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onSingleTap: onSingleTap)
+    }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate {
+        weak var imageView: UIImageView?
+        var onSingleTap: (() -> Void)?
+
+        init(onSingleTap: (() -> Void)?) {
+            self.onSingleTap = onSingleTap
+        }
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            imageView
+        }
+
+        @objc func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+            onSingleTap?()
+        }
+
+        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+            guard let scrollView = gesture.view as? UIScrollView else { return }
+            if scrollView.zoomScale > scrollView.minimumZoomScale {
+                scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
+            } else {
+                let location = gesture.location(in: scrollView)
+                let zoomRect = CGRect(
+                    x: location.x - (scrollView.bounds.width / 4),
+                    y: location.y - (scrollView.bounds.height / 4),
+                    width: scrollView.bounds.width / 2,
+                    height: scrollView.bounds.height / 2
+                )
+                scrollView.zoom(to: zoomRect, animated: true)
+            }
         }
     }
 }

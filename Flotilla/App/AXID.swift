@@ -42,6 +42,12 @@ public enum AXID: String, Sendable {
     /// Focus-variant only, and there is exactly one focused session, so this
     /// one needs no title.
     case sessionBarGitSidebarToggle = "SessionBar.GitSidebarToggle"
+    case sessionBarScreenshotsToggle = "SessionBar.ScreenshotsToggle"
+
+    // MARK: - Agent Screenshot Panel
+    case agentScreenshotPanel = "AgentScreenshotPanel"
+    case agentScreenshotPanelClose = "AgentScreenshotPanel.Close"
+    case agentScreenshotPanelImage = "AgentScreenshotPanel.Image"
 
     // MARK: - Git Sidebar
     case gitSidebar = "GitSidebar"
