@@ -411,45 +411,48 @@ struct ToolGroupRow: View {
     @Binding var isExpanded: Bool
 
     var body: some View {
-        if calls.count == 1, let call = calls.first {
-            ToolCallRow(sessionID: sessionID, call: call)
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                Button {
-                    withAnimation(.snappy) { isExpanded.toggle() }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        if ProtoFlags.isOn("toolChips"), !isExpanded {
-                            toolChips
-                        } else {
-                            Text(title)
-                            if calls.contains(where: \.isError) {
-                                Image(systemName: "xmark.circle.fill").foregroundStyle(FlotillaColors.danger)
+        Group {
+            if calls.count == 1, let call = calls.first {
+                ToolCallRow(sessionID: sessionID, call: call)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Button {
+                        withAnimation(.snappy) { isExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                            if ProtoFlags.isOn("toolChips"), !isExpanded {
+                                toolChips
+                            } else {
+                                Text(title)
+                                if calls.contains(where: \.isError) {
+                                    Image(systemName: "xmark.circle.fill").foregroundStyle(FlotillaColors.danger)
+                                }
+                                Spacer()
                             }
-                            Spacer()
                         }
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 4)
                     }
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(FlotillaColors.textSecondary)
-                    .contentShape(Rectangle())
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                if isExpanded {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(calls) { ToolCallRow(sessionID: sessionID, call: $0) }
-                    }
-                    .padding(.leading, 12)
-                    .overlay(alignment: .leading) {
-                        Rectangle().fill(FlotillaColors.separator).frame(width: 1)
+                    if isExpanded {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(calls) { ToolCallRow(sessionID: sessionID, call: $0) }
+                        }
+                        .padding(.leading, 12)
+                        .overlay(alignment: .leading) {
+                            Rectangle().fill(FlotillaColors.separator).frame(width: 1)
+                        }
                     }
                 }
             }
         }
+        .modifier(HapticsOnChange(value: isExpanded, feedback: .impact(weight: .light)))
     }
 
     private var title: String {
@@ -529,6 +532,7 @@ struct ToolCallRow: View {
                 .transition(.opacity)
             }
         }
+        .modifier(HapticsOnChange(value: isExpanded, feedback: .impact(weight: .light)))
     }
 
     @ViewBuilder

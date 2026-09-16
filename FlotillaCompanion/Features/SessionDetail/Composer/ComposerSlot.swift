@@ -149,6 +149,8 @@ private struct PromptComposer: View {
     @Environment(CompanionStore.self) private var store
     @State private var text = ""
     @FocusState private var isFocused: Bool
+    @State private var sendCount = 0
+    @State private var stopCount = 0
 
     var body: some View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -166,6 +168,7 @@ private struct PromptComposer: View {
             Group {
                 if showsStop {
                     Button {
+                        stopCount += 1
                         Task { await store.stop(session.id) }
                     } label: {
                         if isStopping {
@@ -181,6 +184,7 @@ private struct PromptComposer: View {
                     .foregroundStyle(FlotillaColors.textPrimary)
                 } else {
                     Button {
+                        sendCount += 1
                         let prompt = trimmed
                         text = ""
                         Task {
@@ -206,6 +210,8 @@ private struct PromptComposer: View {
         .disabled(!isActionable)
         .onAppear { text = store.promptDraft(for: session.id) }
         .onChange(of: text) { _, newValue in store.savePromptDraft(newValue, for: session.id) }
+        .modifier(HapticsOnChange(value: sendCount, feedback: .impact(weight: .medium)))
+        .modifier(HapticsOnChange(value: stopCount, feedback: .warning))
     }
 
     private var placeholder: String {

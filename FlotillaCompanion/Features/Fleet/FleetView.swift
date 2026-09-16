@@ -98,6 +98,7 @@ struct FleetView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("FleetView.ProjectHeader")
         .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+        .modifier(HapticsOnChange(value: isCollapsed, feedback: .impact(weight: .light)))
     }
 
     private func setAllCollapsed(_ collapsed: Bool, groups: [(name: String, sessions: [CompanionSession])]) {

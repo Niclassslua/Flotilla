@@ -157,6 +157,7 @@ struct SessionDetailView: View {
             Text("The agent process is restarted and resumes this conversation.")
         }
         .sessionDeleteDialog(session: $pendingDelete, matching: session)
+        .modifier(NeedsAttentionHaptic(status: session.status))
     }
 
     private static let bottomAnchorID = "bottom"
@@ -292,6 +293,24 @@ struct SessionDetailView: View {
     private func headerDiffStat(_ session: CompanionSession) -> DiffStat? {
         guard let diff = store.diff(for: sessionID, commitHash: nil).value, !diff.isEmpty else { return session.diffStat }
         return diff.stat
+    }
+}
+
+/// -proto haptics: fires on entering waiting-for-input or ready-for-review,
+/// not on leaving it — a plain `HapticsOnChange` would fire both ways.
+private struct NeedsAttentionHaptic: ViewModifier {
+    let status: SessionStatus?
+
+    private var needsAttention: Bool { status == .waitingForInput || status == .readyForReview }
+
+    func body(content: Content) -> some View {
+        if ProtoFlags.isOn("haptics") {
+            content.sensoryFeedback(trigger: needsAttention) { wasAttention, isAttention in
+                isAttention && !wasAttention ? .success : nil
+            }
+        } else {
+            content
+        }
     }
 }
 

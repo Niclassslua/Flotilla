@@ -10,6 +10,7 @@ struct PermissionCard: View {
     @State private var noteMode: NoteMode?
     @State private var note = ""
     @State private var isSending = false
+    @State private var denyCount = 0
     @FocusState private var isNoteFocused: Bool
 
     enum NoteMode {
@@ -48,6 +49,7 @@ struct PermissionCard: View {
             }
         }
         .sensoryFeedback(trigger: isSending) { _, sending in sending ? .success : nil }
+        .modifier(HapticsOnChange(value: denyCount, feedback: .warning))
     }
 
     /// What Allow covers versus what the broader Always-Allow option (when
@@ -73,7 +75,7 @@ struct PermissionCard: View {
                     .accessibilityIdentifier("PermissionCard.Allow")
 
                     HStack(spacing: 8) {
-                        Button { send(.deny) } label: {
+                        Button { denyCount += 1; send(.deny) } label: {
                             Text("Deny").frame(maxWidth: .infinity, minHeight: 50)
                         }
                         .buttonStyle(.glass)
@@ -85,7 +87,7 @@ struct PermissionCard: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    Button { send(.deny) } label: {
+                    Button { denyCount += 1; send(.deny) } label: {
                         Text("Deny").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glass)

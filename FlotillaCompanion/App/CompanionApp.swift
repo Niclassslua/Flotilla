@@ -88,6 +88,22 @@ enum ProtoFlags {
     }
 }
 
+/// -proto haptics: fires `feedback` on every change to `value`, gated behind
+/// the flag so it stays off by default. Device-only — `.sensoryFeedback`
+/// doesn't do anything in the simulator, so this can't be screenshotted.
+struct HapticsOnChange<Value: Equatable>: ViewModifier {
+    let value: Value
+    let feedback: SensoryFeedback
+
+    func body(content: Content) -> some View {
+        if ProtoFlags.isOn("haptics") {
+            content.sensoryFeedback(feedback, trigger: value)
+        } else {
+            content
+        }
+    }
+}
+
 enum AppearanceSetting: String, CaseIterable, Identifiable {
     case system
     case dark
