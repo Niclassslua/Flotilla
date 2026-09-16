@@ -126,3 +126,55 @@ struct PairedMacStore: Sendable {
         try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 }
+
+/// Serializes cache snapshots away from the UI actor and collapses bursts of
+/// transcript tokens into one atomic write. Flushing on backgrounding avoids
+/// leaving a pending snapshot behind when iOS suspends the app.
+actor CompanionCacheWriter {
+    private let store: PairedMacStore
+    private let macID: String
+    private var pending: PairedMacStore.Cache?
+    private var latestRevision: UInt64 = 0
+    private var isDiscarded = false
+    private var writeTask: Task<Void, Never>?
+
+    init(store: PairedMacStore, macID: String) {
+        self.store = store
+        self.macID = macID
+    }
+
+    func schedule(_ cache: PairedMacStore.Cache, revision: UInt64) {
+        guard !isDiscarded, revision >= latestRevision else { return }
+        latestRevision = revision
+        pending = cache
+        writeTask?.cancel()
+        writeTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            flushPending()
+        }
+    }
+
+    func flush(_ cache: PairedMacStore.Cache, revision: UInt64) {
+        guard !isDiscarded, revision >= latestRevision else { return }
+        latestRevision = revision
+        pending = cache
+        flushPending()
+    }
+
+    private func flushPending() {
+        writeTask?.cancel()
+        writeTask = nil
+        guard let pending else { return }
+        self.pending = nil
+        store.saveCache(pending, for: macID)
+    }
+
+    func discard() {
+        isDiscarded = true
+        writeTask?.cancel()
+        writeTask = nil
+        pending = nil
+        store.removeCache(macID)
+    }
+}

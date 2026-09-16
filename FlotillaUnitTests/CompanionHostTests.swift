@@ -85,6 +85,71 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(first.events.map(\.id), ["0", "1", "2"])
         XCTAssertEqual(grown.events.map(\.id), ["1", "2", "3", "4"])
     }
+
+    func testAppendingNativeTranscriptKeepsEarlierEventsAndWaitsForCompleteRecord() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("companion-transcript-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let first = #"{"type":"user","message":{"content":"first"},"timestamp":"2026-01-01T00:00:00Z"}"# + "\n"
+        let second = #"{"type":"user","message":{"content":"second"},"timestamp":"2026-01-01T00:00:01Z"}"# + "\n"
+        try Data(first.utf8).write(to: url)
+        var sample = session(status: .working)
+        sample.nativeTranscriptPath = url
+        let reader = CompanionTranscriptReader(registry: .default)
+
+        let initial = await reader.read(sample)
+        XCTAssertEqual(initial.events.map(\.id), ["0:0"])
+
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(second.dropLast().utf8))
+        let incomplete = await reader.read(sample)
+        XCTAssertEqual(incomplete.events, initial.events)
+        try handle.write(contentsOf: Data("\n".utf8))
+        let completed = await reader.read(sample)
+        XCTAssertEqual(completed.events.map(\.id), ["0:0", "1:0"])
+        if case .userMessage(let text, _)? = completed.events.last?.content {
+            XCTAssertEqual(text, "second")
+        } else {
+            XCTFail("the appended message must become visible")
+        }
+    }
+
+    func testOpeningLongNativeTranscriptShowsLatestWindowWithStableIDs() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("companion-long-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let lines = (0..<600).map { index in
+            #"{"type":"user","message":{"content":"message "# + String(index) + #""},"timestamp":"2026-01-01T00:00:00Z"}"#
+        }.joined(separator: "\n") + "\n"
+        try Data(lines.utf8).write(to: url)
+        var sample = session(status: .working)
+        sample.nativeTranscriptPath = url
+        let reader = CompanionTranscriptReader(registry: .default)
+        let opened = await reader.read(sample)
+        XCTAssertEqual(opened.events.count, CompanionProtocol.transcriptEventLimit)
+        XCTAssertEqual(opened.events.first?.id, "200:0")
+        XCTAssertEqual(opened.events.last?.id, "599:0")
+    }
+
+    func testBlankNativeRecordDoesNotShiftIDsAfterAppend() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("companion-blank-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let first = #"{"type":"user","message":{"content":"first"}}"# + "\n\n"
+        let second = #"{"type":"user","message":{"content":"second"}}"# + "\n"
+        try Data(first.utf8).write(to: url)
+        var sample = session(status: .working)
+        sample.nativeTranscriptPath = url
+        let reader = CompanionTranscriptReader(registry: .default)
+
+        let initial = await reader.read(sample)
+        XCTAssertEqual(initial.events.map(\.id), ["0:0"])
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(second.utf8))
+        let appended = await reader.read(sample)
+        XCTAssertEqual(appended.events.map(\.id), ["0:0", "2:0"])
+    }
 }
 
 final class ClaudePermissionPayloadTests: XCTestCase {

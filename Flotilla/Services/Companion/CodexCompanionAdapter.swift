@@ -43,6 +43,7 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
         var itemID: String? = nil
     }
     private(set) var transcript = SessionTranscript()
+    var onChange: (() -> Void)?
     var pending: [PendingInteraction] { order.compactMap { requests[$0]?.card } }
     private static let asyncQuestion = "asyncQuestion"
 
@@ -258,6 +259,7 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
 
     func receive(_ message: [String: Any]) {
         guard let method = message["method"] as? String, let params = message["params"] as? [String: Any] else { return }
+        defer { onChange?() }
         let thread = params["threadId"] as? String ?? ""
         if method == "item/started", let item = params["item"] as? [String: Any], item["type"] as? String == "fileChange" {
             rememberEdit(item, thread: thread)

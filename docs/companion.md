@@ -86,7 +86,7 @@ fresh pairing link there), then launch the companion with
    registers the phone's own Ed25519 key with the Mac. Later connections
    authenticate with that key; no secret is ever reused.
 
-### Handshake (protocol version 1)
+### Handshake (protocol version 2)
 
 All frames are length-prefixed (`UInt32` big-endian, max 8 MiB).
 
@@ -96,7 +96,7 @@ All frames are length-prefixed (`UInt32` big-endian, max 8 MiB).
 | 2 | `ServerHello` or `ServerReject` (plaintext JSON) | X25519 ephemeral key, nonce, Mac name, Ed25519 signature over the transcript — or a reject code |
 | 3+ | Sealed frames | 8-byte counter + ChaChaPoly ciphertext and tag |
 
-- *Client transcript* = `"flotilla-companion-v1" ‖ macID ‖ deviceID ‖ deviceKey ‖ clientEphemeral ‖ clientNonce`.
+- *Client transcript* = `"flotilla-companion-v2" ‖ macID ‖ deviceID ‖ deviceKey ‖ clientEphemeral ‖ clientNonce`.
 - *Proof*: `pair` → HMAC-SHA256(secret, SHA256(client transcript));
   `resume` → Ed25519 signature by the device key over SHA256(client transcript).
 - *Server signature*: Ed25519 by the Mac key over
@@ -112,17 +112,24 @@ All frames are length-prefixed (`UInt32` big-endian, max 8 MiB).
 ## Protocol
 
 After the handshake both sides exchange JSON `ClientMessage` / `ServerMessage`
-values inside sealed frames.
+values inside sealed frames. Version 2 prefixes each plaintext with a one-byte
+encoding tag: raw JSON or LZFSE-compressed JSON (with its decoded size). Payloads
+over 16 KiB are compressed only when they shrink by at least 10%. Both encoded
+and decoded sizes are bounded by the frame limit.
 
 | Client → Mac | Mac → Client |
 |---|---|
-| `subscribe(sessionID)` / `unsubscribe` | `fleet(FleetSnapshot)` on connect and whenever the fleet changes |
-| `request(id, CompanionRequest)`: `sendPrompt`, `stop`, `answer`, `createSession`, `handoff`, `restart`, `delete`, `diff`, `commits`, `file` | `transcript(sessionID, SessionTranscript)` for the subscribed session, on change |
-| `ping` | `response(id, CompanionResponse)` · `pong` |
+| `subscribe(sessionID)` / `unsubscribe` / `resyncTranscript(sessionID)` / `resyncFleet` | `fleet(FleetSnapshot)` on connect; `fleetDelta(FleetDelta)` on changes |
+| `request(id, CompanionRequest)`: `sendPrompt`, `stop`, `answer`, `createSession`, `handoff`, `restart`, `delete`, `diff`, `commits`, `file` | `transcriptSnapshot` on subscription or resync, then `transcriptDelta` on change |
+| `ping` | `transcriptSnapshot(sessionID, revision, SessionTranscript)` on subscription; `transcriptDelta(sessionID, TranscriptDelta)` for overlapping changes; `response(id, CompanionResponse)` · `pong` |
 
 Pending cards travel inside `FleetSnapshot.pending`, keyed by session.
 
-Snapshots are sent whole rather than as deltas (assumption A7).
+Fleet and transcript snapshots are sent on connection/subscription, followed by
+revisioned deltas. Fleet deltas carry changed rows/cards and their new order;
+transcript deltas carry appended events, sliding-window eviction and live-field
+changes when existing events overlap. A gap or rewritten history requests a new
+full snapshot. The phone preserves its cached content during reconnection.
 
 ## Error surfaces on the phone
 
@@ -166,11 +173,14 @@ Decisions made without asking, recorded so they can be revisited.
    need a paid Apple Developer team, APNs/CloudKit entitlements, and a signed
    build this environment cannot produce. The fleet summary copy is ready for
    the Live Activity. The phone updates live while the app is open.
-7. **Whole snapshots, not deltas.** Transcripts are capped to the latest 400
-   events per session. Simpler and robust to reconnects; revisit if large
-   sessions make it slow.
+7. **Bounded transcripts.** Transcripts are capped to the latest 400 events per
+   session. Version 2 sends revisioned fleet and transcript deltas after full
+   snapshots; on-demand diffs still use whole responses. Oversized content
+   currently shows a recoverable error rather than closing the connection.
 8. **Transcripts come from the agents' own files** through TranscriptKit's
-   readers, polled once a second while a phone views the session. The
+   readers. Claude/Codex JSONL append records are parsed incrementally after
+   the first read; watched files push updates and a one-second tick also checks
+   the focused session. The
    provider adapter adds live text (Codex and OpenCode token deltas, Claude
    `MessageDisplay` lines) and failed turns. OpenCode has no file reader; its
    transcript comes from the server's message API. Antigravity writes steps

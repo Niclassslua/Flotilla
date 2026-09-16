@@ -12,9 +12,12 @@ final class OpenCodeCompanionAdapter: CompanionSessionAdapter {
     private var requests: [UUID: Request] = [:]
     private var order: [UUID] = []
     private var eventTask: Task<Void, Never>?
+    private var lastMessageFetch: Date = .distantPast
+    private var messagesDirty = true
     private let client = URLSession(configuration: .ephemeral)
     private struct Request { var nativeID: String; var question: Bool; var card: PendingInteraction }
     private(set) var transcript = SessionTranscript()
+    var onChange: (() -> Void)?
     var pending: [PendingInteraction] { order.compactMap { requests[$0]?.card } }
 
     init(session: Session, descriptor: CompanionRuntimeDescriptor) {
@@ -63,6 +66,10 @@ final class OpenCodeCompanionAdapter: CompanionSessionAdapter {
         let permissions = try await request("GET", "permission") as? [[String: Any]] ?? []
         let questions = try await request("GET", "question") as? [[String: Any]] ?? []
         reconcile(permissions: permissions.filter { related.contains($0["sessionID"] as? String ?? "") }, questions: questions.filter { related.contains($0["sessionID"] as? String ?? "") })
+        // SSE supplies live text; fetching and decoding the entire conversation
+        // every second is unnecessary. Poll occasionally to recover missed
+        // events and on completion to replace the partial with native records.
+        guard messagesDirty || Date().timeIntervalSince(lastMessageFetch) >= 5 else { return }
         let rows = try await request("GET", "session/\(nativeID)/message") as? [[String: Any]] ?? []
         var events: [TranscriptEvent] = []
         for row in rows {
@@ -85,6 +92,8 @@ final class OpenCodeCompanionAdapter: CompanionSessionAdapter {
             if let error = info["error"] as? [String: Any] { events.append(.init(id: id + ":error", content: .turnFailed(message: (error["data"] as? [String: Any])?["message"] as? String ?? "OpenCode turn failed."))) }
         }
         transcript.events = events
+        lastMessageFetch = .now
+        messagesDirty = false
     }
 
     func reconcile(permissions: [[String: Any]], questions: [[String: Any]]) {
@@ -177,6 +186,10 @@ final class OpenCodeCompanionAdapter: CompanionSessionAdapter {
 
     func receive(_ event: [String: Any]) {
         guard let type = event["type"] as? String, let properties = event["properties"] as? [String: Any], properties["sessionID"] as? String == nativeID else { return }
+        defer { onChange?() }
+        if type == "session.idle" || type == "message.updated" || type == "message.removed" {
+            messagesDirty = true
+        }
         if type == "message.part.delta", properties["field"] as? String == "text" { transcript.streamingText = (transcript.streamingText ?? "") + (properties["delta"] as? String ?? "") }
         if type == "session.idle" { transcript.streamingText = nil; transcript.isStopping = false }
         if type == "session.error" { transcript.append(.turnFailed(message: ((properties["error"] as? [String: Any])?["data"] as? [String: Any])?["message"] as? String ?? "OpenCode turn failed.")) }

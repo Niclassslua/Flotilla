@@ -135,3 +135,53 @@ public struct FleetSnapshot: Hashable, Codable, Sendable {
         self.pending = pending
     }
 }
+
+/// Revisioned change to a phone's last fleet. The order is explicit because
+/// activity can reorder rows without changing any other session fields.
+public struct FleetDelta: Hashable, Codable, Sendable {
+    public var baseRevision: UInt64
+    public var revision: UInt64
+    public var orderedIDs: [UUID]
+    public var changed: [CompanionSession]
+    public var pendingChanges: [UUID: [PendingInteraction]]
+    public var projects: [ProjectSummary]?
+    public var catalog: AgentCatalog?
+    public var macName: String?
+
+    public static func make(from old: FleetSnapshot, to new: FleetSnapshot, baseRevision: UInt64) -> Self {
+        let prior = Dictionary(uniqueKeysWithValues: old.sessions.map { ($0.id, $0) })
+        let keys = Set(old.pending.keys).union(new.pending.keys)
+        return Self(
+            baseRevision: baseRevision, revision: baseRevision + 1,
+            orderedIDs: new.sessions.map(\.id),
+            changed: new.sessions.filter { prior[$0.id] != $0 },
+            pendingChanges: Dictionary(uniqueKeysWithValues: keys.compactMap { id in
+                let before = old.pending[id] ?? []
+                let after = new.pending[id] ?? []
+                return before == after ? nil : (id, after)
+            }),
+            projects: old.projects == new.projects ? nil : new.projects,
+            catalog: old.catalog == new.catalog ? nil : new.catalog,
+            macName: old.macName == new.macName ? nil : new.macName
+        )
+    }
+
+    public func applying(to old: FleetSnapshot, revision currentRevision: UInt64) -> FleetSnapshot? {
+        guard baseRevision == currentRevision, revision == baseRevision + 1 else { return nil }
+        var result = old
+        var byID = Dictionary(uniqueKeysWithValues: old.sessions.map { ($0.id, $0) })
+        for session in changed { byID[session.id] = session }
+        let ordered = orderedIDs.compactMap { byID[$0] }
+        guard ordered.count == orderedIDs.count, Set(orderedIDs).count == orderedIDs.count else { return nil }
+        let currentIDs = Set(orderedIDs)
+        result.sessions = ordered
+        for (id, cards) in pendingChanges {
+            result.pending[id] = cards.isEmpty ? nil : cards
+        }
+        result.pending = result.pending.filter { currentIDs.contains($0.key) }
+        if let projects { result.projects = projects }
+        if let catalog { result.catalog = catalog }
+        if let macName { result.macName = macName }
+        return result
+    }
+}

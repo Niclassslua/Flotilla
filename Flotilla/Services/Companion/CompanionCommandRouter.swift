@@ -133,7 +133,23 @@ final class CompanionCommandRouter {
 
         case .file(let sessionID, let path):
             guard let session = session(sessionID) else { return .failure(message: Self.missingSession) }
-            return .file(contents: Self.readFile(path, in: session.workingDirectory))
+            let directory = session.workingDirectory
+            let contents = await Task.detached(priority: .utility) {
+                Self.readFile(path, in: directory)
+            }.value
+            return .file(contents: contents)
+
+        case .filePage(let sessionID, let path, let offset, let maxBytes):
+            guard let session = session(sessionID) else { return .failure(message: Self.missingSession) }
+            guard offset >= 0, maxBytes > 0, maxBytes <= 256 * 1024 else {
+                return .failure(message: "Invalid file page.")
+            }
+            let directory = session.workingDirectory
+            let page = await Task.detached(priority: .utility) {
+                Self.readFilePage(path, in: directory, offset: offset, maxBytes: maxBytes)
+            }.value
+            guard let page else { return .failure(message: "The file couldn't be read.") }
+            return .filePage(contents: page.contents, nextOffset: page.nextOffset, isComplete: page.isComplete)
         }
     }
 
@@ -146,6 +162,11 @@ final class CompanionCommandRouter {
     /// Reads a text file inside the session's directory. Anything resolving
     /// outside it — `..`, an absolute path, a symlink out — is refused.
     nonisolated static func readFile(_ path: String, in directory: URL) -> String? {
+        guard let page = readFilePage(path, in: directory, offset: 0, maxBytes: maximumFileSize), page.isComplete else { return nil }
+        return page.contents
+    }
+
+    nonisolated static func readFilePage(_ path: String, in directory: URL, offset: Int, maxBytes: Int) -> (contents: String, nextOffset: Int?, isComplete: Bool)? {
         let root = directory.standardizedFileURL.resolvingSymlinksInPath()
         let candidate = (path.hasPrefix("/") ? URL(fileURLWithPath: path) : root.appendingPathComponent(path))
             .standardizedFileURL
@@ -153,8 +174,17 @@ final class CompanionCommandRouter {
         let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
         guard candidate.path.hasPrefix(rootPath) else { return nil }
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: candidate.path),
-              (attributes[.size] as? NSNumber)?.intValue ?? .max <= maximumFileSize,
-              let data = FileManager.default.contents(atPath: candidate.path) else { return nil }
-        return String(data: data, encoding: .utf8)
+              let size = (attributes[.size] as? NSNumber)?.intValue,
+              size <= maximumFileSize, offset <= size,
+              let handle = try? FileHandle(forReadingFrom: candidate) else { return nil }
+        defer { try? handle.close() }
+        try? handle.seek(toOffset: UInt64(offset))
+        var data = try? handle.read(upToCount: min(maxBytes, size - offset))
+        while let candidate = data, !candidate.isEmpty, String(data: candidate, encoding: .utf8) == nil {
+            data?.removeLast()
+        }
+        guard let data, let text = String(data: data, encoding: .utf8), !data.isEmpty || offset == size else { return nil }
+        let next = offset + data.count
+        return (text, next < size ? next : nil, next >= size)
     }
 }

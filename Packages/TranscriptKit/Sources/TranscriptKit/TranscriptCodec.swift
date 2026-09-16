@@ -79,6 +79,12 @@ public protocol TranscriptReading: Sendable {
     func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)?
 }
 
+/// Optional companion fast path for append-only native JSONL files. The
+/// caller owns framing: only complete newline-terminated records are passed.
+public protocol TranscriptLineReading: TranscriptReading {
+    func readRecords(_ lines: [Substring]) -> [CanonicalEntry]
+}
+
 extension TranscriptReading {
     public func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)? {
         nil

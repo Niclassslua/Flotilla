@@ -82,7 +82,7 @@ public enum HandshakeError: Error, Equatable, Sendable {
 /// Both sides of the handshake. Pure functions over keys and bytes; the
 /// transport only moves the frames.
 public enum Handshake {
-    static let label = Data("flotilla-companion-v1".utf8)
+    static let label = Data("flotilla-companion-v2".utf8)
 
     static func clientTranscript(macID: String, deviceID: String, deviceKey: Data, ephemeral: Data, nonce: Data) -> Data {
         var data = label

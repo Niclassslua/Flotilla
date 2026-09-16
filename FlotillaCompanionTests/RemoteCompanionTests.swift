@@ -57,6 +57,11 @@ private final class FakeMac: @unchecked Sendable {
                 try? peer.session.send(.fleet(snapshot))
                 Task {
                     for try await message in peer.session.messages {
+                        if case .subscribe(let sessionID) = message {
+                            let transcript = SessionTranscript(events: [TranscriptEvent(id: "0", content: .assistantMessage(text: "Arrived", timestamp: Date(timeIntervalSince1970: 1_700_000_000)))])
+                            try? peer.session.send(.transcriptSnapshot(sessionID: sessionID, revision: 1, transcript))
+                            continue
+                        }
                         guard case .request(let id, let request) = message else { continue }
                         self.lock.withLock { self.received.append(request) }
                         let response: CompanionResponse = switch request {
@@ -104,6 +109,33 @@ private final class FakeMac: @unchecked Sendable {
 
 @MainActor
 final class RemoteCompanionTests: XCTestCase {
+    func testCacheWriterPersistsNewestUpdateBeforeBackgroundSuspension() async {
+        let store = PairedMacStore.temporary()
+        let writer = CompanionCacheWriter(store: store, macID: "test-mac")
+        let first = PairedMacStore.Cache(fleet: FleetSnapshot(macID: "test-mac", macName: "Before", sessions: [], projects: [], catalog: .fallback), transcripts: [:])
+        let latest = PairedMacStore.Cache(fleet: FleetSnapshot(macID: "test-mac", macName: "After", sessions: [], projects: [], catalog: .fallback), transcripts: [:])
+        await writer.schedule(first, revision: 1)
+        await writer.flush(latest, revision: 2)
+        await writer.schedule(first, revision: 1) // A delayed task must not restore stale content.
+        XCTAssertEqual(store.loadCache("test-mac")?.fleet?.macName, "After")
+        await writer.discard()
+        await writer.schedule(latest, revision: 3)
+        XCTAssertNil(store.loadCache("test-mac"), "removing a Mac must not let a delayed write restore its cache")
+    }
+
+    func testSessionCreatedBeforeFleetUpdateStillSubscribesWhenItAppears() async throws {
+        let mac = FakeMac(sessions: [])
+        try await mac.start()
+        let data = RemoteCompanionDataSource(store: .temporary(), identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
+        data.setActive(true)
+        let macID = try await data.pair(with: mac.payload) { _, _ in }
+        let newSession = session()
+        data.focus(on: newSession.id)
+        mac.push(FleetSnapshot(macID: macID, macName: "Test Mac", sessions: [newSession], projects: [], catalog: .fallback))
+        await waitUntil { data.transcript(for: newSession.id).events.count == 1 }
+        XCTAssertEqual(data.transcript(for: newSession.id).latestCompleteLine, "Arrived")
+    }
+
     private func session(status: SessionStatus = .working) -> CompanionSession {
         CompanionSession(id: UUID(), title: "Fix tests", agent: .claudeCode, model: "opus", status: status, hasWorktree: false, isProcessLive: true, updatedAt: .now)
     }

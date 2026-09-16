@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import ImageIO
 import SessionKit
 import DesignSystem
 import Textual
@@ -74,16 +75,29 @@ struct TerminalTailPreview: View {
     }
 }
 
-/// A screenshot the agent looked at — decoded once and cached for the row's
-/// lifetime rather than on every body evaluation.
+/// A screenshot the agent looked at. Decode off the UI actor, and reuse the
+/// thumbnail when a lazy row is recycled while scrolling.
 struct ImageRow: View {
+    let id: String
     let mimeType: String
     let base64: String
+    @State private var thumbnail: UIImage?
+    @State private var failed = false
+
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 30
+        return cache
+    }()
+
+    private struct Prepared: @unchecked Sendable {
+        let image: UIImage?
+    }
 
     var body: some View {
         Group {
-            if let data = Data(base64Encoded: base64), let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage)
+            if let thumbnail {
+                Image(uiImage: thumbnail)
                     .resizable()
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
@@ -91,13 +105,40 @@ struct ImageRow: View {
                         RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
                             .strokeBorder(FlotillaColors.separator, lineWidth: 1)
                     }
-            } else {
+            } else if failed {
                 Label("Image couldn't be shown", systemImage: "photo.badge.exclamationmark")
                     .font(.footnote)
                     .foregroundStyle(FlotillaColors.textTertiary)
+            } else {
+                ProgressView().frame(maxWidth: .infinity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: id) {
+            let key = id as NSString
+            if let cached = Self.cache.object(forKey: key) {
+                thumbnail = cached
+                return
+            }
+            let prepared = await Task.detached(priority: .utility) { [base64] in
+                let sourceOptions: [CFString: Any] = [kCGImageSourceShouldCache: false]
+                guard let data = Data(base64Encoded: base64),
+                      let source = CGImageSourceCreateWithData(data as CFData, sourceOptions as CFDictionary) else {
+                    return Prepared(image: nil)
+                }
+                let options: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 1600,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceShouldCacheImmediately: true
+                ]
+                return Prepared(image: CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary).map(UIImage.init(cgImage:)))
+            }.value
+            guard !Task.isCancelled else { return }
+            thumbnail = prepared.image
+            failed = prepared.image == nil
+            if let image = prepared.image { Self.cache.setObject(image, forKey: key) }
+        }
     }
 }
 

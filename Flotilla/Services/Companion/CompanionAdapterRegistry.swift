@@ -11,6 +11,7 @@ final class CompanionAdapterRegistry {
     var bridge: ClaudePermissionBridge?
     private var adapters: [UUID: any CompanionSessionAdapter] = [:]
     private var refreshing: Set<UUID> = []
+    private var publishTask: Task<Void, Never>?
     var onChange: (() -> Void)?
 
     init(support: URL) { self.support = support }
@@ -35,6 +36,12 @@ final class CompanionAdapterRegistry {
             adapter = AntigravityCompanionAdapter(session: session, descriptor: descriptor, support: support, screen: screen, send: { send(session.id, $0) })
         default: return nil
         }
+        if let codex = adapter as? CodexCompanionAdapter {
+            codex.onChange = { [weak self] in self?.schedulePublish() }
+        }
+        if let openCode = adapter as? OpenCodeCompanionAdapter {
+            openCode.onChange = { [weak self] in self?.schedulePublish() }
+        }
         adapters[session.id] = adapter
         return adapter
     }
@@ -48,13 +55,22 @@ final class CompanionAdapterRegistry {
             Task { [weak self] in
                 try? await adapter.refresh()
                 self?.refreshing.remove(session.id)
-                self?.onChange?()
+                self?.schedulePublish()
             }
         }
-        onChange?()
+    }
+
+    private func schedulePublish() {
+        guard publishTask == nil else { return }
+        publishTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(75))
+            guard !Task.isCancelled else { return }
+            self?.publishTask = nil
+            self?.onChange?()
+        }
     }
 
     func pending(_ session: Session) -> [PendingInteraction] { adapter(for: session)?.pending ?? [] }
     func remove(_ id: UUID) { adapters.removeValue(forKey: id)?.close() }
-    func close() { for adapter in adapters.values { adapter.close() }; adapters.removeAll() }
+    func close() { publishTask?.cancel(); publishTask = nil; for adapter in adapters.values { adapter.close() }; adapters.removeAll() }
 }

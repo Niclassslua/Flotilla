@@ -7,6 +7,7 @@ public enum TransportError: Error, Hashable, Sendable {
     case timedOut
     case closed
     case frameTooLarge(Int)
+    case backpressure
     /// Local Network access was denied on the phone.
     case localNetworkDenied
 }
@@ -25,6 +26,8 @@ public final class FrameConnection: @unchecked Sendable {
     private var readyContinuation: CheckedContinuation<Void, Error>?
     private var isReady = false
     private var stateHandlers: [@Sendable (NWConnection.State) -> Void] = []
+    private var queuedBytes = 0
+    private let maximumQueuedBytes = 16 * 1024 * 1024
 
     public init(connection: NWConnection, label: String = "companion.connection") {
         self.connection = connection
@@ -127,8 +130,19 @@ public final class FrameConnection: @unchecked Sendable {
 
     /// Enqueues a frame without waiting for it to be written. Enqueue order is
     /// preserved, which lets a caller seal and enqueue atomically.
-    public func enqueue(_ frame: Data) {
-        connection.send(content: Self.lengthPrefix(frame.count) + frame, completion: .contentProcessed { _ in })
+    @discardableResult
+    public func enqueue(_ frame: Data) -> Bool {
+        let packet = Self.lengthPrefix(frame.count) + frame
+        guard lock.withLock({
+            guard queuedBytes + packet.count <= maximumQueuedBytes else { return false }
+            queuedBytes += packet.count
+            return true
+        }) else { return false }
+        connection.send(content: packet, completion: .contentProcessed { [weak self] _ in
+            guard let self else { return }
+            self.lock.withLock { self.queuedBytes = max(0, self.queuedBytes - packet.count) }
+        })
+        return true
     }
 
     public func receiveFrame() async throws -> Data {

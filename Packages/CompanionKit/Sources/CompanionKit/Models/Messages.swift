@@ -2,7 +2,7 @@ import Foundation
 
 /// The wire protocol version. Both the handshake and the pairing link carry it.
 public enum CompanionProtocol {
-    public static let version = 1
+    public static let version = 2
     /// Transcripts are capped to the newest events (docs/companion.md, A7).
     public static let transcriptEventLimit = 400
 }
@@ -12,6 +12,8 @@ public enum ClientMessage: Hashable, Codable, Sendable {
     /// Start receiving `transcript` and `pending` for one session; replaces any
     /// earlier subscription.
     case subscribe(sessionID: UUID)
+    case resyncTranscript(sessionID: UUID)
+    case resyncFleet
     case unsubscribe
     case request(id: UInt64, CompanionRequest)
     case ping
@@ -28,12 +30,17 @@ public enum CompanionRequest: Hashable, Codable, Sendable {
     case diff(sessionID: UUID, commitHash: String?)
     case commits(sessionID: UUID)
     case file(sessionID: UUID, path: String)
+    /// Fetches a bounded UTF-8 page; the phone transparently follows pages.
+    case filePage(sessionID: UUID, path: String, offset: Int, maxBytes: Int)
 }
 
 /// Sent by the Mac inside the encrypted channel.
 public enum ServerMessage: Hashable, Codable, Sendable {
     case fleet(FleetSnapshot)
+    case fleetDelta(FleetDelta)
     case transcript(sessionID: UUID, SessionTranscript)
+    case transcriptSnapshot(sessionID: UUID, revision: UInt64, SessionTranscript)
+    case transcriptDelta(sessionID: UUID, TranscriptDelta)
     case response(id: UInt64, CompanionResponse)
     case pong
     /// The Mac's current reachable addresses, sent whenever they change (e.g.
@@ -50,6 +57,7 @@ public enum CompanionResponse: Hashable, Codable, Sendable {
     case diff([FileDiff])
     case commits([CommitSummary])
     case file(contents: String?)
+    case filePage(contents: String?, nextOffset: Int?, isComplete: Bool)
 }
 
 /// Encoding shared by every JSON frame, so both ends agree on dates.

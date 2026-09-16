@@ -22,7 +22,7 @@ import UniformTypeIdentifiers
 /// transcript carries a handoff marker — meaning it is being written for an
 /// agent that did not witness the conversation — every human-visible turn is
 /// written twice, once for each audience.
-public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
+public struct CodexTranscriptCodec: TranscriptLineReading, TranscriptWriting {
     public let agent: AgentKind = .codexCLI
 
     private let homeDirectory: URL
@@ -84,9 +84,13 @@ public struct CodexTranscriptCodec: TranscriptReading, TranscriptWriting {
     }
 
     public func readNative(at url: URL) throws -> [CanonicalEntry] {
+        readRecords(try Self.lines(of: url))
+    }
+
+    public func readRecords(_ lines: [Substring]) -> [CanonicalEntry] {
         var entries: [CanonicalEntry] = []
 
-        for line in try Self.lines(of: url) {
+        for line in lines {
             guard let record = Self.decodeObject(line),
                   let payload = record["payload"] as? [String: Any] else { continue }
 

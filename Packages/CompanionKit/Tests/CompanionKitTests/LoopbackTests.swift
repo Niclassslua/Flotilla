@@ -119,6 +119,30 @@ final class LoopbackTests: XCTestCase {
         resumed.close()
     }
 
+    func testLargeCompressibleTranscriptCrossesEncryptedLoopback() async throws {
+        let phone = CompanionIdentity()
+        let paired = try await connect(mode: .pair, identity: phone, secret: try XCTUnwrap(mac.secret))
+        let macSide = try XCTUnwrap(mac.lock.withLock { mac.sessions.last })
+        let id = UUID()
+        let large = String(repeating: "A long assistant explanation. ", count: 4_000)
+        let transcript = SessionTranscript(events: [TranscriptEvent(id: "0", content: .assistantMessage(text: large, timestamp: .now))])
+        let message = ServerMessage.transcriptSnapshot(sessionID: id, revision: 1, transcript)
+        var incoming = paired.messages.makeAsyncIterator()
+        try macSide.send(message)
+        let received = try await incoming.next()
+        guard case .transcriptSnapshot(let receivedID, let revision, let receivedTranscript)? = received else {
+            return XCTFail("the complete transcript must arrive")
+        }
+        XCTAssertEqual(receivedID, id)
+        XCTAssertEqual(revision, 1)
+        guard case .assistantMessage(let text, _)? = receivedTranscript.events.first?.content else {
+            return XCTFail("the assistant message must remain intact")
+        }
+        XCTAssertEqual(text.count, large.count)
+        XCTAssertEqual(text, large)
+        paired.close()
+    }
+
     func testPairingSecretIsSingleUse() async throws {
         let secret = try XCTUnwrap(mac.secret)
         _ = try await connect(mode: .pair, identity: CompanionIdentity(), secret: secret)

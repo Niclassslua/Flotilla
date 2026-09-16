@@ -55,9 +55,11 @@ final class CompanionHost {
     @ObservationIgnored private var server: CompanionServer?
     @ObservationIgnored private var identity: (macID: String, identity: CompanionIdentity)?
     @ObservationIgnored private var peers: [ObjectIdentifier: Peer] = [:]
+    @ObservationIgnored private var activeReads = 0
+    @ObservationIgnored private var readGeneration: UInt64 = 0
+    @ObservationIgnored private var queuedReads: [(CompanionRequest, UInt64, Peer)] = []
     @ObservationIgnored private var publishTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
-    @ObservationIgnored private var lastFleet: FleetSnapshot?
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
     @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog = CompanionSnapshotBuilder.catalog()
     @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
@@ -71,7 +73,14 @@ final class CompanionHost {
         let deviceID: String
         let session: ServerSideSession
         var subscribedSessionID: UUID?
+        var subscriptionGeneration: UInt64 = 0
+        var lastFleet: FleetSnapshot?
+        var fleetRevision: UInt64 = 0
         var lastTranscript: SessionTranscript?
+        var unsendableTranscript: SessionTranscript?
+        var transcriptRevision: UInt64 = 0
+        var isPublishingTranscript = false
+        var transcriptPublishPending = false
 
         init(deviceID: String, session: ServerSideSession) {
             self.deviceID = deviceID
@@ -105,7 +114,16 @@ final class CompanionHost {
         auth.setDevices(devices, revoked: storage.loadRevoked())
 
         bridge.onChange = { [weak self] in self?.publishFleetIfChanged() }
-        adapters.onChange = { [weak self] in self?.publishFleetIfChanged() }
+        adapters.onChange = { [weak self] in
+            guard let self else { return }
+            self.publishFleetIfChanged()
+            Task { [weak self] in
+                guard let self else { return }
+                for peer in self.peers.values where peer.subscribedSessionID != nil {
+                    await self.publishTranscript(to: peer)
+                }
+            }
+        }
         bridge.onAllowNote = { [weak self] sessionID, note in
             Task { try? await self?.store.deliverMessage(note, to: sessionID) }
         }
@@ -169,9 +187,11 @@ final class CompanionHost {
         Task { await transcripts.unwatchAll() }
         for peer in peers.values { peer.session.close() }
         peers = [:]
+        readGeneration += 1
+        activeReads = 0
+        queuedReads.removeAll()
         connectedDeviceIDs = []
         cancelPairing()
-        lastFleet = nil
         status = .off
     }
 
@@ -371,13 +391,18 @@ final class CompanionHost {
                 guard let self else { return }
                 let sessionID = self.peers[key]?.subscribedSessionID
                 self.peers[key] = nil
+                self.queuedReads.removeAll { ObjectIdentifier($0.2) == key }
                 self.connectedDeviceIDs = Set(self.peers.values.map(\.deviceID))
                 if let sessionID {
                     await self.stopWatchingIfUnneeded(sessionID)
                 }
             }
         }
-        try? peer.session.send(.fleet(buildFleet()))
+        sendFleetSnapshot(to: peer)
+        Task { [weak self] in
+            guard let self else { return }
+            await self.adapters.refresh(self.store.sessions.filter { self.store.process(for: $0.id) != nil })
+        }
 
         Task { [weak self] in
             do {
@@ -393,22 +418,85 @@ final class CompanionHost {
         case .ping:
             try? peer.session.send(.pong)
         case .subscribe(let sessionID):
+            let previous = peer.subscribedSessionID
+            peer.subscriptionGeneration += 1
             peer.subscribedSessionID = sessionID
             peer.lastTranscript = nil
+            peer.unsendableTranscript = nil
+            peer.transcriptRevision = 0
+            if let previous, previous != sessionID { await stopWatchingIfUnneeded(previous) }
             await publishTranscript(to: peer)
             if let session = store.sessions.first(where: { $0.id == sessionID }) {
                 await transcripts.watch(session)
             }
+        case .resyncTranscript(let sessionID):
+            guard peer.subscribedSessionID == sessionID else { return }
+            peer.lastTranscript = nil
+            peer.unsendableTranscript = nil
+            await publishTranscript(to: peer)
+        case .resyncFleet:
+            sendFleetSnapshot(to: peer)
         case .unsubscribe:
-            if let sessionID = peer.subscribedSessionID {
-                await stopWatchingIfUnneeded(sessionID)
-            }
+            let previous = peer.subscribedSessionID
+            peer.subscriptionGeneration += 1
             peer.subscribedSessionID = nil
             peer.lastTranscript = nil
+            peer.unsendableTranscript = nil
+            if let previous { await stopWatchingIfUnneeded(previous) }
         case .request(let id, let request):
+            if case .diff = request {
+                handleRead(request, id: id, from: peer)
+                return
+            }
+            if case .commits = request {
+                handleRead(request, id: id, from: peer)
+                return
+            }
+            if case .file = request {
+                handleRead(request, id: id, from: peer)
+                return
+            }
+            if case .filePage = request {
+                handleRead(request, id: id, from: peer)
+                return
+            }
             let response = await router.handle(request)
             try? peer.session.send(.response(id: id, response))
             publishFleetIfChanged()
+        }
+    }
+
+    private func handleRead(_ request: CompanionRequest, id: UInt64, from peer: Peer) {
+        guard activeReads < 2 else {
+            guard queuedReads.count < 16 else {
+                try? peer.session.send(.response(id: id, .failure(message: "The Mac is busy loading other files. Try again shortly.")))
+                return
+            }
+            queuedReads.append((request, id, peer))
+            return
+        }
+        activeReads += 1
+        let generation = readGeneration
+        Task { [weak self, weak peer] in
+            guard let self else { return }
+            defer { if self.readGeneration == generation { self.readFinished() } }
+            guard let peer else { return }
+            let response = await self.router.handle(request)
+            do {
+                try peer.session.send(.response(id: id, response))
+            } catch TransportError.frameTooLarge {
+                try? peer.session.send(.response(id: id, .failure(message: "This change is too large to send to the iPhone in one piece. Open it on the Mac.")))
+            } catch { }
+        }
+    }
+
+    private func readFinished() {
+        activeReads -= 1
+        while !queuedReads.isEmpty {
+            let (request, id, peer) = queuedReads.removeFirst()
+            guard peers.values.contains(where: { $0 === peer }) else { continue }
+            handleRead(request, id: id, from: peer)
+            break
         }
     }
 
@@ -423,7 +511,9 @@ final class CompanionHost {
                 guard let self else { return }
                 tick += 1
                 // A dead pane's endpoint is gone; polling it only logs failures.
-                await self.adapters.refresh(self.store.sessions.filter { self.store.process(for: $0.id) != nil })
+                if !self.peers.isEmpty {
+                    await self.adapters.refresh(self.store.sessions.filter { self.store.process(for: $0.id) != nil })
+                }
                 self.bridge.retractResolved { sessionID in
                     self.store.sessions.first { $0.id == sessionID }?.status == .waitingForInput
                 }
@@ -457,16 +547,47 @@ final class CompanionHost {
     private func publishFleetIfChanged() {
         guard !peers.isEmpty else { return }
         let fleet = buildFleet()
-        guard fleet != lastFleet else { return }
-        lastFleet = fleet
         for peer in peers.values {
-            try? peer.session.send(.fleet(fleet))
+            guard peer.lastFleet != fleet else { continue }
+            if let old = peer.lastFleet {
+                let delta = FleetDelta.make(from: old, to: fleet, baseRevision: peer.fleetRevision)
+                guard (try? peer.session.send(.fleetDelta(delta))) != nil else { continue }
+                peer.fleetRevision = delta.revision
+            } else {
+                guard (try? peer.session.send(.fleet(fleet))) != nil else { continue }
+                peer.fleetRevision = 0
+            }
+            peer.lastFleet = fleet
         }
     }
 
+    private func sendFleetSnapshot(to peer: Peer) {
+        let snapshot = buildFleet()
+        guard (try? peer.session.send(.fleet(snapshot))) != nil else { return }
+        peer.lastFleet = snapshot
+        peer.fleetRevision = 0
+    }
+
     private func publishTranscript(to peer: Peer) async {
+        // File reads suspend this actor. A watcher, timer, and adapter callback
+        // can all arrive during that suspension; serialize their sends so a
+        // phone never receives two different updates with the same revision.
+        if peer.isPublishingTranscript {
+            peer.transcriptPublishPending = true
+            return
+        }
+        peer.isPublishingTranscript = true
+        defer { peer.isPublishingTranscript = false }
+        repeat {
+            peer.transcriptPublishPending = false
+            await publishTranscriptOnce(to: peer)
+        } while peer.transcriptPublishPending && peers.values.contains(where: { $0 === peer })
+    }
+
+    private func publishTranscriptOnce(to peer: Peer) async {
         guard let sessionID = peer.subscribedSessionID,
               let session = store.sessions.first(where: { $0.id == sessionID }) else { return }
+        let generation = peer.subscriptionGeneration
         let transcript: SessionTranscript
         if let adapter = adapters.adapter(for: session), session.agent == .openCode {
             transcript = adapter.transcript
@@ -479,10 +600,32 @@ final class CompanionHost {
             }
             transcript = native
         }
-        guard transcript != peer.lastTranscript else { return }
-        guard peer.subscribedSessionID == sessionID else { return }
+        guard transcript != peer.lastTranscript, transcript != peer.unsendableTranscript else { return }
+        guard peer.subscriptionGeneration == generation,
+              peers.values.contains(where: { $0 === peer }) else { return }
+        let revision = peer.transcriptRevision + 1
+        let message: ServerMessage
+        if let old = peer.lastTranscript,
+           let delta = TranscriptDelta.make(from: old, to: transcript, baseRevision: peer.transcriptRevision) {
+            message = .transcriptDelta(sessionID: sessionID, delta)
+        } else {
+            message = .transcriptSnapshot(sessionID: sessionID, revision: revision, transcript)
+        }
+        do {
+            try peer.session.send(message)
+        } catch TransportError.frameTooLarge {
+            peer.unsendableTranscript = transcript
+            var oversized = transcript
+            oversized.events = []
+            oversized.unavailableReason = "This transcript is too large to send in one update. Open it on the Mac."
+            guard (try? peer.session.send(.transcriptSnapshot(sessionID: sessionID, revision: revision, oversized))) != nil else { return }
+            peer.lastTranscript = oversized
+            peer.transcriptRevision = revision
+            return
+        } catch { return }
         peer.lastTranscript = transcript
-        try? peer.session.send(.transcript(sessionID: sessionID, transcript))
+        peer.unsendableTranscript = nil
+        peer.transcriptRevision = revision
     }
 
     func buildFleet() -> FleetSnapshot {

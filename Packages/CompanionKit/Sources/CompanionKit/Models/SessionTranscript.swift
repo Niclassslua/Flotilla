@@ -58,6 +58,54 @@ public struct SessionTranscript: Hashable, Codable, Sendable {
     }
 }
 
+/// A change relative to the last transcript delivered to this phone. Events
+/// retained from the old window must match exactly; edits in older records
+/// fall back to a new snapshot instead of silently corrupting the history.
+public struct TranscriptDelta: Hashable, Codable, Sendable {
+    public var baseRevision: UInt64
+    public var revision: UInt64
+    public var dropCount: Int
+    public var retainCount: Int
+    public var events: [TranscriptEvent]
+    public var streamingText: String?
+    public var retryAttempt: Int?
+    public var isStopping: Bool
+    public var unavailableReason: String?
+
+    public static func make(from old: SessionTranscript, to new: SessionTranscript, baseRevision: UInt64) -> Self? {
+        // A capped window may slide forward, and its last event may change
+        // while it is being written. Keep only an equal overlapping prefix.
+        let first = old.events.firstIndex { $0.id == new.events.first?.id } ?? old.events.count
+        var retained = 0
+        while first + retained < old.events.count, retained < new.events.count,
+              old.events[first + retained] == new.events[retained] {
+            retained += 1
+        }
+        guard retained > 0 || old.events.isEmpty || new.events.isEmpty else { return nil }
+        return Self(
+            baseRevision: baseRevision, revision: baseRevision + 1,
+            dropCount: first, retainCount: retained,
+            events: Array(new.events.dropFirst(retained)),
+            streamingText: new.streamingText, retryAttempt: new.retryAttempt,
+            isStopping: new.isStopping, unavailableReason: new.unavailableReason
+        )
+    }
+
+    public func applying(to old: SessionTranscript, revision currentRevision: UInt64) -> SessionTranscript? {
+        guard currentRevision == baseRevision, revision == baseRevision + 1,
+              dropCount >= 0, retainCount >= 0,
+              dropCount <= old.events.count,
+              retainCount <= old.events.count - dropCount else { return nil }
+        var result = old
+        result.events = Array(old.events.dropFirst(dropCount).prefix(retainCount)) + events
+        result.streamingText = streamingText
+        result.retryAttempt = retryAttempt
+        result.isStopping = isStopping
+        result.unavailableReason = unavailableReason
+        return result
+    }
+}
+
 public struct TranscriptEvent: Identifiable, Hashable, Codable, Sendable {
     public enum Content: Hashable, Codable, Sendable {
         case userMessage(text: String, timestamp: Date)

@@ -20,6 +20,7 @@ final class RemoteCompanionDataSource: CompanionDataSource {
     @ObservationIgnored private let identityStore: any DeviceIdentityStoring
     @ObservationIgnored private let deviceName: String
     @ObservationIgnored private var isActive = false
+    @ObservationIgnored private var desiredFocus: UUID?
 
     init(
         store: PairedMacStore = .default(),
@@ -41,8 +42,12 @@ final class RemoteCompanionDataSource: CompanionDataSource {
             deviceName: deviceName
         )
         let macID = record.macID
+        let cacheWriter = CompanionCacheWriter(store: store, macID: macID)
         connection.onRecordChange = { [weak self] _ in self?.saveRecords() }
-        connection.onCacheChange = { [weak self] cache in self?.store.saveCache(cache, for: macID) }
+        connection.onCacheChange = { cache, revision in Task { await cacheWriter.schedule(cache, revision: revision) } }
+        connection.onCacheFlush = { cache, revision in Task { await cacheWriter.flush(cache, revision: revision) } }
+        connection.onCacheDiscard = { await cacheWriter.discard() }
+        connection.onFleetChange = { [weak self] in self?.applyFocus() }
         return connection
     }
 
@@ -136,9 +141,14 @@ final class RemoteCompanionDataSource: CompanionDataSource {
     }
 
     func focus(on sessionID: CompanionSession.ID?) {
-        let owner = sessionID.flatMap { connection(forSession: $0) }
+        desiredFocus = sessionID
+        applyFocus()
+    }
+
+    private func applyFocus() {
+        let owner = desiredFocus.flatMap { connection(forSession: $0) }
         for connection in connections {
-            connection.focus(on: connection === owner ? sessionID : nil)
+            connection.focus(on: connection === owner ? desiredFocus : nil)
         }
     }
 
@@ -233,6 +243,7 @@ final class RemoteCompanionDataSource: CompanionDataSource {
             )
             if let existing = connection(payload.macID) {
                 existing.disconnect()
+                await existing.onCacheDiscard()
                 connections.removeAll { $0 === existing }
             }
             let connection = makeConnection(record)
@@ -256,8 +267,8 @@ final class RemoteCompanionDataSource: CompanionDataSource {
     func removeMac(_ macID: MacHost.ID) {
         guard let connection = connection(macID) else { return }
         connection.setActive(false)
+        Task { await connection.onCacheDiscard() }
         connections.removeAll { $0 === connection }
-        store.removeCache(macID)
         saveRecords()
     }
 

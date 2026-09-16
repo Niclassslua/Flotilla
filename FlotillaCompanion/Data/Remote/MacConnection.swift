@@ -1,11 +1,13 @@
 import Foundation
 import Observation
 import CompanionKit
+import os
 
 /// The live link to one paired Mac, plus everything received from it.
 @MainActor
 @Observable
 final class MacConnection {
+    private static let performance = Logger(subsystem: "com.niclassslua.flotilla", category: "CompanionPerformance")
     private(set) var record: PairedMacRecord
     private(set) var state: MacConnectionState = .unreachable
     private(set) var fleet: FleetSnapshot?
@@ -26,6 +28,13 @@ final class MacConnection {
     @ObservationIgnored private var nextRequestID: UInt64 = 1
     @ObservationIgnored private var waiting: [UInt64: CheckedContinuation<CompanionResponse, Error>] = [:]
     @ObservationIgnored private var focusedSessionID: UUID?
+    @ObservationIgnored private var focusStartedAt: Date?
+    @ObservationIgnored private var transcriptRevisions: [UUID: UInt64] = [:]
+    @ObservationIgnored private var cacheRevision: UInt64 = 0
+    @ObservationIgnored private var fleetRevision: UInt64?
+    @ObservationIgnored private var diffLoads: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var commitLoads: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var fileLoads: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var connectTask: Task<Void, Never>?
     @ObservationIgnored private var receiveTask: Task<Void, Never>?
     @ObservationIgnored private var retryAttempt = 0
@@ -36,7 +45,10 @@ final class MacConnection {
     @ObservationIgnored private let browser: LANBrowser?
     @ObservationIgnored private let deviceName: String
     @ObservationIgnored var onRecordChange: (PairedMacRecord) -> Void = { _ in }
-    @ObservationIgnored var onCacheChange: (PairedMacStore.Cache) -> Void = { _ in }
+    @ObservationIgnored var onCacheChange: (PairedMacStore.Cache, UInt64) -> Void = { _, _ in }
+    @ObservationIgnored var onCacheFlush: (PairedMacStore.Cache, UInt64) -> Void = { _, _ in }
+    @ObservationIgnored var onCacheDiscard: () async -> Void = {}
+    @ObservationIgnored var onFleetChange: () -> Void = {}
 
     static let requestTimeout: Duration = .seconds(45)
     static let retryDelays: [Double] = [1, 2, 5, 10, 20, 30]
@@ -72,6 +84,7 @@ final class MacConnection {
             if case .needsRepairing = state { return }
             if !isConnected { connect() }
         } else {
+            onCacheFlush(PairedMacStore.Cache(fleet: fleet, transcripts: transcripts), cacheRevision)
             connectTask?.cancel()
             disconnect()
         }
@@ -183,6 +196,8 @@ final class MacConnection {
     func adopt(_ newSession: ClientSideSession, target: ConnectTarget, macName: String) {
         disconnect()
         session = newSession
+        transcriptRevisions.removeAll()
+        fleetRevision = nil
         retryAttempt = 0
         state = .connected(path: target.path, address: target.label)
         record.name = macName
@@ -244,9 +259,39 @@ final class MacConnection {
         record.lastSeen = .now
         switch message {
         case .fleet(let snapshot):
+            fleetRevision = 0
             applyFleet(snapshot)
+        case .fleetDelta(let delta):
+            guard let fleet, let fleetRevision,
+                  let updated = delta.applying(to: fleet, revision: fleetRevision) else {
+                try? session?.send(.resyncFleet)
+                return
+            }
+            self.fleetRevision = delta.revision
+            applyFleet(updated)
         case .transcript(let sessionID, let transcript):
             transcripts[sessionID] = transcript
+            pruneQueuedPrompts(sessionID)
+            saveCache()
+        case .transcriptSnapshot(let sessionID, let revision, let transcript):
+            guard focusedSessionID == sessionID else { return }
+            if let focusStartedAt {
+                Self.performance.debug("first transcript \(Date().timeIntervalSince(focusStartedAt), format: .fixed(precision: 4))s events=\(transcript.events.count)")
+                self.focusStartedAt = nil
+            }
+            transcriptRevisions[sessionID] = revision
+            transcripts[sessionID] = transcript
+            pruneQueuedPrompts(sessionID)
+            saveCache()
+        case .transcriptDelta(let sessionID, let delta):
+            guard focusedSessionID == sessionID else { return }
+            guard let old = transcripts[sessionID], let revision = transcriptRevisions[sessionID],
+                  let updated = delta.applying(to: old, revision: revision) else {
+                try? session?.send(.resyncTranscript(sessionID: sessionID))
+                return
+            }
+            transcriptRevisions[sessionID] = delta.revision
+            transcripts[sessionID] = updated
             pruneQueuedPrompts(sessionID)
             saveCache()
         case .response(let id, let response):
@@ -273,6 +318,7 @@ final class MacConnection {
             }, in: sessionID)
         }
         fleet = snapshot
+        onFleetChange()
         if case .connected = state, snapshot.macName != record.name {
             record.name = snapshot.macName
             onRecordChange(record)
@@ -298,7 +344,8 @@ final class MacConnection {
     }
 
     private func saveCache() {
-        onCacheChange(PairedMacStore.Cache(fleet: fleet, transcripts: transcripts))
+        cacheRevision += 1
+        onCacheChange(PairedMacStore.Cache(fleet: fleet, transcripts: transcripts), cacheRevision)
     }
 
     // MARK: - Reads
@@ -333,8 +380,11 @@ final class MacConnection {
         guard sessionID != focusedSessionID else { return }
         focusedSessionID = sessionID
         if let sessionID {
+            focusStartedAt = .now
+            transcriptRevisions[sessionID] = nil
             try? session?.send(.subscribe(sessionID: sessionID))
         } else {
+            focusStartedAt = nil
             try? session?.send(.unsubscribe)
         }
     }
@@ -401,6 +451,14 @@ final class MacConnection {
 
     func loadDiff(for sessionID: UUID, commitHash: String?) async {
         let key = "\(sessionID)|\(commitHash ?? "")"
+        if let pending = diffLoads[key] { await pending.value; return }
+        let task = Task { await fetchDiff(for: sessionID, commitHash: commitHash, key: key) }
+        diffLoads[key] = task
+        await task.value
+        diffLoads[key] = nil
+    }
+
+    private func fetchDiff(for sessionID: UUID, commitHash: String?, key: String) async {
         if diffs[key]?.value == nil { diffs[key] = .loading }
         do {
             switch try await request(.diff(sessionID: sessionID, commitHash: commitHash)) {
@@ -418,6 +476,14 @@ final class MacConnection {
     }
 
     func loadCommits(for sessionID: UUID) async {
+        if let pending = commitLoads[sessionID] { await pending.value; return }
+        let task = Task { await fetchCommits(for: sessionID) }
+        commitLoads[sessionID] = task
+        await task.value
+        commitLoads[sessionID] = nil
+    }
+
+    private func fetchCommits(for sessionID: UUID) async {
         if commits[sessionID]?.value == nil { commits[sessionID] = .loading }
         do {
             switch try await request(.commits(sessionID: sessionID)) {
@@ -432,12 +498,33 @@ final class MacConnection {
 
     func loadFile(at path: String, in sessionID: UUID) async {
         let key = "\(sessionID)|\(path)"
+        if let pending = fileLoads[key] { await pending.value; return }
+        let task = Task { await fetchFile(at: path, in: sessionID, key: key) }
+        fileLoads[key] = task
+        await task.value
+        fileLoads[key] = nil
+    }
+
+    private func fetchFile(at path: String, in sessionID: UUID, key: String) async {
         if files[key]?.value == nil { files[key] = .loading }
         do {
-            switch try await request(.file(sessionID: sessionID, path: path)) {
-            case .file(let contents): files[key] = .loaded(contents)
-            case .failure(let message): files[key] = .failed(message)
-            default: files[key] = .failed("Unexpected response.")
+            var offset = 0
+            var result = ""
+            while true {
+                switch try await request(.filePage(sessionID: sessionID, path: path, offset: offset, maxBytes: 192 * 1024)) {
+                case .filePage(let contents, let nextOffset, let isComplete):
+                    result += contents ?? ""
+                    guard !isComplete, let nextOffset, nextOffset > offset else {
+                        files[key] = .loaded(result)
+                        return
+                    }
+                    offset = nextOffset
+                case .file(let contents):
+                    files[key] = .loaded(contents)
+                    return
+                case .failure(let message): files[key] = .failed(message); return
+                default: files[key] = .failed("Unexpected response."); return
+                }
             }
         } catch {
             if files[key]?.value == nil { files[key] = .failed(error.localizedDescription) }

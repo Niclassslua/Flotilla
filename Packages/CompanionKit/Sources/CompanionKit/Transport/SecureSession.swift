@@ -1,10 +1,12 @@
 import Foundation
 import Network
+import os
 
 /// An established, encrypted message stream: typed messages in, typed messages
 /// out. The Mac holds one per connected phone (`SecureSession<ServerMessage,
 /// ClientMessage>`), the phone one per Mac.
 public final class SecureSession<Outgoing: Encodable & Sendable, Incoming: Decodable & Sendable>: @unchecked Sendable {
+    private static var performance: Logger { Logger(subsystem: "com.niclassslua.flotilla", category: "CompanionPerformance") }
     private let frames: FrameConnection
     private let lock = NSLock()
     private var channel: SecureChannel
@@ -37,11 +39,21 @@ public final class SecureSession<Outgoing: Encodable & Sendable, Incoming: Decod
 
     /// Seals and enqueues atomically, so counters match the wire order.
     public func send(_ message: Outgoing) throws {
-        let plaintext = try CompanionJSON.encode(message)
+        let started = Date()
+        let json = try CompanionJSON.encode(message)
+        let plaintext = try WirePayload.encode(json)
+        // The channel adds an 8-byte counter and a 16-byte authentication tag.
+        // Reject locally instead of enqueueing a frame that closes the peer.
+        guard plaintext.count <= WirePayload.maximumSize else {
+            throw TransportError.frameTooLarge(plaintext.count + 24)
+        }
         try lock.withLock {
             guard !isClosed else { throw TransportError.closed }
             let sealed = try channel.seal(plaintext)
-            frames.enqueue(sealed)
+            guard frames.enqueue(sealed) else { throw TransportError.backpressure }
+        }
+        if json.count > 16 * 1024 {
+            Self.performance.debug("outbound raw=\(json.count) wire=\(plaintext.count + 24) duration=\(Date().timeIntervalSince(started), format: .fixed(precision: 4))s")
         }
     }
 
@@ -75,8 +87,12 @@ public final class SecureSession<Outgoing: Encodable & Sendable, Incoming: Decod
         while true {
             do {
                 let frame = try await frames.receiveFrame()
+                let started = Date()
                 let plaintext = try lock.withLock { try channel.open(frame) }
-                let message = try CompanionJSON.decode(Incoming.self, from: plaintext)
+                let message = try CompanionJSON.decode(Incoming.self, from: WirePayload.decode(plaintext))
+                if frame.count > 16 * 1024 {
+                    Self.performance.debug("decoded frame bytes=\(frame.count) duration=\(Date().timeIntervalSince(started), format: .fixed(precision: 4))s")
+                }
                 continuation.yield(message)
             } catch TransportError.closed {
                 close()

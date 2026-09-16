@@ -2,12 +2,22 @@ import Foundation
 import SessionKit
 import TranscriptKit
 import CompanionKit
+import os
 
 /// Reads a session's native transcript for the phone, re-parsing only when the
 /// file changed (docs/companion.md, A8).
 actor CompanionTranscriptReader {
+    private static let performance = Logger(subsystem: "com.niclassslua.flotilla", category: "CompanionPerformance")
     private let registry: TranscriptCodecRegistry
-    private var cache: [UUID: (url: URL, modified: Date, size: Int, transcript: SessionTranscript)] = [:]
+    private struct Cached {
+        var url: URL
+        var modified: Date
+        var size: Int
+        var parsedSize: Int
+        var lineCount: Int
+        var transcript: SessionTranscript
+    }
+    private var cache: [UUID: Cached] = [:]
     private var watchers: [UUID: TranscriptFileWatcher] = [:]
     private let changeStream: AsyncStream<Void>
     private let changeContinuation: AsyncStream<Void>.Continuation
@@ -18,7 +28,7 @@ actor CompanionTranscriptReader {
     init(registry: TranscriptCodecRegistry) {
         self.registry = registry
         var continuation: AsyncStream<Void>.Continuation!
-        self.changeStream = AsyncStream { continuation = $0 }
+        self.changeStream = AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation = $0 }
         self.changeContinuation = continuation
     }
 
@@ -70,6 +80,10 @@ actor CompanionTranscriptReader {
     }
 
     func read(_ session: Session) -> SessionTranscript {
+        let started = Date()
+        defer {
+            Self.performance.debug("transcript read \(Date().timeIntervalSince(started), format: .fixed(precision: 4))s")
+        }
         guard let reader = registry.reader(for: session.agent) else {
             return SessionTranscript(unavailableReason: session.agent == .openCode ? Self.openCodeUnavailable : "No transcript is available for this session.")
         }
@@ -82,12 +96,74 @@ actor CompanionTranscriptReader {
         if let cached = cache[session.id], cached.url == url, cached.modified == modified, cached.size == size {
             return cached.transcript
         }
+        if let lineReader = reader as? any TranscriptLineReading,
+           var cached = cache[session.id], cached.url == url, size > cached.size,
+           let handle = try? FileHandle(forReadingFrom: url) {
+            defer { try? handle.close() }
+            if (try? handle.seek(toOffset: UInt64(cached.parsedSize))) != nil,
+               let bytes = try? handle.readToEnd() {
+                let complete = Self.completeRecords(bytes)
+                if !complete.isEmpty {
+                    let lines = Self.lines(complete)
+                    cached.transcript.events.append(contentsOf: Self.events(in: lines, reader: lineReader, firstLine: cached.lineCount))
+                    cached.transcript.events = Array(cached.transcript.events.suffix(CompanionProtocol.transcriptEventLimit))
+                    cached.lineCount += lines.count
+                    cached.parsedSize += complete.count
+                }
+                cached.size = cached.parsedSize + bytes.count - complete.count
+                cached.modified = modified
+                cache[session.id] = cached
+                return cached.transcript
+            }
+        }
+        if let lineReader = reader as? any TranscriptLineReading,
+           let bytes = try? Data(contentsOf: url) {
+            let complete = Self.completeRecords(bytes)
+            let lines = Self.lines(complete)
+            let transcript = SessionTranscript(events: Self.recentEvents(in: lines, reader: lineReader))
+            cache[session.id] = Cached(url: url, modified: modified, size: bytes.count,
+                                       parsedSize: complete.count, lineCount: lines.count, transcript: transcript)
+            return transcript
+        }
         guard let entries = try? reader.readNative(at: url) else {
             return cache[session.id]?.transcript ?? SessionTranscript()
         }
         let transcript = Self.transcript(from: entries)
-        cache[session.id] = (url, modified, size, transcript)
+        cache[session.id] = Cached(url: url, modified: modified, size: size,
+                                   parsedSize: size, lineCount: 0, transcript: transcript)
         return transcript
+    }
+
+    private static func completeRecords(_ data: Data) -> Data {
+        guard let end = data.lastIndex(of: 0x0A) else { return Data() }
+        return Data(data.prefix(through: end))
+    }
+
+    private static func lines(_ data: Data) -> [Substring] {
+        // Blank records still occupy a line in the native file. Preserve
+        // their position so append-time event IDs match the initial tail.
+        Array(String(decoding: data, as: UTF8.self)
+            .split(separator: "\n", omittingEmptySubsequences: false).dropLast())
+    }
+
+    private static func events(in lines: [Substring], reader: any TranscriptLineReading, firstLine: Int) -> [TranscriptEvent] {
+        lines.enumerated().flatMap { index, line in
+            reader.readRecords([line]).enumerated().compactMap { entryIndex, entry in
+                TranscriptEvent.Content(entry).map {
+                    TranscriptEvent(id: "\(firstLine + index):\(entryIndex)", content: $0)
+                }
+            }
+        }
+    }
+
+    private static func recentEvents(in lines: [Substring], reader: any TranscriptLineReading) -> [TranscriptEvent] {
+        var latest: [TranscriptEvent] = []
+        for index in lines.indices.reversed() {
+            let events = self.events(in: [lines[index]], reader: reader, firstLine: index)
+            latest.insert(contentsOf: events, at: 0)
+            if latest.count >= CompanionProtocol.transcriptEventLimit { break }
+        }
+        return Array(latest.suffix(CompanionProtocol.transcriptEventLimit))
     }
 
     func forget(_ sessionID: UUID) {
@@ -96,9 +172,9 @@ actor CompanionTranscriptReader {
 
     /// Newest events only, with ids from their absolute position so a growing
     /// transcript keeps every earlier event's identity.
-    static func transcript(from entries: [CanonicalEntry], limit: Int = CompanionProtocol.transcriptEventLimit) -> SessionTranscript {
+    static func transcript(from entries: [CanonicalEntry], limit: Int = CompanionProtocol.transcriptEventLimit, offset: Int = 0) -> SessionTranscript {
         let events = entries.enumerated().compactMap { index, entry -> TranscriptEvent? in
-            TranscriptEvent.Content(entry).map { TranscriptEvent(id: String(index), content: $0) }
+            TranscriptEvent.Content(entry).map { TranscriptEvent(id: String(offset + index), content: $0) }
         }
         return SessionTranscript(events: Array(events.suffix(limit)))
     }

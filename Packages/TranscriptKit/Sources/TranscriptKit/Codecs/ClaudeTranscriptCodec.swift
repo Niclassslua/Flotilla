@@ -15,7 +15,7 @@ import SessionKit
 /// interleaves a dozen sidecar record types (`mode`, `cost-state`,
 /// `file-history-snapshot`, …) that have nothing to do with the conversation;
 /// reading filters to `user` and `assistant` and ignores the rest.
-public struct ClaudeTranscriptCodec: TranscriptReading, TranscriptWriting {
+public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
     public let agent: AgentKind = .claudeCode
 
     private let homeDirectory: URL
@@ -100,9 +100,13 @@ public struct ClaudeTranscriptCodec: TranscriptReading, TranscriptWriting {
     }
 
     public func readNative(at url: URL) throws -> [CanonicalEntry] {
+        readRecords(try Self.lines(of: url))
+    }
+
+    public func readRecords(_ lines: [Substring]) -> [CanonicalEntry] {
         var entries: [CanonicalEntry] = []
 
-        for line in try Self.lines(of: url) {
+        for line in lines {
             guard let record = Self.decodeObject(line) else { continue }
 
             // Sidechain records are a subagent's own conversation. Splicing
