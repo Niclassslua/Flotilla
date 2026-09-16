@@ -182,14 +182,18 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                 if name == "SendUserFile",
                    let dict = input as? [String: Any],
                    let files = dict["files"] as? [String] {
-                    for path in files where isImagePath(path) {
-                        let url = path.hasPrefix("file://") ? URL(string: path) : URL(fileURLWithPath: path)
-                        if let url, let downsampled = ImageDownsampler.downsample(at: url) {
-                            entries.append(.image(
-                                mimeType: downsampled.mimeType,
-                                base64: downsampled.base64,
-                                timestamp: timestamp
-                            ))
+                    for path in files {
+                        if isImagePath(path) {
+                            let url = path.hasPrefix("file://") ? URL(string: path) : URL(fileURLWithPath: path)
+                            if let url, let downsampled = ImageDownsampler.downsample(at: url) {
+                                entries.append(.image(
+                                    mimeType: downsampled.mimeType,
+                                    base64: downsampled.base64,
+                                    timestamp: timestamp
+                                ))
+                            }
+                        } else {
+                            entries.append(.systemNote(text: "File attachment: \(path)", timestamp: timestamp))
                         }
                     }
                 }

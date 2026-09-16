@@ -330,6 +330,29 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(tool, "SendUserFile")
     }
 
+    func testSendUserFileIncludesNonImagePathsAlongsideImages() throws {
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let pngPath = home.appendingPathComponent("screenshot.png")
+        let pdfPath = home.appendingPathComponent("report.pdf")
+        let onePixelData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        try onePixelData.write(to: pngPath)
+        try Data("report".utf8).write(to: pdfPath)
+
+        let url = try writeTranscript([
+            """
+            {"type":"assistant","timestamp":"2026-09-08T01:18:36Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_send","name":"SendUserFile","input":{"files":["\(pngPath.path)","\(pdfPath.path)"]}}]}}
+            """
+        ])
+
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 3)
+        guard case .image = entries[1] else { return XCTFail("expected image entry") }
+        guard case let .systemNote(text, _) = entries[2] else {
+            return XCTFail("expected file note, got \(entries[2])")
+        }
+        XCTAssertEqual(text, "File attachment: \(pdfPath.path)")
+    }
+
     func testDirectImageBlockIsDownsampled() throws {
         let onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
         let url = try writeTranscript([

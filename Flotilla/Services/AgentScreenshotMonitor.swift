@@ -31,9 +31,9 @@ final class AgentScreenshotMonitor {
 
     @ObservationIgnored private let reader: CompanionTranscriptReader
     @ObservationIgnored private var session: Session?
-    /// Highest image event index already accounted for per session.
-    @ObservationIgnored private var baselines: [UUID: Int] = [:]
-    @ObservationIgnored private var dismissedIDs: Set<String> = []
+    /// Highest native transcript position already accounted for per session.
+    @ObservationIgnored private var baselines: [UUID: EventPosition] = [:]
+    @ObservationIgnored private var dismissedIDs: [UUID: Set<String>] = [:]
     @ObservationIgnored private var changesTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
@@ -69,7 +69,9 @@ final class AgentScreenshotMonitor {
     }
 
     func dismiss() {
-        dismissedIDs.formUnion(pending.map(\.id))
+        if let session {
+            dismissedIDs[session.id, default: []].formUnion(pending.map(\.id))
+        }
         pending = []
     }
 
@@ -93,12 +95,12 @@ final class AgentScreenshotMonitor {
 
     private func apply(_ events: [TranscriptEvent], for session: Session) {
         guard session.id == self.session?.id else { return }
-        let allFound = Self.agentImages(in: events, after: -1)
+        let allFound = Self.agentImages(in: events)
         let loadedScreenshots = allFound.compactMap { item -> AgentScreenshot? in
             guard let data = Data(base64Encoded: item.base64),
                   let image = NSImage(data: data) else { return nil }
             return AgentScreenshot(
-                id: String(item.index),
+                id: item.id,
                 sessionID: session.id,
                 agent: session.agent,
                 image: image,
@@ -109,12 +111,15 @@ final class AgentScreenshotMonitor {
         self.screenshots = loadedScreenshots
 
         let previousBaseline = baselines[session.id]
-        let currentMax = allFound.last?.index ?? -1
-        baselines[session.id] = max(previousBaseline ?? -1, currentMax)
+        if let currentMax = allFound.last?.position {
+            baselines[session.id] = max(previousBaseline ?? currentMax, currentMax)
+        }
 
         if let previousBaseline {
+            let positions = Dictionary(uniqueKeysWithValues: allFound.map { ($0.id, $0.position) })
             let newScreenshots = loadedScreenshots.filter {
-                (Int($0.id) ?? -1) > previousBaseline && !dismissedIDs.contains($0.id)
+                (positions[$0.id].map { $0 > previousBaseline } ?? false)
+                    && !(dismissedIDs[session.id]?.contains($0.id) ?? false)
             }
             for item in newScreenshots where !pending.contains(where: { $0.id == item.id }) {
                 pending.append(item)
@@ -123,31 +128,49 @@ final class AgentScreenshotMonitor {
             // First time loading this session: surface screenshots taken within the last 10 minutes
             // that the user has not dismissed.
             let recent = loadedScreenshots.filter {
-                abs($0.timestamp.timeIntervalSinceNow) < 600 && !dismissedIDs.contains($0.id)
+                abs($0.timestamp.timeIntervalSinceNow) < 600
+                    && !(dismissedIDs[session.id]?.contains($0.id) ?? false)
             }
             self.pending = recent
         }
     }
 
+    struct EventPosition: Comparable {
+        let line: Int
+        let entry: Int
+
+        static func < (lhs: Self, rhs: Self) -> Bool {
+            (lhs.line, lhs.entry) < (rhs.line, rhs.entry)
+        }
+    }
+
     struct ImageEvent: Equatable {
-        let index: Int
+        let id: String
+        let position: EventPosition
         let base64: String
         let timestamp: Date
     }
 
-    /// Image events past `baseline` that the agent sent. An image whose record
-    /// also holds a user message is one the human pasted: every block of a
-    /// record shares its timestamp, so the two are matched on it.
-    nonisolated static func agentImages(in events: [TranscriptEvent], after baseline: Int) -> [ImageEvent] {
+    /// Event positions come from the native transcript line and entry numbers,
+    /// which remain stable when the companion reader trims its 400-event window.
+    nonisolated static func agentImages(in events: [TranscriptEvent], after baseline: EventPosition? = nil) -> [ImageEvent] {
+        let userRecordIDs = Set(events.compactMap { event -> Substring? in
+            guard case .userMessage = event.content, event.id.contains(":") else { return nil }
+            return event.id.split(separator: ":", maxSplits: 1).first
+        })
         let userTimestamps = Set(events.compactMap { event -> Date? in
-            if case .userMessage(_, let timestamp) = event.content { return timestamp }
+            if case .userMessage(_, let timestamp) = event.content, !event.id.contains(":") { return timestamp }
             return nil
         })
-        return events.compactMap { event in
+        return events.enumerated().compactMap { offset, event in
             guard case .image(_, let base64, let timestamp) = event.content,
-                  let index = Int(event.id), index > baseline,
+                  !userRecordIDs.contains(event.id.split(separator: ":", maxSplits: 1)[0]),
                   !userTimestamps.contains(timestamp) else { return nil }
-            return ImageEvent(index: index, base64: base64, timestamp: timestamp)
+            let parts = event.id.split(separator: ":", maxSplits: 1)
+            let position = EventPosition(line: Int(parts[0]) ?? offset,
+                                         entry: parts.count > 1 ? (Int(parts[1]) ?? 0) : 0)
+            guard baseline.map({ position > $0 }) ?? true else { return nil }
+            return ImageEvent(id: event.id, position: position, base64: base64, timestamp: timestamp)
         }
     }
 }
