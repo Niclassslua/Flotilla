@@ -384,6 +384,23 @@ final class TranscriptSearchTests: XCTestCase {
     }
 }
 
+final class FileSearchTests: XCTestCase {
+    func testFindsMatchingLinesCaseInsensitively() {
+        let lines = ["import Foundation", "struct Foo {}", "// TODO: fix Foo"]
+        let matches = FileSearch.matches(in: lines, query: "foo")
+        XCTAssertEqual(matches.map(\.lineIndex), [1, 2])
+    }
+
+    func testEmptyQueryHasNoMatches() {
+        XCTAssertEqual(FileSearch.matches(in: ["a", "b"], query: "").count, 0)
+        XCTAssertEqual(FileSearch.matches(in: ["a", "b"], query: "   ").count, 0)
+    }
+
+    func testNoMatchesWhenQueryAbsent() {
+        XCTAssertEqual(FileSearch.matches(in: ["one", "two"], query: "three").count, 0)
+    }
+}
+
 final class CurrentTurnSummaryFormattingTests: XCTestCase {
     func testNoDetailWhenNothingIsActiveOrChanged() {
         XCTAssertNil(CurrentTurnSummaryFormatting.detail(inFlight: nil, diffStat: nil))

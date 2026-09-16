@@ -364,33 +364,60 @@ struct FileViewer: View {
     let sessionID: CompanionSession.ID
     let path: String
     @Environment(CompanionStore.self) private var store
+    @State private var wrapLines = false
+    @State private var isSearching = false
+    @State private var searchQuery = ""
+    @State private var currentMatchIndex = 0
 
     var body: some View {
         RemoteContent(value: store.fileContents(at: path, in: sessionID), retry: load) { contents in
             if let contents {
-                ScrollView([.vertical, .horizontal]) {
-                    let lines = contents.components(separatedBy: "\n")
-                    HStack(alignment: .top, spacing: 10) {
-                        VStack(alignment: .trailing, spacing: 0) {
-                            ForEach(lines.indices, id: \.self) { index in
-                                Text("\(index + 1)")
+                let lines = contents.components(separatedBy: "\n")
+                let matches = isSearching ? FileSearch.matches(in: lines, query: searchQuery) : []
+
+                ScrollViewReader { proxy in
+                    ScrollView(wrapLines ? [.vertical] : [.vertical, .horizontal]) {
+                        HStack(alignment: .top, spacing: 10) {
+                            VStack(alignment: .trailing, spacing: 0) {
+                                ForEach(lines.indices, id: \.self) { index in
+                                    Text("\(index + 1)")
+                                }
                             }
-                        }
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                        .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(lines.indices, id: \.self) { index in
-                                Text(lines[index].isEmpty ? " " : lines[index])
-                                    .fixedSize()
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                            .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(lines.indices, id: \.self) { index in
+                                    Text(lines[index].isEmpty ? " " : lines[index])
+                                        .fixedSize(horizontal: !wrapLines, vertical: false)
+                                        .id(index)
+                                }
                             }
+                            .frame(maxWidth: wrapLines ? .infinity : nil, alignment: .leading)
+                            .foregroundStyle(FlotillaColors.textPrimary)
+                            .textSelection(.enabled)
                         }
-                        .foregroundStyle(FlotillaColors.textPrimary)
-                        .textSelection(.enabled)
+                        .font(.caption.monospaced())
+                        .padding(16)
                     }
-                    .font(.caption.monospaced())
-                    .padding(16)
+                    .scrollIndicators(.visible)
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        if isSearching {
+                            TranscriptSearchBar(
+                                query: $searchQuery,
+                                matchCount: matches.count,
+                                currentIndex: currentMatchIndex,
+                                onNext: { advance(1, in: matches, proxy: proxy) },
+                                onPrevious: { advance(-1, in: matches, proxy: proxy) },
+                                onClose: { closeSearch() }
+                            )
+                            .background(FlotillaColors.canvas)
+                        }
+                    }
+                    .onChange(of: searchQuery) { _, _ in
+                        currentMatchIndex = 0
+                        if let first = matches.first { jumpToMatch(first, proxy: proxy) }
+                    }
                 }
-                .scrollIndicators(.visible)
             } else {
                 ContentUnavailableView("File Unavailable", systemImage: "doc.questionmark", description: Text("\(path)\n\nThe file is outside the session's folder, too large, or not text."))
             }
@@ -398,7 +425,46 @@ struct FileViewer: View {
         .background(FlotillaColors.canvas)
         .navigationTitle((path as NSString).lastPathComponent)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Search File", systemImage: "magnifyingglass") {
+                    if isSearching { closeSearch() } else { isSearching = true }
+                }
+                .accessibilityIdentifier("FileViewer.SearchToggle")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu("File Actions", systemImage: "ellipsis") {
+                    Button(
+                        wrapLines ? "Scroll Horizontally" : "Wrap Lines",
+                        systemImage: wrapLines ? "arrow.left.and.right" : "arrow.turn.down.right"
+                    ) {
+                        wrapLines.toggle()
+                    }
+                    .accessibilityIdentifier("FileViewer.WrapToggle")
+                    Button("Copy Path", systemImage: "doc.on.doc") {
+                        UIPasteboard.general.string = path
+                    }
+                    .accessibilityIdentifier("FileViewer.CopyPath")
+                }
+            }
+        }
         .task { await load() }
+    }
+
+    private func advance(_ delta: Int, in matches: [FileSearchMatch], proxy: ScrollViewProxy) {
+        guard !matches.isEmpty else { return }
+        currentMatchIndex = (currentMatchIndex + delta + matches.count) % matches.count
+        jumpToMatch(matches[currentMatchIndex], proxy: proxy)
+    }
+
+    private func jumpToMatch(_ match: FileSearchMatch, proxy: ScrollViewProxy) {
+        withAnimation(.snappy) { proxy.scrollTo(match.lineIndex, anchor: .center) }
+    }
+
+    private func closeSearch() {
+        isSearching = false
+        searchQuery = ""
+        currentMatchIndex = 0
     }
 
     private func load() async {
