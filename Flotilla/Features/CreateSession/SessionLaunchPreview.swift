@@ -2,6 +2,7 @@ import Foundation
 import SessionKit
 import GitKit
 import AgentKit
+import SettingsKit
 
 /// What a launch is actually going to do, resolved before the user commits.
 ///
@@ -11,10 +12,11 @@ import AgentKit
 /// `BranchNaming` and `WorktreePlanner` the real creation path uses, so the
 /// preview cannot drift from the behaviour.
 struct SessionLaunchPreview: Equatable {
-    /// The title the session will get — also the string the branch slug comes from.
+    /// The prompt-derived fallback title. AI naming resolves at launch.
     let title: String
     /// `nil` for general sessions and main-checkout runs.
     let branchSlug: String?
+    let namingPending: Bool
     let workingDirectory: URL
     /// Rendered argv, e.g. `claude --model opus --effort high`.
     let command: String
@@ -32,13 +34,12 @@ struct SessionLaunchPreview: Equatable {
         )
     }
 
-    /// `BranchNaming.generate` appends a fresh random 8-hex suffix on every
-    /// call, so the exact branch cannot be known before `createSession` runs.
-    /// Showing a concrete suffix here would be a lie the user could check and
-    /// find wrong — so the stable slug is shown with the suffix as a visible
-    /// placeholder.
+    /// AI naming is not known until launch. For prompt-derived branches,
+    /// `BranchNaming.generate` appends a fresh random 8-hex suffix, so the
+    /// preview shows only the stable slug and a visible suffix placeholder.
     var displayBranch: String? {
-        branchSlug.map { "\($0)-••••••••" }
+        if namingPending { return "Name chosen on launch" }
+        return branchSlug.map { "\($0)-••••••••" }
     }
 
     static func resolve(
@@ -48,6 +49,7 @@ struct SessionLaunchPreview: Equatable {
         model: String?,
         effort: AgentEffort?,
         createWorktree: Bool,
+        worktreeNamingSource: WorktreeNamingSource = .promptDerived,
         worktreeBaseDirectory: URL,
         generalSessionDirectory: URL
     ) -> SessionLaunchPreview {
@@ -56,6 +58,7 @@ struct SessionLaunchPreview: Equatable {
         var branchSlug: String?
         var workingDirectory = generalSessionDirectory
         var warning: String?
+        let namingPending = createWorktree && worktreeNamingSource == .appleIntelligence
 
         if let folder = projectChoice.folder {
             // The same planner the creation path uses. Its branch argument is
@@ -72,7 +75,9 @@ struct SessionLaunchPreview: Equatable {
                 workingDirectory = path
                 warning = "The agent edits this checkout directly — concurrent sessions can conflict."
             case .createWorktree(_, let branch, let destination):
-                workingDirectory = destination
+                workingDirectory = namingPending
+                    ? worktreeBaseDirectory.appendingPathComponent("flotilla/…", isDirectory: true)
+                    : destination
                 branchSlug = Self.stripSuffix(from: branch)
             }
         }
@@ -80,6 +85,7 @@ struct SessionLaunchPreview: Equatable {
         return SessionLaunchPreview(
             title: title,
             branchSlug: branchSlug,
+            namingPending: namingPending,
             workingDirectory: workingDirectory,
             command: renderCommand(agent: agent, model: model, effort: effort),
             sharedCheckoutWarning: warning

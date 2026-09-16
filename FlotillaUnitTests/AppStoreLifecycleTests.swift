@@ -27,11 +27,14 @@ final class AppStoreLifecycleTests: XCTestCase {
     func testGeneralSessionStartsBeforeItIsPersistedAndSelected() async throws {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()
+        var settings = AppSettings()
+        settings.sessionDefaults.titleNamingSource = .agentManaged
         let store = AppStore(
             repository: repository,
             gitService: MockGitService(),
             processManager: manager(factory: factory),
-            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            settingsProvider: { settings }
         )
 
         await store.createSession(
@@ -51,8 +54,7 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertNil(store.sessions.first?.status)
         let createdSession = try XCTUnwrap(store.sessions.first)
         let startedArguments = try XCTUnwrap(factory.processes.first?.startedArguments)
-        // `agentManagedTitleEnabled` defaults to true, so the setup-step
-        // title instructions apply here too, Claude Code's own native title
+        // Agent-managed title instructions apply here too, Claude Code's own native title
         // generation notwithstanding (see AppStore.createSession). The launch
         // also carries a trailing `--settings <json>` pair (see
         // HookConfigurationWriter.launchArguments) so this session's own

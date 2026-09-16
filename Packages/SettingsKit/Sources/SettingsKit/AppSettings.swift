@@ -129,9 +129,11 @@ public enum OpenCodeSubscription: String, Codable, CaseIterable, Sendable, Ident
         case .go: "opencode-go"
         }
     }
+
 }
 
 public enum WorktreeNamingSource: String, Codable, CaseIterable, Sendable, Identifiable {
+    case appleIntelligence
     case promptDerived
     case agentManaged
 
@@ -139,6 +141,23 @@ public enum WorktreeNamingSource: String, Codable, CaseIterable, Sendable, Ident
 
     public var displayName: String {
         switch self {
+        case .appleIntelligence: "Apple Intelligence"
+        case .promptDerived: "Derived from prompt"
+        case .agentManaged: "Chosen by the agent"
+        }
+    }
+}
+
+public enum SessionTitleNamingSource: String, Codable, CaseIterable, Sendable, Identifiable {
+    case appleIntelligence
+    case promptDerived
+    case agentManaged
+
+    public var id: Self { self }
+
+    public var displayName: String {
+        switch self {
+        case .appleIntelligence: "Apple Intelligence"
         case .promptDerived: "Derived from prompt"
         case .agentManaged: "Chosen by the agent"
         }
@@ -169,17 +188,24 @@ public enum CommitAttributionMode: String, Codable, CaseIterable, Sendable, Iden
 public struct SessionDefaults: Codable, Equatable, Sendable {
     public var createWorktreeByDefault: Bool
     public var defaultAgentRawValue: String = "claudeCode"
-    public var agentManagedTitleEnabled: Bool
+    public var titleNamingSource: SessionTitleNamingSource
 
-    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: String = "claudeCode", agentManagedTitleEnabled: Bool = true) {
+    /// Compatibility for callers that still set the former two-state preference.
+    public var agentManagedTitleEnabled: Bool {
+        get { titleNamingSource == .agentManaged }
+        set { titleNamingSource = newValue ? .agentManaged : .promptDerived }
+    }
+
+    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: String = "claudeCode", titleNamingSource: SessionTitleNamingSource = .appleIntelligence) {
         self.createWorktreeByDefault = createWorktreeByDefault
         self.defaultAgentRawValue = defaultAgentRawValue
-        self.agentManagedTitleEnabled = agentManagedTitleEnabled
+        self.titleNamingSource = titleNamingSource
     }
 
     private enum CodingKeys: String, CodingKey {
         case createWorktreeByDefault
         case defaultAgentRawValue
+        case titleNamingSource
         case agentManagedTitleEnabled
     }
 
@@ -191,7 +217,13 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         createWorktreeByDefault = try container.decodeIfPresent(Bool.self, forKey: .createWorktreeByDefault) ?? true
-        agentManagedTitleEnabled = try container.decodeIfPresent(Bool.self, forKey: .agentManagedTitleEnabled) ?? true
+        if let source = try container.decodeIfPresent(SessionTitleNamingSource.self, forKey: .titleNamingSource) {
+            titleNamingSource = source
+        } else {
+            // Preserve existing users' choice; only fresh settings default to AI.
+            let legacy = try container.decodeIfPresent(Bool.self, forKey: .agentManagedTitleEnabled) ?? true
+            titleNamingSource = legacy ? .agentManaged : .promptDerived
+        }
         if let stringValue = try? container.decode(String.self, forKey: .defaultAgentRawValue) {
             defaultAgentRawValue = stringValue
         } else if let intValue = try? container.decode(Int.self, forKey: .defaultAgentRawValue) {
@@ -204,6 +236,13 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
         } else {
             defaultAgentRawValue = "claudeCode"
         }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(createWorktreeByDefault, forKey: .createWorktreeByDefault)
+        try container.encode(defaultAgentRawValue, forKey: .defaultAgentRawValue)
+        try container.encode(titleNamingSource, forKey: .titleNamingSource)
     }
 }
 
@@ -356,7 +395,7 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         highlightUnseenCommits: Bool = true,
         defaultCommitAttribution: CommitAttributionMode = .local,
         projectCommitAttribution: [String: CommitAttributionMode] = [:],
-        worktreeNamingSource: WorktreeNamingSource = .promptDerived
+        worktreeNamingSource: WorktreeNamingSource = .appleIntelligence
     ) {
         self.deleteBranchWithWorktree = deleteBranchWithWorktree
         self.fetchBeforeCreatingWorktree = fetchBeforeCreatingWorktree

@@ -338,9 +338,12 @@ private struct SessionSettingsPane: View {
 
                 Toggle("Create a worktree for project sessions", isOn: $viewModel.settings.sessionDefaults.createWorktreeByDefault)
                     .toggleStyle(.switch)
-                Toggle("Let the agent choose a session title", isOn: $viewModel.settings.sessionDefaults.agentManagedTitleEnabled)
-                    .toggleStyle(.switch)
-                    .accessibilityIdentifier("Settings.AgentManagedTitle")
+                Picker("Session title", selection: $viewModel.settings.sessionDefaults.titleNamingSource) {
+                    ForEach(SessionTitleNamingSource.allCases) { source in
+                        Text(source.displayName).tag(source)
+                    }
+                }
+                .accessibilityIdentifier("Settings.SessionTitleNamingSource")
             } header: {
                 SettingsSectionHeader("Defaults", systemImage: "slider.horizontal.3")
             } footer: {
@@ -348,7 +351,7 @@ private struct SessionSettingsPane: View {
                     Text("New sessions open with this agent preselected.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("When enabled, Codex CLI and OpenCode are asked to propose a short title after reading your prompt. Claude Code and Antigravity are unaffected — they already generate titles natively.")
+                    Text("Apple Intelligence names the session before launch on supported Macs, falling back to your prompt when unavailable. The agent's larger model and full task context usually produce a more accurate name, but that name arrives later. Claude Code and Antigravity also provide native titles.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -437,7 +440,7 @@ private struct GitSettingsPane: View {
                     }
                 }
                 .accessibilityIdentifier("Settings.WorktreeNamingSource")
-                Text("Flotilla normally derives the branch name from your prompt. When set to \"Chosen by the agent\", the agent is asked to pick a name and create the worktree itself. Falls back to prompt-derived naming if the agent doesn't respond in time.")
+                Text("Apple Intelligence names the branch and worktree before launch on supported Macs; if unavailable, Flotilla derives the name from your prompt. The agent can choose a more accurate name using its larger model and full task context, but creates the worktree later. If it doesn't respond in time, Flotilla falls back to prompt-derived naming.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

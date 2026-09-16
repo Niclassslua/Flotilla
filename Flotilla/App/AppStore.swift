@@ -51,8 +51,10 @@ final class AppStore {
     /// agent-managed session titles). Same closure-not-frozen-value rationale
     /// as `worktreeBaseDirectoryProvider`.
     private let settingsProvider: () -> AppSettings
+    private let nameGenerator: (any SessionNameGenerating)?
     private let supportDirectory: URL
     private let worktreePlanner = WorktreePlanner()
+    var worktreeNamingSource: WorktreeNamingSource { settingsProvider().git.worktreeNamingSource }
     private let statusMachine = SessionStatusMachine()
     private let scrollbackStore = SessionScrollbackStore()
     private let metadataMonitor: SessionMetadataMonitor
@@ -72,6 +74,7 @@ final class AppStore {
         processManager: SessionProcessManager,
         worktreeBaseDirectoryProvider: @escaping () -> URL,
         settingsProvider: @escaping () -> AppSettings = { AppSettings() },
+        nameGenerator: (any SessionNameGenerating)? = nil,
         metadataMonitor: SessionMetadataMonitor = SessionMetadataMonitor(),
         handoffService: HandoffService? = nil,
         supportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory()
@@ -86,6 +89,7 @@ final class AppStore {
         self.processManager = processManager
         self.worktreeBaseDirectoryProvider = worktreeBaseDirectoryProvider
         self.settingsProvider = settingsProvider
+        self.nameGenerator = nameGenerator
         self.supportDirectory = supportDirectory
         let commitAttribution = CommitAttributionService(
             repository: repository,
@@ -550,11 +554,10 @@ final class AppStore {
                 try? repository.save(mergingLiveScrollback(sessions[index]))
             }
 
-            // When our own setup-step title is in play, it's authoritative —
-            // don't let the agent's native title (discovered on its own,
-            // later, separate schedule) clobber it and reintroduce the
-            // title/worktree mismatch this setting exists to prevent.
-            guard !settingsProvider().sessionDefaults.agentManagedTitleEnabled else { return }
+            // Apple Intelligence and our agent setup-step titles are authoritative.
+            // A native title discovered later must not clobber them and create
+            // a title/worktree mismatch.
+            guard settingsProvider().sessionDefaults.titleNamingSource == .promptDerived else { return }
 
             let discoveredTitle = discovered.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !discoveredTitle.isEmpty else { return }
@@ -1173,18 +1176,26 @@ final class AppStore {
         let settings = settingsProvider()
         let agentDescriptor = AgentCatalog.descriptor(for: agent)
 
+        let usesAppleTitle = settings.sessionDefaults.titleNamingSource == .appleIntelligence
+        let usesAppleBranch = settings.git.worktreeNamingSource == .appleIntelligence
+            && checkoutMode == .newWorktree && projectFolder != nil
+        let suggestedName: String?
+        if (usesAppleTitle || usesAppleBranch), let nameGenerator {
+            suggestedName = await nameGenerator.name(for: goal)
+        } else {
+            suggestedName = nil
+        }
+        let resolvedTitle = usesAppleTitle ? (suggestedName ?? title) : title
+        let branchTitle = usesAppleBranch ? (suggestedName ?? title) : title
+
         // Determine whether agent-managed features should activate.
-        // Title generation applies uniformly regardless of whether the agent
-        // has its own native title feature (Claude Code, Antigravity): our
-        // setup-step title and its native one are picked at different points
-        // in the run and can diverge, so only one is ever allowed to win —
-        // whichever the `agentManagedTitleEnabled` setting selects. See
-        // `syncAgentSessionMetadata`, which defers to this same setting
-        // before letting a native title overwrite ours.
+        // The naming sources apply uniformly regardless of whether the agent
+        // has its own native title feature. Only prompt-derived titles may be
+        // replaced by native discovery; see `syncAgentSessionMetadata`.
         let wantsAgentWorktree = checkoutMode == .newWorktree
             && projectFolder != nil
             && settings.git.worktreeNamingSource == .agentManaged
-        let wantsAgentTitle = settings.sessionDefaults.agentManagedTitleEnabled
+        let wantsAgentTitle = settings.sessionDefaults.titleNamingSource == .agentManaged
 
         do {
             var projectID: UUID?
@@ -1209,7 +1220,7 @@ final class AppStore {
                         useNewWorktree: checkoutMode == .newWorktree,
                         projectRoot: projectFolder,
                         worktreeBaseDirectory: worktreeBaseDirectoryProvider(),
-                        branchName: BranchNaming.generate(from: title)
+                        branchName: BranchNaming.generate(from: branchTitle)
                     )
                     switch decision {
                     case .useExistingCheckout(let path):
@@ -1259,7 +1270,7 @@ final class AppStore {
 
             var session = Session(
                 id: sessionID,
-                title: title,
+                title: resolvedTitle,
                 goal: goal,
                 agent: agent,
                 model: model,

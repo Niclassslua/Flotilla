@@ -89,7 +89,8 @@ struct FlotillaApp: App {
                 let configuredPath = settingsViewModel.settings.worktreeBaseDirectory
                 return configuredPath.isEmpty ? environment.worktreeBaseDirectory : URL(fileURLWithPath: configuredPath)
             },
-            settingsProvider: { settingsViewModel.settings }
+            settingsProvider: { settingsViewModel.settings },
+            nameGenerator: environment.isUITesting ? nil : AppleIntelligenceSessionNameGenerator()
         )
         appStore.lastOperationError = environment.startupWarning
         settingsViewModel.deleteLocalAttributionRecords = { [appStore] in

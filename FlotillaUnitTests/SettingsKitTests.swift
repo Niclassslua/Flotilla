@@ -158,6 +158,17 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.git.deleteBranchWithWorktree, false)
     }
 
+    func testNewSettingsDefaultToAppleIntelligenceWithoutChangingSavedNamingChoices() throws {
+        let fresh = AppSettings()
+        XCTAssertEqual(fresh.sessionDefaults.titleNamingSource, .appleIntelligence)
+        XCTAssertEqual(fresh.git.worktreeNamingSource, .appleIntelligence)
+
+        let saved = Data(#"{"sessionDefaults":{"agentManagedTitleEnabled":false},"git":{"worktreeNamingSource":"agentManaged"}}"#.utf8)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: saved)
+        XCTAssertEqual(decoded.sessionDefaults.titleNamingSource, .promptDerived)
+        XCTAssertEqual(decoded.git.worktreeNamingSource, .agentManaged)
+    }
+
     func testNotificationDeliveryDefaultsAndDisplayName() {
         let prefs = NotificationPreferences()
         XCTAssertEqual(prefs.delivery, .always)

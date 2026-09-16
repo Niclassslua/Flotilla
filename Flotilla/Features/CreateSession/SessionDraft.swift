@@ -89,6 +89,7 @@ final class SessionDraft {
             model: trimmedModel,
             effort: agent.supportsEffortSelection ? effort : nil,
             createWorktree: createWorktree && supportsWorktree,
+            worktreeNamingSource: store.worktreeNamingSource,
             worktreeBaseDirectory: store.worktreeBaseDirectory,
             generalSessionDirectory: store.generalSessionDirectory
         )

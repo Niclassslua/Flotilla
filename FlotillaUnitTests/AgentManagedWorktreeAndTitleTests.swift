@@ -10,6 +10,68 @@ import HooksKit
 
 @MainActor
 final class AgentManagedWorktreeAndTitleTests: XCTestCase {
+    private struct StubNameGenerator: SessionNameGenerating {
+        let result: String?
+        func name(for goal: String) async -> String? { result }
+    }
+
+    func testAppleIntelligenceNameIsAppliedBeforeWorktreeCreation() async throws {
+        let repository = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let settings = AppSettings()
+        let gitService = MockGitService()
+        let store = AppStore(
+            repository: repository,
+            gitService: gitService,
+            processManager: manager(factory: factory, settings: settings),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            settingsProvider: { settings },
+            nameGenerator: StubNameGenerator(result: "Session naming pipeline")
+        )
+
+        let createdID = await store.createSession(
+            title: "First line of a much longer request",
+            goal: "Improve naming from the full request",
+            agent: .codexCLI,
+            projectFolder: URL(fileURLWithPath: "/tmp/name-project"),
+            checkoutMode: .newWorktree
+        )
+        let id = try XCTUnwrap(createdID)
+        let session = try XCTUnwrap(store.sessions.first { $0.id == id })
+        let branch = try XCTUnwrap(session.worktree?.branchName)
+        XCTAssertEqual(session.title, "Session naming pipeline")
+        XCTAssertTrue(branch.hasPrefix("flotilla/session-naming-pipeline-"))
+        XCTAssertEqual(gitService.createWorktreeCalls.first?.branch, branch)
+        XCTAssertEqual(try repository.loadAll().sessions.first { $0.id == id }?.title, "Session naming pipeline")
+    }
+
+    func testUnavailableAppleIntelligenceFallsBackToPromptForTitleAndWorktree() async throws {
+        let repository = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let settings = AppSettings()
+        let gitService = MockGitService()
+        let store = AppStore(
+            repository: repository,
+            gitService: gitService,
+            processManager: manager(factory: factory, settings: settings),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            settingsProvider: { settings },
+            nameGenerator: StubNameGenerator(result: nil)
+        )
+
+        let createdID = await store.createSession(
+            title: "Prompt title",
+            goal: "A specific long request",
+            agent: .codexCLI,
+            projectFolder: URL(fileURLWithPath: "/tmp/name-project"),
+            checkoutMode: .newWorktree
+        )
+        let id = try XCTUnwrap(createdID)
+        let session = try XCTUnwrap(store.sessions.first { $0.id == id })
+        XCTAssertEqual(session.title, "Prompt title")
+        XCTAssertTrue(try XCTUnwrap(session.worktree?.branchName).hasPrefix("flotilla/prompt-title-"))
+    }
+
     private func manager(
         factory: RecordingProcessFactory,
         settings: AppSettings = AppSettings()
@@ -56,6 +118,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         let factory = RecordingProcessFactory()
         var settings = AppSettings()
         settings.git.worktreeNamingSource = .agentManaged
+        settings.sessionDefaults.titleNamingSource = .agentManaged
         let gitService = MockGitService()
 
         let store = AppStore(
@@ -134,6 +197,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         let factory = RecordingProcessFactory()
         var settings = AppSettings()
         settings.git.worktreeNamingSource = .agentManaged
+        settings.sessionDefaults.titleNamingSource = .agentManaged
         let gitService = MockGitService()
 
         let store = AppStore(
