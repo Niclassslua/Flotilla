@@ -51,8 +51,8 @@ final class AgentBrandTests: XCTestCase {
         let frameworks: [SkillFramework] = [.claude, .agents, .codex, .cursor, .gemini, .custom]
         for (offset, lhs) in frameworks.enumerated() {
             for rhs in frameworks.dropFirst(offset + 1) {
-                let a = resolveRGB(AgentBrand.accentColor(for: lhs))
-                let b = resolveRGB(AgentBrand.accentColor(for: rhs))
+                let a = resolveRGB(SkillFrameworkBrand.accentColor(for: lhs))
+                let b = resolveRGB(SkillFrameworkBrand.accentColor(for: rhs))
                 let distance = abs(a.r - b.r) + abs(a.g - b.g) + abs(a.b - b.b)
                 XCTAssertGreaterThan(
                     distance, 0.15,

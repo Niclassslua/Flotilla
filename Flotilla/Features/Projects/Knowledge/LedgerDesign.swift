@@ -152,7 +152,7 @@ private struct LedgerRow: View {
 
     private var tint: Color {
         if let framework = item.framework {
-            return AgentBrand.accentColor(for: framework)
+            return SkillFrameworkBrand.accentColor(for: framework)
         }
         return FlotillaColors.accent
     }

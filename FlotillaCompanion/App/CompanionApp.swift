@@ -44,6 +44,7 @@ enum CompanionEnvironment {
         if arguments.contains("-openFirstMac"), let first = store.macs.first {
             store.path = [.fleet(first.id)]
         }
+        ProtoFlags.enabled = Set(values(after: "-proto", in: arguments))
         #endif
         return store
     }
@@ -51,6 +52,33 @@ enum CompanionEnvironment {
     private static func value(after flag: String, in arguments: [String]) -> String? {
         guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else { return nil }
         return arguments[index + 1]
+    }
+
+    /// Every value following an occurrence of `flag`, for flags repeated to
+    /// enable several at once (`-proto a -proto b`).
+    private static func values(after flag: String, in arguments: [String]) -> [String] {
+        arguments.indices.compactMap { index in
+            guard arguments[index] == flag, arguments.indices.contains(index + 1) else { return nil }
+            return arguments[index + 1]
+        }
+    }
+}
+
+/// UI prototypes gated behind `-proto <name>` (repeatable), so screenshot
+/// comparisons don't touch shipped UI. Debug-only scaffolding for the design
+/// review pass — never read outside `#if DEBUG` call sites.
+///
+/// See `docs/companion.md` for the list of names in flight.
+@MainActor
+enum ProtoFlags {
+    static var enabled: Set<String> = []
+
+    static func isOn(_ name: String) -> Bool {
+        #if DEBUG
+        enabled.contains(name)
+        #else
+        false
+        #endif
     }
 }
 

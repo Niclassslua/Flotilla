@@ -17,7 +17,7 @@ struct KnowledgeIconTile: View {
 
     private var tint: Color {
         if let framework = item.framework {
-            return AgentBrand.accentColor(for: framework)
+            return SkillFrameworkBrand.accentColor(for: framework)
         }
         return FlotillaColors.accent
     }
@@ -38,7 +38,7 @@ struct KnowledgeIconTile: View {
 
     private var fill: Color {
         if let framework = item.framework {
-            return AgentBrand.iconBackgroundColor(for: framework, isHovered: isHighlighted)
+            return SkillFrameworkBrand.iconBackgroundColor(for: framework, isHovered: isHighlighted)
         }
         return FlotillaColors.accent.opacity(isHighlighted ? 0.18 : 0.10)
     }
@@ -96,10 +96,10 @@ struct KnowledgeFrameworkChip: View {
         if let name = item.frameworkName, let framework = item.framework {
             Text(name)
                 .font(FlotillaTypography.caption2.weight(.semibold))
-                .foregroundStyle(AgentBrand.accentColor(for: framework))
+                .foregroundStyle(SkillFrameworkBrand.accentColor(for: framework))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(AgentBrand.accentColor(for: framework).opacity(0.12), in: Capsule())
+                .background(SkillFrameworkBrand.accentColor(for: framework).opacity(0.12), in: Capsule())
         }
     }
 }
