@@ -50,13 +50,23 @@ struct SessionDetailView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ComposerSlot(
-                session: session,
-                transcript: transcript,
-                pending: store.pendingInteractions(for: sessionID),
-                isActionable: isActionable,
-                maxCardHeight: containerHeight * 0.55
-            )
+            VStack(spacing: 0) {
+                if session.status == .working || transcript.isStopping {
+                    WorkingIndicator(
+                        inFlight: TranscriptLayout.inFlightCall(in: transcript.events),
+                        retryAttempt: transcript.retryAttempt,
+                        isStopping: transcript.isStopping
+                    )
+                }
+
+                ComposerSlot(
+                    session: session,
+                    transcript: transcript,
+                    pending: store.pendingInteractions(for: sessionID),
+                    isActionable: isActionable,
+                    maxCardHeight: containerHeight * 0.55
+                )
+            }
         }
         .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -149,13 +159,6 @@ struct SessionDetailView: View {
             }
             ForEach(transcript.queuedPrompts) { prompt in
                 UserMessageRow(text: prompt.text, isQueued: true)
-            }
-            if isWorking || transcript.isStopping {
-                WorkingIndicator(
-                    inFlight: TranscriptLayout.inFlightCall(in: transcript.events),
-                    retryAttempt: transcript.retryAttempt,
-                    isStopping: transcript.isStopping
-                )
             }
         }
         .animation(.snappy, value: transcript.events.count)

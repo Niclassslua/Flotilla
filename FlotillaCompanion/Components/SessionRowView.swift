@@ -79,11 +79,6 @@ struct StatusDot: View {
         Circle()
             .fill(StatusPresentation.color(for: status))
             .frame(width: size, height: size)
-            .phaseAnimator(status == .working ? [1.0, 0.35] : [1.0]) { dot, opacity in
-                dot.opacity(opacity)
-            } animation: { _ in
-                .easeInOut(duration: 0.9)
-            }
             .accessibilityHidden(true)
     }
 }
