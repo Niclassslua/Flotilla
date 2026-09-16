@@ -125,22 +125,22 @@ enum WorkspaceFileDiscovery {
             guard values.isRegularFile == true else { continue }
 
             let filename = url.lastPathComponent
-            let ext = url.pathExtension.lowercased()
             let canonicalURL = url.resolvingSymlinksInPath().standardizedFileURL
             let rootPrefix = canonicalRoot.path.hasSuffix("/") ? canonicalRoot.path : canonicalRoot.path + "/"
             guard canonicalURL.path.hasPrefix(rootPrefix) else { continue }
             let relative = String(canonicalURL.path.dropFirst(rootPrefix.count))
+            // Filename must match a known instruction file (e.g. CLAUDE.md,
+            // AGENTS.md) — being inside an AI-config directory is not
+            // sufficient on its own, or any markdown file dropped in
+            // .claude/ would be misidentified as a rules file.
             let isKnownInstruction = instructionNames.contains(filename)
-            let isAIConfigDir = relative.hasPrefix(".claude/") || relative.hasPrefix(".gemini/") || relative.hasPrefix(".antigravity/") || relative.hasPrefix(".agents/") || relative.hasPrefix(".cursor/") || relative.hasPrefix(".codex/")
-            let isInstructionExtension = ext == "md" || ext == "rules" || ext == "prompt"
-            let isInsideAIDir = isAIConfigDir && isInstructionExtension
             let isSkill = relative.contains(".claude/skills/")
                 || relative.contains(".agents/skills/")
                 || relative.contains(".codex/skills/")
                 || relative.contains(".gemini/skills/")
                 || relative.contains(".antigravity/skills/")
 
-            guard isKnownInstruction || isInsideAIDir || isSkill else { continue }
+            guard isKnownInstruction || isSkill else { continue }
             results.append(RuleFileEntry(url: url, relativePath: relative, scope: .project))
         }
         return results.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }

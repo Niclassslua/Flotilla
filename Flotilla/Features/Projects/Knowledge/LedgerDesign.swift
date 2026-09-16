@@ -96,7 +96,11 @@ struct LedgerDesign: View {
         .accessibilityIdentifier("Knowledge.Ledger.Table")
         // Arrow keys move the selection without leaving the keyboard; the
         // inspector follows because selection lives on the view model.
+        // Selection already has its own indicator (LedgerRow's leading bar),
+        // so the system focus ring is disabled to avoid a redundant blue
+        // border around the whole list.
         .focusable()
+        .focusEffectDisabled()
         .onMoveCommand { direction in
             switch direction {
             case .up: moveSelection(by: -1)
