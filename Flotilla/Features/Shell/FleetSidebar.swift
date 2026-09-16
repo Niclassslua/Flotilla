@@ -20,6 +20,7 @@ struct SessionsSidebar: View {
     /// where a row's grid-membership control means anything. It no longer
     /// changes what *clicking* a row does — see `SessionSidebarRow`.
     var gridMembership: GridMembership? = nil
+    @State private var collapsedProjects: Set<UUID> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +40,26 @@ struct SessionsSidebar: View {
                     }
                     .buttonStyle(.plain)
                 }
+                if store.projects.count > 1 {
+                    Menu {
+                        Button("Expand All") {
+                            collapsedProjects.removeAll()
+                            SidebarProjectCollapseState.save(collapsedProjects)
+                        }
+                        .accessibilityIdentifier(AXID.sidebarExpandAllProjects.rawValue)
+                        Button("Collapse All") {
+                            collapsedProjects = Set(store.projects.map(\.id))
+                            SidebarProjectCollapseState.save(collapsedProjects)
+                        }
+                        .accessibilityIdentifier(AXID.sidebarCollapseAllProjects.rawValue)
+                    } label: {
+                        Image(systemName: "list.bullet.indent")
+                            .font(.system(size: 11))
+                            .foregroundStyle(FlotillaColors.textSecondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -53,8 +74,10 @@ struct SessionsSidebar: View {
                 searchText: searchText,
                 onOpenSession: onOpenSession,
                 onRequestDelete: onRequestDelete,
-                gridMembership: gridMembership
+                gridMembership: gridMembership,
+                collapsedProjects: $collapsedProjects
             )
+            .onAppear { collapsedProjects = SidebarProjectCollapseState.load() }
 
             Divider()
 
@@ -115,6 +138,7 @@ struct FleetSessionList: View {
     /// explicit membership control. It no longer changes what clicking a row
     /// does: a click opens a session in every presentation.
     var gridMembership: GridMembership? = nil
+    @Binding var collapsedProjects: Set<UUID>
 
     private var filtered: SidebarFilterResult { store.sidebarFilter(matching: searchText) }
 
@@ -160,19 +184,26 @@ struct FleetSessionList: View {
 
             ForEach(filtered.projects) { project in
                 let projectSessions = filtered.sessionsByProject[project.id] ?? []
+                let isCollapsed = collapsedProjects.contains(project.id)
                 // No header: the project's own row is the header, and unlike a
                 // `Section` header it can be selected to open the workspace.
+                // Its own chevron button toggles collapse without touching
+                // the row's selection tag.
                 Section {
                     NavigatorRow(
                         item: .project(project.id),
                         title: project.name,
                         systemImage: "folder.fill",
-                        count: projectSessions.count
+                        count: projectSessions.count,
+                        isCollapsed: isCollapsed,
+                        onToggleCollapse: { toggleCollapsed(project.id) }
                     )
                     .accessibilityIdentifier(AXID.sidebarProjectRow.rawValue + project.name)
 
-                    ForEach(projectSessions) { session in
-                        sessionRow(session)
+                    if !isCollapsed {
+                        ForEach(projectSessions) { session in
+                            sessionRow(session)
+                        }
                     }
                 }
             }
@@ -208,6 +239,26 @@ struct FleetSessionList: View {
             gridMembership: gridMembership
         )
     }
+
+    private func toggleCollapsed(_ id: UUID) {
+        if collapsedProjects.contains(id) { collapsedProjects.remove(id) } else { collapsedProjects.insert(id) }
+        SidebarProjectCollapseState.save(collapsedProjects)
+    }
+}
+
+/// Persists which sidebar project sections are folded away. Absent means
+/// expanded, so a project created after this was last saved starts open.
+enum SidebarProjectCollapseState {
+    private static let defaultsKey = "sidebar.collapsedProjects"
+
+    static func load(defaults: UserDefaults = .standard) -> Set<UUID> {
+        let strings = defaults.stringArray(forKey: defaultsKey) ?? []
+        return Set(strings.compactMap(UUID.init))
+    }
+
+    static func save(_ ids: Set<UUID>, defaults: UserDefaults = .standard) {
+        defaults.set(ids.map(\.uuidString), forKey: defaultsKey)
+    }
 }
 
 // MARK: - Navigator row
@@ -223,9 +274,26 @@ private struct NavigatorRow: View {
     /// Draws the count in a status colour when the row is about something
     /// actionable, so "Needs You 2" reads as urgent without a second control.
     var tint: Color? = nil
+    /// Set together to show a collapse chevron ahead of the icon. It's a
+    /// `Button`, so it consumes its own click instead of selecting the row.
+    var isCollapsed: Bool? = nil
+    var onToggleCollapse: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 6) {
+            if let isCollapsed, let onToggleCollapse {
+                Button(action: onToggleCollapse) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                        .frame(width: 10)
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
+                .accessibilityIdentifier(AXID.sidebarProjectCollapseToggle(title))
+            }
+
             Image(systemName: systemImage)
                 .font(.system(size: 11))
                 .frame(width: 16)

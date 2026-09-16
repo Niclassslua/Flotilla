@@ -10,6 +10,9 @@ public enum AXID: String, Sendable {
     case sidebarAllSessions = "Sidebar.AllSessions"
     case sidebarAllProjects = "Sidebar.AllProjects"
     case sidebarProjectRow = "Sidebar.ProjectRow-"
+    case sidebarProjectCollapseToggle = "Sidebar.ProjectRow.CollapseToggle-"
+    case sidebarExpandAllProjects = "Sidebar.ExpandAllProjects"
+    case sidebarCollapseAllProjects = "Sidebar.CollapseAllProjects"
 
     // MARK: - Toolbar
     case toolbarNewSession = "Toolbar.NewSession"
@@ -443,6 +446,11 @@ public enum AXID: String, Sendable {
     /// Creates a sidebar project row identifier
     public static func sidebarProjectRow(_ name: String) -> String {
         "Sidebar.ProjectRow-\(name)"
+    }
+
+    /// Creates a sidebar project row's collapse-toggle identifier
+    public static func sidebarProjectCollapseToggle(_ name: String) -> String {
+        "Sidebar.ProjectRow.CollapseToggle-\(name)"
     }
 
     /// Creates a toolbar presentation show button identifier

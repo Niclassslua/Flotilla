@@ -143,14 +143,11 @@ final class AgentScreenshotMonitor {
             if case .userMessage(_, let timestamp) = event.content { return timestamp }
             return nil
         })
-        // `event.id` isn't guaranteed to be a bare integer (the Claude reader emits
-        // compound ids like "42:0"), so the monotonic index used for the baseline
-        // comes from each event's position in the transcript, not its id.
-        return events.enumerated().compactMap { offset, event in
+        return events.compactMap { event in
             guard case .image(_, let base64, let timestamp) = event.content,
-                  offset > baseline,
+                  let index = Int(event.id), index > baseline,
                   !userTimestamps.contains(timestamp) else { return nil }
-            return ImageEvent(index: offset, base64: base64, timestamp: timestamp)
+            return ImageEvent(index: index, base64: base64, timestamp: timestamp)
         }
     }
 }

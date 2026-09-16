@@ -10,6 +10,7 @@ struct FleetView: View {
     @Environment(CompanionStore.self) private var store
     @State private var isCreating = false
     @State private var pendingDelete: CompanionSession?
+    @State private var collapsedProjects: Set<String> = []
 
     var body: some View {
         let mac = store.mac(macID)
@@ -32,8 +33,13 @@ struct FleetView: View {
                 }
             }
             ForEach(groups, id: \.name) { group in
-                Section(group.name) {
-                    ForEach(group.sessions) { row(for: $0, isActionable: isActionable) }
+                let isCollapsed = collapsedProjects.contains(group.name)
+                Section {
+                    if !isCollapsed {
+                        ForEach(group.sessions) { row(for: $0, isActionable: isActionable) }
+                    }
+                } header: {
+                    projectHeader(group.name, isCollapsed: isCollapsed)
                 }
             }
         }
@@ -58,12 +64,47 @@ struct FleetView: View {
                 Button("New Session", systemImage: "plus") { isCreating = true }
                     .disabled(!isActionable)
             }
+            if groups.count > 1 {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu("Project Sections", systemImage: "list.bullet.indent") {
+                        Button("Expand All", systemImage: "chevron.down") { setAllCollapsed(false, groups: groups) }
+                        Button("Collapse All", systemImage: "chevron.right") { setAllCollapsed(true, groups: groups) }
+                    }
+                }
+            }
         }
         .sheet(isPresented: $isCreating) {
             CreateSessionSheet(macID: macID) { newID in
                 store.path.append(.session(newID))
             }
         }
+        .onAppear { collapsedProjects = store.collapsedProjects(on: macID) }
+    }
+
+    private func projectHeader(_ name: String, isCollapsed: Bool) -> some View {
+        Button {
+            withAnimation(.snappy) {
+                if isCollapsed { collapsedProjects.remove(name) } else { collapsedProjects.insert(name) }
+            }
+            store.setCollapsedProjects(collapsedProjects, on: macID)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                Text(name)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("FleetView.ProjectHeader")
+        .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+    }
+
+    private func setAllCollapsed(_ collapsed: Bool, groups: [(name: String, sessions: [CompanionSession])]) {
+        withAnimation(.snappy) {
+            collapsedProjects = collapsed ? Set(groups.map(\.name)) : []
+        }
+        store.setCollapsedProjects(collapsedProjects, on: macID)
     }
 
     @ViewBuilder

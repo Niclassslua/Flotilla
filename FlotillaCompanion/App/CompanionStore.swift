@@ -44,6 +44,7 @@ final class CompanionStore {
         }
         static let draftPromptPrefix = "companion.draft.prompt."
         static let draftPlanRevisionPrefix = "companion.draft.planRevision."
+        static func collapsedProjects(_ macID: MacHost.ID) -> String { "companion.fleet.collapsedProjects.\(macID)" }
     }
 
     init(data: any CompanionDataSource, defaults: UserDefaults = .standard) {
@@ -227,6 +228,16 @@ final class CompanionStore {
         guard let macID = data.macID(for: sessionID) else { return }
         let key = Key.planRevisionDraft(macID, sessionID)
         if text.isEmpty { defaults.removeObject(forKey: key) } else { defaults.set(text, forKey: key) }
+    }
+
+    // MARK: - Collapsed fleet projects (per Mac, phone-local; absent means expanded)
+
+    func collapsedProjects(on macID: MacHost.ID) -> Set<String> {
+        Set((defaults.array(forKey: Key.collapsedProjects(macID)) as? [String]) ?? [])
+    }
+
+    func setCollapsedProjects(_ names: Set<String>, on macID: MacHost.ID) {
+        defaults.set(Array(names), forKey: Key.collapsedProjects(macID))
     }
 
     // MARK: - Remembered create-session choices (per project, like the Mac)
