@@ -19,7 +19,6 @@ struct CreateSessionSheet: View {
     @State private var effort: AgentEffort?
     @State private var createWorktree = true
     @State private var fetchFirst = true
-    @State private var subscription: OpenCodeSubscription = .none
     @State private var mode: SessionMode = .act
     @State private var isCreating = false
 
@@ -60,14 +59,6 @@ struct CreateSessionSheet: View {
                 }
 
                 AgentModelEffortControls(agent: $agent, model: $model, effort: $effort, catalog: catalog)
-
-                if agent == .openCode {
-                    Section("OpenCode") {
-                        Picker("Subscription", selection: $subscription) {
-                            ForEach(OpenCodeSubscription.allCases) { Text($0.displayName).tag($0) }
-                        }
-                    }
-                }
             }
             .tint(FlotillaColors.accent)
             .navigationTitle("New Session")
@@ -120,8 +111,7 @@ struct CreateSessionSheet: View {
             effort: agent.supportsEffortSelection ? effort : nil,
             initialMode: mode,
             createWorktree: projectID != nil && createWorktree,
-            fetchFirst: fetchFirst,
-            openCodeSubscription: subscription
+            fetchFirst: fetchFirst
         )
         Task {
             if let id = await store.createSession(request, on: macID) {

@@ -2,7 +2,7 @@ import Foundation
 
 /// The wire protocol version. Both the handshake and the pairing link carry it.
 public enum CompanionProtocol {
-    public static let version = 2
+    public static let version = 3
     /// Transcripts are capped to the newest events (docs/companion.md, A7).
     public static let transcriptEventLimit = 400
 }

@@ -226,23 +226,6 @@ public struct AgentCatalog: Hashable, Codable, Sendable {
     ])
 }
 
-/// Mirrors SettingsKit's `OpenCodeSubscription`, which isn't shared with iOS.
-public enum OpenCodeSubscription: String, CaseIterable, Identifiable, Codable, Sendable {
-    case none
-    case zen
-    case go
-
-    public var id: Self { self }
-
-    public var displayName: String {
-        switch self {
-        case .none: "None"
-        case .zen: "OpenCode Zen"
-        case .go: "OpenCode Go"
-        }
-    }
-}
-
 /// What the create-session sheet sends to the Mac.
 public struct NewSessionRequest: Hashable, Codable, Sendable {
     public var goal: String
@@ -253,7 +236,6 @@ public struct NewSessionRequest: Hashable, Codable, Sendable {
     public var initialMode: SessionMode
     public var createWorktree: Bool
     public var fetchFirst: Bool
-    public var openCodeSubscription: OpenCodeSubscription
 
     public init(
         goal: String,
@@ -263,8 +245,7 @@ public struct NewSessionRequest: Hashable, Codable, Sendable {
         effort: AgentEffort?,
         initialMode: SessionMode = .act,
         createWorktree: Bool,
-        fetchFirst: Bool,
-        openCodeSubscription: OpenCodeSubscription
+        fetchFirst: Bool
     ) {
         self.goal = goal
         self.projectID = projectID
@@ -274,7 +255,6 @@ public struct NewSessionRequest: Hashable, Codable, Sendable {
         self.initialMode = initialMode
         self.createWorktree = createWorktree
         self.fetchFirst = fetchFirst
-        self.openCodeSubscription = openCodeSubscription
     }
 }
 

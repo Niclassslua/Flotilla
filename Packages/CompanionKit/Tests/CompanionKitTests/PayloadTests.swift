@@ -109,7 +109,7 @@ final class MessageCodingTests: XCTestCase {
             .answer(sessionID: id, interactionID: UUID(), answer: .questionAnswers([QuestionAnswer(stepID: "q", selected: ["A", "B"], other: "C")])),
             .answer(sessionID: id, interactionID: UUID(), answer: .approvePlan(.autoAccept)),
             .answer(sessionID: id, interactionID: UUID(), answer: .denyWithNote("no")),
-            .createSession(NewSessionRequest(goal: "g", projectID: nil, agent: .openCode, model: "m", effort: nil, createWorktree: false, fetchFirst: false, openCodeSubscription: .go)),
+            .createSession(NewSessionRequest(goal: "g", projectID: nil, agent: .openCode, model: "m", effort: nil, createWorktree: false, fetchFirst: false)),
             .handoff(sessionID: id, HandoffRequest(agent: .codexCLI, model: "gpt", effort: .low, note: "")),
             .restart(sessionID: id),
             .delete(sessionID: id, removeWorktree: true),
