@@ -45,9 +45,10 @@ struct SessionDetailView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { containerHeight = $0 }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
-                if let mac, !mac.isReachable { UnreachableBanner(mac: mac) }
                 SessionHeader(session: session, diffStat: headerDiffStat(session))
+                if let mac, !mac.isReachable { UnreachableBanner(mac: mac) }
             }
+            .background(FlotillaColors.canvas)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
