@@ -60,9 +60,12 @@ final class CompanionHost {
     @ObservationIgnored private var lastFleet: FleetSnapshot?
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
     @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog = CompanionSnapshotBuilder.catalog()
+    @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
 
     private static let enabledKey = "companion.enabled"
     static let pairingLifetime: TimeInterval = 5 * 60
+    /// How many one-second publish ticks between `tailscale status` calls.
+    private static let tailscaleRefreshTicks = 15
 
     private final class Peer {
         let deviceID: String
@@ -209,6 +212,7 @@ final class CompanionHost {
             candidates: candidates()
         )
         pairing = (try? payload.link()).map { ActivePairing(link: $0, payload: payload) }
+        lastPublishedCandidates = payload.candidates
         writePairingLinkForAutomation()
 
         pairingExpiryTask?.cancel()
@@ -217,7 +221,10 @@ final class CompanionHost {
             guard !Task.isCancelled else { return }
             self?.cancelPairing()
         }
-        Task { await refreshTailscaleName() }
+        Task { [weak self] in
+            await self?.refreshTailscaleName()
+            self?.publishAddressUpdateIfNeeded()
+        }
     }
 
     func cancelPairing() {
@@ -275,14 +282,27 @@ final class CompanionHost {
               let name = selfNode["DNSName"] as? String, !name.isEmpty else {
             if tailscaleDNSName != nil {
                 tailscaleDNSName = nil
-                refreshPairingLink()
+                publishAddressUpdateIfNeeded()
             }
             return
         }
         let trimmed = name.hasSuffix(".") ? String(name.dropLast()) : name
         guard trimmed != tailscaleDNSName else { return }
         tailscaleDNSName = trimmed
-        refreshPairingLink()
+        publishAddressUpdateIfNeeded()
+    }
+
+    /// Sends already-paired phones the Mac's current addresses whenever they
+    /// change (Tailscale connecting after pairing, an IP changing, …), so
+    /// reaching the Mac from a new network doesn't require re-pairing.
+    private func publishAddressUpdateIfNeeded() {
+        let current = candidates()
+        guard !current.isEmpty, current != lastPublishedCandidates else { return }
+        lastPublishedCandidates = current
+        if pairing != nil { refreshPairingLink() }
+        for peer in peers.values {
+            try? peer.session.send(.addressUpdate(candidates: current))
+        }
     }
 
     /// `FLOTILLA_COMPANION_PAIRING_FILE` in a DEBUG or Ephemeral build enables the link and
@@ -397,14 +417,21 @@ final class CompanionHost {
     private func startPublishing() {
         publishTask?.cancel()
         publishTask = Task { [weak self] in
+            var tick = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
+                tick += 1
                 // A dead pane's endpoint is gone; polling it only logs failures.
                 await self.adapters.refresh(self.store.sessions.filter { self.store.process(for: $0.id) != nil })
                 self.bridge.retractResolved { sessionID in
                     self.store.sessions.first { $0.id == sessionID }?.status == .waitingForInput
                 }
+                self.refreshAddresses()
+                if tick.isMultiple(of: Self.tailscaleRefreshTicks) {
+                    await self.refreshTailscaleName()
+                }
+                self.publishAddressUpdateIfNeeded()
                 guard !self.peers.isEmpty else { continue }
                 self.publishFleetIfChanged()
                 for peer in self.peers.values where peer.subscribedSessionID != nil { await self.publishTranscript(to: peer) }

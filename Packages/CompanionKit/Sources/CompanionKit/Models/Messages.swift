@@ -36,6 +36,10 @@ public enum ServerMessage: Hashable, Codable, Sendable {
     case transcript(sessionID: UUID, SessionTranscript)
     case response(id: UInt64, CompanionResponse)
     case pong
+    /// The Mac's current reachable addresses, sent whenever they change (e.g.
+    /// Tailscale connects after pairing) so an already-paired phone learns a
+    /// new path without re-scanning a pairing code.
+    case addressUpdate(candidates: [HostCandidate])
 }
 
 public enum CompanionResponse: Hashable, Codable, Sendable {

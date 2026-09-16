@@ -25,6 +25,7 @@ struct PairMacView: View {
     @State private var step: Step = .intro
     @State private var linkText = ""
     @State private var attempts: [ConnectTarget: AttemptStatus] = [:]
+    @State private var showsTailscaleInfo = false
 
     var body: some View {
         NavigationStack {
@@ -84,9 +85,21 @@ struct PairMacView: View {
                 .padding(16)
                 .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
 
-                Label("Works on the same Wi-Fi, or from anywhere when both devices use Tailscale.", systemImage: "network")
+                DisclosureGroup(isExpanded: $showsTailscaleInfo) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Tailscale is a free app that makes a private network between your devices, so this iPhone can reach your Mac even when you're not on the same Wi-Fi.")
+                        Text("Install it on both this iPhone and the Mac, then sign in with the same account on both. Once it's connected on both, pairing — and reconnecting later — works from anywhere.")
+                    }
                     .font(.footnote)
                     .foregroundStyle(FlotillaColors.textSecondary)
+                    .padding(.top, 4)
+                } label: {
+                    Label("Works on the same Wi-Fi, or from anywhere when both devices use Tailscale.", systemImage: "network")
+                        .font(.footnote)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                }
+                .tint(FlotillaColors.textSecondary)
+                .accessibilityIdentifier("Pairing.TailscaleInfo")
 
                 VStack(spacing: 10) {
                     Button {
