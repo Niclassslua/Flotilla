@@ -257,6 +257,48 @@ final class CodexCompanionAdapterTests: XCTestCase {
         XCTAssertTrue(rpc.replies.isEmpty)
     }
 
+    func testLegacyApplyPatchAndExecCommandApprovalsAreAnswerableFromThePhone() async throws {
+        // The TUI's own "Would you like to make the following edits?" dialog:
+        // a legacy v1 protocol request, not `item/fileChange/requestApproval`.
+        for (answer, decision): (InteractionAnswer, [String: Any]) in [
+            (.allow, ["decision": "approved"]),
+            (.alwaysAllow, ["decision": "approved_for_session"]),
+            (.deny, ["decision": ["denied": ["rejection": ""]]]),
+            (.denyAndStop, ["decision": "abort"]),
+            (.denyWithNote("Use a safe path"), ["decision": ["denied": ["rejection": "Use a safe path"]]]),
+        ] {
+            let (adapter, rpc) = makeAdapter()
+            adapter.receive([
+                "id": "patch-1", "method": "applyPatchApproval",
+                "params": ["threadId": "thread-1", "fileChanges": ["/tmp/main.swift": ["type": "update", "unified_diff": "+EDIT"]]],
+            ])
+            let card = try XCTUnwrap(adapter.pending.first)
+            guard case .permission(let permission) = card.kind else { return XCTFail("Expected permission") }
+            XCTAssertEqual(permission.summary, "/tmp/main.swift")
+            XCTAssertTrue(permission.detail?.contains("+EDIT") == true)
+            _ = try await adapter.answer(card.id, with: answer)
+            let reply = try XCTUnwrap(rpc.replies.first)
+            if let expected = decision["decision"] as? String {
+                XCTAssertEqual(reply.result["decision"] as? String, expected)
+            } else if let expected = decision["decision"] as? [String: [String: String]] {
+                let actual = reply.result["decision"] as? [String: [String: String]]
+                XCTAssertEqual(actual, expected)
+            }
+            XCTAssertTrue(adapter.pending.isEmpty)
+        }
+
+        let (adapter, rpc) = makeAdapter()
+        adapter.receive([
+            "id": "exec-1", "method": "execCommandApproval",
+            "params": ["threadId": "thread-1", "command": ["touch", "greeting.txt"]],
+        ])
+        let card = try XCTUnwrap(adapter.pending.first)
+        guard case .permission(let permission) = card.kind else { return XCTFail("Expected permission") }
+        XCTAssertEqual(permission.summary, "touch greeting.txt")
+        _ = try await adapter.answer(card.id, with: .allow)
+        XCTAssertEqual(rpc.replies.first?.result["decision"] as? String, "approved")
+    }
+
     func testFileApprovalShowsTheProposedPathsAndDiffFromItsOwnThread() throws {
         let (adapter, _) = makeAdapter()
         for (thread, path, diff) in [("thread-1", "/tmp/main.swift", "+MAIN-EDIT"), ("child-thread", "/tmp/child.swift", "+CHILD-EDIT")] {
