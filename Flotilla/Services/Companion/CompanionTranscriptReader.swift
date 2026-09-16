@@ -147,13 +147,33 @@ actor CompanionTranscriptReader {
     }
 
     private static func events(in lines: [Substring], reader: any TranscriptLineReading, firstLine: Int) -> [TranscriptEvent] {
-        lines.enumerated().flatMap { index, line in
-            reader.readRecords([line]).enumerated().compactMap { entryIndex, entry in
+        lines.enumerated().flatMap { index, line -> [TranscriptEvent] in
+            guard reader.agent != .codexCLI || isVisibleCodexRecord(line) else { return [] }
+            return reader.readRecords([line]).enumerated().compactMap { entryIndex, entry in
                 TranscriptEvent.Content(entry).map {
                     TranscriptEvent(id: "\(firstLine + index):\(entryIndex)", content: $0)
                 }
             }
         }
+    }
+
+    /// Codex stores harness instructions in the same rollout as the conversation.
+    /// Keep their native records for resume, but never publish them as chat.
+    private static func isVisibleCodexRecord(_ line: Substring) -> Bool {
+        guard let data = line.data(using: .utf8),
+              let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              record["type"] as? String == "response_item",
+              let payload = record["payload"] as? [String: Any],
+              payload["type"] as? String == "message" else { return true }
+
+        guard let role = payload["role"] as? String else { return false }
+        if role != "user" { return role == "assistant" }
+
+        let parts = payload["content"] as? [[String: Any]] ?? []
+        let text = parts.compactMap { $0["text"] as? String }.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return !(text.hasPrefix("# AGENTS.md instructions for ") && text.contains("<INSTRUCTIONS>"))
+            && !(text.hasPrefix("<environment_context>") && text.hasSuffix("</environment_context>"))
     }
 
     private static func recentEvents(in lines: [Substring], reader: any TranscriptLineReading) -> [TranscriptEvent] {

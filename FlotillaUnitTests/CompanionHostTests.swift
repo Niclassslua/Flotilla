@@ -115,6 +115,56 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         }
     }
 
+    func testCodexCompanionOmitsInjectedInstructionsButKeepsTheConversation() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("companion-codex-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        func record(role: String, text: String) throws -> String {
+            let object: [String: Any] = [
+                "type": "response_item",
+                "payload": ["type": "message", "role": role,
+                            "content": [["type": "input_text", "text": text]]]
+            ]
+            return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self) + "\n"
+        }
+        let initial = try [
+            record(role: "developer", text: "<skills_instructions>private setup</skills_instructions>"),
+            record(role: "developer", text: "<permissions_instructions>private setup</permissions_instructions>"),
+            record(role: "user", text: "# AGENTS.md instructions for /project\n<INSTRUCTIONS>private rules</INSTRUCTIONS>"),
+            record(role: "user", text: "<environment_context>private setup</environment_context>"),
+            record(role: "user", text: "Run the tests"),
+            record(role: "assistant", text: "I’ll run them now.")
+        ].joined()
+        try Data(initial.utf8).write(to: url)
+        var sample = session(status: .working, agent: .codexCLI)
+        sample.nativeTranscriptPath = url
+        let reader = CompanionTranscriptReader(registry: .default)
+
+        let opened = await reader.read(sample)
+        XCTAssertEqual(opened.events.map(\.id), ["4:0", "5:0"])
+        if case .userMessage(let text, _)? = opened.events.first?.content {
+            XCTAssertEqual(text, "Run the tests")
+        } else {
+            XCTFail("the real user prompt should be visible")
+        }
+
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        let appended = try [
+            record(role: "developer", text: "<collaboration_mode>Default</collaboration_mode>"),
+            record(role: "user", text: "Why is AGENTS.md shown in the chat?")
+        ].joined()
+        try handle.write(contentsOf: Data(appended.utf8))
+
+        let updated = await reader.read(sample)
+        XCTAssertEqual(updated.events.map(\.id), ["4:0", "5:0", "7:0"])
+        if case .userMessage(let text, _)? = updated.events.last?.content {
+            XCTAssertEqual(text, "Why is AGENTS.md shown in the chat?")
+        } else {
+            XCTFail("a real question about AGENTS.md should stay visible")
+        }
+    }
+
     func testOpeningLongNativeTranscriptShowsLatestWindowWithStableIDs() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("companion-long-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
