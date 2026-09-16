@@ -220,8 +220,17 @@ struct ProjectGitView: View {
     }
 
     private func loadWorktrees() async {
-        if let list = try? await store.gitService.listWorktrees(at: project.rootPath) {
-            worktrees = list
+        guard let list = try? await store.gitService.listWorktrees(at: project.rootPath) else { return }
+        let branchList = try? await store.gitService.branches(at: project.rootPath)
+        let lastCommitDateByBranch = Dictionary(
+            (branchList ?? []).map { ($0.name, $0.lastCommitDate) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        worktrees = list.sorted { lhs, rhs in
+            if lhs.isMainWorktree != rhs.isMainWorktree { return lhs.isMainWorktree }
+            let lhsDate = lastCommitDateByBranch[lhs.branch] ?? .distantPast
+            let rhsDate = lastCommitDateByBranch[rhs.branch] ?? .distantPast
+            return lhsDate > rhsDate
         }
     }
 }
