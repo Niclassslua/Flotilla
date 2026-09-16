@@ -69,7 +69,11 @@ struct SessionDetailView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { containerHeight = $0 }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
-                SessionHeader(session: session, diffStat: headerDiffStat(session))
+                SessionHeader(
+                    session: session,
+                    diffStat: headerDiffStat(session),
+                    modelDisplayName: store.catalog(on: macID).entry(for: session.agent).displayName(forSlug: session.model)
+                )
                 CurrentTurnSummaryRow(
                     latestLine: transcript.latestCompleteLine,
                     inFlight: TranscriptLayout.inFlightCall(in: transcript.events),
@@ -278,6 +282,21 @@ struct SessionDetailView: View {
 private struct SessionHeader: View {
     let session: CompanionSession
     let diffStat: DiffStat?
+    /// The catalog's friendly name for `session.model`, if it has one.
+    let modelDisplayName: String?
+
+    /// Formats a still-unresolved `provider/model` slug (an id the Mac's
+    /// catalog didn't recognize — e.g. a user-configured OpenCode model)
+    /// into something readable, rather than showing it verbatim: the
+    /// provider prefix is dropped and hyphenated words are title-cased.
+    private static func fallbackDisplayName(for slug: String) -> String {
+        let base = slug.split(separator: "/").last.map(String.init) ?? slug
+        guard base.contains("-") else { return base }
+        return base
+            .split(separator: "-")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -287,7 +306,7 @@ private struct SessionHeader: View {
                 StatusDot(status: session.status)
                 Text(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
                     .foregroundStyle(StatusPresentation.color(for: session.status))
-                Text("· \(session.model)")
+                Text("· \(modelDisplayName ?? Self.fallbackDisplayName(for: session.model))")
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .lineLimit(1)
             }

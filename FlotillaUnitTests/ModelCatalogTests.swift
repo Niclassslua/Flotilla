@@ -297,6 +297,34 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(models, ModelCatalog.staticFallback(for: .openCode))
     }
 
+    func testOpenCodeStaticFallbackProfilesAlsoCarryDisplayNames() {
+        let profiles = ModelCatalog.staticFallbackProfiles(for: .openCode)
+
+        XCTAssertFalse(profiles.isEmpty)
+        for profile in profiles {
+            XCTAssertNotNil(profile.displayName, "\(profile.slug) is missing a display name")
+        }
+    }
+
+    func testOpenCodePlainSlugListingAlsoGetsDisplayNamesFromTheStaticTable() async {
+        struct PlainListingRunner: CommandRunning {
+            func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult {
+                guard !arguments.contains("--verbose") else { throw MockRunnerError() }
+                return CommandResult(exitCode: 0, stdout: "opencode/big-pickle\n", stderr: "")
+            }
+        }
+
+        let fetcher = ModelCatalogFetcher(
+            locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/opencode")),
+            runner: PlainListingRunner()
+        )
+
+        let profiles = await fetcher.fetchProfiles(for: .openCode, openCodeSubscription: .go)
+
+        XCTAssertEqual(profiles.map(\.slug), ["opencode/big-pickle"])
+        XCTAssertEqual(profiles.map(\.displayName), ["Big Pickle"])
+    }
+
     func testAntigravitySupportsLowMediumHighEffortLevels() {
         XCTAssertEqual(AgentEffortCatalog.supportedLevels(for: .antigravity), [.low, .medium, .high])
         XCTAssertTrue(AgentKind.antigravity.supportsEffortSelection)

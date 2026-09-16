@@ -6,6 +6,7 @@ import GitKit
 import ProcessKit
 import HooksKit
 import CompanionKit
+import SettingsKit
 
 /// Hosts the iPhone companion link inside Flotilla: the listener, pairing,
 /// paired devices, and the updates each connected phone receives.
@@ -61,8 +62,12 @@ final class CompanionHost {
     @ObservationIgnored private var publishTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
-    @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog = CompanionSnapshotBuilder.catalog()
+    @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog
     @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
+    /// Reads the Mac's currently configured OpenCode plan, so the catalog
+    /// sent to the phone can scope a live model query to it — without this,
+    /// OpenCode has nothing to enumerate against and falls back to bare ids.
+    @ObservationIgnored private let openCodeSubscription: () -> OpenCodeSubscription
 
     private static let enabledKey = "companion.enabled"
     static let pairingLifetime: TimeInterval = 5 * 60
@@ -95,12 +100,16 @@ final class CompanionHost {
         supportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
         storage: CompanionHostStorage = .default(),
         defaults: UserDefaults = .standard,
-        macName: String = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+        macName: String = Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
+        openCodeSubscription: @escaping () -> OpenCodeSubscription = { .none }
     ) {
         self.store = store
         self.storage = storage
         self.defaults = defaults
         self.macName = macName
+        self.openCodeSubscription = openCodeSubscription
+        self.cachedCatalog = CompanionSnapshotBuilder.catalog(openCodeSubscription: openCodeSubscription())
+
         self.socketURL = HookConfigurationWriter.companionSocketPath(supportDirectory: supportDirectory)
         let adapters = CompanionAdapterRegistry(support: supportDirectory)
         self.adapters = adapters
@@ -128,7 +137,7 @@ final class CompanionHost {
             Task { try? await self?.store.deliverMessage(note, to: sessionID) }
         }
         Task { [weak self] in
-            let live = await CompanionSnapshotBuilder.catalog()
+            let live = await CompanionSnapshotBuilder.catalog(openCodeSubscription: openCodeSubscription())
             guard let self else { return }
             self.cachedCatalog = live
             self.publishFleetIfChanged()

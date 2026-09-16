@@ -96,7 +96,9 @@ public struct ModelCatalogFetcher: Sendable {
 
     static func profiles(forSlugs slugs: [String], agent: AgentKind) -> [AgentModelProfile] {
         let options = AgentEffortCatalog.staticOptions(for: agent)
-        return slugs.map { AgentModelProfile(slug: $0, effortOptions: options) }
+        return slugs.map { slug in
+            AgentModelProfile(slug: slug, displayName: ModelCatalog.displayName(for: slug, agent: agent), effortOptions: options)
+        }
     }
 
     private func binaryName(for agent: AgentKind) -> String {
@@ -543,10 +545,21 @@ public enum ModelCatalog {
         return slugs.map { slug in
             AgentModelProfile(
                 slug: slug,
-                displayName: agent == .claudeCode ? claudeModelDisplayName(for: slug) : nil,
+                displayName: displayName(for: slug, agent: agent),
                 description: agent == .claudeCode ? claudeModelDescription(for: slug) : nil,
                 effortOptions: fallbackEffortOptions(for: agent, slug: slug)
             )
+        }
+    }
+
+    /// Dispatches to whichever agent keeps a static id -> friendly-name
+    /// table, since none of them share a naming scheme. A slug missing from
+    /// its agent's table falls back to `nil`, same as before.
+    static func displayName(for slug: String, agent: AgentKind) -> String? {
+        switch agent {
+        case .claudeCode: claudeModelDisplayName(for: slug)
+        case .openCode: openCodeModelDisplayName(for: slug)
+        case .codexCLI, .antigravity: nil
         }
     }
 
@@ -571,6 +584,71 @@ public enum ModelCatalog {
 
     static func claudeModelDescription(for slug: String) -> String? {
         claudeModelMetadata[slug]?.description
+    }
+
+    /// OpenCode's `opencode models <provider>` (without `--verbose`) and the
+    /// static fallback list both only carry bare `provider/model` slugs, with
+    /// no metadata query to source a friendly name from the way Codex and
+    /// Antigravity's CLIs do. This mirrors `claudeModelMetadata`: a hand-kept
+    /// table for the ids Flotilla ships as OpenCode's fallback catalog. A
+    /// slug missing here (a newer or user-configured OpenCode model) falls
+    /// back to showing its raw id, same as every other agent.
+    private static let openCodeModelMetadata: [String: String] = [
+        "opencode/nemotron-3-ultra-free": "Nemotron 3 Ultra (Free)",
+        "opencode/nemotron-3.5-lightning-free": "Nemotron 3.5 Lightning (Free)",
+        "opencode/big-pickle": "Big Pickle",
+        "opencode/deepseek-v4-flash-free": "DeepSeek V4 Flash (Free)",
+        "opencode/hy3-free": "HY3 (Free)",
+        "opencode/laguna-s-2.1-free": "Laguna S 2.1 (Free)",
+        "opencode/mimo-v2.5-free": "MiMo V2.5 (Free)",
+        "opencode-go/deepseek-v4-flash": "DeepSeek V4 Flash",
+        "opencode-go/deepseek-v4-pro": "DeepSeek V4 Pro",
+        "opencode-go/glm-5.1": "GLM 5.1",
+        "opencode-go/glm-5.2": "GLM 5.2",
+        "opencode-go/glm-5.3": "GLM 5.3",
+        "opencode-go/gpt-5.6-luna": "GPT-5.6 Luna",
+        "opencode-go/grok-4.5": "Grok 4.5",
+        "opencode-go/hy3": "HY3",
+        "opencode-go/kimi-k2.6": "Kimi K2.6",
+        "opencode-go/kimi-k2.7-code": "Kimi K2.7 Code",
+        "opencode-go/kimi-k3": "Kimi K3",
+        "opencode-go/mimo-v2.5": "MiMo V2.5",
+        "opencode-go/mimo-v2.5-pro": "MiMo V2.5 Pro",
+        "opencode-go/minimax-m2.7": "MiniMax M2.7",
+        "opencode-go/minimax-m3": "MiniMax M3",
+        "opencode-go/qwen3.6-plus": "Qwen3.6 Plus",
+        "opencode-go/qwen3.7-max": "Qwen3.7 Max",
+        "opencode-go/qwen3.7-plus": "Qwen3.7 Plus",
+        "opencode-go/qwen3.8-max": "Qwen3.8 Max",
+        "openrouter/~anthropic/claude-sonnet-latest": "Claude Sonnet (Latest)",
+        "openrouter/~anthropic/claude-opus-latest": "Claude Opus (Latest)",
+        "openrouter/~anthropic/claude-haiku-latest": "Claude Haiku (Latest)",
+        "openrouter/~openai/gpt-latest": "GPT (Latest)",
+        "openrouter/~openai/gpt-mini-latest": "GPT Mini (Latest)",
+        "openrouter/~x-ai/grok-latest": "Grok (Latest)",
+        "openrouter/~deepseek/deepseek-v4-flash-latest": "DeepSeek V4 Flash (Latest)",
+        "openrouter/~moonshotai/kimi-latest": "Kimi (Latest)",
+        "openrouter/anthropic/claude-3.5-sonnet": "Claude 3.5 Sonnet",
+        "openrouter/anthropic/claude-3.5-haiku": "Claude 3.5 Haiku",
+        "openrouter/anthropic/claude-3-opus": "Claude 3 Opus",
+        "openrouter/openai/gpt-4o": "GPT-4o",
+        "openrouter/openai/gpt-4o-mini": "GPT-4o Mini",
+        "openrouter/openai/o1": "OpenAI o1",
+        "openrouter/openai/o3-mini": "OpenAI o3-mini",
+        "openrouter/x-ai/grok-4.5": "Grok 4.5",
+        "openrouter/meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
+        "openrouter/mistralai/mistral-large": "Mistral Large",
+        "openrouter/deepseek/deepseek-chat": "DeepSeek Chat",
+        "openrouter/deepseek/deepseek-r1": "DeepSeek R1",
+        "openrouter/qwen/qwen-2.5-coder-32b-instruct": "Qwen 2.5 Coder 32B",
+        "openrouter/qwen/qwen3-coder": "Qwen3 Coder",
+        "openrouter/nvidia/nemotron-3-ultra-550b-a55b": "Nemotron 3 Ultra 550B",
+        "openrouter/anthropic/claude-opus-4": "Claude Opus 4",
+        "openrouter/anthropic/claude-sonnet-4": "Claude Sonnet 4",
+    ]
+
+    static func openCodeModelDisplayName(for slug: String) -> String? {
+        openCodeModelMetadata[slug]
     }
 
     public static func staticAntigravityGroups() -> [AntigravityModelGroup] {

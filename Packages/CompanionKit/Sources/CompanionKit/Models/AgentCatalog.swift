@@ -97,6 +97,13 @@ public struct AgentCatalog: Hashable, Codable, Sendable {
             models.map(\.slug)
         }
 
+        /// The Mac-supplied friendly name for a model slug, if it sent one.
+        /// Falls back to `nil` — same as the slug simply being missing from
+        /// `models` — so callers decide how to present an unresolved id.
+        public func displayName(forSlug slug: String) -> String? {
+            models.first { $0.slug == slug }?.displayName
+        }
+
         enum CodingKeys: String, CodingKey {
             case models
             case defaultModel

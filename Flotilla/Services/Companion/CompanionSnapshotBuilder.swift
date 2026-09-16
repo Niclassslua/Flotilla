@@ -3,6 +3,7 @@ import SessionKit
 import GitKit
 import AgentKit
 import CompanionKit
+import SettingsKit
 
 /// Translates the Mac's session records into what the phone renders.
 ///
@@ -106,11 +107,16 @@ enum CompanionSnapshotBuilder {
                            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 
-    /// Queries `ModelCatalogCache` for live model profiles, descriptions, and Antigravity groups.
-    static func catalog() async -> CompanionKit.AgentCatalog {
+    /// Queries `ModelCatalogCache` for live model profiles, descriptions, and
+    /// Antigravity groups. `openCodeSubscription` should be the Mac's
+    /// currently configured plan — passing `.none` (the default) means
+    /// OpenCode has nothing to scope a live query to, so its entry falls
+    /// back to the static catalog with no per-model display names beyond
+    /// what `ModelCatalog`'s own fallback table already knows.
+    static func catalog(openCodeSubscription: OpenCodeSubscription = .none) async -> CompanionKit.AgentCatalog {
         var entries: [AgentKind: CompanionKit.AgentCatalog.Entry] = [:]
         for agent in AgentKind.allCases {
-            let profiles = await ModelCatalogCache.shared.profiles(for: agent)
+            let profiles = await ModelCatalogCache.shared.profiles(for: agent, openCodeSubscription: openCodeSubscription)
             let models = profiles.map {
                 CompanionKit.ModelOption(slug: $0.slug, displayName: $0.displayName, description: $0.description)
             }
@@ -143,10 +149,10 @@ enum CompanionSnapshotBuilder {
     }
 
     /// Static fallback lists when offline or before live catalog finishes loading.
-    static func catalog() -> CompanionKit.AgentCatalog {
+    static func catalog(openCodeSubscription: OpenCodeSubscription = .none) -> CompanionKit.AgentCatalog {
         var entries: [AgentKind: CompanionKit.AgentCatalog.Entry] = [:]
         for agent in AgentKind.allCases {
-            let profiles = ModelCatalog.staticFallbackProfiles(for: agent)
+            let profiles = ModelCatalog.staticFallbackProfiles(for: agent, openCodeSubscription: openCodeSubscription)
             let models = profiles.map {
                 CompanionKit.ModelOption(slug: $0.slug, displayName: $0.displayName, description: $0.description)
             }

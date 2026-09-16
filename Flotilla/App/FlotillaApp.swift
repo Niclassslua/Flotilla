@@ -144,7 +144,8 @@ struct FlotillaApp: App {
             store: appStore,
             gitService: environment.gitService,
             screenReader: environment.isUITesting ? nil : hookCoordinator.screenReader,
-            defaults: environment.isUITesting ? UserDefaults(suiteName: "FlotillaUITests-companion-\(ProcessInfo.processInfo.processIdentifier)")! : .standard
+            defaults: environment.isUITesting ? UserDefaults(suiteName: "FlotillaUITests-companion-\(ProcessInfo.processInfo.processIdentifier)")! : .standard,
+            openCodeSubscription: { settingsViewModel.settings.openCodeSubscription }
         ))
 
         appStore.onSessionFinished = { session in
