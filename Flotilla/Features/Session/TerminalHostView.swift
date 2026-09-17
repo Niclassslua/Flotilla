@@ -57,6 +57,11 @@ private final class XirpTerminalContainerView: NSView {
     private var terminalConstraints: [NSLayoutConstraint] = []
     private var shouldFocusTerminal = false
     private var hasRequestedFocus = false
+    /// `layout()` is also reached while SwiftTerm is moving through its
+    /// scrollback. Do not feed that scroll-driven layout churn back into the
+    /// controller's PTY sizing/reflow path when the container did not change
+    /// size.
+    private var lastSyncedBounds: CGSize?
     private let keyDownMonitor = EventMonitorBox()
 
     init(
@@ -131,6 +136,8 @@ private final class XirpTerminalContainerView: NSView {
     /// to. This is the call that closes that gap.
     func syncTerminalSizeIfReady() {
         guard window != nil, bounds.width > 0, bounds.height > 0 else { return }
+        guard lastSyncedBounds != bounds.size else { return }
+        lastSyncedBounds = bounds.size
         controller?.syncPTYSize(for: presentation)
     }
 
@@ -144,6 +151,9 @@ private final class XirpTerminalContainerView: NSView {
         self.controller = controller
         self.presentation = presentation
         let rendererChanged = mountedTerminalView !== terminalView || terminalView.superview !== self
+        if rendererChanged {
+            lastSyncedBounds = nil
+        }
         setTerminalFocused(isFocused, rendererChanged: rendererChanged)
         guard rendererChanged else {
             requestTerminalFocusIfNeeded()
