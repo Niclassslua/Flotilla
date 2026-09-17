@@ -200,6 +200,35 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         let appended = await reader.read(sample)
         XCTAssertEqual(appended.events.map(\.id), ["0:0", "2:0"])
     }
+
+    func testOpeningHugeNativeTranscriptReadsTailFastWithAccurateIDsAndAppend() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("companion-huge-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let totalLines = 2500
+        let lines = (0..<totalLines).map { index in
+            #"{"type":"user","message":{"content":"message "# + String(index) + #""},"timestamp":"2026-01-01T00:00:00Z"}"#
+        }.joined(separator: "\n") + "\n"
+        try Data(lines.utf8).write(to: url)
+        var sample = session(status: .working)
+        sample.nativeTranscriptPath = url
+        let reader = CompanionTranscriptReader(registry: .default)
+
+        let opened = await reader.read(sample)
+        XCTAssertEqual(opened.events.count, CompanionProtocol.transcriptEventLimit)
+        XCTAssertEqual(opened.events.first?.id, "2100:0")
+        XCTAssertEqual(opened.events.last?.id, "2499:0")
+
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        let newLine = #"{"type":"user","message":{"content":"message 2500"},"timestamp":"2026-01-01T00:00:02Z"}"# + "\n"
+        try handle.write(contentsOf: Data(newLine.utf8))
+
+        let updated = await reader.read(sample)
+        XCTAssertEqual(updated.events.count, CompanionProtocol.transcriptEventLimit)
+        XCTAssertEqual(updated.events.first?.id, "2101:0")
+        XCTAssertEqual(updated.events.last?.id, "2500:0")
+    }
 }
 
 final class ClaudePermissionPayloadTests: XCTestCase {

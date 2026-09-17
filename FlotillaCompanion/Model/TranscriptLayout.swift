@@ -3,7 +3,7 @@ import SessionKit
 import CompanionKit
 
 /// One row of the rendered transcript.
-enum TranscriptItem: Identifiable {
+enum TranscriptItem: Identifiable, Equatable {
     case user(id: String, text: String)
     case assistant(id: String, text: String)
     case toolGroup(id: String, calls: [ToolCall])
@@ -23,7 +23,7 @@ enum TranscriptItem: Identifiable {
 }
 
 /// A `toolUse` with its `toolResult`, if one has arrived.
-struct ToolCall: Identifiable, Sendable {
+struct ToolCall: Identifiable, Sendable, Equatable {
     let id: String
     var tool: String
     var input: [String: String]
@@ -133,9 +133,14 @@ enum TranscriptLayout {
         return items
     }
 
+    /// The call still waiting for its result, looking at precomputed items in O(1).
+    static func inFlightCall(in items: [TranscriptItem]) -> ToolCall? {
+        guard case .toolGroup(_, let calls)? = items.last else { return nil }
+        return calls.last(where: \.isRunning)
+    }
+
     /// The call still waiting for its result, which the working indicator names.
     static func inFlightCall(in events: [TranscriptEvent]) -> ToolCall? {
-        guard case .toolGroup(_, let calls)? = items(from: events).last else { return nil }
-        return calls.last(where: \.isRunning)
+        inFlightCall(in: items(from: events))
     }
 }
