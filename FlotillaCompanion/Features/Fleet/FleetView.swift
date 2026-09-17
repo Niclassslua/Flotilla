@@ -180,8 +180,8 @@ private struct ApproveSwipeAction: ViewModifier {
     @Environment(CompanionStore.self) private var store
 
     func body(content: Content) -> some View {
-        if let permission {
-            content.swipeActions(edge: .leading, allowsFullSwipe: false) {
+        content.swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if let permission {
                 Button("Allow", systemImage: "checkmark") {
                     Task { _ = await store.answer(permission.id, in: sessionID, with: .allow) }
                 }
