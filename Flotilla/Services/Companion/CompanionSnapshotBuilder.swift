@@ -16,6 +16,10 @@ enum CompanionSnapshotBuilder {
         var isProcessLive: Bool
         /// Cards the phone can answer, from the provider permission bridge.
         var answerable: [PendingInteraction]
+        /// The provider accepted a phone answer, but the persisted session
+        /// status has not caught up yet. Do not replace that card with the
+        /// generic terminal fallback during this handoff window.
+        var suppressTerminalFallback: Bool = false
     }
 
     static let crashReason = "The agent process exited unexpectedly"
@@ -33,7 +37,11 @@ enum CompanionSnapshotBuilder {
             .sorted { $0.lastActiveAt > $1.lastActiveAt }
             .map { session -> CompanionSession in
                 let sessionContext = context(session)
-                let cards = interactions(for: session, answerable: sessionContext.answerable)
+                let cards = interactions(
+                    for: session,
+                    answerable: sessionContext.answerable,
+                    suppressTerminalFallback: sessionContext.suppressTerminalFallback
+                )
                 if !cards.isEmpty { pending[session.id] = cards }
                 return companionSession(session, context: sessionContext, cards: cards)
             }
@@ -76,9 +84,13 @@ enum CompanionSnapshotBuilder {
     /// while a second approval is still open. Otherwise a waiting session gets
     /// one "Needs the terminal" card naming what the agent waits for — the
     /// phone must never offer a prompt field then.
-    static func interactions(for session: Session, answerable: [PendingInteraction]) -> [PendingInteraction] {
+    static func interactions(
+        for session: Session,
+        answerable: [PendingInteraction],
+        suppressTerminalFallback: Bool = false
+    ) -> [PendingInteraction] {
         if !answerable.isEmpty { return answerable }
-        guard session.status == .waitingForInput else { return [] }
+        guard session.status == .waitingForInput, !suppressTerminalFallback else { return [] }
         let title = switch session.waitingReason {
         case .permission: "Permission prompt"
         case .question: "Question"

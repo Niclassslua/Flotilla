@@ -73,6 +73,16 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(snapshot.sessions.first?.attentionSummary, "Allow rm -rf build?")
     }
 
+    func testAcceptedProviderAnswerDoesNotBecomeATransientNeedsTerminalCard() {
+        let waiting = session(status: .waitingForInput, reason: .permission, agent: .codexCLI)
+        var context = self.context()
+        context.suppressTerminalFallback = true
+
+        let snapshot = CompanionSnapshotBuilder.snapshot(macID: "m", macName: "Studio", sessions: [waiting], projects: [], context: { _ in context })
+
+        XCTAssertNil(snapshot.pending[waiting.id], "The accepted Codex request should stay absent while the Mac status catches up")
+    }
+
     /// OpenCode flips the session to working when one of two concurrent
     /// approvals is answered; the other is still open and must stay answerable.
     func testProviderRequestsStayVisibleWhileTheSessionReadsWorking() {

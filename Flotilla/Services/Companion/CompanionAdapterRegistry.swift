@@ -71,6 +71,10 @@ final class CompanionAdapterRegistry {
     }
 
     func pending(_ session: Session) -> [PendingInteraction] { adapter(for: session)?.pending ?? [] }
+
+    func suppressesTerminalFallback(for session: Session) -> Bool {
+        adapter(for: session)?.suppressesTerminalFallback ?? false
+    }
     func remove(_ id: UUID) { adapters.removeValue(forKey: id)?.close() }
     func close() { publishTask?.cancel(); publishTask = nil; for adapter in adapters.values { adapter.close() }; adapters.removeAll() }
 }

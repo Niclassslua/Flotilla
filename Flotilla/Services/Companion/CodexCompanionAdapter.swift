@@ -7,12 +7,17 @@ protocol CompanionSessionAdapter: AnyObject {
     /// Kept current by the registry: status and ids change after launch.
     var session: Session { get set }
     var pending: [PendingInteraction] { get }
+    var suppressesTerminalFallback: Bool { get }
     var transcript: SessionTranscript { get }
     func refresh() async throws
     func sendPrompt(_ text: String) async throws
     func stop() async throws
     func answer(_ id: UUID, with answer: InteractionAnswer) async throws -> AnswerOutcome
     func close()
+}
+
+extension CompanionSessionAdapter {
+    var suppressesTerminalFallback: Bool { false }
 }
 
 /// An experimental-API peer of the app-server used by the Mac's Codex TUI.
@@ -22,7 +27,14 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
     private let endpoint: String
     private let screen: (() async -> String?)?
     private let send: ((Data) -> Void)?
-    var session: Session
+    var session: Session {
+        didSet {
+            // Codex removes the request as soon as it accepts the phone
+            // answer, while AppStore's status update arrives slightly later.
+            // Clear the suppression once the real status is no longer waiting.
+            if session.status != .waitingForInput { suppressesTerminalFallback = false }
+        }
+    }
     private var connected = false
     private var refreshTask: Task<Void, Error>?
     private var subscribedThreadID: String?
@@ -33,6 +45,7 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
     private var requests: [UUID: Request] = [:]
     private var order: [UUID] = []
     private var answering: Set<UUID> = []
+    private(set) var suppressesTerminalFallback = false
     private struct ItemKey: Hashable { var thread: String; var id: String }
     private var editPreviews: [ItemKey: PermissionRequest] = [:]
     private struct Request {
@@ -226,6 +239,7 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
         }
         try rpc.reply(id: request.id, result: result)
         requests[id] = nil; order.removeAll { $0 == id }
+        suppressesTerminalFallback = true
         if let note, !note.isEmpty {
             // The decision is already applied; a turn that ended meanwhile
             // takes the note as a new turn instead of failing the answer.

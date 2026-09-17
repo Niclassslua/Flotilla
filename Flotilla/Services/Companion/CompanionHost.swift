@@ -687,7 +687,8 @@ final class CompanionHost {
                     diffStat: store.diffStatStore.stat(for: session.id),
                     handoffTargets: store.handoffTargets(for: session),
                     isProcessLive: store.process(for: session.id) != nil && session.status != .crashed,
-                    answerable: session.agent == .claudeCode ? bridge.pending(for: session.id) : adapters.pending(session) + bridge.pending(for: session.id)
+                    answerable: session.agent == .claudeCode ? bridge.pending(for: session.id) : adapters.pending(session) + bridge.pending(for: session.id),
+                    suppressTerminalFallback: session.agent != .claudeCode && adapters.suppressesTerminalFallback(for: session)
                 )
             }
         )
