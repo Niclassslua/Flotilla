@@ -59,10 +59,6 @@ struct FleetView: View {
         .animation(.snappy, value: mac?.isReachable)
         .navigationTitle(mac?.name ?? "Mac")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                FlotillaWordmark(pointSize: 14)
-                    .accessibilityIdentifier("FleetView.Wordmark")
-            }
             #if DEBUG
             ToolbarItem(placement: .topBarTrailing) { ScenarioMenu() }
             #endif

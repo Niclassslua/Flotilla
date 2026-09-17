@@ -48,11 +48,17 @@ struct WorkspaceToolbar: ToolbarContent {
         // Leading Flotilla brand mark. `.navigation` pins it to the true
         // leading edge so it never reflows when principal/trailing items
         // appear, and `sharedBackgroundVisibility(.hidden)` drops it out of
-        // the toolbar's shared Liquid Glass grouping so it renders as a bare
-        // wordmark with no capsule — see
+        // the toolbar's shared Liquid Glass grouping so the boat and wordmark
+        // render without a capsule — see
         // https://developer.apple.com/documentation/swiftui/customizabletoolbarcontent/sharedbackgroundvisibility(_:)
         ToolbarItem(placement: .navigation) {
-            FlotillaWordmark(pointSize: 17)
+            HStack(spacing: 10) {
+                Image(systemName: "sailboat.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(FlotillaColors.accent)
+                    .accessibilityHidden(true)
+                FlotillaWordmark(pointSize: 17)
+            }
             .accessibilityIdentifier(AXID.topBarLogo.rawValue)
         }
         .sharedBackgroundVisibility(.hidden)
