@@ -95,6 +95,27 @@ final class AntigravityWorkspaceTrustTests: XCTestCase {
         XCTAssertTrue(trusted.contains(workspace.path), "New workspace path must be appended")
     }
 
+    func testEnsureTrustedDoesNotReplaceMalformedTrustedWorkspaces() throws {
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let initialSettings: [String: Any] = [
+            "model": "gemini-3.7-flash-high",
+            "trustedWorkspaces": ["unexpected": "object"]
+        ]
+        let initialData = try JSONSerialization.data(withJSONObject: initialSettings, options: [])
+        try initialData.write(to: settingsURL)
+        let originalData = try Data(contentsOf: settingsURL)
+
+        let workspace = tempDirectory.appendingPathComponent("new-project", isDirectory: true)
+        XCTAssertThrowsError(
+            try AntigravityWorkspaceTrust.ensureTrusted(
+                workspace: workspace,
+                settingsURL: settingsURL
+            )
+        )
+        XCTAssertEqual(try Data(contentsOf: settingsURL), originalData)
+    }
+
     func testCandidatePathsNormalizesTrailingSlashes() {
         let urlWithSlash = URL(fileURLWithPath: "/path/to/project/")
         let candidates = AntigravityWorkspaceTrust.candidatePaths(for: urlWithSlash)

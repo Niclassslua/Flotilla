@@ -21,6 +21,10 @@ import Foundation
 public struct AntigravityWorkspaceTrust: Sendable {
     private static let inProcessLock = NSLock()
 
+    public enum Error: Swift.Error, Equatable {
+        case trustedWorkspacesIsNotAnArray
+    }
+
     /// Default directory containing Antigravity settings (`~/.gemini/antigravity-cli`),
     /// customizable via the `JETSKI_APP_DATA_DIR` environment variable.
     public static var defaultSettingsDirectory: URL {
@@ -104,7 +108,18 @@ public struct AntigravityWorkspaceTrust: Sendable {
             }
         }
 
-        var trusted = (root["trustedWorkspaces"] as? [String]) ?? []
+        var trusted: [String]
+        if let value = root["trustedWorkspaces"] {
+            guard let existing = value as? [String] else {
+                // Do not silently replace a setting whose schema we do not
+                // understand. Antigravity may have migrated this field, or a
+                // user may need to repair it manually.
+                throw Error.trustedWorkspacesIsNotAnArray
+            }
+            trusted = existing
+        } else {
+            trusted = []
+        }
         var modified = false
 
         for candidate in candidates {
