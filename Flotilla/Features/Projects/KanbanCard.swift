@@ -230,12 +230,12 @@ private struct GlassCard: View {
         HStack(spacing: 5) {
             GitBranchIcon(size: 10)
                 .foregroundStyle(FlotillaColors.textTertiary)
-            Text(branch)
+            Text(BranchNaming.displayName(for: branch))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(FlotillaColors.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .help(branch)
+                .help(BranchNaming.displayName(for: branch))
             Spacer(minLength: 0)
         }
     }

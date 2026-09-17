@@ -295,7 +295,7 @@ struct ReviewHeaderBar: View {
                 HStack(spacing: FlotillaSpacing.xSmall) {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 9, weight: .semibold))
-                    Text(branch)
+                    Text(BranchNaming.displayName(for: branch))
                         .font(FlotillaTypography.caption2.monospaced())
                         .lineLimit(1)
                         .truncationMode(.middle)

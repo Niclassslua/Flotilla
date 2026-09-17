@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import SessionKit
 
 /// The canonical Git branch mark (Octicon `git-branch`), rendered as a vector template asset
 /// rather than Apple's generic three-way fork SF Symbol `arrow.triangle.branch`.
@@ -39,7 +40,7 @@ public struct GitBranchLabel: View {
 
     public var body: some View {
         Label {
-            Text(title)
+            Text(BranchNaming.displayName(for: title))
         } icon: {
             GitBranchIcon(size: size)
         }

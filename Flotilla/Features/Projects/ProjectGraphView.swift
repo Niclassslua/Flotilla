@@ -155,7 +155,7 @@ struct ProjectGraphView: View {
 
                     ForEach(viewModel.branches, id: \.name) { branch in
                         GraphBranchChip(
-                            title: branch.name,
+                            title: BranchNaming.displayName(for: branch.name),
                             systemImage: branch.isRemote ? "cloud" : "",
                             isBranch: !branch.isRemote,
                             laneColor: viewModel.laneColor(forBranch: branch),
@@ -389,4 +389,3 @@ struct ProjectGraphView: View {
         .background(FlotillaColors.surface)
     }
 }
-

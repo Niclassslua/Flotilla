@@ -127,7 +127,7 @@ struct StreamProjectWorkspace: View {
             instrumentSegment {
                 HStack(spacing: 5) {
                     GitBranchIcon(size: 11)
-                    Text(pulse.branch ?? "—")
+                    Text(pulse.branch.map(BranchNaming.displayName) ?? "—")
                 }
             } action: { openGit() }
 
@@ -262,7 +262,7 @@ struct StreamProjectWorkspace: View {
         .background(FlotillaColors.sidebar)
         .accessibilityIdentifier(AXID.projectWorktreesSection.rawValue)
         .confirmationDialog(
-            worktreePendingDeletion.map { "Delete the worktree on “\($0.branch)”?" } ?? "",
+            worktreePendingDeletion.map { "Delete the worktree on “\(BranchNaming.displayName(for: $0.branch))”?" } ?? "",
             isPresented: Binding(
                 get: { worktreePendingDeletion != nil },
                 set: { if !$0 { worktreePendingDeletion = nil } }
@@ -332,7 +332,7 @@ struct StreamProjectWorkspace: View {
 
                 HStack(spacing: 6) {
                     GitBranchIcon(size: 11)
-                    Text(pulse.branch ?? "—")
+                    Text(pulse.branch.map(BranchNaming.displayName) ?? "—")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .lineLimit(1)
@@ -714,7 +714,7 @@ struct StreamProjectWorkspace: View {
                     .lineLimit(1)
                     .layoutPriority(1)
                 if let branch = session.worktree?.branchName {
-                    Text(branch)
+                    Text(BranchNaming.displayName(for: branch))
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(FlotillaColors.textTertiary)
                         .lineLimit(1)
@@ -858,7 +858,7 @@ private struct WorktreeContextRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(worktree.branch)
+                        Text(BranchNaming.displayName(for: worktree.branch))
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(isProminent ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
                             .lineLimit(1)

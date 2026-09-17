@@ -143,7 +143,7 @@ struct SessionRow: View {
                 .foregroundStyle(.tertiary)
             if let branch = session.worktree?.branchName {
                 GitBranchIcon(size: 9)
-                Text(branch)
+                Text(BranchNaming.displayName(for: branch))
                     .font(.caption2.monospaced())
                     .truncationMode(.middle)
                     .layoutPriority(-1)

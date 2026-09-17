@@ -174,7 +174,7 @@ struct SessionCard<Terminal: View>: View {
                 if let branch = session.worktree?.branchName {
                     GitBranchIcon(size: 10)
                         .foregroundStyle(.secondary)
-                    Text(branch)
+                    Text(BranchNaming.displayName(for: branch))
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -290,7 +290,7 @@ struct SessionCard<Terminal: View>: View {
                 .foregroundStyle(.secondary)
 
             if let worktree = session.worktree {
-                Text(worktree.branchName)
+                Text(BranchNaming.displayName(for: worktree.branchName))
                     .font(.caption.monospaced())
                     .lineLimit(1)
                     .truncationMode(.middle)

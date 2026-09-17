@@ -39,7 +39,7 @@ struct SessionGitSidebar: View {
             await viewModel.monitorSelection()
         }
         .confirmationDialog(
-            pendingDeletion.map { "Delete \($0.branch)?" } ?? "Delete branch?",
+            pendingDeletion.map { "Delete \(BranchNaming.displayName(for: $0.branch))?" } ?? "Delete branch?",
             isPresented: Binding(
                 get: { pendingDeletion != nil },
                 set: { if !$0 { pendingDeletion = nil } }
@@ -400,9 +400,9 @@ struct SessionGitSidebar: View {
                         viewModel.selectLogBranch(branch.name)
                     } label: {
                         if viewModel.selectedLogBranch == branch.name {
-                            Label(branch.name, systemImage: "checkmark")
+                            Label(BranchNaming.displayName(for: branch.name), systemImage: "checkmark")
                         } else {
-                            Text(branch.name)
+                            Text(BranchNaming.displayName(for: branch.name))
                         }
                     }
                 }
@@ -673,7 +673,7 @@ private struct GitSidebarBranchRow: View {
                 .accessibilityLabel(hasWorkingAgent ? "Agent working" : "No agent working")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(branch.name)
+                Text(BranchNaming.displayName(for: branch.name))
                     .font(FlotillaTypography.caption.weight(isCurrentSessionBranch ? .semibold : .regular).monospaced())
                     .foregroundStyle(
                         isCurrentSessionBranch ? FlotillaColors.accent : FlotillaColors.textPrimary

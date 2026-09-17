@@ -409,7 +409,7 @@ struct SessionSidebarRow: View {
                 with: "~"
             )
         guard let branch = session.worktree?.branchName else { return path }
-        return "\(branch)\n\(path)"
+        return "\(BranchNaming.displayName(for: branch))\n\(path)"
     }
 
     /// Exactly one state wins — layering translucent tints on top of each

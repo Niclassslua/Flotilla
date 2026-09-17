@@ -13,7 +13,7 @@ struct CommitRefChip: View {
     let maxTextWidth: CGFloat?
 
     init(text: String, systemImage: String, tint: Color, maxTextWidth: CGFloat? = nil) {
-        self.text = text
+        self.text = BranchNaming.displayName(for: text)
         self.systemImage = systemImage
         self.tint = tint
         self.maxTextWidth = maxTextWidth
@@ -59,4 +59,3 @@ struct CommitRefChip: View {
         .fixedSize(horizontal: maxTextWidth == nil, vertical: true)
     }
 }
-

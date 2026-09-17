@@ -88,13 +88,15 @@ struct SessionBar: View {
         store.project(for: session)?.name ?? "General"
     }
 
-    private var branchName: String? { session.worktree?.branchName }
+    private var branchName: String? {
+        session.worktree.map { BranchNaming.displayName(for: $0.branchName) }
+    }
 
     /// The worktree's own directory name. With no worktree the agent is
     /// working in the checkout itself, and naming that directory is more use
     /// than naming nothing — the same fallback the window subtitle used.
     private var worktreeName: String {
-        (session.worktree?.worktreePath ?? session.workingDirectory).lastPathComponent
+        BranchNaming.displayName(for: (session.worktree?.worktreePath ?? session.workingDirectory).lastPathComponent)
     }
 
     /// Both project-owned panels need a project to open into. An unassigned

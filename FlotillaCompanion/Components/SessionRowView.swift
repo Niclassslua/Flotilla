@@ -43,7 +43,7 @@ struct SessionRowView: View {
                 }
 
                 HStack(spacing: 5) {
-                    Text(session.branch.map { "\(projectName) / \($0)" } ?? projectName)
+                    Text(session.branch.map { "\(projectName) / \(BranchNaming.displayName(for: $0))" } ?? projectName)
                         .foregroundStyle(FlotillaColors.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.middle)

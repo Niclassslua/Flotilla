@@ -80,14 +80,14 @@ final class SessionLaunchPreviewTests: XCTestCase {
 
         // BranchNaming appends a per-launch random 8-hex suffix; only the
         // stable slug can be previewed.
-        XCTAssertEqual(preview.branchSlug, "flotilla/dark-mode")
+        XCTAssertEqual(preview.branchSlug, "dark-mode")
     }
 
     func testBranchSlugSlugifiesPunctuationTheSameWayBranchNamingDoes() {
         let goal = "Fix the CI/CD pipeline (again!)"
         let preview = resolve(goal: goal, choice: .known(project()), createWorktree: true)
 
-        let expected = BranchNaming.generate(from: goal, uuid: UUID())
+        let expected = BranchNaming.displayName(for: BranchNaming.generate(from: goal, uuid: UUID()))
         XCTAssertTrue(
             expected.hasPrefix(preview.branchSlug ?? "<none>"),
             "\(expected) should start with the previewed slug \(preview.branchSlug ?? "<none>")"
@@ -98,7 +98,7 @@ final class SessionLaunchPreviewTests: XCTestCase {
         let preview = resolve(goal: "Dark mode", choice: .known(project()), createWorktree: true)
 
         let displayed = try? XCTUnwrap(preview.displayBranch)
-        XCTAssertEqual(displayed, "flotilla/dark-mode-••••••••")
+        XCTAssertEqual(displayed, "dark-mode")
     }
 
     // MARK: - Title derivation

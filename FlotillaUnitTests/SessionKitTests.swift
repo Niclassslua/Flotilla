@@ -84,3 +84,26 @@ final class SessionStatusMachineTests: XCTestCase {
         XCTAssertNil(result.waitingReason)
     }
 }
+
+final class BranchNamingTests: XCTestCase {
+    func testDisplayNameHidesFlotillaPrefixAndGeneratedSuffix() {
+        XCTAssertEqual(
+            BranchNaming.displayName(for: "flotilla/fix-login-bug-a1b2c3d4"),
+            "fix-login-bug"
+        )
+    }
+
+    func testDisplayNameHidesPrefixForAgentChosenBranchWithoutSuffix() {
+        XCTAssertEqual(
+            BranchNaming.displayName(for: "flotilla/agent-chosen-slug"),
+            "agent-chosen-slug"
+        )
+    }
+
+    func testDisplayNameLeavesUnmanagedBranchUnchanged() {
+        XCTAssertEqual(
+            BranchNaming.displayName(for: "feature/fix-login-bug-a1b2c3d4"),
+            "feature/fix-login-bug-a1b2c3d4"
+        )
+    }
+}

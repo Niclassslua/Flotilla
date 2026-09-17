@@ -129,7 +129,7 @@ struct ProjectGitView: View {
                     Button {
                         navigator.setProjectGitScope(wt.path, for: project.id)
                     } label: {
-                        Label(wt.branch, systemImage: selectedScopeURL == wt.path ? "checkmark" : "")
+                        Label(BranchNaming.displayName(for: wt.branch), systemImage: selectedScopeURL == wt.path ? "checkmark" : "")
                     }
                 }
             }
@@ -163,9 +163,9 @@ struct ProjectGitView: View {
             return "Main (\(project.name))"
         }
         if let matching = worktrees.first(where: { $0.path.standardizedFileURL == selectedScopeURL.standardizedFileURL }) {
-            return matching.branch
+            return BranchNaming.displayName(for: matching.branch)
         }
-        return selectedScopeURL.lastPathComponent
+        return BranchNaming.displayName(for: selectedScopeURL.lastPathComponent)
     }
 
     private var selectedSubTab: GitSubTab {
@@ -210,9 +210,10 @@ struct ProjectGitView: View {
 
     private func dummySession(for url: URL) -> Session {
         let branchName = worktrees.first(where: { $0.path.standardizedFileURL == url.standardizedFileURL })?.branch ?? url.lastPathComponent
+        let displayBranchName = BranchNaming.displayName(for: branchName)
         return Session(
-            title: branchName,
-            goal: "Git Scope: \(branchName)",
+            title: displayBranchName,
+            goal: "Git Scope: \(displayBranchName)",
             agent: .claudeCode,
             projectID: project.id,
             workingDirectory: url

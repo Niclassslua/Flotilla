@@ -34,12 +34,11 @@ struct SessionLaunchPreview: Equatable {
         )
     }
 
-    /// AI naming is not known until launch. For prompt-derived branches,
-    /// `BranchNaming.generate` appends a fresh random 8-hex suffix, so the
-    /// preview shows only the stable slug and a visible suffix placeholder.
+    /// AI naming is not known until launch. For prompt-derived branches, the
+    /// preview shows only the stable human-readable slug.
     var displayBranch: String? {
         if namingPending { return "Name chosen on launch" }
-        return branchSlug.map { "\($0)-••••••••" }
+        return branchSlug
     }
 
     static func resolve(
@@ -137,10 +136,9 @@ struct SessionLaunchPreview: Equatable {
     /// suffix it produces is discarded.
     private static let previewUUID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
 
-    /// `BranchNaming` returns `flotilla/<slug>-<8hex>`; the suffix is
-    /// per-launch noise, so only the stable part is surfaced.
+    /// `BranchNaming` returns `flotilla/<slug>-<8hex>`; both the namespace and
+    /// suffix are implementation details, so only the stable part is surfaced.
     private static func stripSuffix(from branch: String) -> String {
-        guard let separator = branch.lastIndex(of: "-") else { return branch }
-        return String(branch[branch.startIndex..<separator])
+        BranchNaming.displayName(for: branch)
     }
 }

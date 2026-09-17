@@ -79,7 +79,7 @@ struct ProjectCommandCard: View {
             if let branch = currentBranch {
                 HStack(spacing: 4) {
                     GitBranchIcon(size: FlotillaIconSize.small)
-                    Text(branch)
+                    Text(BranchNaming.displayName(for: branch))
                         .font(.system(size: 11, design: .monospaced))
                         .lineLimit(1)
                         .truncationMode(.middle)
