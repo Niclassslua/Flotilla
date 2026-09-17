@@ -68,7 +68,18 @@ struct CreateSessionSheet: View {
                     Button("Cancel", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create", systemImage: "arrow.up") { create() }
+                    Button(action: create) {
+                        if isCreating {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 20, height: 20)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .frame(width: 20, height: 20)
+                        }
+                    }
+                        .accessibilityLabel(isCreating ? "Creating session" : "Create session")
+                        .accessibilityIdentifier("CreateSession.CreateButton")
                         .buttonStyle(.glassProminent)
                         .tint(FlotillaColors.accent)
                         .disabled(isCreating || goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.isActionable(macID: macID))
