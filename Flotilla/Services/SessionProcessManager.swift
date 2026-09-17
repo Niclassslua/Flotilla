@@ -33,6 +33,7 @@ final class SessionProcessManager {
     private let conversationOwnershipChecker: any AgentConversationOwnershipChecking
     private let hookConfigurationWriter: any HookConfiguring
     private let hookSupportDirectory: URL
+    private let antigravityWorkspaceTruster: (@Sendable (URL) throws -> Void)?
     private var intentionallyTerminating = Set<UUID>()
     private let resizeVerification: ResizeVerificationPolicy
     private var tmuxProbeCache: (usable: Bool, probedAt: Date)?
@@ -88,6 +89,9 @@ final class SessionProcessManager {
         conversationOwnershipChecker: any AgentConversationOwnershipChecking = ProcessAgentConversationOwnershipChecker(),
         hookConfigurationWriter: any HookConfiguring = HookConfigurationWriter(),
         hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
+        antigravityWorkspaceTruster: (@Sendable (URL) throws -> Void)? = {
+            try AntigravityWorkspaceTrust.ensureTrusted(workspace: $0)
+        },
         gitService: any GitServiceProtocol = GitService(),
         resizeVerification: ResizeVerificationPolicy = .default
     ) {
@@ -104,6 +108,7 @@ final class SessionProcessManager {
         self.conversationOwnershipChecker = conversationOwnershipChecker
         self.hookConfigurationWriter = hookConfigurationWriter
         self.hookSupportDirectory = hookSupportDirectory
+        self.antigravityWorkspaceTruster = antigravityWorkspaceTruster
         self.resizeVerification = resizeVerification
     }
 
@@ -218,6 +223,13 @@ final class SessionProcessManager {
             workingDirectory: session.workingDirectory,
             supportDirectory: hookSupportDirectory
         )
+
+        // Ensure Antigravity's workspace trust is recorded so the interactive
+        // trust confirmation dialog ("Do you trust the contents of this project?")
+        // is skipped automatically.
+        if session.agent == .antigravity {
+            try? antigravityWorkspaceTruster?(session.workingDirectory)
+        }
 
         let provider = providers.provider(for: session.agent)
         let settings = settingsProvider()

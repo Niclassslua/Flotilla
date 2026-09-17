@@ -709,6 +709,9 @@ final class AppStore {
         if let validatedWorktree {
             sessions[index].worktree = validatedWorktree
             sessions[index].workingDirectory = validatedWorktree.worktreePath
+            if sessions[index].agent == .antigravity {
+                try? AntigravityWorkspaceTrust.ensureTrusted(workspace: validatedWorktree.worktreePath)
+            }
         }
 
         do {
@@ -762,6 +765,9 @@ final class AppStore {
             }
             sessions[index].worktree = worktreeInfo
             sessions[index].workingDirectory = worktree.path
+            if sessions[index].agent == .antigravity {
+                try? AntigravityWorkspaceTrust.ensureTrusted(workspace: worktree.path)
+            }
             try repository.save(mergingLiveScrollback(sessions[index]))
             lastOperationError = Self.fallbackWarning
             return worktreeInfo
