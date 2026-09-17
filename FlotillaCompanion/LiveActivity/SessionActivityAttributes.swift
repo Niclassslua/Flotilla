@@ -1,7 +1,7 @@
 import ActivityKit
 import Foundation
 
-/// -proto liveActivity: shared between FlotillaCompanion and
+/// Shared between FlotillaCompanion and
 /// FlotillaCompanionWidget — the app starts/updates/ends the activity, the
 /// widget extension renders it. Kept intentionally small: just enough for
 /// the Dynamic Island and Lock Screen to show what's happening.

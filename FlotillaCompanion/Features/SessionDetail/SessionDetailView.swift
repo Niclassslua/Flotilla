@@ -19,15 +19,14 @@ struct SessionDetailView: View {
     private static let nearBottomThreshold: CGFloat = 80
     @State private var isNearBottom = true
     @State private var hasNewOutputWhileScrolledUp = false
-    /// -proto jumpPillCount: how many new-content events landed while
-    /// scrolled up, shown on the jump pill instead of a bare arrow.
+    /// How many new-content events landed while scrolled up, shown on the
+    /// jump pill instead of a bare arrow.
     @State private var newOutputCount = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSearching = false
     @State private var searchQuery = ""
     @State private var currentMatchIndex = 0
     @State private var scrollProxy: ScrollViewProxy?
-    /// -proto liveActivity
     @State private var liveActivity: Activity<SessionActivityAttributes>?
     @State private var visibleItemCount: Int = 40
 
@@ -184,7 +183,6 @@ struct SessionDetailView: View {
         .sessionDeleteDialog(session: $pendingDelete, matching: session)
         .modifier(NeedsAttentionHaptic(status: session.status))
         .task(id: activityContentState(for: session)) {
-            guard ProtoFlags.isOn("liveActivity") else { return }
             await syncLiveActivity(session: session)
         }
         .onDisappear { endLiveActivity() }
@@ -220,7 +218,7 @@ struct SessionDetailView: View {
             scrollToBottom(proxy)
         } label: {
             Group {
-                if ProtoFlags.isOn("jumpPillCount"), newOutputCount > 0 {
+                if newOutputCount > 0 {
                     Label("\(newOutputCount) new", systemImage: "arrow.down")
                 } else {
                     Label("New output", systemImage: "arrow.down")
@@ -372,7 +370,6 @@ struct SessionDetailView: View {
         return diff.stat
     }
 
-    /// -proto liveActivity
     private func activityContentState(for session: CompanionSession) -> SessionActivityAttributes.ContentState {
         let kind: SessionActivityAttributes.StatusKind = switch session.status {
         case .working: .working
@@ -388,7 +385,7 @@ struct SessionDetailView: View {
         )
     }
 
-    /// -proto liveActivity: starts the activity on first appearance, updates
+    /// Starts the activity on first appearance, updates
     /// it on every status change thereafter. Local-only — no push token is
     /// requested, so this only reflects reality while the app is open (see
     /// docs/companion.md decision #6).
@@ -411,11 +408,11 @@ struct SessionDetailView: View {
         Task { @MainActor in await liveActivity.end(nil, dismissalPolicy: .immediate) }
     }
 
-    /// -proto statusTint: a soft gradient behind the header, following
-    /// `StatusPresentation.color` — amber while waiting, emerald when ready.
+    /// A soft gradient behind the header, following `StatusPresentation.color`
+    /// — amber while waiting, emerald when ready.
     @ViewBuilder
     private func statusTintBackground(for status: SessionStatus?) -> some View {
-        if ProtoFlags.isOn("statusTint"), status == .waitingForInput || status == .readyForReview {
+        if status == .waitingForInput || status == .readyForReview {
             LinearGradient(
                 colors: [StatusPresentation.color(for: status).opacity(0.22), FlotillaColors.canvas],
                 startPoint: .top,
@@ -428,13 +425,13 @@ struct SessionDetailView: View {
     }
 }
 
-/// -proto statusTint: tints the navigation bar itself to match, since the
+/// Tints the navigation bar itself to match, since the
 /// header's gradient alone leaves the system bar untouched above it.
 private struct NavBarStatusTint: ViewModifier {
     let status: SessionStatus?
 
     func body(content: Content) -> some View {
-        if ProtoFlags.isOn("statusTint"), status == .waitingForInput || status == .readyForReview {
+        if status == .waitingForInput || status == .readyForReview {
             content.toolbarBackground(StatusPresentation.color(for: status).opacity(0.18), for: .navigationBar)
         } else {
             content
@@ -442,7 +439,7 @@ private struct NavBarStatusTint: ViewModifier {
     }
 }
 
-/// -proto haptics: fires on entering waiting-for-input or ready-for-review,
+/// Fires on entering waiting-for-input or ready-for-review,
 /// not on leaving it — a plain `HapticsOnChange` would fire both ways.
 private struct NeedsAttentionHaptic: ViewModifier {
     let status: SessionStatus?
@@ -450,12 +447,8 @@ private struct NeedsAttentionHaptic: ViewModifier {
     private var needsAttention: Bool { status == .waitingForInput || status == .readyForReview }
 
     func body(content: Content) -> some View {
-        if ProtoFlags.isOn("haptics") {
-            content.sensoryFeedback(trigger: needsAttention) { wasAttention, isAttention in
-                isAttention && !wasAttention ? .success : nil
-            }
-        } else {
-            content
+        content.sensoryFeedback(trigger: needsAttention) { wasAttention, isAttention in
+            isAttention && !wasAttention ? .success : nil
         }
     }
 }

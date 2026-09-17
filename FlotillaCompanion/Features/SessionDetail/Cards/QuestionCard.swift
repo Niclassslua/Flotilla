@@ -111,8 +111,7 @@ struct QuestionCard: View {
         .sensoryFeedback(.selection, trigger: selections)
     }
 
-    /// -proto thumbCardActions
-    private var buttonRowHeight: CGFloat? { ProtoFlags.isOn("thumbCardActions") ? 50 : nil }
+    private var buttonRowHeight: CGFloat? { 50 }
 
     private func isAnswered(_ step: QuestionStep) -> Bool {
         let hasOther = otherEnabled.contains(step.id) && !otherText[step.id, default: ""].trimmingCharacters(in: .whitespaces).isEmpty

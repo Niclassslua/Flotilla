@@ -12,21 +12,14 @@ struct SessionRowView: View {
     let latestLine: String?
 
     private var isWorking: Bool { session.status == .working }
-    /// -proto logoStatusBadge: status dot moves onto the provider logo as a
-    /// corner badge, the text status label drops (the dot's color already
-    /// carries it), and the diff pill moves up next to the branch.
-    private var isLogoStatusBadge: Bool { ProtoFlags.isOn("logoStatusBadge") }
-
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ZStack(alignment: .bottomTrailing) {
                 ProviderLogo(agent: session.agent)
                     .frame(width: 22, height: 22)
-                if isLogoStatusBadge {
-                    StatusDot(status: session.status, size: 8, isPulsing: ProtoFlags.isOn("pulsingStatusDot") && isWorking)
-                        .background(Circle().fill(FlotillaColors.surface).frame(width: 11, height: 11))
-                        .offset(x: 3, y: 3)
-                }
+                StatusDot(status: session.status, size: 8, isPulsing: isWorking)
+                    .background(Circle().fill(FlotillaColors.surface).frame(width: 11, height: 11))
+                    .offset(x: 3, y: 3)
             }
             .padding(.top, 1)
 
@@ -38,7 +31,7 @@ struct SessionRowView: View {
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 2) {
-                        if ProtoFlags.isOn("elapsedTimer"), isWorking {
+                        if isWorking {
                             ElapsedTimer(since: session.updatedAt)
                         } else {
                             Text(session.updatedAt, format: .relative(presentation: .numeric, unitsStyle: .narrow))
@@ -46,24 +39,15 @@ struct SessionRowView: View {
                                 .foregroundStyle(FlotillaColors.textTertiary)
                                 .monospacedDigit()
                         }
-                        if !isLogoStatusBadge, ProtoFlags.isOn("diffPills"), let diffStat = session.diffStat, diffStat.hasChanges {
-                            DiffPill(diffStat: diffStat)
-                        }
                     }
                 }
 
                 HStack(spacing: 5) {
-                    if !isLogoStatusBadge {
-                        StatusDot(status: session.status, isPulsing: ProtoFlags.isOn("pulsingStatusDot") && isWorking)
-                        Text(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
-                            .foregroundStyle(StatusPresentation.color(for: session.status))
-                        Text("·").foregroundStyle(FlotillaColors.textTertiary)
-                    }
                     Text(session.branch.map { "\(projectName) / \($0)" } ?? projectName)
                         .foregroundStyle(FlotillaColors.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    if isLogoStatusBadge, ProtoFlags.isOn("diffPills"), let diffStat = session.diffStat, diffStat.hasChanges {
+                    if let diffStat = session.diffStat, diffStat.hasChanges {
                         Spacer(minLength: 8)
                         DiffPill(diffStat: diffStat)
                     }
@@ -102,7 +86,6 @@ struct SessionRowView: View {
 struct StatusDot: View {
     let status: SessionStatus?
     var size: CGFloat = 7
-    /// -proto pulsingStatusDot
     var isPulsing: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -117,8 +100,8 @@ struct StatusDot: View {
     }
 }
 
-/// -proto pulsingStatusDot: a soft glow that breathes behind the dot while a
-/// session is working, so an active row reads as "alive" from a glance.
+/// A soft glow breathes behind the dot while a session is working, so an
+/// active row reads as "alive" from a glance.
 private struct PulsingGlow: ViewModifier {
     let color: Color
     let size: CGFloat
@@ -143,7 +126,7 @@ private struct PulsingGlow: ViewModifier {
     }
 }
 
-/// -proto elapsedTimer: a live "1m 42s" ticker. `since` is the session's
+/// A live "1m 42s" ticker. `since` is the session's
 /// `updatedAt` — the closest signal available on the phone to when the
 /// current turn started, since `CompanionSession` doesn't carry a separate
 /// turn-start timestamp.
@@ -166,7 +149,7 @@ private struct ElapsedTimer: View {
     }
 }
 
-/// -proto diffPills: additions/deletions colored the way a diff reads
+/// Additions/deletions colored the way a diff reads
 /// everywhere else, sitting under the timestamp rather than jammed into the
 /// status line next to the branch.
 private struct DiffPill: View {

@@ -3,8 +3,8 @@ import DesignSystem
 import SwiftUI
 import WidgetKit
 
-/// -proto liveActivity: the Dynamic Island and Lock Screen presentation for
-/// a session's live status. Local-only — see SessionActivityAttributes.
+/// The Dynamic Island and Lock Screen presentation for a session's live
+/// status. Local-only — see SessionActivityAttributes.
 struct SessionActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: SessionActivityAttributes.self) { context in

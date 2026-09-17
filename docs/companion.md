@@ -69,31 +69,16 @@ End-to-end in the simulator (DEBUG): launch Flotilla with
 fresh pairing link there), then launch the companion with
 `-pairingLink "$(cat /tmp/pair.txt)"`.
 
-### UI prototypes (`-proto`)
+### Companion UI
 
-Screenshot-review scaffolding for UI ideas not yet shipped, gated behind
-`ProtoFlags` (`FlotillaCompanion/App/CompanionApp.swift`, DEBUG-only). Pass
-`-proto <name>` once per flag to enable it; repeat for several at once, e.g.
-`-scenario streamingClaude -proto pulsingStatusDot -proto diffPills`.
+The companion ships the fleet-row status badge, live status timing, diff pills,
+accented user bubbles, code-block headers, tool chips, counted new-output
+jumps, thumb-friendly action cards, haptic feedback, status tinting, Live
+Activities, and smart-presence notifications by default. Live Activities and
+smart presence remain local-only while the app is open; APNs would be required
+for delivery after iOS suspends the app.
 
-| Name | Feature |
-|---|---|
-| `approveSwipe` | Fleet row: leading swipe action to allow a pending permission |
-| `pulsingStatusDot` | Fleet row: glowing status dot while working |
-| `diffPills` | Fleet row: colored +N/−N diff summary (placement depends on `logoStatusBadge`) |
-| `elapsedTimer` | Fleet row: live "1m 42s" ticker since the row last updated |
-| `logoStatusBadge` | Fleet row: status dot as a corner badge on the provider logo, drops the text status label, moves the diff pill next to the branch |
-| `userBubbleAccentTint` | Transcript: accent-tinted user message bubble instead of flat `surfaceElevated` |
-| `codeBlockHeader` | Transcript: language badge + Copy button above fenced code, via `MarkdownCodeFence` segment splitting (see note below) |
-| `toolChips` | Transcript: collapsed tool group header becomes a scrolling row of what each call touched, instead of just a count |
-| `jumpPillCount` | Transcript: the "New output" jump pill shows a live count instead of a bare label |
-| `thumbCardActions` | Cards (Permission/Plan/Question): primary action full-width ≥50pt at the bottom, secondary actions quieter, thumb-reachable |
-| `haptics` | Fills gaps in the existing `.sensoryFeedback` usage: `.impact(.light)` on expand/collapse (tool groups, project headers), `.impact(.medium)` on Send, `.warning` on Stop and Deny, `.success` on entering waiting-for-input/ready-for-review. Device-only, nothing to screenshot — verify with `make run-companion-device`. |
-| `statusTint` | Session detail: soft gradient behind the header and nav bar, following `StatusPresentation.color` — amber while waiting, emerald when ready |
-| `liveActivity` | Starts a Live Activity (Dynamic Island + Lock Screen) for the open session, updated on status change, ended on leaving the screen. The compact Island shows a status dot and elapsed time; holding it reveals the session title, status, agent, and timer. The Lock Screen card uses the same information. Local-only — no push token requested, so it only reflects reality while the app is open (decision #6). Needs `FlotillaCompanionWidget` (widget-extension target, `SessionActivityAttributes` shared between it and the app). |
-| `smartPresence` | Mac and iPhone: when the Mac is inactive, idle for over 45 seconds, or locked, an attention transition sends `SessionAttentionEvent` to connected phones. The phone presents a local notification with View Session, plus Approve/Deny for permissions. Launch both apps with the flag. This only works while the encrypted link is active; delivery after iOS suspends the app requires APNs. |
-
-`codeBlockHeader`'s implementation note: `StructuredText`'s per-block style
+The code-block header implementation note: `StructuredText`'s per-block style
 customization hooks (`.textual.codeBlockStyle(_:)`, `.textual.paragraphStyle(_:)`)
 did not take effect in this app despite matching the package's documented
 usage exactly — verified by swapping a style's entire body for an unmissable

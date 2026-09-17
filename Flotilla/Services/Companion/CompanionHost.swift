@@ -183,9 +183,7 @@ final class CompanionHost {
         )
         self.server = server
         server.start()
-        if ProcessInfo.processInfo.arguments.contains("-proto"), ProcessInfo.processInfo.arguments.contains("smartPresence") {
-            lastAttentionSessions = Dictionary(uniqueKeysWithValues: buildFleet().sessions.map { ($0.id, $0) })
-        }
+        lastAttentionSessions = Dictionary(uniqueKeysWithValues: buildFleet().sessions.map { ($0.id, $0) })
         startPublishing()
     }
 
@@ -578,8 +576,6 @@ final class CompanionHost {
     }
 
     private func publishAttentionTransitions() {
-        guard ProcessInfo.processInfo.arguments.contains("-proto"),
-              ProcessInfo.processInfo.arguments.contains("smartPresence") else { return }
         let fleet = buildFleet()
         let previous = lastAttentionSessions
         lastAttentionSessions = Dictionary(uniqueKeysWithValues: fleet.sessions.map { ($0.id, $0) })

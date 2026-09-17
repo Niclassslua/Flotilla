@@ -86,42 +86,32 @@ private struct PlanActions: View {
                 VStack(spacing: 8) {
                     Button { send(.approvePlan(.autoAccept)) } label: {
                         Text("Approve & Auto-Accept Edits")
-                            .frame(maxWidth: .infinity, minHeight: ProtoFlags.isOn("thumbCardActions") ? 50 : nil)
+                            .frame(maxWidth: .infinity, minHeight: 50)
                     }
                     .buttonStyle(.glassProminent)
                     .tint(FlotillaColors.accent)
                     HStack(spacing: 8) {
                         Button { send(.approvePlan(.askForEdits)) } label: {
                             Text("Approve & Ask for Edits")
-                                .frame(maxWidth: .infinity, minHeight: ProtoFlags.isOn("thumbCardActions") ? 50 : nil)
+                                .frame(maxWidth: .infinity, minHeight: 50)
                         }
                         .buttonStyle(.glass)
                         Button { isRevising = true } label: {
                             Text("Revise")
-                                .frame(maxWidth: .infinity, minHeight: ProtoFlags.isOn("thumbCardActions") ? 50 : nil)
+                                .frame(maxWidth: .infinity, minHeight: 50)
                         }
                         .buttonStyle(.glass)
                     }
                 }
                 .controlSize(.large)
                 .disabled(isSending)
-            } else if ProtoFlags.isOn("thumbCardActions") {
+            } else {
                 VStack(spacing: 8) {
                     Button { send(.approvePlan(nil)) } label: { Text("Approve").frame(maxWidth: .infinity, minHeight: 50) }
                         .buttonStyle(.glassProminent)
                         .tint(FlotillaColors.accent)
                     Button { isRevising = true } label: { Text("Revise").frame(maxWidth: .infinity, minHeight: 50) }
                         .buttonStyle(.glass)
-                }
-                .controlSize(.large)
-                .disabled(isSending)
-            } else {
-                HStack(spacing: 8) {
-                    Button { isRevising = true } label: { Text("Revise").frame(maxWidth: .infinity) }
-                        .buttonStyle(.glass)
-                    Button { send(.approvePlan(nil)) } label: { Text("Approve").frame(maxWidth: .infinity) }
-                        .buttonStyle(.glassProminent)
-                        .tint(FlotillaColors.accent)
                 }
                 .controlSize(.large)
                 .disabled(isSending)

@@ -20,7 +20,6 @@ final class CompanionAttentionNotifications: NSObject, UNUserNotificationCenterD
     private weak var store: CompanionStore?
 
     func configure(store: CompanionStore) {
-        guard ProtoFlags.isOn("smartPresence") else { return }
         self.store = store
         let approve = UNNotificationAction(identifier: ID.approve, title: "Approve")
         let deny = UNNotificationAction(identifier: ID.deny, title: "Deny", options: [.destructive])

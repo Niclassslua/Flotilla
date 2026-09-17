@@ -156,9 +156,9 @@ struct FleetView: View {
     }
 }
 
-/// -proto approveSwipe: a leading swipe action that allows a pending
-/// permission, mirroring the trailing Deny swipe. Full swipe stays off so
-/// nothing gets approved by accident.
+/// A leading swipe action that allows a pending permission, mirroring the
+/// trailing Deny swipe. Full swipe stays off so nothing gets approved by
+/// accident.
 private struct ApproveSwipeAction: ViewModifier {
     let permission: PendingInteraction?
     let sessionID: CompanionSession.ID
@@ -166,7 +166,7 @@ private struct ApproveSwipeAction: ViewModifier {
     @Environment(CompanionStore.self) private var store
 
     func body(content: Content) -> some View {
-        if ProtoFlags.isOn("approveSwipe"), let permission {
+        if let permission {
             content.swipeActions(edge: .leading, allowsFullSwipe: false) {
                 Button("Allow", systemImage: "checkmark") {
                     Task { _ = await store.answer(permission.id, in: sessionID, with: .allow) }
@@ -174,8 +174,6 @@ private struct ApproveSwipeAction: ViewModifier {
                 .tint(FlotillaColors.accent)
                 .disabled(!isActionable)
             }
-        } else {
-            content
         }
     }
 }

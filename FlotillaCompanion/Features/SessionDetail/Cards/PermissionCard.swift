@@ -64,61 +64,21 @@ struct PermissionCard: View {
     }
 
     private var actions: some View {
-        Group {
-            if ProtoFlags.isOn("thumbCardActionsOneLine") {
-                HStack(spacing: 8) {
-                    Button { denyCount += 1; send(.deny) } label: {
-                        Text("Deny").frame(maxWidth: .infinity, minHeight: 50)
-                    }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("PermissionCard.Deny")
-
-                    Button { send(.allow) } label: {
-                        Text("Allow").frame(maxWidth: .infinity, minHeight: 50)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(FlotillaColors.accent)
-                    .accessibilityIdentifier("PermissionCard.Allow")
-
-                    moreMenu(expandsToFill: false, matchesRowHeight: true)
-                }
-            } else if ProtoFlags.isOn("thumbCardActions") {
-                VStack(spacing: 8) {
-                    Button { send(.allow) } label: {
-                        Text("Allow").frame(maxWidth: .infinity, minHeight: 50)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(FlotillaColors.accent)
-                    .accessibilityIdentifier("PermissionCard.Allow")
-
-                    HStack(spacing: 8) {
-                        Button { denyCount += 1; send(.deny) } label: {
-                            Text("Deny").frame(maxWidth: .infinity, minHeight: 50)
-                        }
-                        .buttonStyle(.glass)
-                        .accessibilityIdentifier("PermissionCard.Deny")
-
-                        moreMenu(expandsToFill: true)
-                    }
-                }
-            } else {
-                HStack(spacing: 8) {
-                    Button { denyCount += 1; send(.deny) } label: {
-                        Text("Deny").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("PermissionCard.Deny")
-
-                    Button { send(.allow) } label: {
-                        Text("Allow").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(FlotillaColors.accent)
-                    .accessibilityIdentifier("PermissionCard.Allow")
-
-                    moreMenu(expandsToFill: false)
-                }
+        HStack(spacing: 8) {
+            Button { denyCount += 1; send(.deny) } label: {
+                Text("Deny").frame(maxWidth: .infinity, minHeight: 50)
             }
+            .buttonStyle(.glass)
+            .accessibilityIdentifier("PermissionCard.Deny")
+
+            Button { send(.allow) } label: {
+                Text("Allow").frame(maxWidth: .infinity, minHeight: 50)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(FlotillaColors.accent)
+            .accessibilityIdentifier("PermissionCard.Allow")
+
+            moreMenu(expandsToFill: false, matchesRowHeight: true)
         }
         .controlSize(.large)
         .disabled(isSending)

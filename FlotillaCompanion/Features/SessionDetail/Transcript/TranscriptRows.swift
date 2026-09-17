@@ -43,10 +43,8 @@ struct UserMessageRow: View, @preconcurrency Equatable {
         .accessibilityElement(children: .combine)
     }
 
-    /// -proto userBubbleAccentTint
     private var bubbleFill: Color {
         guard !isQueued else { return .clear }
-        guard ProtoFlags.isOn("userBubbleAccentTint") else { return FlotillaColors.surfaceElevated }
         return FlotillaColors.accent.opacity(0.14)
     }
 }
@@ -59,20 +57,14 @@ struct AssistantMessageRow: View, @preconcurrency Equatable {
     }
 
     var body: some View {
-        Group {
-            if ProtoFlags.isOn("codeBlockHeader") {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(MarkdownCodeFence.segments(in: markdown).enumerated()), id: \.offset) { _, segment in
-                        switch segment {
-                        case .prose(let text):
-                            structuredText(text)
-                        case .code(let language, let code):
-                            CodeBlockView(language: language, code: code)
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(MarkdownCodeFence.segments(in: markdown).enumerated()), id: \.offset) { _, segment in
+                switch segment {
+                case .prose(let text):
+                    structuredText(text)
+                case .code(let language, let code):
+                    CodeBlockView(language: language, code: code)
                 }
-            } else {
-                structuredText(markdown)
             }
         }
         .font(.body)
@@ -88,8 +80,8 @@ struct AssistantMessageRow: View, @preconcurrency Equatable {
     }
 }
 
-/// -proto codeBlockHeader: splits a message's markdown into prose and fenced
-/// code segments, so code segments can get a header the default `.gitHub`
+/// Splits a message's markdown into prose and fenced code segments, so code
+/// segments can get a header the default `.gitHub`
 /// code block style doesn't offer — `StructuredText`'s per-block style
 /// customization hooks (`.textual.codeBlockStyle(_:)`) didn't take effect in
 /// this app despite matching the documented usage, so this sidesteps that
@@ -132,7 +124,7 @@ enum MarkdownCodeFence {
     }
 }
 
-/// -proto codeBlockHeader: a language badge and Copy button above the code.
+/// A language badge and Copy button above the code.
 /// Reuses `.gitHub`'s code block rendering (syntax highlighting included)
 /// for the code itself, nested one level down — see `MarkdownCodeFence`.
 private struct CodeBlockView: View {
@@ -438,7 +430,7 @@ struct ToolGroupRow: View {
                             Image(systemName: "chevron.right")
                                 .font(.caption2.weight(.semibold))
                                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                            if ProtoFlags.isOn("toolChips"), !isExpanded {
+                            if !isExpanded {
                                 toolChips
                             } else {
                                 Text(title)
@@ -475,8 +467,8 @@ struct ToolGroupRow: View {
         return running ? "Running tools · \(calls.count)" : "Ran \(calls.count) tools"
     }
 
-    /// -proto toolChips: the collapsed header as a scrolling row of what
-    /// each call touched, instead of just a count.
+    /// The collapsed header is a scrolling row of what each call touched,
+    /// instead of just a count.
     private var toolChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
