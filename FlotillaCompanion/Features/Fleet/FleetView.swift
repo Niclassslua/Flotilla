@@ -2,9 +2,11 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 import CompanionKit
+import os
 
 /// One Mac's sessions: **Needs you** pinned on top, then grouped by project.
 struct FleetView: View {
+    private static let syncLog = Logger(subsystem: "com.niclassslua.flotilla", category: "CompanionSync")
     let macID: MacHost.ID
 
     @Environment(CompanionStore.self) private var store
@@ -78,7 +80,19 @@ struct FleetView: View {
                 store.path.append(.session(newID))
             }
         }
-        .onAppear { collapsedProjects = store.collapsedProjects(on: macID) }
+        .onAppear {
+            collapsedProjects = store.collapsedProjects(on: macID)
+            logRender(sessions: sessions, needsYou: needsYou, groups: groups)
+        }
+    }
+
+    private func logRender(
+        sessions: [CompanionSession],
+        needsYou: [CompanionSession],
+        groups: [(name: String, sessions: [CompanionSession])]
+    ) {
+        let collapsedVisibleGroups = groups.filter { collapsedProjects.contains($0.name) }.map(\.name)
+        Self.syncLog.debug("render fleet mac=\(macID, privacy: .public) sessions=\(sessions.count) needsYou=\(needsYou.count) groups=\(groups.count) collapsed=\(collapsedVisibleGroups, privacy: .public)")
     }
 
     private func projectHeader(_ name: String, isCollapsed: Bool) -> some View {

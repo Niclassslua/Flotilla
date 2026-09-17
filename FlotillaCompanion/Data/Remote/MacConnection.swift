@@ -8,6 +8,7 @@ import os
 @Observable
 final class MacConnection {
     private static let performance = Logger(subsystem: "com.niclassslua.flotilla", category: "CompanionPerformance")
+    private static let syncLog = Logger(subsystem: "com.niclassslua.flotilla", category: "CompanionSync")
     private(set) var record: PairedMacRecord
     private(set) var state: MacConnectionState = .unreachable
     private(set) var fleet: FleetSnapshot?
@@ -280,14 +281,17 @@ final class MacConnection {
         record.lastSeen = .now
         switch message {
         case .fleet(let snapshot):
+            Self.syncLog.info("received fleet mac=\(self.record.macID, privacy: .public) sessions=\(snapshot.sessions.count) projects=\(snapshot.projects.count) sessionIDs=\(snapshot.sessions.map { $0.id.uuidString }, privacy: .public)")
             fleetRevision = 0
             applyFleet(snapshot)
         case .fleetDelta(let delta):
             guard let fleet, let fleetRevision,
                   let updated = delta.applying(to: fleet, revision: fleetRevision) else {
+                Self.syncLog.error("rejected fleet delta mac=\(self.record.macID, privacy: .public) base=\(delta.baseRevision) revision=\(delta.revision) localRevision=\(self.fleetRevision ?? 999999) localSessions=\(self.fleet?.sessions.count ?? 0); requesting resync")
                 try? session?.send(.resyncFleet)
                 return
             }
+            Self.syncLog.info("received fleet delta mac=\(self.record.macID, privacy: .public) base=\(delta.baseRevision) revision=\(delta.revision) ordered=\(delta.orderedIDs.count) changed=\(delta.changed.count) resultingSessions=\(updated.sessions.count) projects=\(updated.projects.count)")
             self.fleetRevision = delta.revision
             applyFleet(updated)
         case .transcript(let sessionID, let transcript):
@@ -332,6 +336,11 @@ final class MacConnection {
     }
 
     private func applyFleet(_ snapshot: FleetSnapshot) {
+        let previousSessionIDs = Set(fleet?.sessions.map(\.id) ?? [])
+        let incomingSessionIDs = Set(snapshot.sessions.map(\.id))
+        if !previousSessionIDs.isEmpty && incomingSessionIDs.isEmpty {
+            Self.syncLog.error("fleet update removed every session mac=\(self.record.macID, privacy: .public) previous=\(previousSessionIDs.count) projects=\(snapshot.projects.count)")
+        }
         let previous = fleet?.pending ?? [:]
         for (sessionID, cards) in previous {
             let stillOpen = Set((snapshot.pending[sessionID] ?? []).map(\.id))
@@ -345,6 +354,7 @@ final class MacConnection {
         }
         fleet = snapshot
         fleetReceivedAt = .now
+        Self.syncLog.debug("applied fleet mac=\(self.record.macID, privacy: .public) sessions=\(snapshot.sessions.count) projects=\(snapshot.projects.count)")
         onFleetChange()
         if case .connected = state, snapshot.macName != record.name {
             record.name = snapshot.macName

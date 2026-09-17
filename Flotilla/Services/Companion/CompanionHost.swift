@@ -7,12 +7,14 @@ import ProcessKit
 import HooksKit
 import CompanionKit
 import SettingsKit
+import os
 
 /// Hosts the iPhone companion link inside Flotilla: the listener, pairing,
 /// paired devices, and the updates each connected phone receives.
 @MainActor
 @Observable
 final class CompanionHost {
+    private static let syncLog = Logger(subsystem: "com.niclassslua.flotilla", category: "CompanionSync")
     enum Status: Equatable {
         case off
         case starting
@@ -398,6 +400,7 @@ final class CompanionHost {
         let key = ObjectIdentifier(peer)
         peers[key] = peer
         connectedDeviceIDs = Set(peers.values.map(\.deviceID))
+        Self.syncLog.info("peer attached device=\(hello.deviceID, privacy: .public) mode=\(String(describing: hello.mode), privacy: .public) peers=\(self.peers.count)")
 
         connected.session.onClose { [weak self] _ in
             Task { @MainActor in
@@ -565,9 +568,11 @@ final class CompanionHost {
             guard peer.lastFleet != fleet else { continue }
             if let old = peer.lastFleet {
                 let delta = FleetDelta.make(from: old, to: fleet, baseRevision: peer.fleetRevision)
+                Self.syncLog.info("send fleet delta device=\(peer.deviceID, privacy: .public) base=\(delta.baseRevision) revision=\(delta.revision) oldSessions=\(old.sessions.count) newSessions=\(fleet.sessions.count) ordered=\(delta.orderedIDs.count) changed=\(delta.changed.count) projects=\(fleet.projects.count)")
                 guard (try? peer.session.send(.fleetDelta(delta))) != nil else { continue }
                 peer.fleetRevision = delta.revision
             } else {
+                Self.syncLog.info("send initial fleet device=\(peer.deviceID, privacy: .public) sessions=\(fleet.sessions.count) projects=\(fleet.projects.count) sessionIDs=\(fleet.sessions.map { $0.id.uuidString }, privacy: .public)")
                 guard (try? peer.session.send(.fleet(fleet))) != nil else { continue }
                 peer.fleetRevision = 0
             }
@@ -606,6 +611,7 @@ final class CompanionHost {
 
     private func sendFleetSnapshot(to peer: Peer) {
         let snapshot = buildFleet()
+        Self.syncLog.info("send fleet snapshot device=\(peer.deviceID, privacy: .public) sessions=\(snapshot.sessions.count) projects=\(snapshot.projects.count) sessionIDs=\(snapshot.sessions.map { $0.id.uuidString }, privacy: .public)")
         guard (try? peer.session.send(.fleet(snapshot))) != nil else { return }
         peer.lastFleet = snapshot
         peer.fleetRevision = 0
@@ -672,7 +678,7 @@ final class CompanionHost {
     }
 
     func buildFleet() -> FleetSnapshot {
-        CompanionSnapshotBuilder.snapshot(
+        let snapshot = CompanionSnapshotBuilder.snapshot(
             macID: identity?.macID ?? "",
             macName: macName,
             sessions: store.sessions,
@@ -688,5 +694,11 @@ final class CompanionHost {
                 )
             }
         )
+        if !store.sessions.isEmpty && snapshot.sessions.isEmpty {
+            Self.syncLog.error("BUG fleet mapping dropped all sessions storeSessions=\(self.store.sessions.count) projects=\(snapshot.projects.count)")
+        } else {
+            Self.syncLog.debug("built fleet storeSessions=\(self.store.sessions.count) snapshotSessions=\(snapshot.sessions.count) projects=\(snapshot.projects.count)")
+        }
+        return snapshot
     }
 }
