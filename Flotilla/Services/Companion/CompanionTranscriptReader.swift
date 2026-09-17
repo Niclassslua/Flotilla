@@ -119,10 +119,10 @@ actor CompanionTranscriptReader {
         if let lineReader = reader as? any TranscriptLineReading,
            let bytes = try? Data(contentsOf: url) {
             let complete = Self.completeRecords(bytes)
-            let lines = Self.lines(complete)
-            let transcript = SessionTranscript(events: Self.recentEvents(in: lines, reader: lineReader))
+            let (events, lineCount) = Self.tailEvents(in: complete, reader: lineReader)
+            let transcript = SessionTranscript(events: events)
             cache[session.id] = Cached(url: url, modified: modified, size: bytes.count,
-                                       parsedSize: complete.count, lineCount: lines.count, transcript: transcript)
+                                       parsedSize: complete.count, lineCount: lineCount, transcript: transcript)
             return transcript
         }
         guard let entries = try? reader.readNative(at: url) else {
@@ -176,14 +176,78 @@ actor CompanionTranscriptReader {
             && !(text.hasPrefix("<environment_context>") && text.hasSuffix("</environment_context>"))
     }
 
-    private static func recentEvents(in lines: [Substring], reader: any TranscriptLineReading) -> [TranscriptEvent] {
-        var latest: [TranscriptEvent] = []
-        for index in lines.indices.reversed() {
-            let events = self.events(in: [lines[index]], reader: reader, firstLine: index)
-            latest.insert(contentsOf: events, at: 0)
-            if latest.count >= CompanionProtocol.transcriptEventLimit { break }
+    private static func tailEvents(in data: Data, reader: any TranscriptLineReading) -> (events: [TranscriptEvent], totalLines: Int) {
+        guard !data.isEmpty else { return ([], 0) }
+        let totalLines = countNewlines(in: data)
+        guard totalLines > 0 else { return ([], 0) }
+
+        // Read up to 1,000 lines from the tail: more than enough to yield
+        // CompanionProtocol.transcriptEventLimit (400 events) while avoiding
+        // allocating and splitting megabytes of historical JSONL records.
+        let targetTailLines = min(totalLines, max(1000, CompanionProtocol.transcriptEventLimit * 2))
+        if let (offset, linesInTail) = tailNewlineOffset(in: data, maxLines: targetTailLines) {
+            let tailData = data.subdata(in: offset..<data.count)
+            let tailLines = Self.lines(tailData)
+            let firstLineIndex = totalLines - linesInTail
+            let events = recentEvents(in: tailLines, reader: reader, firstLine: firstLineIndex)
+            if events.count >= CompanionProtocol.transcriptEventLimit || offset == 0 {
+                return (events, totalLines)
+            }
         }
-        return Array(latest.suffix(CompanionProtocol.transcriptEventLimit))
+
+        // Fallback in case the tail had fewer than 400 events due to filtered records:
+        let lines = Self.lines(data)
+        return (recentEvents(in: lines, reader: reader, firstLine: 0), totalLines)
+    }
+
+    private static func countNewlines(in data: Data) -> Int {
+        data.withUnsafeBytes { rawBuffer in
+            guard let base = rawBuffer.baseAddress else { return 0 }
+            var count = 0
+            var ptr = base
+            var remaining = rawBuffer.count
+            while remaining > 0, let next = memchr(ptr, Int32(0x0A), remaining) {
+                let found = UnsafeRawPointer(next)
+                count += 1
+                let consumed = (found - ptr) + 1
+                ptr = found + 1
+                remaining -= consumed
+            }
+            return count
+        }
+    }
+
+    private static func tailNewlineOffset(in data: Data, maxLines: Int) -> (offset: Int, linesFound: Int)? {
+        data.withUnsafeBytes { rawBuffer in
+            guard let base = rawBuffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return nil }
+            var count = 0
+            var i = rawBuffer.count - 1
+            if i >= 0 && base[i] == 0x0A {
+                i -= 1
+            }
+            while i >= 0 {
+                if base[i] == 0x0A {
+                    count += 1
+                    if count == maxLines {
+                        return (i + 1, count)
+                    }
+                }
+                i -= 1
+            }
+            return (0, count + (rawBuffer.count > 0 ? 1 : 0))
+        }
+    }
+
+    private static func recentEvents(in lines: [Substring], reader: any TranscriptLineReading, firstLine: Int = 0) -> [TranscriptEvent] {
+        var latestReversed: [TranscriptEvent] = []
+        for index in lines.indices.reversed() {
+            let events = self.events(in: [lines[index]], reader: reader, firstLine: firstLine + index)
+            for event in events.reversed() {
+                latestReversed.append(event)
+            }
+            if latestReversed.count >= CompanionProtocol.transcriptEventLimit { break }
+        }
+        return Array(latestReversed.reversed().suffix(CompanionProtocol.transcriptEventLimit))
     }
 
     func forget(_ sessionID: UUID) {

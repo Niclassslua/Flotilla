@@ -115,8 +115,9 @@ public struct TranscriptEvent: Identifiable, Hashable, Codable, Sendable {
         case toolResult(toolUseID: String, output: String, isError: Bool, timestamp: Date)
         case systemNote(text: String, timestamp: Date)
         /// A screenshot the agent took and looked at — Codex's `view_image`,
-        /// downsampled to a JPEG on the Mac before it travels.
-        case image(mimeType: String, base64: String, timestamp: Date)
+        /// downsampled to a JPEG on the Mac before it travels. `filename` is
+        /// the name the agent gave the file, when it sent one.
+        case image(mimeType: String, base64: String, filename: String?, timestamp: Date)
         case handoff(from: AgentKind, to: AgentKind, timestamp: Date)
         /// The compact trace a resolved card leaves (`Allowed Bash: npm test`).
         case resolvedInteraction(text: String, isPositive: Bool)
@@ -157,8 +158,8 @@ extension TranscriptEvent.Content {
             self = .toolUse(id: id, tool: tool, input: Self.scalarArguments(input), timestamp: timestamp)
         case .toolResult(let toolUseID, let output, let isError, let timestamp):
             self = .toolResult(toolUseID: toolUseID, output: output, isError: isError, timestamp: timestamp)
-        case .image(let mimeType, let base64, let timestamp):
-            self = .image(mimeType: mimeType, base64: base64, timestamp: timestamp)
+        case .image(let mimeType, let base64, let filename, let timestamp):
+            self = .image(mimeType: mimeType, base64: base64, filename: filename, timestamp: timestamp)
         case .handoffMarker(let from, let to, _, let timestamp):
             self = .handoff(from: from, to: to, timestamp: timestamp)
         case .systemNote(let text, let timestamp):

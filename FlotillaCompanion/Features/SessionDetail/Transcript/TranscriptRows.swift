@@ -6,9 +6,13 @@ import DesignSystem
 import Textual
 import CompanionKit
 
-struct UserMessageRow: View {
+struct UserMessageRow: View, @preconcurrency Equatable {
     let text: String
     var isQueued = false
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.text == rhs.text && lhs.isQueued == rhs.isQueued
+    }
 
     var body: some View {
         HStack {
@@ -47,8 +51,12 @@ struct UserMessageRow: View {
     }
 }
 
-struct AssistantMessageRow: View {
+struct AssistantMessageRow: View, @preconcurrency Equatable {
     let markdown: String
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.markdown == rhs.markdown
+    }
 
     var body: some View {
         Group {
@@ -196,6 +204,12 @@ struct ImageRow: View {
         return cache
     }()
 
+    /// Shown as a small preview inline in the chat, matching a chat
+    /// attachment rather than filling the transcript column; full size is
+    /// still one tap away in the fullscreen viewer.
+    private static let maxThumbnailWidth: CGFloat = 110
+    private static let maxThumbnailHeight: CGFloat = 130
+
     private struct Prepared: @unchecked Sendable {
         let image: UIImage?
     }
@@ -211,6 +225,7 @@ struct ImageRow: View {
                     Image(uiImage: thumbnail)
                         .resizable()
                         .scaledToFit()
+                        .frame(maxWidth: Self.maxThumbnailWidth, maxHeight: Self.maxThumbnailHeight)
                         .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
@@ -568,9 +583,13 @@ struct ToolCallRow: View {
     }
 }
 
-struct ResolvedInteractionRow: View {
+struct ResolvedInteractionRow: View, @preconcurrency Equatable {
     let text: String
     let isPositive: Bool
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.text == rhs.text && lhs.isPositive == rhs.isPositive
+    }
 
     var body: some View {
         Label {
@@ -584,8 +603,12 @@ struct ResolvedInteractionRow: View {
     }
 }
 
-struct TurnFailedRow: View {
+struct TurnFailedRow: View, @preconcurrency Equatable {
     let message: String
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.message == rhs.message
+    }
 
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -597,8 +620,12 @@ struct TurnFailedRow: View {
     }
 }
 
-struct SystemNoteRow: View {
+struct SystemNoteRow: View, @preconcurrency Equatable {
     let text: String
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.text == rhs.text
+    }
 
     var body: some View {
         Text(text)
@@ -608,9 +635,13 @@ struct SystemNoteRow: View {
     }
 }
 
-struct HandoffRow: View {
+struct HandoffRow: View, @preconcurrency Equatable {
     let from: AgentKind
     let to: AgentKind
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.from == rhs.from && lhs.to == rhs.to
+    }
 
     var body: some View {
         HStack(spacing: 6) {

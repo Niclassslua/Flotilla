@@ -3,12 +3,12 @@ import SessionKit
 import CompanionKit
 
 /// One row of the rendered transcript.
-enum TranscriptItem: Identifiable {
+enum TranscriptItem: Identifiable, Equatable {
     case user(id: String, text: String)
     case assistant(id: String, text: String)
     case toolGroup(id: String, calls: [ToolCall])
     case system(id: String, text: String)
-    case image(id: String, mimeType: String, base64: String)
+    case image(id: String, mimeType: String, base64: String, filename: String?)
     case handoff(id: String, from: AgentKind, to: AgentKind)
     case resolved(id: String, text: String, isPositive: Bool)
     case failed(id: String, message: String)
@@ -16,14 +16,14 @@ enum TranscriptItem: Identifiable {
     var id: String {
         switch self {
         case .user(let id, _), .assistant(let id, _), .toolGroup(let id, _), .system(let id, _),
-             .image(let id, _, _), .handoff(let id, _, _), .resolved(let id, _, _), .failed(let id, _):
+             .image(let id, _, _, _), .handoff(let id, _, _), .resolved(let id, _, _), .failed(let id, _):
             id
         }
     }
 }
 
 /// A `toolUse` with its `toolResult`, if one has arrived.
-struct ToolCall: Identifiable, Sendable {
+struct ToolCall: Identifiable, Sendable, Equatable {
     let id: String
     var tool: String
     var input: [String: String]
@@ -115,9 +115,9 @@ enum TranscriptLayout {
             case .systemNote(let text, _):
                 flush()
                 items.append(.system(id: event.id, text: text))
-            case .image(let mimeType, let base64, _):
+            case .image(let mimeType, let base64, let filename, _):
                 flush()
-                items.append(.image(id: event.id, mimeType: mimeType, base64: base64))
+                items.append(.image(id: event.id, mimeType: mimeType, base64: base64, filename: filename))
             case .handoff(let from, let to, _):
                 flush()
                 items.append(.handoff(id: event.id, from: from, to: to))
@@ -133,9 +133,14 @@ enum TranscriptLayout {
         return items
     }
 
+    /// The call still waiting for its result, looking at precomputed items in O(1).
+    static func inFlightCall(in items: [TranscriptItem]) -> ToolCall? {
+        guard case .toolGroup(_, let calls)? = items.last else { return nil }
+        return calls.last(where: \.isRunning)
+    }
+
     /// The call still waiting for its result, which the working indicator names.
     static func inFlightCall(in events: [TranscriptEvent]) -> ToolCall? {
-        guard case .toolGroup(_, let calls)? = items(from: events).last else { return nil }
-        return calls.last(where: \.isRunning)
+        inFlightCall(in: items(from: events))
     }
 }

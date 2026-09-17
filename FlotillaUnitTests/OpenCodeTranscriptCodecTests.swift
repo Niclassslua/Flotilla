@@ -108,7 +108,7 @@ final class OpenCodeTranscriptCodecTests: XCTestCase {
             .toolUse(id: "call_1", tool: "shell", input: Data(#"{"command":"ls"}"#.utf8), timestamp: Self.epoch),
             .toolResult(toolUseID: "call_1", output: "README.md", isError: false, timestamp: Self.epoch),
             .toolResult(toolUseID: "call_2", output: "it broke", isError: true, timestamp: Self.epoch),
-            .image(mimeType: "image/png", base64: "AAAA", timestamp: Self.epoch)
+            .image(mimeType: "image/png", base64: "AAAA", filename: nil, timestamp: Self.epoch)
         ])
 
         let handle = try await codec.writeNative(

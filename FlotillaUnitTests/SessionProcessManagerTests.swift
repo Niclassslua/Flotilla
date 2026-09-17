@@ -202,6 +202,32 @@ final class SessionProcessManagerTests: XCTestCase {
         XCTAssertTrue(factory.processes[0].startedArguments.contains("new-session"))
     }
 
+    func testAntigravitySessionStartInvokesWorkspaceTruster() throws {
+        final class TrustRecorder: @unchecked Sendable {
+            var recorded: [URL] = []
+        }
+        let recorder = TrustRecorder()
+        let factory = RecordingProcessFactory()
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(executable: URL(fileURLWithPath: "/usr/bin/env")),
+            processFactory: factory,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: false),
+            antigravityWorkspaceTruster: { url in
+                recorder.recorded.append(url)
+            }
+        )
+        var model = session()
+        model.agent = .antigravity
+
+        _ = try manager.start(session: model)
+        XCTAssertEqual(recorder.recorded, [model.workingDirectory])
+
+        var codexModel = session()
+        codexModel.agent = .codexCLI
+        _ = try manager.start(session: codexModel)
+        XCTAssertEqual(recorder.recorded, [model.workingDirectory], "Non-Antigravity agents should not invoke Antigravity workspace truster")
+    }
+
     func testUnexpectedCrashPublishesExitEventAndExplicitRestartUsesNewProcess() async throws {
         let factory = RecordingProcessFactory()
         let manager = SessionProcessManager(

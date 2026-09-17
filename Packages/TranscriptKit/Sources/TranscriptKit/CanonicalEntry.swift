@@ -43,7 +43,9 @@ public enum CanonicalEntry: Sendable, Equatable {
 
     /// An inline image. Not every target can represent one; a codec that
     /// cannot must drop it in `sanitize(_:)` rather than fail the move.
-    case image(mimeType: String, base64: String, timestamp: Date)
+    /// `filename` is the name the agent gave the file, when it sent one
+    /// (Claude's `SendUserFile`); `nil` for pasted or tool-captured images.
+    case image(mimeType: String, base64: String, filename: String?, timestamp: Date)
 
     /// The seam itself, recorded in the conversation it describes.
     ///
@@ -66,7 +68,7 @@ extension CanonicalEntry {
              let .assistantMessage(_, timestamp),
              let .toolUse(_, _, _, timestamp),
              let .toolResult(_, _, _, timestamp),
-             let .image(_, _, timestamp),
+             let .image(_, _, _, timestamp),
              let .handoffMarker(_, _, _, timestamp),
              let .systemNote(_, timestamp):
             return timestamp

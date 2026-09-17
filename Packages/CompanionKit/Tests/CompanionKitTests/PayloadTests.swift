@@ -162,8 +162,8 @@ final class TranscriptMappingTests: XCTestCase {
     func testImagesAndHandoffsArePreserved() {
         let now = Date()
         XCTAssertEqual(
-            TranscriptEvent.Content(.image(mimeType: "image/png", base64: "YWJj", timestamp: now)),
-            .image(mimeType: "image/png", base64: "YWJj", timestamp: now)
+            TranscriptEvent.Content(.image(mimeType: "image/png", base64: "YWJj", filename: nil, timestamp: now)),
+            .image(mimeType: "image/png", base64: "YWJj", filename: nil, timestamp: now)
         )
         XCTAssertEqual(
             TranscriptEvent.Content(.handoffMarker(from: .claudeCode, to: .codexCLI, reason: "r", timestamp: now)),

@@ -29,6 +29,7 @@ struct SessionDetailView: View {
     @State private var scrollProxy: ScrollViewProxy?
     /// -proto liveActivity
     @State private var liveActivity: Activity<SessionActivityAttributes>?
+    @State private var visibleItemCount: Int = 40
 
     var body: some View {
         if let session = store.session(sessionID), let macID = store.mac(forSession: sessionID)?.id {
@@ -44,12 +45,22 @@ struct SessionDetailView: View {
         let mac = store.mac(macID)
         let items = TranscriptLayout.items(from: transcript.events)
         let matches = isSearching ? TranscriptSearch.matches(in: items, query: searchQuery) : []
+        let inFlight = TranscriptLayout.inFlightCall(in: items)
+        let visibleItems = isSearching ? items : Array(items.suffix(visibleItemCount))
+        let hiddenCount = max(0, items.count - visibleItems.count)
 
         return ScrollViewReader { proxy in
             ScrollView {
-                transcriptContent(session: session, transcript: transcript, items: items)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                transcriptContent(
+                    session: session,
+                    transcript: transcript,
+                    items: visibleItems,
+                    totalItemCount: items.count,
+                    hiddenCount: hiddenCount,
+                    isSearching: isSearching
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
                 Color.clear.frame(height: 1).id(Self.bottomAnchorID)
             }
             .task { scrollProxy = proxy }
@@ -65,7 +76,17 @@ struct SessionDetailView: View {
             }
             .onChange(of: transcript.events.count) { _, _ in handleNewContent(proxy) }
             .onChange(of: transcript.queuedPrompts.count) { _, _ in handleNewContent(proxy) }
-            .onChange(of: transcript.streamingText) { _, _ in handleNewContent(proxy) }
+            .onChange(of: transcript.streamingText) { _, _ in handleNewContent(proxy, animated: false) }
+            .onChange(of: items.count) { oldVal, newVal in
+                if newVal > oldVal {
+                    visibleItemCount += (newVal - oldVal)
+                }
+            }
+            .onChange(of: isSearching) { _, searching in
+                if searching {
+                    visibleItemCount = items.count
+                }
+            }
             .overlay(alignment: .bottom) {
                 if hasNewOutputWhileScrolledUp {
                     newOutputButton(proxy)
@@ -85,7 +106,7 @@ struct SessionDetailView: View {
                 )
                 CurrentTurnSummaryRow(
                     latestLine: transcript.latestCompleteLine,
-                    inFlight: TranscriptLayout.inFlightCall(in: transcript.events),
+                    inFlight: inFlight,
                     diffStat: headerDiffStat(session)
                 )
                 if let mac, !mac.isReachable { UnreachableBanner(mac: mac, asOf: store.transcriptReceivedAt(sessionID)) }
@@ -111,7 +132,7 @@ struct SessionDetailView: View {
             VStack(spacing: 0) {
                 if session.status == .working || transcript.isStopping {
                     WorkingIndicator(
-                        inFlight: TranscriptLayout.inFlightCall(in: transcript.events),
+                        inFlight: inFlight,
                         retryAttempt: transcript.retryAttempt,
                         isStopping: transcript.isStopping
                     )
@@ -173,17 +194,17 @@ struct SessionDetailView: View {
 
     /// New output only pulls the reader along when they're already at the
     /// tail; otherwise it's flagged for the "New output" jump instead.
-    private func handleNewContent(_ proxy: ScrollViewProxy) {
+    private func handleNewContent(_ proxy: ScrollViewProxy, animated: Bool = true) {
         if isNearBottom {
-            scrollToBottom(proxy)
+            scrollToBottom(proxy, animated: animated)
         } else {
             hasNewOutputWhileScrolledUp = true
             newOutputCount += 1
         }
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        if reduceMotion {
+    private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool = true) {
+        if reduceMotion || !animated {
             proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
         } else {
             withAnimation(.snappy) {
@@ -241,7 +262,14 @@ struct SessionDetailView: View {
         currentMatchIndex = 0
     }
 
-    private func transcriptContent(session: CompanionSession, transcript: SessionTranscript, items: [TranscriptItem]) -> some View {
+    private func transcriptContent(
+        session: CompanionSession,
+        transcript: SessionTranscript,
+        items: [TranscriptItem],
+        totalItemCount: Int,
+        hiddenCount: Int,
+        isSearching: Bool
+    ) -> some View {
         let lastGroupID = items.last(where: { if case .toolGroup = $0 { true } else { false } })?.id
         let isWorking = session.status == .working
         // A group whose last tool waits on an answer is still being worked through.
@@ -256,12 +284,48 @@ struct SessionDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
             }
+
+            if !isSearching && hiddenCount > 0 {
+                HStack(spacing: 8) {
+                    Button {
+                        withAnimation(.snappy) {
+                            visibleItemCount = min(totalItemCount, visibleItemCount + 50)
+                        }
+                    } label: {
+                        Label("Load earlier (\(min(50, hiddenCount)))", systemImage: "clock.arrow.circlepath")
+                            .font(.caption.weight(.medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(FlotillaColors.textSecondary)
+                    .controlSize(.small)
+
+                    if hiddenCount > 50 {
+                        Button {
+                            withAnimation(.snappy) {
+                                visibleItemCount = totalItemCount
+                            }
+                        } label: {
+                            Text("Load all (\(hiddenCount))")
+                                .font(.caption.weight(.medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(FlotillaColors.textTertiary)
+                        .controlSize(.small)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("Transcript.LoadEarlier")
+            }
+
             ForEach(items) { item in
                 switch item {
                 case .user(_, let text):
                     UserMessageRow(text: text)
+                        .equatable()
                 case .assistant(_, let text):
                     AssistantMessageRow(markdown: text)
+                        .equatable()
                 case .toolGroup(let id, let calls):
                     // Expanded while the agent is still working through it,
                     // collapsed once done — unless the user chose otherwise.
@@ -276,14 +340,18 @@ struct SessionDetailView: View {
                     )
                 case .system(_, let text):
                     SystemNoteRow(text: text)
-                case .image(_, let mimeType, let base64):
+                        .equatable()
+                case .image(_, let mimeType, let base64, _):
                     ImageRow(id: "\(sessionID):\(item.id)", mimeType: mimeType, base64: base64)
                 case .handoff(_, let from, let to):
                     HandoffRow(from: from, to: to)
+                        .equatable()
                 case .resolved(_, let text, let isPositive):
                     ResolvedInteractionRow(text: text, isPositive: isPositive)
+                        .equatable()
                 case .failed(_, let message):
                     TurnFailedRow(message: message)
+                        .equatable()
                 }
             }
 
@@ -293,9 +361,9 @@ struct SessionDetailView: View {
             }
             ForEach(transcript.queuedPrompts) { prompt in
                 UserMessageRow(text: prompt.text, isQueued: true)
+                    .equatable()
             }
         }
-        .animation(.snappy, value: transcript.events.count)
         .animation(.snappy, value: transcript.queuedPrompts.count)
     }
 

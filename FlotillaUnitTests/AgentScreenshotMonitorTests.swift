@@ -13,12 +13,12 @@ final class AgentScreenshotMonitorTests: XCTestCase {
     private var events: [TranscriptEvent] {
         [
             TranscriptEvent(id: "0", content: .userMessage(text: "What's wrong here?", timestamp: pasteTime)),
-            TranscriptEvent(id: "1", content: .image(mimeType: "image/png", base64: "pasted", timestamp: pasteTime)),
+            TranscriptEvent(id: "1", content: .image(mimeType: "image/png", base64: "pasted", filename: nil, timestamp: pasteTime)),
             TranscriptEvent(id: "2", content: .toolUse(id: "t1", tool: "Read", input: [:], timestamp: toolTime)),
             TranscriptEvent(id: "3", content: .toolResult(toolUseID: "t1", output: "", isError: false, timestamp: toolTime)),
-            TranscriptEvent(id: "4", content: .image(mimeType: "image/jpeg", base64: "read", timestamp: toolTime)),
+            TranscriptEvent(id: "4", content: .image(mimeType: "image/jpeg", base64: "read", filename: nil, timestamp: toolTime)),
             TranscriptEvent(id: "5", content: .toolUse(id: "t2", tool: "SendUserFile", input: [:], timestamp: sendTime)),
-            TranscriptEvent(id: "6", content: .image(mimeType: "image/jpeg", base64: "sent", timestamp: sendTime)),
+            TranscriptEvent(id: "6", content: .image(mimeType: "image/jpeg", base64: "sent", filename: nil, timestamp: sendTime)),
         ]
     }
 
@@ -51,7 +51,7 @@ final class AgentScreenshotMonitorTests: XCTestCase {
             TranscriptEvent(id: offset == 1 ? "0:1" : "\(offset):0", content: event.content)
         }
         let nextWindow = Array(firstWindow.dropFirst(3)) + [
-            TranscriptEvent(id: "7:0", content: .image(mimeType: "image/png", base64: "new", timestamp: Date(timeIntervalSince1970: 400)))
+            TranscriptEvent(id: "7:0", content: .image(mimeType: "image/png", base64: "new", filename: nil, timestamp: Date(timeIntervalSince1970: 400)))
         ]
 
         let baseline = AgentScreenshotMonitor.agentImages(in: firstWindow).last?.position
@@ -66,7 +66,7 @@ final class AgentScreenshotMonitorTests: XCTestCase {
         let events = [
             TranscriptEvent(id: "10:0", content: .userMessage(text: "hello", timestamp: sameTime)),
             TranscriptEvent(id: "11:0", content: .toolUse(id: "send", tool: "SendUserFile", input: [:], timestamp: sameTime)),
-            TranscriptEvent(id: "11:1", content: .image(mimeType: "image/png", base64: "sent", timestamp: sameTime))
+            TranscriptEvent(id: "11:1", content: .image(mimeType: "image/png", base64: "sent", filename: nil, timestamp: sameTime))
         ]
 
         XCTAssertEqual(AgentScreenshotMonitor.agentImages(in: events).map(\.base64), ["sent"])

@@ -178,6 +178,28 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(text, "real question")
     }
 
+    /// Claude adds image dimensions and coordinate scaling as a synthetic
+    /// companion turn after image inspection. It is useful to the model, but
+    /// must not appear as a message from the person using Flotilla.
+    func testImageCoordinateCompanionTurnIsExcluded() throws {
+        let imageMetadata = "[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]"
+        let url = try writeTranscript([
+            #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
+            #"{"type":"user","isMeta":true,"turnCompanion":true,"timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"\#(imageMetadata)"}}"#,
+            #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":"\#(imageMetadata)"}}"#
+        ])
+
+        let entries = try codec.readNative(at: url)
+
+        XCTAssertEqual(entries.count, 2)
+        guard case let .userMessage(first, _) = entries[0],
+              case let .userMessage(second, _) = entries[1] else {
+            return XCTFail("expected the real and unmarked messages, got \(entries)")
+        }
+        XCTAssertEqual(first, "real question")
+        XCTAssertEqual(second, imageMetadata)
+    }
+
     /// `--resume` makes the CLI nudge itself with an `isMeta` "Continue from
     /// where you left off." turn; when nothing was pending it answers itself
     /// client-side with "No response requested." (model `<synthetic>`, zero
@@ -279,7 +301,7 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(output, "")
         XCTAssertFalse(isError)
 
-        guard case let .image(mimeType, base64, _) = entries[1] else {
+        guard case let .image(mimeType, base64, _, _) = entries[1] else {
             return XCTFail("expected image, got \(entries[1])")
         }
         XCTAssertEqual(mimeType, "image/jpeg")
@@ -307,11 +329,12 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(id, "call_send")
         XCTAssertEqual(tool, "SendUserFile")
 
-        guard case let .image(mimeType, base64, _) = entries[1] else {
+        guard case let .image(mimeType, base64, filename, _) = entries[1] else {
             return XCTFail("expected image, got \(entries[1])")
         }
         XCTAssertEqual(mimeType, "image/jpeg")
         XCTAssertFalse(base64.isEmpty)
+        XCTAssertEqual(filename, "screenshot.png")
     }
 
     func testSendUserFileWithMissingFileIsSkippedGracefully() throws {
@@ -363,11 +386,42 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
 
         let entries = try codec.readNative(at: url)
         XCTAssertEqual(entries.count, 1)
-        guard case let .image(mimeType, base64, _) = entries[0] else {
+        guard case let .image(mimeType, base64, _, _) = entries[0] else {
             return XCTFail("expected image, got \(entries[0])")
         }
         XCTAssertEqual(mimeType, "image/jpeg")
         XCTAssertFalse(base64.isEmpty)
+    }
+
+    func testSameScreenshotViewedThenSentIsNotDuplicated() throws {
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let pngPath = home.appendingPathComponent("screenshot.png")
+        let onePixelData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        try onePixelData.write(to: pngPath)
+        let onePixelPNG = onePixelData.base64EncodedString()
+
+        // A real Claude Code turn: the agent reads the screenshot off disk
+        // (echoed back as a tool_result image block), then hands the same
+        // file to the user via SendUserFile. Both downsample the identical
+        // source bytes, so they should collapse into a single .image entry.
+        let url = try writeTranscript([
+            """
+            {"type":"assistant","timestamp":"2026-09-08T01:18:36Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_read","name":"Read","input":{"file_path":"\(pngPath.path)"}}]}}
+            """,
+            """
+            {"type":"user","timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_read","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"\(onePixelPNG)"}}]}]}}
+            """,
+            """
+            {"type":"assistant","timestamp":"2026-09-08T01:18:38Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_send","name":"SendUserFile","input":{"files":["\(pngPath.path)"],"caption":"sheet"}}]}}
+            """
+        ])
+
+        let entries = try codec.readNative(at: url)
+        let images = entries.filter {
+            if case .image = $0 { return true }
+            return false
+        }
+        XCTAssertEqual(images.count, 1)
     }
 
     func testReadsRealPlanningSessionTranscript() throws {
