@@ -224,7 +224,7 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 | Say | What it is | Code |
 | --- | --- | --- |
 | **Settings window** | The whole preferences window. | `SettingsView` — `Features/Settings/` |
-| **Settings pane** | One page of settings. Named by its tab: **General, Session, Terminal, Git, Notifications, Agent, Appearance, Project, Environment, Advanced, Shortcuts**. | `…SettingsPane` |
+| **Settings pane** | One page of settings. Named by its tab: **General, Sessions, Terminal, Git & Worktrees, Notifications, iPhone Companion, Coding Agents**. Shortcut reference lives in the command palette; tool status lives in Coding Agents. | `…SettingsPane` |
 | **Settings sidebar row** | A row in the settings window's own sidebar. | `SettingsSidebarRow` |
 | **Settings section header** | The icon + title header inside a pane (e.g. "Worktrees", "Prompt Delivery"). | `SettingsSectionHeader` |
 | **Tool status row** | The installed/missing line per external CLI. | `ToolStatusRow` |
@@ -371,9 +371,9 @@ The Stream workspace: the masthead over the activity feed on the left, the conte
 
 ### Settings
 
-**Terminal & Editor pane**
+**Terminal pane**
 
-![Settings window showing the Terminal and Editor pane](images/ui-vocabulary/settings-terminal-editor.png)
+![Settings window showing the Terminal pane](images/ui-vocabulary/settings-terminal-editor.png)
 
 **Git & Worktrees pane**
 

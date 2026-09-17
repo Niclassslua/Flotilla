@@ -8,85 +8,60 @@ import DesignSystem
 
 private enum SettingsTab: String, CaseIterable, Identifiable {
     case general
-    case shortcuts
     case sessions
     case terminal
     case git
     case notifications
     case companion
     case agents
-    // case appearance  // Removed - dark mode only for now
-    case projects
-    case environment
-    case advanced
 
     var id: Self { self }
 
     var title: String {
         switch self {
         case .general: "General"
-        case .shortcuts: "Shortcuts"
         case .sessions: "Sessions"
-        case .terminal: "Terminal & Editor"
+        case .terminal: "Terminal"
         case .git: "Git & Worktrees"
         case .notifications: "Notifications"
         case .companion: "iPhone Companion"
         case .agents: "Coding Agents"
-        // case .appearance: "Appearance"
-        case .projects: "Projects"
-        case .environment: "Developer Tools"
-        case .advanced: "Advanced"
         }
     }
 
     var icon: String {
         switch self {
         case .general: "gearshape.fill"
-        case .shortcuts: "keyboard.fill"
         case .sessions: "rectangle.3.group.fill"
         case .terminal: "terminal.fill"
         case .git: "arrow.triangle.branch"
         case .notifications: "bell.fill"
         case .companion: "iphone"
         case .agents: "cpu.fill"
-        // case .appearance: "paintbrush.fill"
-        case .projects: "folder.fill"
-        case .environment: "wrench.and.screwdriver.fill"
-        case .advanced: "slider.horizontal.3"
         }
     }
 
     var color: Color {
         switch self {
         case .general: .gray
-        case .shortcuts: .teal
         case .sessions: .indigo
         case .terminal: .cyan
         case .git: FlotillaColors.accent
         case .notifications: .red
         case .companion: .green
         case .agents: .purple
-        // case .appearance: .pink
-        case .projects: .blue
-        case .environment: .orange
-        case .advanced: .teal
         }
     }
 
     var searchText: String {
         switch self {
-        case .general: "worktrees workspace grid density directory"
-        case .shortcuts: "keyboard shortcuts keybindings hotkeys navigation layout session terminal commands"
+        case .general: "worktrees workspace grid density directory appearance light dark theme"
         case .sessions: "session defaults coding agent prompt worktree"
-        case .terminal: "terminal editor font size scroll option meta"
+        case .terminal: "terminal font size scroll option meta editor monaco curly braces"
         case .git: "git branch worktree delete lifecycle"
         case .notifications: "notifications waiting input sound privacy never active always delivery"
         case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices"
-        case .agents: "claude codex opencode agy antigravity executable arguments authentication"
-        // case .appearance: "appearance theme system light dark"
-        case .projects: "projects paths rules skills local"
-        case .environment: "developer tools git github gh tmux path"
-        case .advanced: "advanced local storage sqlite pty about"
+        case .agents: "claude codex opencode agy antigravity executable arguments authentication developer tools git github gh tmux path"
         }
     }
 }
@@ -197,8 +172,6 @@ struct SettingsView: View {
         switch selectedTab {
         case .general:
             GeneralSettingsPane(viewModel: viewModel)
-        case .shortcuts:
-            ShortcutsSettingsPane()
         case .sessions:
             SessionSettingsPane(viewModel: viewModel)
         case .terminal:
@@ -211,14 +184,6 @@ struct SettingsView: View {
             CompanionSettingsPane()
         case .agents:
             AgentSettingsPane(viewModel: viewModel)
-        // case .appearance:
-            // AppearanceSettingsPane(viewModel: viewModel)
-        case .projects:
-            ProjectSettingsPane(viewModel: viewModel)
-        case .environment:
-            EnvironmentSettingsPane()
-        case .advanced:
-            AdvancedSettingsPane()
         }
     }
 }
@@ -276,6 +241,18 @@ private struct GeneralSettingsPane: View {
     var body: some View {
         Form {
             Section {
+                Picker("Appearance", selection: $viewModel.settings.appearance) {
+                    Text("System").tag(AppearanceMode.system)
+                    Text("Light").tag(AppearanceMode.light)
+                    Text("Dark").tag(AppearanceMode.dark)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("Settings.AppearancePicker")
+            } header: {
+                SettingsSectionHeader("Appearance", systemImage: "circle.lefthalf.filled")
+            }
+
+            Section {
                 LabeledContent("Base directory") {
                     HStack(spacing: 8) {
                         TextField("Base Directory", text: $viewModel.settings.worktreeBaseDirectory)
@@ -284,7 +261,8 @@ private struct GeneralSettingsPane: View {
                         Button("Choose…") { chooseWorktreeDirectory() }
                     }
                 }
-                Text("New isolated checkouts are created here. Existing sessions are never moved.")
+                .help("Project instruction files and skills stay in their checkout. Flotilla does not upload them.")
+                Text("New isolated checkouts are created here. Existing sessions are never moved. Sessions and their local terminal data stay on this Mac.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
@@ -351,17 +329,10 @@ private struct SessionSettingsPane: View {
                     Text("New sessions open with this agent preselected.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("This names the session's title and, when a worktree is created for it, its branch and folder — all from the same choice. Apple Intelligence resolves a name before launch on supported Macs, falling back to your prompt when unavailable. The agent can choose a more accurate name using its larger model and full task context, but only creates the worktree once it does — so the session launches straight into the project's main checkout until then. Claude Code and Antigravity also provide native titles, used only when this is set to prompt-derived.")
+                    Text("Session naming also sets a new worktree's branch and folder. The agent-managed option starts in the main checkout until the agent chooses a name.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            Section {
-                Text("Flotilla sends the goal unchanged through the interactive PTY after the selected CLI starts. It does not prepend instructions, inject permissions, or handle authentication.")
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("Prompt Delivery", systemImage: "text.bubble")
             }
         }
         .flotillaSettingsFormLayout()
@@ -397,10 +368,22 @@ private struct TerminalSettingsPane: View {
             }
 
             Section {
-                Text("Files and instruction documents open in Flotilla’s native text editor. ⌘S saves the active document to disk.")
+                LabeledContent("Font size") {
+                    HStack(spacing: 12) {
+                        Slider(value: $viewModel.settings.terminal.editorFontSize, in: 10...22, step: 1)
+                            .frame(width: 180)
+                            .accessibilityIdentifier("Settings.EditorFontSize")
+                        Text("\(Int(viewModel.settings.terminal.editorFontSize)) pt")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 42, alignment: .trailing)
+                    }
+                }
+                Text("Used by the code editor in Projects → Files. The Monaco-based editor applies this size immediately.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
-                SettingsSectionHeader("Editor", systemImage: "doc.text")
+                SettingsSectionHeader("Editor", systemImage: "curlybraces")
             }
         }
         .flotillaSettingsFormLayout()
@@ -431,14 +414,6 @@ private struct GitSettingsPane: View {
                     .foregroundStyle(.secondary)
             } header: {
                 SettingsSectionHeader("Worktree Creation", systemImage: "arrow.down.circle")
-            }
-
-            Section {
-                Text("Branch and worktree naming follows the same choice as session naming, in Session settings, so a session's title and its worktree never diverge.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("Worktree Naming", systemImage: "pencil.and.list.clipboard")
             }
 
             Section {
@@ -519,13 +494,8 @@ private struct NotificationSettingsPane: View {
                     .foregroundStyle(.secondary)
             } header: {
                 SettingsSectionHeader("Session Events", systemImage: "bell")
-            }
-
-            Section {
-                Text("Notifications are produced by a read-only observer of PTY output and process state. They never approve prompts or grant the agent file-system or network access.")
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("Privacy & Permissions", systemImage: "hand.raised")
+            } footer: {
+                Text("Notifications observe terminal output and process state. They never approve agent prompts.")
             }
         }
         .flotillaSettingsFormLayout()
@@ -534,16 +504,10 @@ private struct NotificationSettingsPane: View {
 
 private struct AgentSettingsPane: View {
     @Bindable var viewModel: SettingsViewModel
+    @State private var toolScanGeneration = UUID()
 
     var body: some View {
         Form {
-            Section {
-                Text("Flotilla launches each CLI exactly as a terminal would. Authentication remains entirely inside the agent—credentials are never requested or stored here.")
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("Agent Security", systemImage: "lock.shield")
-            }
-
             ForEach(AgentKind.allCases) { agent in
                 Section {
                     LabeledContent("Executable") {
@@ -562,6 +526,7 @@ private struct AgentSettingsPane: View {
                         configuredPath: pathBinding(for: agent).wrappedValue,
                         locator: PATHExecutableLocator()
                     )
+                    .help("Flotilla starts this CLI locally. Authentication remains in the CLI; Flotilla does not store its credentials.")
                     LabeledContent("Arguments") {
                         TextEditor(text: argumentsBinding(for: agent))
                             .font(.system(.callout, design: .monospaced))
@@ -589,6 +554,18 @@ private struct AgentSettingsPane: View {
                         SettingsSectionHeader("OpenCode Plan", systemImage: "network")
                     }
                 }
+            }
+
+            Section {
+                ForEach(["git", "gh", "tmux"], id: \.self) { tool in
+                    ToolStatusRow(name: tool, locator: PATHExecutableLocator())
+                }
+                .id(toolScanGeneration)
+                Button("Rescan Tools") { toolScanGeneration = UUID() }
+            } header: {
+                SettingsSectionHeader("Supporting Tools", systemImage: "wrench.and.screwdriver")
+            } footer: {
+                Text("Flotilla checks your PATH and common local install locations. An explicit agent executable path takes priority.")
             }
         }
         .flotillaSettingsFormLayout()
@@ -637,167 +614,6 @@ private struct AgentSettingsPane: View {
         if panel.runModal() == .OK, let url = panel.url {
             pathBinding(for: agent).wrappedValue = url.path
         }
-    }
-}
-
-private struct AppearanceSettingsPane: View {
-    @Bindable var viewModel: SettingsViewModel
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("Appearance", selection: $viewModel.settings.appearance) {
-                    Text("System").tag(AppearanceMode.system)
-                    Text("Light").tag(AppearanceMode.light)
-                    Text("Dark").tag(AppearanceMode.dark)
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("Settings.AppearancePicker")
-                Text("The terminal uses Xirp’s dark palette so agent output stays consistent across sessions.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("Interface", systemImage: "circle.lefthalf.filled")
-            }
-        }
-        .flotillaSettingsFormLayout()
-    }
-}
-
-private struct ProjectSettingsPane: View {
-    @Bindable var viewModel: SettingsViewModel
-
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent("Worktree base directory") {
-                    Text(viewModel.settings.worktreeBaseDirectory)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Text("Project instruction files and skills stay in their checkout. Flotilla does not upload or catalog them.")
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("Project Defaults", systemImage: "folder")
-            }
-        }
-        .flotillaSettingsFormLayout()
-    }
-}
-
-private struct EnvironmentSettingsPane: View {
-    @State private var generation = UUID()
-
-    var body: some View {
-        Form {
-            Section {
-                ForEach(["git", "gh", "tmux"], id: \.self) { tool in
-                    ToolStatusRow(name: tool, locator: PATHExecutableLocator())
-                }
-                .id(generation)
-                Button("Rescan") { generation = UUID() }
-            } header: {
-                SettingsSectionHeader("Developer Tools", systemImage: "wrench.and.screwdriver")
-            }
-
-            Section {
-                Text("Flotilla checks the inherited PATH, ~/.local/bin, ~/.cargo/bin, ~/bin, Homebrew on Apple Silicon and Intel, and macOS system locations. An explicit agent path always wins.")
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("How Discovery Works", systemImage: "scope")
-            }
-        }
-        .flotillaSettingsFormLayout()
-    }
-}
-
-private struct AdvancedSettingsPane: View {
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent("Session store", value: "SQLite on this Mac")
-                LabeledContent("Agent transport", value: "Local PTY")
-                LabeledContent("Git integration", value: "Local git CLI")
-                Text("There is no account, organization catalog, fleet router, telemetry pipeline, or hosted backend in this build.")
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("Local-Only Architecture", systemImage: "externaldrive")
-            }
-
-            Section {
-                HStack(spacing: 14) {
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable()
-                        .frame(width: 56, height: 56)
-                    VStack(alignment: .leading, spacing: 3) {
-                        FlotillaWordmark(pointSize: 22)
-                        Text("A local command center for coding agents")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } header: {
-                SettingsSectionHeader("About", systemImage: "info.circle")
-            }
-        }
-        .flotillaSettingsFormLayout()
-    }
-}
-
-private struct ShortcutsSettingsPane: View {
-    var body: some View {
-        Form {
-            Section {
-                Text("Move through Flotilla quickly without leaving the keyboard.")
-                    .font(FlotillaTypography.body)
-                    .foregroundStyle(FlotillaColors.textSecondary)
-            } header: {
-                SettingsSectionHeader("Keyboard Shortcuts", systemImage: "keyboard")
-            }
-
-            ForEach(shortcutGroups, id: \.0) { groupName, shortcuts in
-                Section(groupName) {
-                    ForEach(shortcuts, id: \.0) { label, key in
-                        LabeledContent(label) {
-                            Text(key)
-                                .font(FlotillaTypography.callout.monospaced())
-                                .foregroundStyle(FlotillaColors.textSecondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
-                        }
-                    }
-                }
-            }
-        }
-        .flotillaSettingsFormLayout()
-    }
-
-    private var shortcutGroups: [(String, [(String, String)])] {
-        [
-            ("Navigation", [
-                ("New Session", "⌘N"),
-                ("Command Palette", "⌘K"),
-                ("Overview", "⌘1"),
-                ("All Sessions", "⌘2"),
-                ("Settings", "⌘,"),
-            ]),
-            ("Layout & Views", [
-                ("Focus Presentation", "⌘⌃1"),
-                ("Grid Presentation", "⌘⌃2"),
-                ("Board Presentation", "⌘⌃3"),
-                ("Zoom In / Out", "⌘+ / ⌘-"),
-            ]),
-            ("Session & Terminal", [
-                ("Terminal Lens", "⌘⇧T"),
-                ("Changes Lens", "⌘⇧G"),
-                ("Files Browser Lens", "⌘⇧F"),
-                ("Rules & Skills Lens", "⌘⇧I"),
-                ("Restart Session", "⌘R"),
-                ("Delete Session", "⌘⌫"),
-            ]),
-        ]
     }
 }
 

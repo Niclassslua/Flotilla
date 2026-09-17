@@ -208,8 +208,8 @@ private let publications: [Publication] = [
     Publication(
         "24-settings-terminal", "settings-terminal-editor.png",
         section: "Settings",
-        caption: "Terminal & Editor pane",
-        alt: "Settings window showing the Terminal and Editor pane"
+        caption: "Terminal pane",
+        alt: "Settings window showing the Terminal pane"
     ),
     Publication(
         "25-settings-git", "settings-git-worktrees.png",

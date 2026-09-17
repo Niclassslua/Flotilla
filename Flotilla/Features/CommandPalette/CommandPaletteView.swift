@@ -360,9 +360,10 @@ struct KeyboardShortcutsView: View {
             ("Navigation", [
                 ("New session", "⌘N"),
                 ("Command palette", "⌘K"),
-                ("Overview", "⌘1"),
-                ("Sessions", "⌘2"),
-                ("Projects", "⌘3"),
+                ("Home", "⌘1"),
+                ("All sessions", "⌘2"),
+                ("Back", "⌘["),
+                ("Forward", "⌘]"),
             ]),
             ("Layout", [
                 ("Focus", "⌘⌃1"),
@@ -370,14 +371,14 @@ struct KeyboardShortcutsView: View {
                 ("Board", "⌘⌃3"),
             ]),
             ("Session Lens", [
-                ("Terminal", "⌘⇧T"),
                 ("Files", "⌘⇧F"),
                 ("Instructions", "⌘⇧I"),
                 ("Changes", "⌘⇧G"),
+                ("Review", "⌘⇧R"),
             ]),
             ("Session", [
-                ("Previous session", "⌘⌥↑"),
-                ("Next session", "⌘⌥↓"),
+                ("Previous session", "⌘⌥["),
+                ("Next session", "⌘⌥]"),
                 ("Restart session", "⌘R"),
                 ("Delete session", "⌘⌫"),
             ]),

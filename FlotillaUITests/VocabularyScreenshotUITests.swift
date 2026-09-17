@@ -404,8 +404,8 @@ final class VocabularyScreenshotUITests: XCTestCase {
         XCTAssertTrue(fastWait(element(app, .settingsView), timeout: 6))
         shootWindow(app, "23-settings-general", "Settings General pane", containing: AXID.settingsView.rawValue)
 
-        if clickButton(app, title: "Terminal & Editor", identifier: AXID.settingsSidebarTab("terminal")) {
-            shootWindow(app, "24-settings-terminal", "Settings Terminal & Editor pane", containing: AXID.settingsView.rawValue)
+        if clickButton(app, title: "Terminal", identifier: AXID.settingsSidebarTab("terminal")) {
+            shootWindow(app, "24-settings-terminal", "Settings Terminal pane", containing: AXID.settingsView.rawValue)
         }
         if clickButton(app, title: "Git & Worktrees", identifier: AXID.settingsSidebarTab("git")) {
             shootWindow(app, "25-settings-git", "Settings Git & Worktrees pane", containing: AXID.settingsView.rawValue)

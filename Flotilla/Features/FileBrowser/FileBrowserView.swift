@@ -9,6 +9,7 @@ import DesignSystem
 struct FileBrowserView: View {
     let rootURL: URL
     @Bindable var viewModel: FileBrowserViewModel
+    @Environment(\.editorFontSize) private var editorFontSize
 
     @State private var markdownMode: MarkdownMode = .preview
     @State private var searchText = ""
@@ -403,6 +404,7 @@ struct FileBrowserView: View {
                             content: $viewModel.content,
                             language: .markdown,
                             fileURL: node.url,
+                            fontSize: editorFontSize,
                             onSave: { _ in
                                 Task { await viewModel.save() }
                             }
@@ -414,6 +416,7 @@ struct FileBrowserView: View {
                         content: $viewModel.content,
                         language: MonacoLanguage.from(url: node.url),
                         fileURL: node.url,
+                        fontSize: editorFontSize,
                         onSave: { _ in
                             Task { await viewModel.save() }
                         }

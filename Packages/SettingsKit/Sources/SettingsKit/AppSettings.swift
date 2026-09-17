@@ -257,21 +257,24 @@ public struct TerminalPreferences: Codable, Equatable, Sendable {
     public var optionActsAsMeta: Bool
     public var scrollSpeed: Double
     public var gpuRendering: Bool
+    public var editorFontSize: Double
 
     public init(
         fontSize: Double = 14,
         optionActsAsMeta: Bool = true,
         scrollSpeed: Double = 1,
-        gpuRendering: Bool = false
+        gpuRendering: Bool = false,
+        editorFontSize: Double = 13
     ) {
         self.fontSize = fontSize
         self.optionActsAsMeta = optionActsAsMeta
         self.scrollSpeed = scrollSpeed
         self.gpuRendering = gpuRendering
+        self.editorFontSize = editorFontSize
     }
 
     private enum CodingKeys: String, CodingKey {
-        case fontSize, optionActsAsMeta, scrollSpeed, gpuRendering
+        case fontSize, optionActsAsMeta, scrollSpeed, gpuRendering, editorFontSize
     }
 
     // Hand-written rather than synthesized: `SettingsStoring` decodes the
@@ -288,6 +291,7 @@ public struct TerminalPreferences: Codable, Equatable, Sendable {
         optionActsAsMeta = try container.decodeIfPresent(Bool.self, forKey: .optionActsAsMeta) ?? true
         scrollSpeed = try container.decodeIfPresent(Double.self, forKey: .scrollSpeed) ?? 1
         gpuRendering = try container.decodeIfPresent(Bool.self, forKey: .gpuRendering) ?? false
+        editorFontSize = try container.decodeIfPresent(Double.self, forKey: .editorFontSize) ?? 13
     }
 }
 

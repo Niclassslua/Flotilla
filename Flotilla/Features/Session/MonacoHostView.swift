@@ -32,12 +32,24 @@ public enum MonacoLanguage: String, Sendable {
     }
 }
 
+private struct EditorFontSizeKey: EnvironmentKey {
+    static let defaultValue: Double = 13
+}
+
+extension EnvironmentValues {
+    var editorFontSize: Double {
+        get { self[EditorFontSizeKey.self] }
+        set { self[EditorFontSizeKey.self] = newValue }
+    }
+}
+
 /// WKWebView-backed Monaco Editor host view with dark theme matching FlotillaPalette,
 /// bidirectional synchronization, and ⌘S save bridge.
 struct MonacoHostView: NSViewRepresentable {
     @Binding var content: String
     let language: MonacoLanguage
     let fileURL: URL?
+    let fontSize: Double
     let onSave: (String) -> Void
     let onContentChange: ((String) -> Void)?
 
@@ -45,12 +57,14 @@ struct MonacoHostView: NSViewRepresentable {
         content: Binding<String>,
         language: MonacoLanguage,
         fileURL: URL? = nil,
+        fontSize: Double = 13,
         onSave: @escaping (String) -> Void,
         onContentChange: ((String) -> Void)? = nil
     ) {
         self._content = content
         self.language = language
         self.fileURL = fileURL
+        self.fontSize = fontSize
         self.onSave = onSave
         self.onContentChange = onContentChange
     }
@@ -88,18 +102,24 @@ struct MonacoHostView: NSViewRepresentable {
             context.coordinator.lastLoadedURL = fileURL
             context.coordinator.setContentInEditor(content, language: language, fileURL: fileURL)
         }
+        if context.coordinator.lastFontSize != fontSize {
+            context.coordinator.lastFontSize = fontSize
+            context.coordinator.updateFontSize(fontSize)
+        }
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var parent: MonacoHostView
         weak var webView: WKWebView?
         var lastLoadedURL: URL?
+        var lastFontSize: Double
         var isEditorReady = false
         var currentDocumentID: String = UUID().uuidString
 
         init(_ parent: MonacoHostView) {
             self.parent = parent
             self.currentDocumentID = parent.fileURL?.absoluteString ?? UUID().uuidString
+            self.lastFontSize = parent.fontSize
         }
 
         func setContentInEditor(_ content: String, language: MonacoLanguage, fileURL: URL?) {
@@ -119,6 +139,17 @@ struct MonacoHostView: NSViewRepresentable {
             )
         }
 
+        func updateFontSize(_ size: Double) {
+            guard isEditorReady, let webView else { return }
+            webView.callAsyncJavaScript(
+                "if (window.editor) { window.editor.updateOptions({ fontSize: size }); }",
+                arguments: ["size": size],
+                in: nil,
+                in: .page,
+                completionHandler: nil
+            )
+        }
+
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let dict = message.body as? [String: Any],
                   let type = dict["type"] as? String else { return }
@@ -126,6 +157,7 @@ struct MonacoHostView: NSViewRepresentable {
             if type == "ready" {
                 isEditorReady = true
                 setContentInEditor(parent.content, language: parent.language, fileURL: parent.fileURL)
+                updateFontSize(parent.fontSize)
                 return
             }
 

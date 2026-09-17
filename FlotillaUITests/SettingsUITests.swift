@@ -39,4 +39,19 @@ final class SettingsUITests: XCTestCase {
         app.typeText("/tmp/flotilla-custom-worktrees")
         app.typeKey(XCUIKeyboardKey.return.rawValue, modifierFlags: [])
     }
+
+    func testKeyboardShortcutReferenceOpensFromCommandPalette() {
+        let app = launchedApp()
+
+        app.typeKey("k", modifierFlags: .command)
+        let search = element(app, "CommandPalette.Search")
+        XCTAssertTrue(fastWait(search, timeout: 5))
+        search.typeText("keyboard shortcuts")
+
+        let shortcutCommand = element(app, "CommandPalette.Row-Keyboard shortcuts")
+        XCTAssertTrue(fastWait(shortcutCommand, timeout: 3))
+        shortcutCommand.click()
+
+        XCTAssertTrue(fastWait(element(app, "KeyboardShortcuts"), timeout: 5))
+    }
 }
