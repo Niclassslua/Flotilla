@@ -10,10 +10,10 @@ public struct FlotillaWordmark: View {
     }
 
     public var body: some View {
-        (Text("flotilla") + Text(".").foregroundColor(FlotillaColors.accent))
+        (Text("flotilla").foregroundStyle(FlotillaColors.textPrimary)
+         + Text(".").foregroundStyle(FlotillaColors.accent))
             .font(.system(size: pointSize, weight: .heavy, design: .rounded))
             .tracking(-1)
-            .foregroundStyle(FlotillaColors.textPrimary)
             .fixedSize()
             .accessibilityLabel("Flotilla")
     }
