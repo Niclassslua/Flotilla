@@ -732,8 +732,7 @@ private struct AdvancedSettingsPane: View {
                         .resizable()
                         .frame(width: 56, height: 56)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Flotilla")
-                            .font(.title2.weight(.semibold))
+                        FlotillaWordmark(pointSize: 22)
                         Text("A local command center for coding agents")
                             .foregroundStyle(.secondary)
                     }

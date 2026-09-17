@@ -52,14 +52,7 @@ struct WorkspaceToolbar: ToolbarContent {
         // wordmark with no capsule — see
         // https://developer.apple.com/documentation/swiftui/customizabletoolbarcontent/sharedbackgroundvisibility(_:)
         ToolbarItem(placement: .navigation) {
-            HStack(spacing: 10) {
-                Image(systemName: "sailboat.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(FlotillaColors.accent)
-                Text("Flotilla")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(FlotillaColors.textPrimary)
-            }
+            FlotillaWordmark(pointSize: 17)
             .accessibilityIdentifier(AXID.topBarLogo.rawValue)
         }
         .sharedBackgroundVisibility(.hidden)

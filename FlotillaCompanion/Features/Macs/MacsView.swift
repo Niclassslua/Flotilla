@@ -31,6 +31,10 @@ struct MacsView: View {
         .background(FlotillaColors.canvas)
         .navigationTitle("Macs")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                FlotillaWordmark(pointSize: 17)
+                    .accessibilityIdentifier("Macs.Wordmark")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("iPhone Settings", systemImage: "gearshape") { isShowingSettings = true }
             }
