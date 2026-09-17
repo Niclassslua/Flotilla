@@ -10,7 +10,6 @@ struct CompanionSettingsPane: View {
     @Environment(CompanionHost.self) private var host
     @State private var isShowingPairing = false
     @State private var pendingRevoke: PairedDevice?
-    @State private var presentedPairing: CompanionHost.PendingPairing?
 
     var body: some View {
         @Bindable var host = host
@@ -59,14 +58,6 @@ struct CompanionSettingsPane: View {
             CompanionPairingSheet()
                 .environment(host)
         }
-        .sheet(item: $presentedPairing) { pending in
-            CompanionPairingConfirmationSheet(pairing: pending) {
-                host.approvePairing(pending.id)
-            } onReject: {
-                host.rejectPairing(pending.id)
-            }
-            .environment(host)
-        }
         .confirmationDialog(
             pendingRevoke.map { "Remove “\($0.name)”?" } ?? "",
             isPresented: Binding(get: { pendingRevoke != nil }, set: {
@@ -83,12 +74,6 @@ struct CompanionSettingsPane: View {
         }
         .onAppear {
             host.refreshAddresses()
-            presentedPairing = host.pendingPairings.first
-        }
-        .onChange(of: host.pendingPairings) { _, pending in
-            if presentedPairing == nil {
-                presentedPairing = pending.first
-            }
         }
     }
 
@@ -166,146 +151,136 @@ struct CompanionSettingsPane: View {
     }
 }
 
-/// A deliberate approval step for a new device. The QR code proves possession
-/// of the short-lived secret; this Mac-side decision is what makes the device
-/// trusted and allows it to receive the fleet.
-private struct CompanionPairingConfirmationSheet: View {
-    let pairing: CompanionHost.PendingPairing
-    let onApprove: () -> Void
-    let onReject: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Circle()
-                    .fill(FlotillaColors.accent.opacity(0.14))
-                    .frame(width: 92, height: 92)
-                Image(systemName: "iphone.gen3.and.arrow.forward")
-                    .font(.system(size: 38, weight: .medium))
-                    .foregroundStyle(FlotillaColors.accent)
-            }
-            .padding(.top, 28)
-
-            Text("Approve iPhone pairing?")
-                .font(.title2.weight(.bold))
-                .padding(.top, 20)
-            Text("An iPhone just used your pairing code to request access to this Mac.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(pairing.deviceName)
-                            .fontWeight(.semibold)
-                        Text("Device name")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "iphone")
-                        .foregroundStyle(FlotillaColors.accent)
-                }
-                Divider()
-                Label("The connection is encrypted", systemImage: "lock.fill")
-                Label("Only approve a device you recognize", systemImage: "checkmark.shield")
-            }
-            .font(.callout)
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)
-                    .stroke(FlotillaColors.separator, lineWidth: 1)
-            }
-            .padding(.top, 24)
-
-            HStack(spacing: 10) {
-                Button("Not Now") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Approve iPhone", systemImage: "checkmark.circle.fill") {
-                    onApprove()
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(FlotillaColors.accent)
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("CompanionPairing.Approve")
-            }
-            .controlSize(.large)
-            .padding(.top, 24)
-
-            Button("Reject and disconnect") {
-                onReject()
-                dismiss()
-            }
-            .buttonStyle(.link)
-            .foregroundStyle(FlotillaColors.danger)
-            .padding(.top, 12)
-            .accessibilityIdentifier("CompanionPairing.Reject")
-        }
-        .padding(28)
-        .frame(width: 430)
-    }
-}
-
-/// The QR code, the copyable link, and a countdown. Closes itself once the
-/// phone pairs.
+/// The one-use QR code turns into a success receipt as soon as the phone pairs.
 struct CompanionPairingSheet: View {
     @Environment(CompanionHost.self) private var host
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var didCopy = false
+    @State private var celebration = false
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Pair an iPhone")
-                .font(.title2.weight(.semibold))
-            if let pairing = host.pairing {
-                Text("In Flotilla on your iPhone, tap **Pair a Mac** and scan this code.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                if let image = QRCode.image(for: pairing.link) {
-                    Image(nsImage: image)
-                        .interpolation(.none)
-                        .resizable()
-                        .frame(width: 260, height: 260)
-                        .padding(12)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 12))
-                        .accessibilityLabel("Pairing QR code")
-                }
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let remaining = max(0, Int(pairing.payload.expiresAt.timeIntervalSince(context.date)))
-                    Text("Expires in \(remaining / 60):\(String(format: "%02d", remaining % 60))")
-                        .font(.callout.monospacedDigit())
+        Group {
+            if let device = host.recentlyPairedDevice {
+                pairedReceipt(device)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else if let pairing = host.pairing {
+                VStack(spacing: 16) {
+                    Text("Pair an iPhone")
+                        .font(.title2.weight(.semibold))
+                    Text("In Flotilla on your iPhone, tap **Pair a Mac** and scan this code.")
+                        .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
-                }
-                pathSummary(pairing.payload)
-                HStack {
-                    Button(didCopy ? "Copied" : "Copy Pairing Link") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(pairing.link, forType: .string)
-                        didCopy = true
+                    if let image = QRCode.image(for: pairing.link) {
+                        Image(nsImage: image)
+                            .interpolation(.none)
+                            .resizable()
+                            .frame(width: 260, height: 260)
+                            .padding(12)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                            .accessibilityLabel("Pairing QR code")
                     }
-                    Button("Done") { dismiss() }
-                        .keyboardShortcut(.defaultAction)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let remaining = max(0, Int(pairing.payload.expiresAt.timeIntervalSince(context.date)))
+                        Text("Expires in \(remaining / 60):\(String(format: "%02d", remaining % 60))")
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    pathSummary(pairing.payload)
+                    HStack {
+                        Button(didCopy ? "Copied" : "Copy Pairing Link") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(pairing.link, forType: .string)
+                            didCopy = true
+                        }
+                        Button("Done") { dismiss() }
+                            .keyboardShortcut(.defaultAction)
+                    }
                 }
             } else {
-                ContentUnavailableView(
-                    "No Active Code",
-                    systemImage: "qrcode",
-                    description: Text("The code expired or an iPhone just paired.")
-                )
-                HStack {
-                    Button("Show New Code") { host.beginPairing() }
-                    Button("Done") { dismiss() }
-                        .keyboardShortcut(.defaultAction)
+                VStack(spacing: 16) {
+                    ContentUnavailableView(
+                        "Code Expired",
+                        systemImage: "qrcode",
+                        description: Text("Show a new code to pair an iPhone.")
+                    )
+                    HStack {
+                        Button("Show New Code") { host.beginPairing() }
+                        Button("Done") { dismiss() }
+                            .keyboardShortcut(.defaultAction)
+                    }
                 }
             }
         }
         .padding(24)
         .frame(width: 420)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: host.recentlyPairedDevice?.id)
+    }
+
+    private func pairedReceipt(_ device: PairedDevice) -> some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Circle()
+                    .stroke(FlotillaColors.statusWorking.opacity(0.18), lineWidth: 1)
+                    .frame(width: 116, height: 116)
+                Circle()
+                    .fill(FlotillaColors.statusWorking.opacity(0.12))
+                    .frame(width: 88, height: 88)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 37, weight: .medium))
+                    .foregroundStyle(FlotillaColors.statusWorking)
+                    .symbolEffect(.bounce, value: celebration)
+                    .symbolEffectsRemoved(reduceMotion)
+            }
+            .accessibilityHidden(true)
+
+            Text("iPhone paired")
+                .font(.system(size: 25, weight: .semibold))
+                .padding(.top, 20)
+            Text("\(device.name) is ready to use with this Mac.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 7)
+
+            HStack(spacing: 14) {
+                Image(systemName: "iphone.gen3")
+                    .font(.system(size: 23, weight: .regular))
+                    .foregroundStyle(FlotillaColors.accent)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(device.name)
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(1)
+                    Label("End-to-end encrypted", systemImage: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(FlotillaColors.statusWorking)
+                    .accessibilityHidden(true)
+            }
+            .padding(16)
+            .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.panel))
+            .overlay {
+                RoundedRectangle(cornerRadius: FlotillaRadius.panel)
+                    .stroke(FlotillaColors.separator, lineWidth: 1)
+            }
+            .padding(.top, 27)
+
+            Button("Done") { dismiss() }
+                .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+                .padding(.top, 24)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("CompanionPairing.Success")
+        .onAppear {
+            if !reduceMotion { celebration.toggle() }
+        }
     }
 
     private func pathSummary(_ payload: PairingPayload) -> some View {

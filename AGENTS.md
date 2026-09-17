@@ -459,7 +459,12 @@ autosave name, `EphemeralWindowStateDisabler` clears the Ephemeral preferences
 domain before scene creation, disables native window and split-view autosave,
 and reapplies the design-system sidebar width once per launch. It also uses the
 separate bundle identifier `com.niclassslua.flotilla.ephemeral` so macOS-managed
-state cannot affect the normal app.
+state cannot affect the normal app. Its hook support files and companion bridge
+socket live under `Application Support/Flotilla Ephemeral/`, and its tmux server
+uses `flotilla-ephemeral`, so a preview cannot unlink or attach to the running
+Flotilla instance's sockets. The companion permission bridge also holds an
+exclusive lock for its socket path: a second instance refuses to replace a
+live bridge, while a crash-left socket can be reclaimed after the lock drops.
 
 Use `make run-ephemeral` locally. CI uploads the same build as the
 `Flotilla-Ephemeral` artifact for pull requests and `main` pushes.

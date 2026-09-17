@@ -1,6 +1,7 @@
+import CompanionKit
+import Darwin
 import Foundation
 import Network
-import CompanionKit
 
 /// Claude Code and Codex `PermissionRequest` payloads, turned into phone cards, and the
 /// phone's answers, turned back into hook decisions.
@@ -191,6 +192,9 @@ final class ClaudePermissionBridge {
     }
 
     private var listener: NWListener?
+    /// Held for the listener's lifetime. A second process must never unlink
+    /// this process's socket just because it was given the same path.
+    private var socketLockDescriptor: Int32 = -1
     private var held: [UUID: [Held]] = [:]
     /// When a session was first observed not-waiting, per session — reset the
     /// moment it reads as waiting again. `retractResolved` only acts once this
@@ -206,31 +210,58 @@ final class ClaudePermissionBridge {
 
     private(set) var socketURL: URL?
 
-    func start(socketURL: URL) {
+    @discardableResult
+    func start(socketURL: URL) -> Bool {
         stop()
-        try? FileManager.default.createDirectory(at: socketURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: socketURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        } catch {
+            return false
+        }
+        let lockPath = socketURL.path + ".lock"
+        let descriptor = Darwin.open(lockPath, O_CREAT | O_RDWR, 0o600)
+        guard descriptor >= 0 else { return false }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            Darwin.close(descriptor)
+            return false
+        }
+        socketLockDescriptor = descriptor
+        // Only the lock holder may remove a stale socket left by a crash.
         unlink(socketURL.path)
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .unix(path: socketURL.path)
         parameters.allowLocalEndpointReuse = true
-        guard let listener = try? NWListener(using: parameters) else { return }
+        guard let listener = try? NWListener(using: parameters) else {
+            releaseSocketLock()
+            return false
+        }
         listener.newConnectionHandler = { [weak self] connection in
             Task { @MainActor in self?.accept(connection) }
         }
         listener.start(queue: queue)
         self.listener = listener
         self.socketURL = socketURL
+        return true
     }
 
     func stop() {
         listener?.cancel()
         listener = nil
-        if let socketURL { unlink(socketURL.path) }
+        // Leave the socket file behind. The next lock holder can safely clear
+        // it, while this process cannot accidentally delete a replacement.
         socketURL = nil
+        releaseSocketLock()
         for requests in held.values { requests.forEach { $0.connection.cancel() } }
         held = [:]
         notWaitingSince = [:]
         onChange()
+    }
+
+    private func releaseSocketLock() {
+        guard socketLockDescriptor >= 0 else { return }
+        flock(socketLockDescriptor, LOCK_UN)
+        Darwin.close(socketLockDescriptor)
+        socketLockDescriptor = -1
     }
 
     func pending(for sessionID: UUID) -> [PendingInteraction] {

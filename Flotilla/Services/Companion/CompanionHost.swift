@@ -27,18 +27,11 @@ final class CompanionHost {
         var payload: PairingPayload
     }
 
-    struct PendingPairing: Identifiable, Equatable {
-        let id: UUID
-        let deviceID: String
-        let deviceName: String
-        let receivedAt: Date
-    }
-
     private(set) var status: Status = .off
     private(set) var devices: [PairedDevice] = []
     private(set) var connectedDeviceIDs: Set<String> = []
     private(set) var pairing: ActivePairing?
-    private(set) var pendingPairings: [PendingPairing] = []
+    private(set) var recentlyPairedDevice: PairedDevice?
     private(set) var addresses: [InterfaceAddress] = []
     private(set) var tailscaleDNSName: String?
     /// Set when the host couldn't load or create its identity.
@@ -72,8 +65,6 @@ final class CompanionHost {
     @ObservationIgnored private var publishTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingPairingTasks: [UUID: Task<Void, Never>] = [:]
-    @ObservationIgnored private var pendingPeers: [UUID: CompanionServer.Peer] = [:]
     @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog
     @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
     @ObservationIgnored private let presence = PresenceMonitor()
@@ -164,6 +155,16 @@ final class CompanionHost {
     // MARK: - Lifecycle
 
     private func start() {
+        #if FLOTILLA_EPHEMERAL
+        let liveSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Flotilla", isDirectory: true)
+        let liveSocket = HookConfigurationWriter.companionSocketPath(supportDirectory: liveSupport)
+        guard socketURL.resolvingSymlinksInPath() != liveSocket.resolvingSymlinksInPath() else {
+            setupError = "Ephemeral refused to use the running Flotilla app's companion socket."
+            status = .failed(setupError!)
+            return
+        }
+        #endif
         do {
             identity = try identity ?? storage.loadOrCreateHost()
             setupError = nil
@@ -174,7 +175,9 @@ final class CompanionHost {
         }
         guard let identity else { return }
         refreshAddresses()
-        bridge.start(socketURL: socketURL)
+        if !bridge.start(socketURL: socketURL) {
+            setupError = "The companion permission bridge couldn't start because its socket is already in use. Another Flotilla instance may be running."
+        }
 
         let auth = self.auth
         let macName = self.macName
@@ -221,15 +224,7 @@ final class CompanionHost {
         lastAttentionSessions = [:]
         connectedDeviceIDs = []
         cancelPairing()
-        for task in pendingPairingTasks.values {
-            task.cancel()
-        }
-        pendingPairingTasks.removeAll()
-        for peer in pendingPeers.values {
-            peer.session.close()
-        }
-        pendingPeers.removeAll()
-        pendingPairings.removeAll()
+        recentlyPairedDevice = nil
         status = .off
     }
 
@@ -257,6 +252,7 @@ final class CompanionHost {
 
     func beginPairing() {
         guard isEnabled, let identity, case .listening = status else { return }
+        recentlyPairedDevice = nil
         let secret = Handshake.randomSecret()
         let expiresAt = Date().addingTimeInterval(Self.pairingLifetime)
         auth.beginPairing(secret: secret, expiresAt: expiresAt)
@@ -387,26 +383,6 @@ final class CompanionHost {
 
     // MARK: - Devices
 
-    func approvePairing(_ id: UUID) {
-        guard let peer = pendingPeers.removeValue(forKey: id),
-              let pending = pendingPairings.first(where: { $0.id == id }) else { return }
-        removePendingPairing(id)
-        attach(peer, pairingApproved: true)
-        Self.syncLog.info("pairing approved device=\(pending.deviceID, privacy: .public)")
-    }
-
-    func rejectPairing(_ id: UUID) {
-        guard let peer = pendingPeers.removeValue(forKey: id) else { return }
-        removePendingPairing(id)
-        peer.session.close()
-        Self.syncLog.info("pairing rejected device=\(peer.hello.deviceID, privacy: .public)")
-    }
-
-    private func removePendingPairing(_ id: UUID) {
-        pendingPairingTasks.removeValue(forKey: id)?.cancel()
-        pendingPairings.removeAll { $0.id == id }
-    }
-
     func revoke(_ deviceID: String) {
         devices.removeAll { $0.id == deviceID }
         var revoked = storage.loadRevoked()
@@ -421,27 +397,17 @@ final class CompanionHost {
         connectedDeviceIDs = Set(peers.values.map(\.deviceID))
     }
 
-    private func attach(_ connected: CompanionServer.Peer, pairingApproved: Bool = false) {
+    private func attach(_ connected: CompanionServer.Peer) {
         guard isEnabled else {
             connected.session.close()
             return
         }
         let hello = connected.hello
-        if hello.mode == .pair, !pairingApproved {
-            let id = UUID()
-            pendingPeers[id] = connected
-            pendingPairings.append(PendingPairing(id: id, deviceID: hello.deviceID, deviceName: hello.deviceName, receivedAt: .now))
-            pendingPairingTasks[id] = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(120))
-                guard !Task.isCancelled else { return }
-                self?.rejectPairing(id)
-            }
-            Self.syncLog.info("pairing awaiting Mac confirmation device=\(hello.deviceID, privacy: .public)")
-            return
-        }
         if hello.mode == .pair {
             devices.removeAll { $0.id == hello.deviceID }
-            devices.append(PairedDevice(id: hello.deviceID, name: hello.deviceName, publicKey: hello.deviceKey, pairedAt: .now, lastSeen: .now))
+            let device = PairedDevice(id: hello.deviceID, name: hello.deviceName, publicKey: hello.deviceKey, pairedAt: .now, lastSeen: .now)
+            devices.append(device)
+            recentlyPairedDevice = device
             var revoked = storage.loadRevoked()
             revoked.remove(hello.deviceID)
             try? storage.saveRevoked(revoked)

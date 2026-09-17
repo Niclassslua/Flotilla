@@ -1,10 +1,13 @@
 import XCTest
 import CryptoKit
+import Network
 import SessionKit
 import TranscriptKit
 import GitKit
 import HooksKit
 import CompanionKit
+import PersistenceKit
+import ProcessKit
 @testable import Flotilla
 
 @MainActor
@@ -32,6 +35,71 @@ final class PresenceMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.isAway)
         monitor.setScreenLockedForTesting(false)
         XCTAssertFalse(monitor.isAway)
+    }
+}
+
+@MainActor
+final class CompanionHostPairingTests: XCTestCase {
+    func testOneTimeCodePairsPhoneWithoutMacApprovalAndShowsReceipt() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("companion-pair-test-\(UUID().uuidString)")
+        let domain = "CompanionPairingTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer {
+            defaults.removePersistentDomain(forName: domain)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let storage = CompanionHostStorage(directory: directory.appendingPathComponent("identity"))
+        let appStore = AppStore(
+            repository: try GRDBSessionRepository(),
+            gitService: MockGitService(),
+            processManager: SessionProcessManager(
+                locator: AppLayerExecutableLocator(executable: URL(fileURLWithPath: "/usr/bin/env")),
+                processFactory: RecordingProcessFactory()
+            ),
+            worktreeBaseDirectoryProvider: { directory }
+        )
+        let host = CompanionHost(
+            store: appStore,
+            gitService: MockGitService(),
+            supportDirectory: directory,
+            storage: storage,
+            defaults: defaults
+        )
+        defer { host.shutdown() }
+
+        host.isEnabled = true
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if case .listening = host.status { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        guard case let .listening(port) = host.status else {
+            return XCTFail("The Mac must listen before a phone can pair")
+        }
+        host.beginPairing()
+        let payload = try XCTUnwrap(host.pairing?.payload)
+        let phone = CompanionIdentity()
+        let connection = try await CompanionClient.connect(
+            to: [ConnectTarget(path: .lan, label: "loopback", endpoint: .hostPort(host: "127.0.0.1", port: .init(rawValue: port)!))],
+            hello: {
+                try Handshake.makeClientHello(
+                    mode: .pair, macID: payload.macID, deviceID: "phone-1",
+                    deviceName: "Niclassslua’s iPhone", identity: phone, pairingSecret: payload.secret
+                )
+            },
+            pinnedMacKey: payload.macKey
+        )
+        defer { connection.session.close() }
+
+        let attachedDeadline = Date().addingTimeInterval(5)
+        while host.recentlyPairedDevice == nil, Date() < attachedDeadline {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(host.recentlyPairedDevice?.name, "Niclassslua’s iPhone")
+        XCTAssertEqual(host.devices.map(\.id), ["phone-1"])
+        XCTAssertEqual(storage.loadDevices().map(\.id), ["phone-1"])
+        XCTAssertTrue(host.connectedDeviceIDs.contains("phone-1"))
+        XCTAssertNil(host.pairing, "The used code should be replaced by the success receipt")
     }
 }
 
@@ -474,6 +542,37 @@ final class CompanionBridgeHookTests: XCTestCase {
         let result = try Self.run(try permissionCommand(), input: #"{"tool_name":"Bash"}"#, eventFile: directory.appendingPathComponent("e.jsonl"))
         XCTAssertEqual(result.status, 0)
         XCTAssertEqual(result.stdout, "")
+    }
+
+    @MainActor
+    func testSecondBridgeCannotReplaceLiveSocketButCanRecoverItAfterShutdown() async throws {
+        let socket = HookConfigurationWriter.companionSocketPath(supportDirectory: directory)
+        let first = ClaudePermissionBridge()
+        let second = ClaudePermissionBridge()
+        XCTAssertTrue(first.start(socketURL: socket))
+        defer {
+            first.stop()
+            second.stop()
+        }
+
+        XCTAssertFalse(second.start(socketURL: socket), "a preview must not unlink the live app's socket")
+        let sessionID = UUID()
+        let command = try permissionCommand()
+        let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
+        let hook = Task.detached {
+            try Self.run(command, input: #"{"tool_name":"Bash","tool_input":{"command":"pwd"}}"#, eventFile: eventFile)
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while first.pending(for: sessionID).isEmpty, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let card = try XCTUnwrap(first.pending(for: sessionID).first)
+        XCTAssertEqual(first.answer(sessionID: sessionID, interactionID: card.id, with: .allow), .accepted)
+        let result = try await hook.value
+        XCTAssertTrue(result.stdout.contains(#""behavior":"allow""#))
+
+        first.stop()
+        XCTAssertTrue(second.start(socketURL: socket), "a stale socket is recoverable once the owner exits")
     }
 
     @MainActor

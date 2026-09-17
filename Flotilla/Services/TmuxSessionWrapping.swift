@@ -17,6 +17,10 @@ enum TmuxSessionWrapping {
     /// `-L` resolves to `$TMUX_TMPDIR/flotilla`, which is already
     /// per-user (`/tmp/tmux-<uid>/flotilla`).
     static var socketName: String {
+        #if FLOTILLA_EPHEMERAL
+        // A preview must never attach to the live app's tmux server.
+        return "flotilla-ephemeral"
+        #else
         if let custom = ProcessInfo.processInfo.environment["FLOTILLA_TMUX_SOCKET"] {
             return custom
         }
@@ -29,6 +33,7 @@ enum TmuxSessionWrapping {
             return "flotilla-demo"
         }
         return "flotilla"
+        #endif
     }
 
     /// Client flags (`-L <socket>`) that must precede the tmux command.
@@ -90,6 +95,13 @@ enum TmuxSessionWrapping {
     }
 
     static func defaultSupportDirectory() -> URL {
+        #if FLOTILLA_EPHEMERAL
+        // Hook files and the companion.sock are scoped to the Ephemeral app.
+        // In particular, its bridge must never unlink the live app's socket.
+        return FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Flotilla Ephemeral", isDirectory: true)
+        #else
         if let custom = ProcessInfo.processInfo.environment["FLOTILLA_SUPPORT_DIR"] {
             return URL(fileURLWithPath: custom, isDirectory: true)
         }
@@ -100,6 +112,7 @@ enum TmuxSessionWrapping {
         return FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Flotilla", isDirectory: true)
+        #endif
     }
 
     /// tmux — unlike the agent CLIs it hosts — needs a `TERM` it can

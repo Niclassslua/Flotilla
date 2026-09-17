@@ -111,7 +111,10 @@ Remove a row here once its feature ships (drops the flag) or is dropped
    whichever answers first, showing each path's result.
 4. The handshake proves possession of the secret, pins the Mac's key, and
    registers the phone's own Ed25519 key with the Mac. Later connections
-   authenticate with that key; no secret is ever reused.
+   authenticate with that key; no secret is ever reused. The Mac trusts a
+   phone immediately after this one-time proof and changes the QR sheet into
+   a paired-device receipt; there is no second approval prompt. A paired
+   phone can be removed from the list in Settings at any time.
 
 ### Handshake (protocol version 4)
 
