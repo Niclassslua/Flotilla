@@ -71,15 +71,18 @@ public struct ProcessCommandRunner: CommandRunning {
         process.arguments = arguments
         process.currentDirectoryURL = workingDirectory
         process.standardInput = nil
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        // Held locally rather than re-read from `process.standardOutput`/
+        // `standardError` (typed `Any?`): those force-cast back to `Pipe`
+        // crashed intermittently, so we just keep the references we made.
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
 
         process.environment = ProcessInfo.processInfo.environment
             .merging(environmentOverrides) { _, override in override }
             .merging(extraEnvironment) { _, override in override }
 
-        let outPipe = process.standardOutput as! Pipe
-        let errPipe = process.standardError as! Pipe
         let outCollector = PipeCollector(handle: outPipe.fileHandleForReading)
         let errCollector = PipeCollector(handle: errPipe.fileHandleForReading)
 
