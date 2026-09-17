@@ -440,6 +440,22 @@ final class ConnectionDiagnosisTests: XCTestCase {
 }
 
 final class TranscriptLayoutTests: XCTestCase {
+    func testCodexToolIdentifiersGetPreciseHumanFacingNames() {
+        let now = Date()
+        let events: [TranscriptEvent.Content] = [
+            .toolUse(id: "command", tool: "exec", input: ["cmd": "[\"swift\", \"test\"]"], timestamp: now),
+            .toolUse(id: "edit", tool: "apply_patch", input: [:], timestamp: now),
+            .toolUse(id: "unknown", tool: "custom_tool", input: [:], timestamp: now),
+        ]
+
+        let items = TranscriptLayout.items(from: events.enumerated().map { TranscriptEvent(id: String($0.offset), content: $0.element) })
+        guard case .toolGroup(_, let calls) = items[0] else { return XCTFail("expected a tool group") }
+
+        XCTAssertEqual(calls[0].summary, "Run command · swift test")
+        XCTAssertEqual(calls[1].summary, "Edit files")
+        XCTAssertEqual(calls[2].summary, "custom_tool")
+    }
+
     func testConsecutiveToolsGroupAndTheUnansweredOneIsInFlight() {
         let now = Date()
         let events: [TranscriptEvent.Content] = [

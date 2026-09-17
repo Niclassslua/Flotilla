@@ -33,10 +33,30 @@ struct ToolCall: Identifiable, Sendable, Equatable {
 
     var isRunning: Bool { output == nil }
 
-    /// `Bash · npm test`, `Edit · Sources/App.swift`.
+    /// A human-facing name for the provider's tool identifier.
+    ///
+    /// Codex calls its shell tool `exec`. That name is useful when debugging
+    /// provider payloads, but it is not meaningful in a transcript on its
+    /// own. Keep `tool` unchanged as the raw identifier and only normalize it
+    /// at the presentation boundary.
+    var displayName: String {
+        switch tool {
+        case "exec": "Run command"
+        case "apply_patch": "Edit files"
+        case "view_image": "View image"
+        case "search_query": "Search the web"
+        case "open": "Open page"
+        case "click": "Follow link"
+        case "find": "Find text"
+        case "screenshot": "Take screenshot"
+        default: tool
+        }
+    }
+
+    /// `Run command · npm test`, `Edit · Sources/App.swift`.
     var summary: String {
-        guard let subject else { return tool }
-        return "\(tool) · \(subject)"
+        guard let subject else { return displayName }
+        return "\(displayName) · \(subject)"
     }
 
     /// The command, path, or pattern the call acts on.
@@ -44,7 +64,16 @@ struct ToolCall: Identifiable, Sendable, Equatable {
         if let path = input["file_path"] ?? input["path"] {
             return (path as NSString).lastPathComponent
         }
-        return input["command"] ?? input["cmd"] ?? input["pattern"] ?? input["url"] ?? input["query"] ?? input["description"]
+        let value = input["command"] ?? input["cmd"] ?? input["pattern"] ?? input["url"] ?? input["query"] ?? input["description"]
+        guard let value else { return nil }
+        return Self.readableArgument(value)
+    }
+
+    private static func readableArgument(_ value: String) -> String {
+        guard let data = value.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data),
+              let array = json as? [Any] else { return value }
+        return array.map { String(describing: $0) }.joined(separator: " ")
     }
 
     /// A file the call touched, for opening the file viewer or diff.
@@ -56,7 +85,7 @@ struct ToolCall: Identifiable, Sendable, Equatable {
 
     var systemImage: String {
         switch tool {
-        case "Bash", "shell", "run_command", "exec_command": "terminal"
+        case "Bash", "shell", "run_command", "exec_command", "exec": "terminal"
         case "Edit", "MultiEdit", "apply_patch", "edit", "replace_file_content": "pencil"
         case "Write", "write", "write_to_file": "square.and.pencil"
         case "Read", "read", "view_file": "doc.text"

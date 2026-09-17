@@ -481,7 +481,7 @@ struct ToolGroupRow: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(calls) { call in
-                    Text(call.subject ?? call.tool)
+                    Text(call.subject ?? call.displayName)
                         .font(.caption2.monospaced())
                         .lineLimit(1)
                         .padding(.horizontal, 8)
@@ -515,6 +515,7 @@ struct ToolCallRow: View {
                         .foregroundStyle(FlotillaColors.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .accessibilityLabel(call.summary)
                     Spacer(minLength: 4)
                     resultBadge
                 }
