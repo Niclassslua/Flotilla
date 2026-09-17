@@ -1,8 +1,8 @@
+import CompanionKit
 import Foundation
 import Observation
-import UIKit
 import SessionKit
-import CompanionKit
+import UIKit
 
 /// A pairing attempt that didn't work, with a diagnosis for the error screen.
 struct PairingFailure: Error {
@@ -88,7 +88,9 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         }
     }
 
-    var supportsPairing: Bool { true }
+    var supportsPairing: Bool {
+        true
+    }
 
     func sessions(on macID: MacHost.ID) -> [CompanionSession] {
         guard let connection = connection(macID) else { return [] }
@@ -172,8 +174,12 @@ final class RemoteCompanionDataSource: CompanionDataSource {
 
     func setActive(_ active: Bool) {
         isActive = active
-        if active, !connections.isEmpty { browser.start() }
-        if !active { browser.stop() }
+        if active, !connections.isEmpty {
+            browser.start()
+        }
+        if !active {
+            browser.stop()
+        }
         connections.forEach { $0.setActive(active) }
     }
 
@@ -196,8 +202,8 @@ final class RemoteCompanionDataSource: CompanionDataSource {
     func createSession(_ request: NewSessionRequest, on macID: MacHost.ID) async throws -> CompanionSession.ID {
         guard let connection = connection(macID), connection.isConnected else { throw CompanionActionError.unreachable }
         switch try await connection.request(.createSession(request)) {
-        case .created(let sessionID): return sessionID
-        case .failure(let message): throw CompanionActionError(message: message)
+        case let .created(sessionID): return sessionID
+        case let .failure(message): throw CompanionActionError(message: message)
         default: throw CompanionActionError(message: "Unexpected response from the Mac.")
         }
     }
@@ -237,6 +243,7 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         targets += payload.candidates.compactMap(ConnectTarget.init)
 
         let log = AttemptLog()
+        var newConnection: MacConnection?
         do {
             let identity = try identityStore.loadOrCreate()
             let name = deviceName
@@ -265,13 +272,19 @@ final class RemoteCompanionDataSource: CompanionDataSource {
                 connections.removeAll { $0 === existing }
             }
             let connection = makeConnection(record)
+            newConnection = connection
             connections.append(connection)
             saveRecords()
             // Adopt first: activating an unconnected Mac starts a second handshake.
             connection.adopt(result.session, target: result.target, macName: result.serverHello.macName)
+            try await connection.waitForInitialFleet()
             connection.setActive(isActive)
             return payload.macID
         } catch {
+            newConnection?.disconnect()
+            if let newConnection {
+                connections.removeAll { $0 === newConnection }
+            }
             throw PairingFailure(diagnosis: ConnectionDiagnosis.diagnose(
                 error: error,
                 attempts: log.snapshot,

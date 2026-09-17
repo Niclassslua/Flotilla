@@ -1,8 +1,8 @@
-import SwiftUI
 import AppKit
+import CompanionKit
 import CoreImage.CIFilterBuiltins
 import DesignSystem
-import CompanionKit
+import SwiftUI
 
 /// Settings ▸ iPhone Companion: turn the link on, pair a phone, see where the
 /// Mac is reachable, and remove paired phones.
@@ -10,6 +10,7 @@ struct CompanionSettingsPane: View {
     @Environment(CompanionHost.self) private var host
     @State private var isShowingPairing = false
     @State private var pendingRevoke: PairedDevice?
+    @State private var presentedPairing: CompanionHost.PendingPairing?
 
     var body: some View {
         @Bindable var host = host
@@ -58,9 +59,21 @@ struct CompanionSettingsPane: View {
             CompanionPairingSheet()
                 .environment(host)
         }
+        .sheet(item: $presentedPairing) { pending in
+            CompanionPairingConfirmationSheet(pairing: pending) {
+                host.approvePairing(pending.id)
+            } onReject: {
+                host.rejectPairing(pending.id)
+            }
+            .environment(host)
+        }
         .confirmationDialog(
             pendingRevoke.map { "Remove “\($0.name)”?" } ?? "",
-            isPresented: Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } }),
+            isPresented: Binding(get: { pendingRevoke != nil }, set: {
+                if !$0 {
+                    pendingRevoke = nil
+                }
+            }),
             presenting: pendingRevoke
         ) { device in
             Button("Remove", role: .destructive) { host.revoke(device.id) }
@@ -68,11 +81,21 @@ struct CompanionSettingsPane: View {
         } message: { _ in
             Text("The iPhone is disconnected and can't reconnect until it's paired again.")
         }
-        .onAppear { host.refreshAddresses() }
+        .onAppear {
+            host.refreshAddresses()
+            presentedPairing = host.pendingPairings.first
+        }
+        .onChange(of: host.pendingPairings) { _, pending in
+            if presentedPairing == nil {
+                presentedPairing = pending.first
+            }
+        }
     }
 
     private var isListening: Bool {
-        if case .listening = host.status { return true }
+        if case .listening = host.status {
+            return true
+        }
         return false
     }
 
@@ -83,10 +106,10 @@ struct CompanionSettingsPane: View {
             Text("Off").foregroundStyle(.secondary)
         case .starting:
             Text("Starting…").foregroundStyle(.secondary)
-        case .listening(let port):
+        case let .listening(port):
             Label("Listening on port \(String(port)) · \(host.connectedDeviceIDs.count) connected", systemImage: "dot.radiowaves.left.and.right")
                 .foregroundStyle(FlotillaColors.statusWorking)
-        case .failed(let message):
+        case let .failed(message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(FlotillaColors.danger)
         }
@@ -140,6 +163,91 @@ struct CompanionSettingsPane: View {
         let paired = "Paired \(device.pairedAt.formatted(date: .abbreviated, time: .omitted))"
         guard let lastSeen = device.lastSeen else { return paired }
         return paired + " · last seen \(lastSeen.formatted(.relative(presentation: .named)))"
+    }
+}
+
+/// A deliberate approval step for a new device. The QR code proves possession
+/// of the short-lived secret; this Mac-side decision is what makes the device
+/// trusted and allows it to receive the fleet.
+private struct CompanionPairingConfirmationSheet: View {
+    let pairing: CompanionHost.PendingPairing
+    let onApprove: () -> Void
+    let onReject: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Circle()
+                    .fill(FlotillaColors.accent.opacity(0.14))
+                    .frame(width: 92, height: 92)
+                Image(systemName: "iphone.gen3.and.arrow.forward")
+                    .font(.system(size: 38, weight: .medium))
+                    .foregroundStyle(FlotillaColors.accent)
+            }
+            .padding(.top, 28)
+
+            Text("Approve iPhone pairing?")
+                .font(.title2.weight(.bold))
+                .padding(.top, 20)
+            Text("An iPhone just used your pairing code to request access to this Mac.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(pairing.deviceName)
+                            .fontWeight(.semibold)
+                        Text("Device name")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "iphone")
+                        .foregroundStyle(FlotillaColors.accent)
+                }
+                Divider()
+                Label("The connection is encrypted", systemImage: "lock.fill")
+                Label("Only approve a device you recognize", systemImage: "checkmark.shield")
+            }
+            .font(.callout)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)
+                    .stroke(FlotillaColors.separator, lineWidth: 1)
+            }
+            .padding(.top, 24)
+
+            HStack(spacing: 10) {
+                Button("Not Now") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Approve iPhone", systemImage: "checkmark.circle.fill") {
+                    onApprove()
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("CompanionPairing.Approve")
+            }
+            .controlSize(.large)
+            .padding(.top, 24)
+
+            Button("Reject and disconnect") {
+                onReject()
+                dismiss()
+            }
+            .buttonStyle(.link)
+            .foregroundStyle(FlotillaColors.danger)
+            .padding(.top, 12)
+            .accessibilityIdentifier("CompanionPairing.Reject")
+        }
+        .padding(28)
+        .frame(width: 430)
     }
 }
 

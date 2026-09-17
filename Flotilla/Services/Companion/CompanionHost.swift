@@ -1,13 +1,13 @@
-import Foundation
 import AppKit
-import Observation
-import SessionKit
-import GitKit
-import ProcessKit
-import HooksKit
 import CompanionKit
-import SettingsKit
+import Foundation
+import GitKit
+import HooksKit
+import Observation
 import os
+import ProcessKit
+import SessionKit
+import SettingsKit
 
 /// Hosts the iPhone companion link inside Flotilla: the listener, pairing,
 /// paired devices, and the updates each connected phone receives.
@@ -27,10 +27,18 @@ final class CompanionHost {
         var payload: PairingPayload
     }
 
+    struct PendingPairing: Identifiable, Equatable {
+        let id: UUID
+        let deviceID: String
+        let deviceName: String
+        let receivedAt: Date
+    }
+
     private(set) var status: Status = .off
     private(set) var devices: [PairedDevice] = []
     private(set) var connectedDeviceIDs: Set<String> = []
     private(set) var pairing: ActivePairing?
+    private(set) var pendingPairings: [PendingPairing] = []
     private(set) var addresses: [InterfaceAddress] = []
     private(set) var tailscaleDNSName: String?
     /// Set when the host couldn't load or create its identity.
@@ -64,6 +72,8 @@ final class CompanionHost {
     @ObservationIgnored private var publishTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingPairingTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var pendingPeers: [UUID: CompanionServer.Peer] = [:]
     @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog
     @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
     @ObservationIgnored private let presence = PresenceMonitor()
@@ -112,14 +122,14 @@ final class CompanionHost {
         self.defaults = defaults
         self.macName = macName
         self.openCodeSubscription = openCodeSubscription
-        self.cachedCatalog = CompanionSnapshotBuilder.catalog(openCodeSubscription: openCodeSubscription())
+        cachedCatalog = CompanionSnapshotBuilder.catalog(openCodeSubscription: openCodeSubscription())
 
-        self.socketURL = HookConfigurationWriter.companionSocketPath(supportDirectory: supportDirectory)
+        socketURL = HookConfigurationWriter.companionSocketPath(supportDirectory: supportDirectory)
         let adapters = CompanionAdapterRegistry(support: supportDirectory)
         self.adapters = adapters
-        self.router = CompanionCommandRouter(store: store, gitService: gitService, bridge: bridge, adapters: adapters)
-        self.transcripts = CompanionTranscriptReader(registry: .flotilla())
-        self.isEnabled = defaults.bool(forKey: Self.enabledKey) || Self.autoPairsForAutomation
+        router = CompanionCommandRouter(store: store, gitService: gitService, bridge: bridge, adapters: adapters)
+        transcripts = CompanionTranscriptReader(registry: .flotilla())
+        isEnabled = defaults.bool(forKey: Self.enabledKey) || Self.autoPairsForAutomation
         adapters.screen = { id in await screenReader?.readScreen(for: id) }
         adapters.send = { [weak store] id, data in store?.process(for: id)?.send(input: data) }
         adapters.bridge = bridge
@@ -146,7 +156,9 @@ final class CompanionHost {
             self.cachedCatalog = live
             self.publishFleetIfChanged()
         }
-        if isEnabled { start() }
+        if isEnabled {
+            start()
+        }
     }
 
     // MARK: - Lifecycle
@@ -199,7 +211,9 @@ final class CompanionHost {
         transcriptPublishTask?.cancel()
         transcriptPublishTask = nil
         Task { await transcripts.unwatchAll() }
-        for peer in peers.values { peer.session.close() }
+        for peer in peers.values {
+            peer.session.close()
+        }
         peers = [:]
         readGeneration += 1
         activeReads = 0
@@ -207,6 +221,15 @@ final class CompanionHost {
         lastAttentionSessions = [:]
         connectedDeviceIDs = []
         cancelPairing()
+        for task in pendingPairingTasks.values {
+            task.cancel()
+        }
+        pendingPairingTasks.removeAll()
+        for peer in pendingPeers.values {
+            peer.session.close()
+        }
+        pendingPeers.removeAll()
+        pendingPairings.removeAll()
         status = .off
     }
 
@@ -219,14 +242,14 @@ final class CompanionHost {
         switch state {
         case .stopped: status = .off
         case .starting: status = .starting
-        case .listening(let port):
+        case let .listening(port):
             status = .listening(port: port)
             if pairing != nil {
                 refreshPairingLink()
             } else if Self.autoPairsForAutomation {
                 beginPairing()
             }
-        case .failed(let message): status = .failed(message)
+        case let .failed(message): status = .failed(message)
         }
     }
 
@@ -281,7 +304,7 @@ final class CompanionHost {
 
     /// Every address the phone may try, LAN first (docs/companion.md).
     func candidates() -> [HostCandidate] {
-        guard case .listening(let port) = status else { return [] }
+        guard case let .listening(port) = status else { return [] }
         var result: [HostCandidate] = []
         let bonjourHost = ProcessInfo.processInfo.hostName
         if bonjourHost.hasSuffix(".local") {
@@ -314,7 +337,8 @@ final class CompanionHost {
         // send the phone down a path that can't work.
         guard json["BackendState"] as? String == "Running",
               let selfNode = json["Self"] as? [String: Any],
-              let name = selfNode["DNSName"] as? String, !name.isEmpty else {
+              let name = selfNode["DNSName"] as? String, !name.isEmpty
+        else {
             if tailscaleDNSName != nil {
                 tailscaleDNSName = nil
                 publishAddressUpdateIfNeeded()
@@ -334,7 +358,9 @@ final class CompanionHost {
         let current = candidates()
         guard !current.isEmpty, current != lastPublishedCandidates else { return }
         lastPublishedCandidates = current
-        if pairing != nil { refreshPairingLink() }
+        if pairing != nil {
+            refreshPairingLink()
+        }
         for peer in peers.values {
             try? peer.session.send(.addressUpdate(candidates: current))
         }
@@ -344,9 +370,9 @@ final class CompanionHost {
     /// opens a pairing window at launch, for end-to-end runs.
     private static var autoPairsForAutomation: Bool {
         #if DEBUG || FLOTILLA_EPHEMERAL
-        ProcessInfo.processInfo.environment["FLOTILLA_COMPANION_PAIRING_FILE"] != nil
+            ProcessInfo.processInfo.environment["FLOTILLA_COMPANION_PAIRING_FILE"] != nil
         #else
-        false
+            false
         #endif
     }
 
@@ -354,12 +380,32 @@ final class CompanionHost {
     /// up (`FLOTILLA_COMPANION_PAIRING_FILE`), since the simulator can't scan.
     private func writePairingLinkForAutomation() {
         #if DEBUG || FLOTILLA_EPHEMERAL
-        guard let path = ProcessInfo.processInfo.environment["FLOTILLA_COMPANION_PAIRING_FILE"], let link = pairing?.link else { return }
-        try? Data(link.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
+            guard let path = ProcessInfo.processInfo.environment["FLOTILLA_COMPANION_PAIRING_FILE"], let link = pairing?.link else { return }
+            try? Data(link.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
         #endif
     }
 
     // MARK: - Devices
+
+    func approvePairing(_ id: UUID) {
+        guard let peer = pendingPeers.removeValue(forKey: id),
+              let pending = pendingPairings.first(where: { $0.id == id }) else { return }
+        removePendingPairing(id)
+        attach(peer, pairingApproved: true)
+        Self.syncLog.info("pairing approved device=\(pending.deviceID, privacy: .public)")
+    }
+
+    func rejectPairing(_ id: UUID) {
+        guard let peer = pendingPeers.removeValue(forKey: id) else { return }
+        removePendingPairing(id)
+        peer.session.close()
+        Self.syncLog.info("pairing rejected device=\(peer.hello.deviceID, privacy: .public)")
+    }
+
+    private func removePendingPairing(_ id: UUID) {
+        pendingPairingTasks.removeValue(forKey: id)?.cancel()
+        pendingPairings.removeAll { $0.id == id }
+    }
 
     func revoke(_ deviceID: String) {
         devices.removeAll { $0.id == deviceID }
@@ -375,12 +421,24 @@ final class CompanionHost {
         connectedDeviceIDs = Set(peers.values.map(\.deviceID))
     }
 
-    private func attach(_ connected: CompanionServer.Peer) {
+    private func attach(_ connected: CompanionServer.Peer, pairingApproved: Bool = false) {
         guard isEnabled else {
             connected.session.close()
             return
         }
         let hello = connected.hello
+        if hello.mode == .pair, !pairingApproved {
+            let id = UUID()
+            pendingPeers[id] = connected
+            pendingPairings.append(PendingPairing(id: id, deviceID: hello.deviceID, deviceName: hello.deviceName, receivedAt: .now))
+            pendingPairingTasks[id] = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(120))
+                guard !Task.isCancelled else { return }
+                self?.rejectPairing(id)
+            }
+            Self.syncLog.info("pairing awaiting Mac confirmation device=\(hello.deviceID, privacy: .public)")
+            return
+        }
         if hello.mode == .pair {
             devices.removeAll { $0.id == hello.deviceID }
             devices.append(PairedDevice(id: hello.deviceID, name: hello.deviceName, publicKey: hello.deviceKey, pairedAt: .now, lastSeen: .now))
@@ -433,19 +491,21 @@ final class CompanionHost {
         switch message {
         case .ping:
             try? peer.session.send(.pong)
-        case .subscribe(let sessionID):
+        case let .subscribe(sessionID):
             let previous = peer.subscribedSessionID
             peer.subscriptionGeneration += 1
             peer.subscribedSessionID = sessionID
             peer.lastTranscript = nil
             peer.unsendableTranscript = nil
             peer.transcriptRevision = 0
-            if let previous, previous != sessionID { await stopWatchingIfUnneeded(previous) }
+            if let previous, previous != sessionID {
+                await stopWatchingIfUnneeded(previous)
+            }
             await publishTranscript(to: peer)
             if let session = store.sessions.first(where: { $0.id == sessionID }) {
                 await transcripts.watch(session)
             }
-        case .resyncTranscript(let sessionID):
+        case let .resyncTranscript(sessionID):
             guard peer.subscribedSessionID == sessionID else { return }
             peer.lastTranscript = nil
             peer.unsendableTranscript = nil
@@ -458,8 +518,10 @@ final class CompanionHost {
             peer.subscribedSessionID = nil
             peer.lastTranscript = nil
             peer.unsendableTranscript = nil
-            if let previous { await stopWatchingIfUnneeded(previous) }
-        case .request(let id, let request):
+            if let previous {
+                await stopWatchingIfUnneeded(previous)
+            }
+        case let .request(id, request):
             if case .diff = request {
                 handleRead(request, id: id, from: peer)
                 return
@@ -495,14 +557,18 @@ final class CompanionHost {
         let generation = readGeneration
         Task { [weak self, weak peer] in
             guard let self else { return }
-            defer { if self.readGeneration == generation { self.readFinished() } }
+            defer {
+                if self.readGeneration == generation {
+                    self.readFinished()
+                }
+            }
             guard let peer else { return }
             let response = await self.router.handle(request)
             do {
                 try peer.session.send(.response(id: id, response))
             } catch TransportError.frameTooLarge {
                 try? peer.session.send(.response(id: id, .failure(message: "This change is too large to send to the iPhone in one piece. Open it on the Mac.")))
-            } catch { }
+            } catch {}
         }
     }
 
@@ -541,7 +607,9 @@ final class CompanionHost {
                 self.publishAttentionTransitions()
                 guard !self.peers.isEmpty else { continue }
                 self.publishFleetIfChanged()
-                for peer in self.peers.values where peer.subscribedSessionID != nil { await self.publishTranscript(to: peer) }
+                for peer in self.peers.values where peer.subscribedSessionID != nil {
+                    await self.publishTranscript(to: peer)
+                }
             }
         }
         transcriptPublishTask?.cancel()
@@ -590,7 +658,9 @@ final class CompanionHost {
                   let status = session.status,
                   status == .waitingForInput || status == .readyForReview || status == .crashed else { continue }
             let permission = fleet.pending[session.id]?.first { card in
-                if case .permission = card.kind { return true }
+                if case .permission = card.kind {
+                    return true
+                }
                 return false
             }
             let summary = session.attentionSummary ?? {
@@ -605,7 +675,9 @@ final class CompanionHost {
                 sessionID: session.id, title: session.title, status: status,
                 summary: summary, permissionID: permission?.id
             )
-            for peer in peers.values { try? peer.session.send(.attention(event)) }
+            for peer in peers.values {
+                try? peer.session.send(.attention(event))
+            }
         }
     }
 
@@ -645,7 +717,13 @@ final class CompanionHost {
             if let adapter = adapters.adapter(for: session) {
                 native.streamingText = adapter.transcript.streamingText
                 native.retryAttempt = adapter.transcript.retryAttempt
-                native.events += adapter.transcript.events.filter { if case .turnFailed = $0.content { true } else { false } }
+                native.events += adapter.transcript.events.filter {
+                    if case .turnFailed = $0.content {
+                        true
+                    } else {
+                        false
+                    }
+                }
             }
             transcript = native
         }
@@ -655,7 +733,8 @@ final class CompanionHost {
         let revision = peer.transcriptRevision + 1
         let message: ServerMessage
         if let old = peer.lastTranscript,
-           let delta = TranscriptDelta.make(from: old, to: transcript, baseRevision: peer.transcriptRevision) {
+           let delta = TranscriptDelta.make(from: old, to: transcript, baseRevision: peer.transcriptRevision)
+        {
             message = .transcriptDelta(sessionID: sessionID, delta)
         } else {
             message = .transcriptSnapshot(sessionID: sessionID, revision: revision, transcript)
