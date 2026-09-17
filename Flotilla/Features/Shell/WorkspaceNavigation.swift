@@ -32,6 +32,7 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     case showChanges
     case restoreSessions
     case showSettings
+    case showShortcuts
 
     var id: Self { self }
 
@@ -40,7 +41,7 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     /// `WorkspaceCommandTests.testNoTwoCommandsShareADestination`.
     var destination: WorkspaceDestination? {
         switch self {
-        case .newSession, .restoreSessions, .showSettings: nil
+        case .newSession, .restoreSessions, .showSettings, .showShortcuts: nil
         case .showHome: .home
         case .showSessions: .sessions(.focus)
         case .showGrid: .sessions(.grid)
@@ -65,6 +66,7 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showChanges: "Review changes"
         case .restoreSessions: "Restore stopped sessions"
         case .showSettings: "Open Settings"
+        case .showShortcuts: "Keyboard shortcuts"
         }
     }
 
@@ -80,7 +82,8 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showInstructions: "View all instruction documents"
         case .showChanges: "Review Git changes"
         case .restoreSessions: "Restart finished or crashed sessions"
-        case .showSettings: "Configure agents, worktrees, and appearance"
+        case .showSettings: "Configure agents, sessions, and worktrees"
+        case .showShortcuts: "Reference for navigation and session commands"
         }
     }
 
@@ -97,6 +100,7 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showChanges: "arrow.triangle.branch"
         case .restoreSessions: "arrow.clockwise"
         case .showSettings: "gearshape"
+        case .showShortcuts: "keyboard"
         }
     }
 }

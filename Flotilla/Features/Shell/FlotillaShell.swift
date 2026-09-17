@@ -435,6 +435,8 @@ struct FlotillaShell: View {
             navigator.presentedSheet = .restore
         case .showSettings:
             openSettings()
+        case .showShortcuts:
+            navigator.presentedSheet = .shortcuts
         }
     }
 }

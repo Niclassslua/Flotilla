@@ -198,6 +198,7 @@ struct FlotillaApp: App {
                     : hookCoordinator.screenReader
             )
             .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
+            .environment(\.editorFontSize, settingsViewModel.settings.terminal.editorFontSize)
             .onChange(of: settingsViewModel.settings.notifications.delivery) { _, delivery in
                 foregroundNotificationGate.withLock { $0 = (delivery == .always) }
             }
