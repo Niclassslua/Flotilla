@@ -82,9 +82,20 @@ final class CompanionStore {
         data.macID(for: id).flatMap(mac)
     }
 
-    func sessions(on macID: MacHost.ID) -> [CompanionSession] { data.sessions(on: macID) }
-    func projects(on macID: MacHost.ID) -> [ProjectSummary] { data.projects(on: macID) }
-    func catalog(on macID: MacHost.ID) -> AgentCatalog { data.catalog(on: macID) }
+    func sessions(on macID: MacHost.ID) -> [CompanionSession] {
+        observeDataChanges()
+        return data.sessions(on: macID)
+    }
+
+    func projects(on macID: MacHost.ID) -> [ProjectSummary] {
+        observeDataChanges()
+        return data.projects(on: macID)
+    }
+
+    func catalog(on macID: MacHost.ID) -> AgentCatalog {
+        observeDataChanges()
+        return data.catalog(on: macID)
+    }
     func session(_ id: CompanionSession.ID) -> CompanionSession? { data.session(id) }
     func transcript(for id: CompanionSession.ID) -> SessionTranscript { data.transcript(for: id) }
     func pendingInteractions(for id: CompanionSession.ID) -> [PendingInteraction] { data.pendingInteractions(for: id) }
@@ -93,6 +104,13 @@ final class CompanionStore {
     func diff(for id: CompanionSession.ID, commitHash: String?) -> Remote<[FileDiff]> { data.diff(for: id, commitHash: commitHash) }
     func commits(for id: CompanionSession.ID) -> Remote<[CommitSummary]> { data.commits(for: id) }
     func fileContents(at path: String, in id: CompanionSession.ID) -> Remote<String?> { data.fileContents(at: path, in: id) }
+
+    /// Reads the forwarding token so views that consume the data source
+    /// through this store are invalidated when a child MacConnection receives
+    /// a new fleet snapshot.
+    private func observeDataChanges() {
+        _ = data.observationRevision
+    }
 
     func loadDiff(for id: CompanionSession.ID, commitHash: String?) async { await data.loadDiff(for: id, commitHash: commitHash) }
     func loadCommits(for id: CompanionSession.ID) async { await data.loadCommits(for: id) }

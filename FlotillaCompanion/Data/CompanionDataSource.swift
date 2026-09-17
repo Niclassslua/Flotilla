@@ -11,6 +11,12 @@ import CompanionKit
 /// `CompanionActionError` with a message worth showing.
 @MainActor
 protocol CompanionDataSource: AnyObject, Observable {
+    /// Monotonically increases when remote state changes inside a data source.
+    ///
+    /// The remote source owns observable `MacConnection` children. SwiftUI
+    /// must observe this forwarding token because replacing a child's fleet
+    /// does not mutate the parent's `connections` array.
+    var observationRevision: UInt64 { get }
     var macs: [MacHost] { get }
     /// `false` for the demo, which has nothing to pair with.
     var supportsPairing: Bool { get }

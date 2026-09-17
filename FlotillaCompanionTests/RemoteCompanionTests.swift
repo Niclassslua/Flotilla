@@ -234,10 +234,12 @@ final class RemoteCompanionTests: XCTestCase {
         data.setActive(true)
         let macID = try await data.pair(with: mac.payload) { _, _ in }
         let newSession = session()
+        let revisionBeforeFleetUpdate = data.observationRevision
         data.focus(on: newSession.id)
         mac.push(FleetSnapshot(macID: macID, macName: "Test Mac", sessions: [newSession], projects: [], catalog: .fallback))
         await waitUntil { data.transcript(for: newSession.id).events.count == 1 }
         XCTAssertEqual(data.transcript(for: newSession.id).latestCompleteLine, "Arrived")
+        XCTAssertGreaterThan(data.observationRevision, revisionBeforeFleetUpdate)
     }
 
     private func session(status: SessionStatus = .working) -> CompanionSession {

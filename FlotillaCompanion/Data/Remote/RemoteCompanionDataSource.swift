@@ -14,6 +14,7 @@ struct PairingFailure: Error {
 @Observable
 final class RemoteCompanionDataSource: CompanionDataSource {
     private(set) var connections: [MacConnection] = []
+    private(set) var observationRevision: UInt64 = 0
     let browser = LANBrowser()
 
     @ObservationIgnored private let store: PairedMacStore
@@ -44,11 +45,18 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         )
         let macID = record.macID
         let cacheWriter = CompanionCacheWriter(store: store, macID: macID)
-        connection.onRecordChange = { [weak self] _ in self?.saveRecords() }
+        connection.onRecordChange = { [weak self] _ in
+            self?.observationRevision &+= 1
+            self?.saveRecords()
+        }
         connection.onCacheChange = { cache, revision in Task { await cacheWriter.schedule(cache, revision: revision) } }
         connection.onCacheFlush = { cache, revision in Task { await cacheWriter.flush(cache, revision: revision) } }
         connection.onCacheDiscard = { await cacheWriter.discard() }
-        connection.onFleetChange = { [weak self] in self?.applyFocus() }
+        connection.onFleetChange = { [weak self] in
+            guard let self else { return }
+            self.observationRevision &+= 1
+            self.applyFocus()
+        }
         connection.onAttention = { [weak self] event in self?.onAttention(macID, event) }
         return connection
     }

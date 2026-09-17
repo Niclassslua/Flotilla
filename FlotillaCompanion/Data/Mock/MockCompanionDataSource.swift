@@ -9,6 +9,7 @@ import CompanionKit
 @Observable
 @MainActor
 final class MockCompanionDataSource: CompanionDataSource {
+    private(set) var observationRevision: UInt64 = 0
     var macs: [MacHost]
     var sessionsByMac: [MacHost.ID: [CompanionSession]]
     var projectsByMac: [MacHost.ID: [ProjectSummary]]
@@ -237,6 +238,7 @@ final class MockCompanionDataSource: CompanionDataSource {
             updatedAt: .now
         )
         sessionsByMac[macID, default: []].insert(session, at: 0)
+        observationRevision &+= 1
         var transcript = SessionTranscript()
         if !request.goal.isEmpty {
             transcript.append(.userMessage(text: request.goal, timestamp: .now))
@@ -280,6 +282,7 @@ final class MockCompanionDataSource: CompanionDataSource {
         }
         transcripts[sessionID] = nil
         pending[sessionID] = nil
+        observationRevision &+= 1
     }
 
     func acknowledgeReview(_ sessionID: CompanionSession.ID) {
@@ -293,6 +296,7 @@ final class MockCompanionDataSource: CompanionDataSource {
             if let index = sessionsByMac[macID]?.firstIndex(where: { $0.id == id }) {
                 body(&sessionsByMac[macID]![index])
                 sessionsByMac[macID]![index].updatedAt = .now
+                observationRevision &+= 1
                 return
             }
         }
