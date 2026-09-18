@@ -191,12 +191,18 @@ private struct PromptComposer: View {
             HStack(alignment: .center, spacing: 4) {
                 if speech.phase == .recording {
                     AudioWaveformHistory(levels: speech.audioLevels)
-                        .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+                        .frame(maxWidth: .infinity, minHeight: 52, maxHeight: 52)
                         .accessibilityIdentifier("Composer.AudioWaveform")
                 } else {
                     TextField(placeholder, text: $text, axis: .vertical)
                         .lineLimit(1...6)
                         .focused($isFocused)
+                        // Prompts frequently contain code, paths, and agent
+                        // syntax. Predictive candidates add no value here and
+                        // can trigger UIKit's zero-width candidate-cell layout
+                        // loop while selecting text in a growing field.
+                        .autocorrectionDisabled(true)
+                        .frame(maxWidth: .infinity)
                         .padding(.leading, 14)
                         .padding(.trailing, 4)
                         .padding(.vertical, 10)
@@ -319,21 +325,20 @@ private struct AudioWaveformHistory: View {
     private let barCount = 72
 
     var body: some View {
-        Canvas { context, size in
-            let spacing: CGFloat = 2
-            let barWidth = max(2, (size.width - spacing * CGFloat(barCount - 1)) / CGFloat(barCount))
+        GeometryReader { proxy in
             let visibleLevels = Array(levels.suffix(barCount))
             let emptyBars = barCount - visibleLevels.count
-            for index in 0..<barCount {
-                let level = index < emptyBars ? 0 : visibleLevels[index - emptyBars]
-                let height = max(3, CGFloat(level) * (size.height - 4))
-                let x = CGFloat(index) * (barWidth + spacing)
-                let rect = CGRect(x: x, y: (size.height - height) / 2,
-                                  width: barWidth, height: height)
-                let opacity = level > 0.03 ? 0.82 : 0.28
-                context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
-                              with: .color(.white.opacity(opacity)))
+            HStack(alignment: .center, spacing: 2) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    let level = index < emptyBars ? 0 : visibleLevels[index - emptyBars]
+                    Capsule()
+                        .fill(.white.opacity(level > 0.03 ? 0.82 : 0.28))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: max(3, CGFloat(level) * (proxy.size.height - 4)))
+                        .animation(.easeInOut(duration: 0.16), value: level)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(.horizontal, 14)
         .accessibilityElement(children: .ignore)

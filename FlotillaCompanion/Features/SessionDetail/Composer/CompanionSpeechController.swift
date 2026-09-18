@@ -123,6 +123,7 @@ final class CompanionSpeechController {
     private var pump: Task<Void, Never>?
     private var generation: UInt64 = 0
     private var lastAudioLevelSampleAt = Date.distantPast
+    private var smoothedAudioLevel = 0.0
 
     func checkAvailability(store: CompanionStore, sessionID: UUID) async {
         guard let macID = store.data.macID(for: sessionID) else {
@@ -217,6 +218,7 @@ final class CompanionSpeechController {
         capture?.stop()
         capture = nil
         audioLevel = 0
+        smoothedAudioLevel = 0
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         await pump?.value
@@ -241,6 +243,7 @@ final class CompanionSpeechController {
         capture?.stop()
         capture = nil
         audioLevel = 0
+        smoothedAudioLevel = 0
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         pump?.cancel()
@@ -258,11 +261,15 @@ final class CompanionSpeechController {
 
     private func recordAudioLevel(_ level: Double) {
         guard phase == .recording else { return }
-        audioLevel = level
+        let smoothing: Double = level > smoothedAudioLevel ? 0.3 : 0.16
+        smoothedAudioLevel += (level - smoothedAudioLevel) * smoothing
+        // Keep the visual range expressive without snapping to either edge.
+        let displayLevel = min(0.86, smoothedAudioLevel * 0.78 + 0.02)
+        audioLevel = displayLevel
         let now = Date()
         guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.16 else { return }
         lastAudioLevelSampleAt = now
-        audioLevels.append(level)
+        audioLevels.append(displayLevel)
         if audioLevels.count > 96 {
             audioLevels.removeFirst(audioLevels.count - 96)
         }
@@ -275,6 +282,7 @@ final class CompanionSpeechController {
         capture?.stop()
         capture = nil
         audioLevel = 0
+        smoothedAudioLevel = 0
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         pump?.cancel()
