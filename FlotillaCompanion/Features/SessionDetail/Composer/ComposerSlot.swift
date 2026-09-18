@@ -316,18 +316,23 @@ private struct PromptComposer: View {
 
 private struct AudioWaveformHistory: View {
     let levels: [Double]
+    private let barCount = 72
 
     var body: some View {
         Canvas { context, size in
-            guard !levels.isEmpty else { return }
             let spacing: CGFloat = 2
-            let barWidth = max(2, (size.width - spacing * CGFloat(levels.count - 1)) / CGFloat(levels.count))
-            for (index, level) in levels.enumerated() {
-                let height = max(4, CGFloat(level) * (size.height - 4))
+            let barWidth = max(2, (size.width - spacing * CGFloat(barCount - 1)) / CGFloat(barCount))
+            let visibleLevels = Array(levels.suffix(barCount))
+            let emptyBars = barCount - visibleLevels.count
+            for index in 0..<barCount {
+                let level = index < emptyBars ? 0 : visibleLevels[index - emptyBars]
+                let height = max(3, CGFloat(level) * (size.height - 4))
                 let x = CGFloat(index) * (barWidth + spacing)
                 let rect = CGRect(x: x, y: (size.height - height) / 2,
                                   width: barWidth, height: height)
-                context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2), with: .color(.red))
+                let opacity = level > 0.03 ? 0.82 : 0.28
+                context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
+                              with: .color(.white.opacity(opacity)))
             }
         }
         .padding(.horizontal, 14)

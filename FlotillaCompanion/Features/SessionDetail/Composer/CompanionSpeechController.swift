@@ -78,7 +78,11 @@ private final class CompanionAudioCapture: @unchecked Sendable {
                 sumOfSquares += sample * sample
             }
             let rms = (sumOfSquares / Double(frameCount)).squareRoot()
-            onLevel(min(1, rms * 4.5))
+            // Phone microphone input is normalized, but typical speech RMS
+            // levels are much lower than 1. Remove a small noise floor and
+            // apply enough gain for quiet speakers to see the meter move.
+            let voiceEnergy = max(0, rms - 0.004)
+            onLevel(min(1, voiceEnergy * 22))
         }
         var chunksToYield: [Data] = []
         lock.lock()
