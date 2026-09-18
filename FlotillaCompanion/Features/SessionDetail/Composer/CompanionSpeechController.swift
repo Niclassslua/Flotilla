@@ -261,13 +261,13 @@ final class CompanionSpeechController {
 
     private func recordAudioLevel(_ level: Double) {
         guard phase == .recording else { return }
-        let smoothing: Double = level > smoothedAudioLevel ? 0.3 : 0.16
+        let smoothing: Double = level > smoothedAudioLevel ? 0.18 : 0.1
         smoothedAudioLevel += (level - smoothedAudioLevel) * smoothing
         // Keep the visual range expressive without snapping to either edge.
         let displayLevel = min(0.86, smoothedAudioLevel * 0.78 + 0.02)
         audioLevel = displayLevel
         let now = Date()
-        guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.16 else { return }
+        guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.2 else { return }
         lastAudioLevelSampleAt = now
         audioLevels.append(displayLevel)
         if audioLevels.count > 96 {

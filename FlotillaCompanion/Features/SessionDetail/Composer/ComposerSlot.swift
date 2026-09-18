@@ -191,7 +191,7 @@ private struct PromptComposer: View {
             HStack(alignment: .center, spacing: 4) {
                 if speech.phase == .recording {
                     AudioWaveformHistory(levels: speech.audioLevels)
-                        .frame(maxWidth: .infinity, minHeight: 52, maxHeight: 52)
+                        .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)
                         .accessibilityIdentifier("Composer.AudioWaveform")
                 } else {
                     TextField(placeholder, text: $text, axis: .vertical)
@@ -322,7 +322,7 @@ private struct PromptComposer: View {
 
 private struct AudioWaveformHistory: View {
     let levels: [Double]
-    private let barCount = 72
+    private let barCount = 48
 
     var body: some View {
         GeometryReader { proxy in
@@ -335,12 +335,23 @@ private struct AudioWaveformHistory: View {
                         .fill(.white.opacity(level > 0.03 ? 0.82 : 0.28))
                         .frame(maxWidth: .infinity)
                         .frame(height: max(3, CGFloat(level) * (proxy.size.height - 4)))
-                        .animation(.easeInOut(duration: 0.16), value: level)
+                        .animation(.easeInOut(duration: 0.26), value: level)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(.horizontal, 14)
+        .mask {
+            LinearGradient(
+                stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: 0.82),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Microphone level history")
         .accessibilityValue(levels.isEmpty ? "Listening" : "Receiving audio")
