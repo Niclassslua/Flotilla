@@ -13,9 +13,12 @@ private final class CompanionAudioCapture: @unchecked Sendable {
     private let continuation: AsyncStream<Data>.Continuation
     let chunks: AsyncStream<Data>
     private let onOverflow: @Sendable () -> Void
+    private let onLevel: @Sendable (Double) -> Void
 
-    init(onOverflow: @escaping @Sendable () -> Void) {
+    init(onOverflow: @escaping @Sendable () -> Void,
+         onLevel: @escaping @Sendable (Double) -> Void) {
         self.onOverflow = onOverflow
+        self.onLevel = onLevel
         let pair = AsyncStream.makeStream(of: Data.self, bufferingPolicy: .bufferingOldest(20))
         chunks = pair.stream
         continuation = pair.continuation
@@ -67,6 +70,16 @@ private final class CompanionAudioCapture: @unchecked Sendable {
             return input
         }
         guard error == nil, status != .error, let floats = output.floatChannelData?[0] else { return }
+        let frameCount = Int(output.frameLength)
+        if frameCount > 0 {
+            var sumOfSquares = 0.0
+            for index in 0..<frameCount {
+                let sample = Double(floats[index])
+                sumOfSquares += sample * sample
+            }
+            let rms = (sumOfSquares / Double(frameCount)).squareRoot()
+            onLevel(min(1, rms * 4.5))
+        }
         var chunksToYield: [Data] = []
         lock.lock()
         for index in 0..<Int(output.frameLength) {
@@ -99,6 +112,7 @@ final class CompanionSpeechController {
 
     private(set) var phase: Phase = .idle
     private(set) var isAvailable: Bool = false
+    private(set) var audioLevel: Double = 0
     private var requestID: UUID?
     private var capture: CompanionAudioCapture?
     private var pump: Task<Void, Never>?
@@ -146,10 +160,15 @@ final class CompanionSpeechController {
                 throw CompanionActionError(message: message(for: started))
             }
             requestID = id
-            let capture = CompanionAudioCapture { [weak self] in
-                Task { @MainActor in self?.fail("Audio could not keep up with the connection.",
-                                                store: store, macID: macID) }
-            }
+            let capture = CompanionAudioCapture(
+                onOverflow: { [weak self] in
+                    Task { @MainActor in self?.fail("Audio could not keep up with the connection.",
+                                                    store: store, macID: macID) }
+                },
+                onLevel: { [weak self] level in
+                    Task { @MainActor in self?.audioLevel = level }
+                }
+            )
             self.capture = capture
             try capture.start()
             phase = .recording
@@ -191,6 +210,7 @@ final class CompanionSpeechController {
         phase = .processing
         capture?.stop()
         capture = nil
+        audioLevel = 0
         await pump?.value
         pump = nil
         guard phase == .processing else { return nil }
@@ -212,6 +232,7 @@ final class CompanionSpeechController {
         generation &+= 1
         capture?.stop()
         capture = nil
+        audioLevel = 0
         pump?.cancel()
         pump = nil
         if let id = requestID, let macID = store.data.macID(for: sessionID) {
@@ -231,6 +252,7 @@ final class CompanionSpeechController {
         generation &+= 1
         capture?.stop()
         capture = nil
+        audioLevel = 0
         pump?.cancel()
         pump = nil
         requestID = nil

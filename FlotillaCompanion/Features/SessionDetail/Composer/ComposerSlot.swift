@@ -169,7 +169,7 @@ private struct PromptComposer: View {
                         ProgressView().controlSize(.mini)
                         Text("Checking Handy…")
                     case .recording:
-                        Image(systemName: "waveform").foregroundStyle(.red)
+                        AudioWaveformMeter(level: speech.audioLevel)
                         Text("Recording · tap microphone to finish")
                     case .processing:
                         ProgressView().controlSize(.mini)
@@ -215,6 +215,7 @@ private struct PromptComposer: View {
                         .disabled(speech.phase == .checking || speech.phase == .processing)
                         .buttonStyle(.glass)
                         .foregroundStyle(speech.phase == .recording ? .red : FlotillaColors.textSecondary)
+                        .frame(width: 36, height: 36)
                     }
 
                     Group {
@@ -234,6 +235,7 @@ private struct PromptComposer: View {
                             .disabled(isStopping)
                             .buttonStyle(.glass)
                             .foregroundStyle(FlotillaColors.textPrimary)
+                            .frame(width: 36, height: 36)
                         } else {
                             Button {
                                 if speech.phase == .recording {
@@ -256,12 +258,13 @@ private struct PromptComposer: View {
                             .disabled(trimmed.isEmpty && speech.phase != .recording || speech.phase == .processing)
                             .buttonStyle(.glassProminent)
                             .tint(FlotillaColors.accent)
+                            .frame(width: 36, height: 36)
                         }
                     }
                 }
                 .font(.body.weight(.semibold))
                 .buttonBorderShape(.circle)
-                .controlSize(.large)
+                .controlSize(.regular)
                 .padding(.trailing, 4)
             }
             .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -303,6 +306,31 @@ private struct PromptComposer: View {
     private var placeholder: String {
         if !isActionable { return "Mac unreachable" }
         return session.status == .working ? "Queue a message" : "Message \(session.agent.displayName)"
+    }
+}
+
+private struct AudioWaveformMeter: View {
+    let level: Double
+
+    private let barCount = 9
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.08)) { timeline in
+            let phase = timeline.date.timeIntervalSinceReferenceDate * 5
+            HStack(alignment: .center, spacing: 2) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    let wave = (sin(phase + Double(index) * 0.9) + 1) / 2
+                    let height = 4 + (level * (8 + wave * 10))
+                    Capsule()
+                        .fill(.red)
+                        .frame(width: 2.5, height: height)
+                }
+            }
+            .frame(width: 40, height: 24)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Microphone level")
+            .accessibilityValue(level > 0.05 ? "Receiving audio" : "Listening")
+        }
     }
 }
 
