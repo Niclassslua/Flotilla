@@ -300,6 +300,9 @@ struct LauncherProjectList: View {
     @Bindable var draft: SessionDraft
     var showsFilter = true
     var onPick: () -> Void = {}
+    /// A popover needs to close before presenting an `NSOpenPanel`; callers
+    /// with that presentation requirement provide their own sequencing.
+    var onChooseFolder: (() -> Void)?
 
     @State private var query = ""
     @State private var hoveredChoiceID: String?
@@ -328,8 +331,12 @@ struct LauncherProjectList: View {
             }
 
             Button {
-                onPick()
-                draft.chooseFolderFromPanel()
+                if let onChooseFolder {
+                    onChooseFolder()
+                } else {
+                    onPick()
+                    draft.chooseFolderFromPanel()
+                }
             } label: {
                 HStack(spacing: FlotillaSpacing.small) {
                     Image(systemName: "folder.badge.plus")

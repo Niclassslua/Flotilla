@@ -26,19 +26,9 @@ struct TilesDesign: View {
 
             HStack(alignment: .top, spacing: FlotillaSpacing.medium) {
                 workspaceTile
-                    // The project list is an in-window overlay. Its card,
-                    // rather than only the button inside it, must sit above
-                    // the other two HStack siblings while it is open.
-                    .zIndex(isWorkspacePickerPresented ? 1 : 0)
                 agentTile
                 launchTile
             }
-            // `zIndex` only orders siblings in the same container. The
-            // picker is also allowed to extend below this HStack, where it
-            // overlaps the error and action rows that are siblings of the
-            // HStack in the surrounding VStack. Raise the whole row while
-            // the in-window menu is open so those later rows cannot cover it.
-            .zIndex(isWorkspacePickerPresented ? 1 : 0)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, FlotillaSpacing.large)
 
@@ -153,39 +143,78 @@ private struct TilesWorkspacePicker: View {
     @State private var isHovering = false
 
     var body: some View {
-        LauncherProjectButton(
-            draft: draft,
-            label: {
-                HStack(spacing: 6) {
-                    Image(systemName: draft.projectChoice.symbolName)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(draft.projectChoice.isGeneral ? FlotillaColors.textTertiary : FlotillaColors.accent)
-
-                    Text(draft.projectChoice.displayName)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(draft.projectChoice.isGeneral ? FlotillaColors.textSecondary : FlotillaColors.textPrimary)
-                        .lineLimit(1)
-
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(
-                    isHovering ? FlotillaColors.surfaceElevated : FlotillaColors.surfaceElevated.opacity(0.7),
-                    in: Capsule()
-                )
-                .overlay {
-                    Capsule().strokeBorder(
-                        isHovering ? FlotillaColors.accent.opacity(0.6) : FlotillaColors.separator,
-                        lineWidth: FlotillaBorderWidth.hairline
-                    )
-                }
-                .contentShape(Capsule())
-            },
-            presentationChanged: { isPresented = $0 }
-        )
+        Button { isPresented.toggle() } label: { chip }
+        .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            popoverContent
+        }
+        .help("Choose the workspace")
+        .accessibilityIdentifier("CreateSession.ProjectPicker")
+        .accessibilityValue(draft.projectChoice.displayName)
+    }
+
+    private var chip: some View {
+        HStack(spacing: 6) {
+            Image(systemName: draft.projectChoice.symbolName)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(draft.projectChoice.isGeneral ? FlotillaColors.textTertiary : FlotillaColors.accent)
+
+            Text(draft.projectChoice.displayName)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(draft.projectChoice.isGeneral ? FlotillaColors.textSecondary : FlotillaColors.textPrimary)
+                .lineLimit(1)
+
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(FlotillaColors.textTertiary)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            isHovering ? FlotillaColors.surfaceElevated : FlotillaColors.surfaceElevated.opacity(0.7),
+            in: Capsule()
+        )
+        .overlay {
+            Capsule().strokeBorder(
+                isHovering ? FlotillaColors.accent.opacity(0.6) : FlotillaColors.separator,
+                lineWidth: FlotillaBorderWidth.hairline
+            )
+        }
+        .contentShape(Capsule())
+    }
+
+    private var popoverContent: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text("Workspace")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .textCase(.uppercase)
+                Spacer(minLength: 0)
+                Text(draft.projectChoice.isGeneral ? "General" : "Project")
+                    .font(.system(size: 10))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+
+            LauncherProjectList(
+                draft: draft,
+                onPick: { isPresented = false },
+                onChooseFolder: chooseFolder
+            )
+            .padding(.horizontal, 6)
+        }
+        .padding(.bottom, 8)
+        .frame(width: 300)
+    }
+
+    private func chooseFolder() {
+        isPresented = false
+        Task { @MainActor in
+            draft.chooseFolderFromPanel()
+        }
     }
 }
