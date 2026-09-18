@@ -222,6 +222,10 @@ final class MockCompanionDataSource: CompanionDataSource {
         mutateSession(sessionID) { $0.status = .readyForReview }
     }
 
+    func isSpeechAvailable(on macID: MacHost.ID) -> Bool {
+        true
+    }
+
     func speech(_ message: ClientMessage, on macID: MacHost.ID) async throws -> CompanionSpeechEvent {
         switch message {
         case .speechCapabilities:

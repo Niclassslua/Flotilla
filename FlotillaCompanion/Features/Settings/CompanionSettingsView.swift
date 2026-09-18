@@ -47,6 +47,23 @@ struct CompanionSettingsView: View {
                         Text("Removes transcripts stored on this iPhone. Paired Macs, fleet summaries, and unsent drafts stay available. Drafts are discarded separately.")
                     }
                 }
+
+                Section {
+                    LabeledContent("Handy Dictation") {
+                        if store.isAnyMacSpeechAvailable {
+                            Label("Available", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(FlotillaColors.statusWorking)
+                        } else {
+                            Text("Unavailable")
+                                .foregroundStyle(FlotillaColors.textSecondary)
+                        }
+                    }
+                    .listRowBackground(FlotillaColors.surface)
+                } header: {
+                    Text("Speech to Text (Handy)")
+                } footer: {
+                    Text("When connected to a Mac running Handy, you can dictate prompt messages directly into your sessions. Audio streams securely over your encrypted companion link and is transcribed locally on Apple Silicon by Handy. Audio is never persisted or sent to any cloud service.")
+                }
             }
             .scrollContentBackground(.hidden)
             .background(FlotillaColors.canvas)
@@ -104,6 +121,23 @@ struct MacConnectionDetailView: View {
                     }
                     Button("Reconnect Now") { store.reconnect(macID) }
                         .disabled(mac.isReachable)
+                }
+
+                Section {
+                    LabeledContent("Status") {
+                        if store.isSpeechAvailable(for: macID) {
+                            Label("Connected & Ready", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(FlotillaColors.statusWorking)
+                        } else {
+                            Label("Unavailable", systemImage: "xmark.circle.fill")
+                                .foregroundStyle(FlotillaColors.danger)
+                        }
+                    }
+                    .listRowBackground(FlotillaColors.surface)
+                } header: {
+                    Text("Speech to Text (Handy)")
+                } footer: {
+                    Text("Transcribes dictation locally on Apple Silicon using Handy on this Mac. If unavailable, ensure Handy is running on this Mac with a speech model downloaded.")
                 }
             }
 

@@ -98,19 +98,44 @@ final class CompanionSpeechController {
     }
 
     private(set) var phase: Phase = .idle
+    private(set) var isAvailable: Bool = false
     private var requestID: UUID?
     private var capture: CompanionAudioCapture?
     private var pump: Task<Void, Never>?
     private var generation: UInt64 = 0
 
+    func checkAvailability(store: CompanionStore, sessionID: UUID) async {
+        guard let macID = store.data.macID(for: sessionID) else {
+            isAvailable = false
+            return
+        }
+        let available = store.data.isSpeechAvailable(on: macID)
+        if isAvailable != available {
+            isAvailable = available
+        }
+        if let mac = store.mac(macID), mac.isReachable {
+            do {
+                let capabilities = try await store.data.speech(.speechCapabilities, on: macID)
+                if case let .capabilities(status, _) = capabilities {
+                    isAvailable = (status == "ready")
+                } else {
+                    isAvailable = false
+                }
+            } catch {
+                isAvailable = false
+            }
+        }
+    }
+
     func begin(store: CompanionStore, sessionID: UUID) async {
-        guard phase == .idle, let macID = store.data.macID(for: sessionID) else { return }
+        guard isAvailable, phase == .idle, let macID = store.data.macID(for: sessionID) else { return }
         generation &+= 1
         let current = generation
         phase = .checking
         do {
             let capabilities = try await store.data.speech(.speechCapabilities, on: macID)
             guard case .capabilities("ready", _) = capabilities else {
+                isAvailable = false
                 throw CompanionActionError(message: message(for: capabilities))
             }
             let permission = await AVAudioApplication.requestRecordPermission()

@@ -29,6 +29,7 @@ final class MacConnection {
     private(set) var acknowledgedReviews: Set<UUID> = []
     /// Cards that just disappeared, shown briefly with how they ended.
     private(set) var resolvedCards: [UUID: [PendingInteraction]] = [:]
+    private(set) var isSpeechAvailable: Bool = false
 
     @ObservationIgnored private var session: ClientSideSession?
     @ObservationIgnored private var nextRequestID: UInt64 = 1
@@ -59,6 +60,7 @@ final class MacConnection {
     @ObservationIgnored var onCacheDiscard: () async -> Void = {}
     @ObservationIgnored var onFleetChange: () -> Void = {}
     @ObservationIgnored var onAttention: (SessionAttentionEvent) -> Void = { _ in }
+    @ObservationIgnored var onSpeechAvailabilityChange: () -> Void = {}
 
     static let requestTimeout: Duration = .seconds(45)
     static let retryDelays: [Double] = [1, 2, 5, 10, 20, 30]
@@ -260,6 +262,24 @@ final class MacConnection {
         if let focusedSessionID {
             try? newSession.send(.subscribe(sessionID: focusedSessionID))
         }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let event = try await self.speech(.speechCapabilities)
+                if case let .capabilities(status, _) = event {
+                    let available = (status == "ready")
+                    if self.isSpeechAvailable != available {
+                        self.isSpeechAvailable = available
+                        self.onSpeechAvailabilityChange()
+                    }
+                }
+            } catch {
+                if self.isSpeechAvailable {
+                    self.isSpeechAvailable = false
+                    self.onSpeechAvailabilityChange()
+                }
+            }
+        }
     }
 
     /// Pairing is not complete until the Mac has approved the phone and sent
@@ -297,6 +317,10 @@ final class MacConnection {
         if isConnected {
             state = .unreachable
         }
+        if isSpeechAvailable {
+            isSpeechAvailable = false
+            onSpeechAvailabilityChange()
+        }
     }
 
     private func sessionClosed(_ closed: ClientSideSession) {
@@ -310,6 +334,10 @@ final class MacConnection {
             return
         }
         state = .unreachable
+        if isSpeechAvailable {
+            isSpeechAvailable = false
+            onSpeechAvailabilityChange()
+        }
         if isActive {
             scheduleConnect(after: Self.retryDelays[0])
         }
@@ -375,6 +403,21 @@ final class MacConnection {
         case let .response(id, response):
             waiting.removeValue(forKey: id)?.resume(returning: response)
         case let .speech(event):
+            switch event {
+            case let .capabilities(status, _):
+                let available = (status == "ready")
+                if isSpeechAvailable != available {
+                    isSpeechAvailable = available
+                    onSpeechAvailabilityChange()
+                }
+            case let .failed(_, code, _, _):
+                if code == "unavailable" && isSpeechAvailable {
+                    isSpeechAvailable = false
+                    onSpeechAvailabilityChange()
+                }
+            default:
+                break
+            }
             speechWaiter?.resume(returning: event)
             speechWaiter = nil
         case .pong:

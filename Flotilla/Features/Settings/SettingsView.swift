@@ -60,7 +60,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .terminal: "terminal font size scroll option meta editor monaco curly braces"
         case .git: "git branch worktree delete lifecycle"
         case .notifications: "notifications waiting input sound privacy never active always delivery"
-        case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices"
+        case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices speech dictation audio handy stt transcribe"
         case .agents: "claude codex opencode agy antigravity executable arguments authentication developer tools git github gh tmux path"
         }
     }

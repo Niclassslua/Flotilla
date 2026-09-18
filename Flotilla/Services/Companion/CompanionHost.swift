@@ -37,6 +37,15 @@ final class CompanionHost {
     /// Set when the host couldn't load or create its identity.
     private(set) var setupError: String?
 
+    enum HandyStatus: Equatable, Sendable {
+        case checking
+        case connected(model: String?)
+        case disconnected(reason: String)
+    }
+
+    private(set) var handyStatus: HandyStatus = .checking
+    @ObservationIgnored private let localSpeech: any HandySpeechServing = HandySpeechClient()
+
     var isEnabled: Bool {
         didSet {
             guard isEnabled != oldValue else { return }
@@ -152,6 +161,9 @@ final class CompanionHost {
         }
         if isEnabled {
             start()
+        }
+        Task { [weak self] in
+            await self?.checkHandyConnection()
         }
     }
 
@@ -741,6 +753,32 @@ final class CompanionHost {
         peer.lastTranscript = transcript
         peer.unsendableTranscript = nil
         peer.transcriptRevision = revision
+    }
+
+    // MARK: - Handy Speech to Text
+
+    func checkHandyConnection() async {
+        handyStatus = .checking
+        let result = await localSpeech.capabilities()
+        switch result {
+        case let .capabilities(status, models):
+            if status == "ready" {
+                handyStatus = .connected(model: models.first)
+            } else {
+                handyStatus = .disconnected(reason: "Handy is \(status).")
+            }
+        case let .failed(_, _, message, _):
+            handyStatus = .disconnected(reason: message)
+        default:
+            handyStatus = .disconnected(reason: "Handy is not reachable on this Mac.")
+        }
+    }
+
+    func openHandyApp() {
+        let handyID = "computer.handy.macos"
+        if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: handyID) ?? URL(fileURLWithPath: "/Applications/Handy.app") as URL? {
+            NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+        }
     }
 
     func buildFleet() -> FleetSnapshot {

@@ -130,6 +130,22 @@ final class CompanionStore {
         mac(forSession: sessionID)?.isReachable ?? false
     }
 
+    func isSpeechAvailable(for sessionID: CompanionSession.ID) -> Bool {
+        observeDataChanges()
+        guard let macID = data.macID(for: sessionID) else { return false }
+        return data.isSpeechAvailable(on: macID)
+    }
+
+    func isSpeechAvailable(for macID: MacHost.ID) -> Bool {
+        observeDataChanges()
+        return data.isSpeechAvailable(on: macID)
+    }
+
+    var isAnyMacSpeechAvailable: Bool {
+        observeDataChanges()
+        return data.macs.contains { data.isSpeechAvailable(on: $0.id) }
+    }
+
     func setActive(_ isActive: Bool) {
         data.setActive(isActive)
     }

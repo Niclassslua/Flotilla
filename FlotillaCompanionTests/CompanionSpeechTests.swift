@@ -74,4 +74,24 @@ final class CompanionSpeechTests: XCTestCase {
         speech.cancel(store: store, sessionID: sessionID)
         XCTAssertEqual(speech.phase, .idle)
     }
+
+    func testSpeechDisabledWhenNotAvailable() async {
+        let sessionID = MockFixtures.SessionID.offlineBanner
+        let store = makeStore()
+        let speech = CompanionSpeechController()
+
+        XCTAssertFalse(speech.isAvailable, "Speech must default to unavailable until verified")
+        await speech.begin(store: store, sessionID: sessionID)
+        XCTAssertEqual(speech.phase, .idle, "Speech begin must be a no-op when isAvailable is false")
+
+        await speech.checkAvailability(store: store, sessionID: sessionID)
+        XCTAssertTrue(speech.isAvailable, "Mock source reports speech ready, so isAvailable must become true")
+    }
+
+    func testStoreSpeechAvailabilityHelpers() {
+        let store = makeStore()
+        let sessionID = MockFixtures.SessionID.offlineBanner
+        XCTAssertTrue(store.isSpeechAvailable(for: sessionID))
+        XCTAssertTrue(store.isAnyMacSpeechAvailable)
+    }
 }

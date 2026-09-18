@@ -55,6 +55,7 @@ protocol CompanionDataSource: AnyObject, Observable {
     ) async throws -> AnswerOutcome
     func sendPrompt(_ text: String, to sessionID: CompanionSession.ID) async throws
     func stop(_ sessionID: CompanionSession.ID) async throws
+    func isSpeechAvailable(on macID: MacHost.ID) -> Bool
     func speech(_ message: ClientMessage, on macID: MacHost.ID) async throws -> CompanionSpeechEvent
     func createSession(_ request: NewSessionRequest, on macID: MacHost.ID) async throws -> CompanionSession.ID
     func handoff(_ sessionID: CompanionSession.ID, _ request: HandoffRequest) async throws

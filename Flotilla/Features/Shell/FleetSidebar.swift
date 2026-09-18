@@ -3,8 +3,8 @@ import SessionKit
 import DesignSystem
 
 /// The navigator: search on top, then the fleet smart lists, then projects
-/// with their sessions beneath them, then unassigned sessions, over a pinned
-/// "New Session" button.
+/// with their sessions beneath them, then unassigned sessions, with a floating
+/// New Session control over the list's lower-left corner.
 ///
 /// Present in every scope. It used to appear only in the Sessions facet, so
 /// the window's left edge reflowed on every scope switch and half the app's
@@ -16,6 +16,8 @@ struct SessionsSidebar: View {
     let onOpenSession: (UUID) -> Void
     let onRequestDelete: (UUID) -> Void
     let onCreateSession: () -> Void
+    let createSessionNamespace: Namespace.ID
+    let isCreateSessionExpanding: Bool
     /// Whether the grid is the current presentation, which is the only context
     /// where a row's grid-membership control means anything. It no longer
     /// changes what *clicking* a row does — see `SessionSidebarRow`.
@@ -80,32 +82,32 @@ struct SessionsSidebar: View {
                 collapsedProjects: $collapsedProjects
             )
             .onAppear { collapsedProjects = SidebarProjectCollapseState.load() }
-
-            Divider()
-
-            // Bottom Left "New Session" button
-            HStack {
-                Button(action: onCreateSession) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("New Session")
-                            .font(.system(size: 12, weight: .medium))
+            .overlay(alignment: .bottomLeading) {
+                // The 36-point glass stays visually compact; its 44-point
+                // frame preserves a comfortable pointer/accessibility target.
+                Group {
+                    if isCreateSessionExpanding {
+                        Color.clear.frame(width: 44, height: 44)
+                    } else {
+                        Button(action: onCreateSession) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(FlotillaColors.textPrimary)
+                                .frame(width: 36, height: 36)
+                                .glassEffect(.regular.interactive(), in: .circle)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .matchedGeometryEffect(id: "createSession", in: createSessionNamespace)
+                        .help("Create new session (⌘N)")
+                        .accessibilityLabel("New Session")
+                        .accessibilityIdentifier("NewSessionButton")
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(FlotillaColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .foregroundStyle(FlotillaColors.accent)
                 }
-                .buttonStyle(.plain)
-                .help("Create new session (⌘N)")
-                .accessibilityIdentifier("NewSessionButton")
-
-                Spacer()
+                .padding(.leading, 10)
+                .padding(.bottom, 10)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(FlotillaColors.surface)
         }
         .background(FlotillaColors.sidebar)
     }

@@ -52,6 +52,40 @@ struct CompanionSettingsPane: View {
                     }
                 }
             }
+
+            Section {
+                LabeledContent("Status") { handyStatusLabel }
+                switch host.handyStatus {
+                case let .connected(model):
+                    if let model, !model.isEmpty {
+                        LabeledContent("Model") {
+                            Text(model)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button("Check Connection") {
+                        Task { await host.checkHandyConnection() }
+                    }
+                case let .disconnected(reason):
+                    Text(reason)
+                        .foregroundStyle(FlotillaColors.danger)
+                        .font(.callout)
+                    HStack {
+                        Button("Open Handy") {
+                            host.openHandyApp()
+                        }
+                        Button("Check Again") {
+                            Task { await host.checkHandyConnection() }
+                        }
+                    }
+                case .checking:
+                    EmptyView()
+                }
+            } header: {
+                Text("Speech to Text (Handy)")
+            } footer: {
+                Text("Paired iPhones can dictate prompt messages directly into your sessions using Handy on this Mac. Audio streams over the encrypted connection and is transcribed locally by Handy on Apple Silicon. Audio is never persisted or sent to any cloud service.")
+            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $isShowingPairing, onDismiss: { host.cancelPairing() }) {
@@ -74,6 +108,7 @@ struct CompanionSettingsPane: View {
         }
         .onAppear {
             host.refreshAddresses()
+            Task { await host.checkHandyConnection() }
         }
     }
 
@@ -96,6 +131,24 @@ struct CompanionSettingsPane: View {
                 .foregroundStyle(FlotillaColors.statusWorking)
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(FlotillaColors.danger)
+        }
+    }
+
+    @ViewBuilder
+    private var handyStatusLabel: some View {
+        switch host.handyStatus {
+        case .checking:
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Checking…").foregroundStyle(.secondary)
+            }
+        case .connected:
+            Label("Connected & Ready", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(FlotillaColors.statusWorking)
+        case .disconnected:
+            Label("Not Connected", systemImage: "xmark.circle.fill")
                 .foregroundStyle(FlotillaColors.danger)
         }
     }

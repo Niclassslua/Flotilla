@@ -9,6 +9,7 @@ import HooksKit
 
 struct FlotillaShell: View {
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var navigator: WorkspaceNavigator
     @Bindable var store: AppStore
     let terminalManager: TerminalManager
@@ -16,6 +17,8 @@ struct FlotillaShell: View {
     @Bindable var startupCheck: StartupCheckViewModel
     @Bindable var settingsViewModel: SettingsViewModel
     @State var activityStore: SessionActivityStore
+    @Namespace private var createSessionNamespace
+    @State private var createSessionFromSidebar = false
 
     init(
         store: AppStore,
@@ -175,7 +178,14 @@ struct FlotillaShell: View {
                     store.selectedSessionID = id
                 },
                 onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
-                onCreateSession: { navigator.presentedSheet = .createSession },
+                onCreateSession: {
+                    createSessionFromSidebar = true
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
+                        navigator.presentedSheet = .createSession
+                    }
+                },
+                createSessionNamespace: createSessionNamespace,
+                isCreateSessionExpanding: createSessionFromSidebar && isCreateSessionPresented,
                 gridMembership: gridMembership
             )
             .navigationSplitViewColumnWidth(
@@ -246,6 +256,19 @@ struct FlotillaShell: View {
         }
     }
 
+    private var isCreateSessionPresented: Bool {
+        if case .createSession? = navigator.presentedSheet { return true }
+        return false
+    }
+
+    private func dismissOverlay() {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
+            navigator.presentedSheet = nil
+        } completion: {
+            createSessionFromSidebar = false
+        }
+    }
+
     /// `.sheet(item:)` filtered to the true-modal cases, so those still get
     /// native AppKit sheet behavior (delete confirmation, shortcuts, restore).
     /// The setter only clears `presentedSheet` when it currently holds one of
@@ -276,18 +299,17 @@ struct FlotillaShell: View {
                     .fill(Color.black.opacity(0.55))
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
-                    .onTapGesture { navigator.presentedSheet = nil }
+                    .onTapGesture { dismissOverlay() }
                     .transition(.opacity)
 
-                sheetContent(sheet)
+                overlaySheetContent(sheet)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         // Absorb clicks inside the sheet content so they don't fall through to the backdrop
                     }
-                    .transition(.scale(scale: 0.97).combined(with: .opacity))
             }
             .zIndex(1)
-            .onExitCommand { navigator.presentedSheet = nil }
+            .onExitCommand { dismissOverlay() }
             // Belt and suspenders: `.onExitCommand`/`.keyboardShortcut(.cancelAction)`
             // only fire if nothing focused inside the overlay consumes Escape
             // first — and a focused NSTextField/NSTextView's own `cancelOperation:`
@@ -295,8 +317,20 @@ struct FlotillaShell: View {
             // local event monitor intercepts Escape at the AppKit level, ahead
             // of any responder's own handling, so focus inside the overlay
             // can't swallow it.
-            .background(EscapeKeyCatcher { navigator.presentedSheet = nil })
-            .animation(FlotillaMotion.snappy.curve, value: navigator.presentedSheet)
+            .background(EscapeKeyCatcher { dismissOverlay() })
+            .animation(createSessionFromSidebar ? nil : FlotillaMotion.snappy.curve, value: navigator.presentedSheet)
+        }
+    }
+
+    @ViewBuilder
+    private func overlaySheetContent(_ sheet: WorkspaceSheet) -> some View {
+        if case .createSession = sheet, createSessionFromSidebar {
+            sheetContent(sheet)
+                .matchedGeometryEffect(id: "createSession", in: createSessionNamespace)
+                .transition(.opacity)
+        } else {
+            sheetContent(sheet)
+                .transition(.scale(scale: 0.97).combined(with: .opacity))
         }
     }
 
@@ -317,7 +351,7 @@ struct FlotillaShell: View {
                 },
                 openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
                 defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode,
-                onDismiss: { navigator.presentedSheet = nil }
+                onDismiss: { dismissOverlay() }
             )
         case .commandPalette:
             CommandPaletteView(
@@ -332,7 +366,7 @@ struct FlotillaShell: View {
                         Task { await store.handoffSession(sessionID: sessionID, to: target) }
                     }
                 },
-                onDismiss: { navigator.presentedSheet = nil }
+                onDismiss: { dismissOverlay() }
             )
         case .shortcuts:
             KeyboardShortcutsView()

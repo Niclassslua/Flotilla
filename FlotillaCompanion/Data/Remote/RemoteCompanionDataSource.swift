@@ -58,6 +58,9 @@ final class RemoteCompanionDataSource: CompanionDataSource {
             self.applyFocus()
         }
         connection.onAttention = { [weak self] event in self?.onAttention(macID, event) }
+        connection.onSpeechAvailabilityChange = { [weak self] in
+            self?.observationRevision &+= 1
+        }
         return connection
     }
 
@@ -67,6 +70,10 @@ final class RemoteCompanionDataSource: CompanionDataSource {
 
     private func connection(_ macID: MacHost.ID) -> MacConnection? {
         connections.first { $0.record.macID == macID }
+    }
+
+    func isSpeechAvailable(on macID: MacHost.ID) -> Bool {
+        connection(macID)?.isSpeechAvailable ?? false
     }
 
     func speech(_ message: ClientMessage, on macID: MacHost.ID) async throws -> CompanionSpeechEvent {

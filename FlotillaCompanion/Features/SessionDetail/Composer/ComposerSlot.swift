@@ -199,20 +199,22 @@ private struct PromptComposer: View {
                     .accessibilityIdentifier("Composer.TextField")
 
                 HStack(spacing: 6) {
-                    Button {
-                        if speech.phase == .recording {
-                            Task { await finishDictation() }
-                        } else if speech.phase == .idle {
-                            Task { await speech.begin(store: store, sessionID: session.id) }
+                    if speech.isAvailable {
+                        Button {
+                            if speech.phase == .recording {
+                                Task { await finishDictation() }
+                            } else if speech.phase == .idle {
+                                Task { await speech.begin(store: store, sessionID: session.id) }
+                            }
+                        } label: {
+                            Image(systemName: speech.phase == .recording ? "stop.circle.fill" : "mic.fill")
                         }
-                    } label: {
-                        Image(systemName: speech.phase == .recording ? "stop.circle.fill" : "mic.fill")
+                        .accessibilityLabel(speech.phase == .recording ? "Finish dictation" : "Dictate")
+                        .accessibilityIdentifier("Composer.Dictate")
+                        .disabled(speech.phase == .checking || speech.phase == .processing)
+                        .buttonStyle(.glass)
+                        .foregroundStyle(speech.phase == .recording ? .red : FlotillaColors.textSecondary)
                     }
-                    .accessibilityLabel(speech.phase == .recording ? "Finish dictation" : "Dictate")
-                    .accessibilityIdentifier("Composer.Dictate")
-                    .disabled(speech.phase == .checking || speech.phase == .processing)
-                    .buttonStyle(.glass)
-                    .foregroundStyle(speech.phase == .recording ? .red : FlotillaColors.textSecondary)
 
                     Group {
                         if showsStop {
@@ -278,6 +280,12 @@ private struct PromptComposer: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in
             speech.cancel(store: store, sessionID: session.id)
+        }
+        .task(id: session.id) {
+            await speech.checkAvailability(store: store, sessionID: session.id)
+        }
+        .task(id: store.isSpeechAvailable(for: session.id)) {
+            await speech.checkAvailability(store: store, sessionID: session.id)
         }
         .modifier(HapticsOnChange(value: sendCount, feedback: .impact(weight: .medium)))
         .modifier(HapticsOnChange(value: stopCount, feedback: .warning))
