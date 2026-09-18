@@ -348,7 +348,7 @@ private struct SessionSettingsPane: View {
             } header: {
                 SettingsSectionHeader("New Session Window", systemImage: "rectangle.3.group")
             } footer: {
-                Text("Switch live from inside the window with ⌥⌘1–⌥⌘5 or the layout menu above it. Every layout launches the same way.")
+                Text("Switch live from inside the window with ⌥⌘1–⌥⌘5 or the layout buttons above it. Every layout launches the same way.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
