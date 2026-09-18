@@ -302,6 +302,8 @@ struct LauncherProjectList: View {
     var onPick: () -> Void = {}
 
     @State private var query = ""
+    @State private var hoveredChoiceID: String?
+    @State private var isChooseFolderHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -315,7 +317,7 @@ struct LauncherProjectList: View {
                         .font(FlotillaTypography.caption)
                         .accessibilityIdentifier("CreateSession.ProjectFilter")
                 }
-                .padding(.horizontal, FlotillaSpacing.small)
+                .padding(.horizontal, 10)
                 .frame(height: 26)
                 .background(FlotillaColors.surfaceElevated.opacity(0.6), in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous))
                 .padding(.bottom, FlotillaSpacing.xSmall)
@@ -338,11 +340,17 @@ struct LauncherProjectList: View {
                     Spacer(minLength: 0)
                 }
                 .foregroundStyle(FlotillaColors.textSecondary)
-                .padding(.horizontal, FlotillaSpacing.small)
-                .frame(height: 30)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                        .fill(isChooseFolderHovered ? FlotillaColors.accent.opacity(0.12) : .clear)
+                }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { isChooseFolderHovered = $0 }
             .accessibilityIdentifier("CreateSession.ChooseFolderButton")
         }
     }
@@ -360,31 +368,38 @@ struct LauncherProjectList: View {
                     .frame(width: FlotillaIconSize.medium)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(choice.displayName)
-                        .font(FlotillaTypography.callout.weight(isSelected ? .semibold : .regular))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .lineLimit(1)
                     Text(choice.displayPath ?? "No repository · scratch folder")
-                        .font(FlotillaTypography.caption3)
-                        .foregroundStyle(FlotillaColors.textTertiary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(FlotillaColors.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.head)
                 }
                 Spacer(minLength: 0)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(FlotillaTypography.caption2.weight(.bold))
-                        .foregroundStyle(FlotillaColors.accent)
-                }
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(FlotillaColors.accent)
+                    .opacity(isSelected ? 1 : 0)
             }
-            .padding(.horizontal, FlotillaSpacing.small)
-            .padding(.vertical, 6)
-            .background(
-                isSelected ? FlotillaColors.accent.opacity(FlotillaStateOpacity.hover) : .clear,
-                in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-            )
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                    .fill(hoveredChoiceID == choice.id ? FlotillaColors.accent.opacity(0.12) : .clear)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { inside in
+            if inside {
+                hoveredChoiceID = choice.id
+            } else if hoveredChoiceID == choice.id {
+                hoveredChoiceID = nil
+            }
+        }
         .accessibilityIdentifier(
             choice.isGeneral ? "CreateSession.Source.General" : "CreateSession.Project.\(choice.displayName)"
         )
@@ -436,10 +451,13 @@ struct LauncherProjectButton<Label: View>: View {
                 .padding(.bottom, 4)
 
             LauncherProjectList(draft: draft) { isPresented = false }
-                .padding(.horizontal, FlotillaSpacing.small)
+                // These margins and the row-card insets mirror the Model and
+                // Reasoning Effort popovers, while keeping this menu in-window
+                // for the launcher's AppKit safety constraint.
+                .padding(.horizontal, 6)
         }
             .padding(.bottom, FlotillaSpacing.small)
-            .frame(width: 320)
+            .frame(width: 300)
             .background(
                 FlotillaColors.surfaceElevated,
                 in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
