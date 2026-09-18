@@ -391,8 +391,12 @@ struct LauncherProjectList: View {
     }
 }
 
-/// A trigger that opens `LauncherProjectList` in a popover. The label is the
-/// caller's, so each design can present the current project its own way.
+/// A trigger that opens `LauncherProjectList` in the launcher's own view
+/// hierarchy. The New Session launcher is already an in-window overlay; using
+/// an AppKit popover below it gives macOS's text-completion remote view two
+/// competing containing windows and can raise an `NSInternalInconsistencyException`
+/// when a project row is chosen. Keeping this list in-window also makes its
+/// lifetime match the launcher that owns the draft.
 struct LauncherProjectButton<Label: View>: View {
     @Bindable var draft: SessionDraft
     @ViewBuilder var label: () -> Label
@@ -402,14 +406,34 @@ struct LauncherProjectButton<Label: View>: View {
     var body: some View {
         Button { isPresented.toggle() } label: { label() }
             .buttonStyle(.plain)
-            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-                LauncherProjectList(draft: draft) { isPresented = false }
-                    .padding(FlotillaSpacing.small)
-                    .frame(width: 320)
+            .overlay(alignment: .bottomLeading) {
+                if isPresented {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .overlay(alignment: .topLeading) {
+                            projectList
+                        }
+                }
             }
+            .zIndex(isPresented ? 1 : 0)
             .help("Choose the workspace")
             .accessibilityIdentifier("CreateSession.ProjectPicker")
             .accessibilityValue(draft.projectChoice.displayName)
+    }
+
+    private var projectList: some View {
+        LauncherProjectList(draft: draft) { isPresented = false }
+            .padding(FlotillaSpacing.small)
+            .frame(width: 320)
+            .background(
+                FlotillaColors.surfaceElevated,
+                in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
+                    .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+            }
+            .shadow(color: .black.opacity(0.3), radius: 14, y: 8)
     }
 }
 
