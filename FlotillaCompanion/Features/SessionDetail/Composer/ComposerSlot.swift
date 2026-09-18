@@ -189,7 +189,7 @@ private struct PromptComposer: View {
                 .accessibilityIdentifier("Composer.SpeechStatus")
             }
 
-            HStack(alignment: .bottom, spacing: 4) {
+            HStack(alignment: .center, spacing: 4) {
                 TextField(placeholder, text: $text, axis: .vertical)
                     .lineLimit(1...6)
                     .focused($isFocused)
@@ -215,7 +215,7 @@ private struct PromptComposer: View {
                         .disabled(speech.phase == .checking || speech.phase == .processing)
                         .buttonStyle(.glass)
                         .foregroundStyle(speech.phase == .recording ? .red : FlotillaColors.textSecondary)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 42, height: 42)
                     }
 
                     Group {
@@ -235,7 +235,7 @@ private struct PromptComposer: View {
                             .disabled(isStopping)
                             .buttonStyle(.glass)
                             .foregroundStyle(FlotillaColors.textPrimary)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 42, height: 42)
                         } else {
                             Button {
                                 if speech.phase == .recording {
@@ -258,7 +258,7 @@ private struct PromptComposer: View {
                             .disabled(trimmed.isEmpty && speech.phase != .recording || speech.phase == .processing)
                             .buttonStyle(.glassProminent)
                             .tint(FlotillaColors.accent)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 42, height: 42)
                         }
                     }
                 }
