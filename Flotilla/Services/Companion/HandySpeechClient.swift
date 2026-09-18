@@ -22,7 +22,7 @@ private enum HandySpeechLog {
 }
 
 private final class HandySpeechSocket: @unchecked Sendable {
-    private static let receiveTimeout = timeval(tv_sec: 10, tv_usec: 0)
+    private static let receiveTimeout = timeval(tv_sec: 60, tv_usec: 0)
     private let fd: Int32
     private let lock = NSLock()
     private var closed = false
@@ -147,6 +147,7 @@ actor HandySpeechClient: HandySpeechServing {
 
     func capabilities() async -> CompanionSpeechEvent {
         var capabilitySocket: HandySpeechSocket?
+        var phase = "opening socket"
         do {
             // A capability probe is independent of an active transcription.
             // Keep it off the actor's streaming socket slot so concurrent
@@ -156,11 +157,14 @@ actor HandySpeechClient: HandySpeechServing {
                 try HandySpeechSocket()
             }.value
             capabilitySocket = opened
+            phase = "handshake"
             _ = try await exchange(opened,
                 ["type": "hello", "version": "1.0.0"], until: ["hello"])
+            phase = "capabilities request"
             let response = try await exchange(opened,
                 ["type": "capabilities"], until: ["capabilities"])
             let status = response["status"] as? String ?? "unavailable"
+            HandySpeechLog.logger.error("Handy capability response received: type=\(response["type"] as? String ?? "missing", privacy: .public), status=\(status, privacy: .public)")
             let event = CompanionSpeechEvent.capabilities(
                 status: status,
                 models: (response["models"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
@@ -170,7 +174,7 @@ actor HandySpeechClient: HandySpeechServing {
             return event
         } catch {
             capabilitySocket?.close()
-            HandySpeechLog.logger.error("Handy capability check failed: \(String(describing: error), privacy: .public)")
+            HandySpeechLog.logger.error("Handy capability check failed during \(phase, privacy: .public): \(String(describing: error), privacy: .public)")
             return .failed(requestID: nil, code: "unavailable", message: "Handy is unavailable on this Mac.", retryable: true)
         }
     }

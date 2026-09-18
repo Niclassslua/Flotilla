@@ -74,6 +74,7 @@ final class CompanionHost {
     @ObservationIgnored private var publishTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
     @ObservationIgnored private var handyCheckTask: Task<CompanionSpeechEvent, Never>?
+    @ObservationIgnored private var handyCheckGeneration: UInt64 = 0
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
     @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog
     @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
@@ -759,6 +760,8 @@ final class CompanionHost {
     // MARK: - Handy Speech to Text
 
     func checkHandyConnection() async {
+        handyCheckGeneration &+= 1
+        let generation = handyCheckGeneration
         handyStatus = .checking
         let result: CompanionSpeechEvent
         if let handyCheckTask {
@@ -774,6 +777,7 @@ final class CompanionHost {
             result = await task.value
             handyCheckTask = nil
         }
+        guard generation == handyCheckGeneration else { return }
         switch result {
         case let .capabilities(status, models):
             if status == "ready" {
