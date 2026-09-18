@@ -1,6 +1,7 @@
 import CompanionKit
 import Darwin
 import Foundation
+import os
 
 protocol HandySpeechServing: Sendable {
     func capabilities() async -> CompanionSpeechEvent
@@ -14,6 +15,10 @@ protocol HandySpeechServing: Sendable {
 private enum HandySpeechError: Error {
     case unavailable
     case invalidResponse
+}
+
+private enum HandySpeechLog {
+    static let logger = Logger(subsystem: "com.niclassslua.flotilla", category: "HandySpeech")
 }
 
 private final class HandySpeechSocket: @unchecked Sendable {
@@ -31,6 +36,7 @@ private final class HandySpeechSocket: @unchecked Sendable {
         // builds would otherwise look in Flotilla's private container.
         let path = FileManager.default.homeDirectoryForCurrentUser
             .appending(path: "Library/Application Support/Handy/transcription-v1.sock").path
+        HandySpeechLog.logger.info("Connecting to Handy local transcription socket at \(path, privacy: .private(mask: .hash))")
         let bytes = Array(path.utf8)
         var address = sockaddr_un()
         guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
@@ -49,9 +55,11 @@ private final class HandySpeechSocket: @unchecked Sendable {
             }
         }
         guard result == 0 else {
+            HandySpeechLog.logger.error("Handy socket connect failed: errno=\(errno)")
             Darwin.close(fd)
             throw HandySpeechError.unavailable
         }
+        HandySpeechLog.logger.info("Connected to Handy local transcription socket")
         var noSigPipe: Int32 = 1
         _ = Darwin.setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE,
                               &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
@@ -141,16 +149,19 @@ actor HandySpeechClient: HandySpeechServing {
         do {
             let socket = try await connect()
             let response = try await exchange(socket, ["type": "capabilities"], until: ["capabilities"])
+            let status = response["status"] as? String ?? "unavailable"
             let event = CompanionSpeechEvent.capabilities(
-                status: response["status"] as? String ?? "unavailable",
+                status: status,
                 models: (response["models"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
             )
             socket.close()
             self.socket = nil
+            HandySpeechLog.logger.info("Handy capability response received: \(status, privacy: .public)")
             return event
         } catch {
             socket?.close()
             self.socket = nil
+            HandySpeechLog.logger.error("Handy capability check failed: \(String(describing: error), privacy: .public)")
             return .failed(requestID: nil, code: "unavailable", message: "Handy is unavailable on this Mac.", retryable: true)
         }
     }
