@@ -33,6 +33,12 @@ struct TilesDesign: View {
                 agentTile
                 launchTile
             }
+            // `zIndex` only orders siblings in the same container. The
+            // picker is also allowed to extend below this HStack, where it
+            // overlaps the error and action rows that are siblings of the
+            // HStack in the surrounding VStack. Raise the whole row while
+            // the in-window menu is open so those later rows cannot cover it.
+            .zIndex(isWorkspacePickerPresented ? 1 : 0)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, FlotillaSpacing.large)
 
