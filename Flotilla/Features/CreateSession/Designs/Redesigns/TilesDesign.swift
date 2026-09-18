@@ -26,11 +26,9 @@ struct TilesDesign: View {
 
             HStack(alignment: .top, spacing: FlotillaSpacing.medium) {
                 workspaceTile
-                    .zIndex(isWorkspacePickerPresented ? 20 : 1)
                 agentTile
                 launchTile
             }
-            .zIndex(isWorkspacePickerPresented ? 20 : 1)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, FlotillaSpacing.large)
 
@@ -49,21 +47,6 @@ struct TilesDesign: View {
             .padding(.vertical, FlotillaSpacing.large)
         }
         .launcherSurface()
-        .overlay {
-            if isWorkspacePickerPresented {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { isWorkspacePickerPresented = false }
-                    .zIndex(15)
-            }
-        }
-        .onKeyPress(.escape) {
-            if isWorkspacePickerPresented {
-                isWorkspacePickerPresented = false
-                return .handled
-            }
-            return .ignored
-        }
         .background { LauncherHiddenShortcuts(actions: actions) }
         .task(id: draft.agent) { await coordinator.refresh() }
     }
@@ -161,21 +144,15 @@ private struct TilesWorkspacePicker: View {
     @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            Button { isPresented.toggle() } label: { chip }
-                .buttonStyle(.plain)
-                .onHover { isHovering = $0 }
-                .help("Choose the workspace")
-                .accessibilityIdentifier("CreateSession.ProjectPicker")
-                .accessibilityValue(draft.projectChoice.displayName)
-        }
-        .overlay(alignment: .topLeading) {
-            if isPresented {
-                dropdownMenu
-                    .offset(y: 28)
-                    .zIndex(25)
+        Button { isPresented.toggle() } label: { chip }
+            .buttonStyle(.plain)
+            .onHover { isHovering = $0 }
+            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+                popoverContent
             }
-        }
+            .help("Choose the workspace")
+            .accessibilityIdentifier("CreateSession.ProjectPicker")
+            .accessibilityValue(draft.projectChoice.displayName)
     }
 
     private var chip: some View {
@@ -208,7 +185,7 @@ private struct TilesWorkspacePicker: View {
         .contentShape(Capsule())
     }
 
-    private var dropdownMenu: some View {
+    private var popoverContent: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Text("Workspace")
@@ -233,15 +210,6 @@ private struct TilesWorkspacePicker: View {
         }
         .padding(.bottom, 8)
         .frame(width: 300)
-        .background(
-            FlotillaColors.surfaceElevated,
-            in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-        }
-        .flotillaShadow(.level3)
     }
 
     private func chooseFolder() {
