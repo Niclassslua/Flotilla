@@ -400,12 +400,16 @@ struct LauncherProjectList: View {
 struct LauncherProjectButton<Label: View>: View {
     @Bindable var draft: SessionDraft
     @ViewBuilder var label: () -> Label
+    var presentationChanged: (Bool) -> Void = { _ in }
 
     @State private var isPresented = false
 
     var body: some View {
         Button { isPresented.toggle() } label: { label() }
             .buttonStyle(.plain)
+            .onChange(of: isPresented) { _, isPresented in
+                presentationChanged(isPresented)
+            }
             .overlay(alignment: .bottomLeading) {
                 if isPresented {
                     Color.clear
@@ -422,8 +426,19 @@ struct LauncherProjectButton<Label: View>: View {
     }
 
     private var projectList: some View {
-        LauncherProjectList(draft: draft) { isPresented = false }
-            .padding(FlotillaSpacing.small)
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Workspace")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .textCase(.uppercase)
+                .padding(.horizontal, 10)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+
+            LauncherProjectList(draft: draft) { isPresented = false }
+                .padding(.horizontal, FlotillaSpacing.small)
+        }
+            .padding(.bottom, FlotillaSpacing.small)
             .frame(width: 320)
             .background(
                 FlotillaColors.surfaceElevated,
