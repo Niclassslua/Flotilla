@@ -146,21 +146,30 @@ actor HandySpeechClient: HandySpeechServing {
     private var socket: HandySpeechSocket?
 
     func capabilities() async -> CompanionSpeechEvent {
+        var capabilitySocket: HandySpeechSocket?
         do {
-            let socket = try await connect()
-            let response = try await exchange(socket, ["type": "capabilities"], until: ["capabilities"])
+            // A capability probe is independent of an active transcription.
+            // Keep it off the actor's streaming socket slot so concurrent
+            // startup/settings probes cannot close or replace a socket that
+            // another probe is using.
+            let opened = try await Task.detached(priority: .utility) {
+                try HandySpeechSocket()
+            }.value
+            capabilitySocket = opened
+            _ = try await exchange(opened,
+                ["type": "hello", "version": "1.0.0"], until: ["hello"])
+            let response = try await exchange(opened,
+                ["type": "capabilities"], until: ["capabilities"])
             let status = response["status"] as? String ?? "unavailable"
             let event = CompanionSpeechEvent.capabilities(
                 status: status,
                 models: (response["models"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
             )
-            socket.close()
-            self.socket = nil
+            opened.close()
             HandySpeechLog.logger.info("Handy capability response received: \(status, privacy: .public)")
             return event
         } catch {
-            socket?.close()
-            self.socket = nil
+            capabilitySocket?.close()
             HandySpeechLog.logger.error("Handy capability check failed: \(String(describing: error), privacy: .public)")
             return .failed(requestID: nil, code: "unavailable", message: "Handy is unavailable on this Mac.", retryable: true)
         }
