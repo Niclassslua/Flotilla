@@ -162,15 +162,14 @@ private struct PromptComposer: View {
             (session.status == .working || isStopping)
 
         VStack(alignment: .leading, spacing: 6) {
-            if speech.phase != .idle {
+            if speech.phase != .idle && speech.phase != .recording {
                 HStack(spacing: 6) {
                     switch speech.phase {
                     case .checking:
                         ProgressView().controlSize(.mini)
                         Text("Checking Handy…")
                     case .recording:
-                        AudioWaveformMeter(level: speech.audioLevel)
-                        Text("Recording · tap microphone to finish")
+                        EmptyView()
                     case .processing:
                         ProgressView().controlSize(.mini)
                         Text("Transcribing on Mac…")
@@ -190,14 +189,20 @@ private struct PromptComposer: View {
             }
 
             HStack(alignment: .center, spacing: 4) {
-                TextField(placeholder, text: $text, axis: .vertical)
-                    .lineLimit(1...6)
-                    .focused($isFocused)
-                    .padding(.leading, 14)
-                    .padding(.trailing, 4)
-                    .padding(.vertical, 10)
-                    .frame(minHeight: 44, alignment: .center)
-                    .accessibilityIdentifier("Composer.TextField")
+                if speech.phase == .recording {
+                    AudioWaveformHistory(levels: speech.audioLevels)
+                        .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+                        .accessibilityIdentifier("Composer.AudioWaveform")
+                } else {
+                    TextField(placeholder, text: $text, axis: .vertical)
+                        .lineLimit(1...6)
+                        .focused($isFocused)
+                        .padding(.leading, 14)
+                        .padding(.trailing, 4)
+                        .padding(.vertical, 10)
+                        .frame(minHeight: 44, alignment: .center)
+                        .accessibilityIdentifier("Composer.TextField")
+                }
 
                 HStack(spacing: 6) {
                     if speech.isAvailable {
@@ -309,28 +314,26 @@ private struct PromptComposer: View {
     }
 }
 
-private struct AudioWaveformMeter: View {
-    let level: Double
-
-    private let barCount = 9
+private struct AudioWaveformHistory: View {
+    let levels: [Double]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.08)) { timeline in
-            let phase = timeline.date.timeIntervalSinceReferenceDate * 5
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    let wave = (sin(phase + Double(index) * 0.9) + 1) / 2
-                    let height = 4 + (level * (8 + wave * 10))
-                    Capsule()
-                        .fill(.red)
-                        .frame(width: 2.5, height: height)
-                }
+        Canvas { context, size in
+            guard !levels.isEmpty else { return }
+            let spacing: CGFloat = 2
+            let barWidth = max(2, (size.width - spacing * CGFloat(levels.count - 1)) / CGFloat(levels.count))
+            for (index, level) in levels.enumerated() {
+                let height = max(4, CGFloat(level) * (size.height - 4))
+                let x = CGFloat(index) * (barWidth + spacing)
+                let rect = CGRect(x: x, y: (size.height - height) / 2,
+                                  width: barWidth, height: height)
+                context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2), with: .color(.red))
             }
-            .frame(width: 40, height: 24)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Microphone level")
-            .accessibilityValue(level > 0.05 ? "Receiving audio" : "Listening")
         }
+        .padding(.horizontal, 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Microphone level history")
+        .accessibilityValue(levels.isEmpty ? "Listening" : "Receiving audio")
     }
 }
 

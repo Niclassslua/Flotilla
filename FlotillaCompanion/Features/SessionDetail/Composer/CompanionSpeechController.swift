@@ -113,6 +113,7 @@ final class CompanionSpeechController {
     private(set) var phase: Phase = .idle
     private(set) var isAvailable: Bool = false
     private(set) var audioLevel: Double = 0
+    private(set) var audioLevels: [Double] = []
     private var requestID: UUID?
     private var capture: CompanionAudioCapture?
     private var pump: Task<Void, Never>?
@@ -166,7 +167,7 @@ final class CompanionSpeechController {
                                                     store: store, macID: macID) }
                 },
                 onLevel: { [weak self] level in
-                    Task { @MainActor in self?.audioLevel = level }
+                    Task { @MainActor in self?.recordAudioLevel(level) }
                 }
             )
             self.capture = capture
@@ -211,6 +212,7 @@ final class CompanionSpeechController {
         capture?.stop()
         capture = nil
         audioLevel = 0
+        audioLevels.removeAll(keepingCapacity: true)
         await pump?.value
         pump = nil
         guard phase == .processing else { return nil }
@@ -233,6 +235,7 @@ final class CompanionSpeechController {
         capture?.stop()
         capture = nil
         audioLevel = 0
+        audioLevels.removeAll(keepingCapacity: true)
         pump?.cancel()
         pump = nil
         if let id = requestID, let macID = store.data.macID(for: sessionID) {
@@ -246,6 +249,15 @@ final class CompanionSpeechController {
         if case .failed = phase { phase = .idle }
     }
 
+    private func recordAudioLevel(_ level: Double) {
+        guard phase == .recording else { return }
+        audioLevel = level
+        audioLevels.append(level)
+        if audioLevels.count > 96 {
+            audioLevels.removeFirst(audioLevels.count - 96)
+        }
+    }
+
     private func fail(_ message: String, store: CompanionStore, macID: MacHost.ID) {
         guard phase != .idle else { return }
         let id = requestID
@@ -253,6 +265,7 @@ final class CompanionSpeechController {
         capture?.stop()
         capture = nil
         audioLevel = 0
+        audioLevels.removeAll(keepingCapacity: true)
         pump?.cancel()
         pump = nil
         requestID = nil
