@@ -196,6 +196,7 @@ private struct PromptComposer: View {
                     .padding(.leading, 14)
                     .padding(.trailing, 4)
                     .padding(.vertical, 10)
+                    .frame(minHeight: 44, alignment: .center)
                     .accessibilityIdentifier("Composer.TextField")
 
                 HStack(spacing: 6) {
@@ -262,7 +263,6 @@ private struct PromptComposer: View {
                 .buttonBorderShape(.circle)
                 .controlSize(.large)
                 .padding(.trailing, 4)
-                .padding(.bottom, 4)
             }
             .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
