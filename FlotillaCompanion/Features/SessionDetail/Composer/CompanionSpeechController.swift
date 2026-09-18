@@ -130,6 +130,8 @@ final class CompanionSpeechController {
     private var generation: UInt64 = 0
     private var smoothedAudioLevel = 0.0
     private var adaptivePeak = 0.18
+    private var pendingAudioTick: UInt64?
+    private var pendingAudioPeak = 0.0
 
     func checkAvailability(store: CompanionStore, sessionID: UUID) async {
         guard let macID = store.data.macID(for: sessionID) else {
@@ -229,6 +231,8 @@ final class CompanionSpeechController {
         adaptivePeak = 0.18
         audioStartTime = nil
         audioLevels.removeAll(keepingCapacity: true)
+        pendingAudioTick = nil
+        pendingAudioPeak = 0
         await pump?.value
         pump = nil
         guard phase == .processing else { return nil }
@@ -255,6 +259,8 @@ final class CompanionSpeechController {
         adaptivePeak = 0.18
         audioStartTime = nil
         audioLevels.removeAll(keepingCapacity: true)
+        pendingAudioTick = nil
+        pendingAudioPeak = 0
         pump?.cancel()
         pump = nil
         if let id = requestID, let macID = store.data.macID(for: sessionID) {
@@ -286,18 +292,21 @@ final class CompanionSpeechController {
         guard let audioStartTime else { return }
         let elapsed = Date().timeIntervalSinceReferenceDate - audioStartTime
         let tick = UInt64(max(0, elapsed / 0.2).rounded(.down))
-        if let last = audioLevels.last, last.id == tick {
-            // Only the current slot may grow. Earlier peaks stay frozen.
-            if displayLevel > last.level {
-                audioLevels[audioLevels.count - 1] = CompanionAudioLevelSample(
-                    id: tick, level: displayLevel
-                )
+        if let pendingAudioTick {
+            if tick == pendingAudioTick {
+                pendingAudioPeak = max(pendingAudioPeak, displayLevel)
+                return
             }
-        } else {
-            audioLevels.append(CompanionAudioLevelSample(
-                id: tick, level: displayLevel
-            ))
+            if tick > pendingAudioTick, pendingAudioPeak > 0.09 {
+                // Publish a complete speech bar once. Quiet slots stay gray;
+                // their heights never change while moving through the reveal.
+                audioLevels.append(CompanionAudioLevelSample(
+                    id: pendingAudioTick, level: pendingAudioPeak
+                ))
+            }
         }
+        pendingAudioTick = tick
+        pendingAudioPeak = displayLevel
         if audioLevels.count > 96 {
             audioLevels.removeFirst(audioLevels.count - 96)
         }
@@ -314,6 +323,8 @@ final class CompanionSpeechController {
         adaptivePeak = 0.18
         audioStartTime = nil
         audioLevels.removeAll(keepingCapacity: true)
+        pendingAudioTick = nil
+        pendingAudioPeak = 0
         pump?.cancel()
         pump = nil
         requestID = nil

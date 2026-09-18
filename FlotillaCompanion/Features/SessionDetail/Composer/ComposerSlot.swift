@@ -338,7 +338,7 @@ private struct PromptComposer: View {
 private struct AudioWaveformHistory: View {
     let levels: [CompanionAudioLevelSample]
     let startTime: TimeInterval?
-    private let barCount = 36
+    private let barCount = 32
     private let sampleInterval = 0.2
 
     var body: some View {
@@ -377,7 +377,7 @@ private struct AudioWaveformHistory: View {
             LinearGradient(
                 stops: [
                     .init(color: .black, location: 0),
-                    .init(color: .black, location: 0.82),
+                    .init(color: .black, location: 0.75),
                     .init(color: .clear, location: 1)
                 ],
                 startPoint: .leading,
