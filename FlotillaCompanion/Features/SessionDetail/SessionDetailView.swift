@@ -75,7 +75,7 @@ struct SessionDetailView: View {
             }
             .onChange(of: transcript.events.count) { _, _ in handleNewContent(proxy) }
             .onChange(of: transcript.queuedPrompts.count) { _, _ in handleNewContent(proxy) }
-            .onChange(of: transcript.streamingText) { _, _ in handleNewContent(proxy, animated: false) }
+            .onChange(of: transcript.streamingText) { _, _ in handleStreamingContent(proxy) }
             .onChange(of: items.count) { oldVal, newVal in
                 if newVal > oldVal {
                     visibleItemCount += (newVal - oldVal)
@@ -198,6 +198,17 @@ struct SessionDetailView: View {
         } else {
             hasNewOutputWhileScrolledUp = true
             newOutputCount += 1
+        }
+    }
+
+    /// Streaming text changes once per provider delta (Codex can emit one per
+    /// token), so they must not each increment the new-output count. The
+    /// completed transcript event is counted separately by `handleNewContent`.
+    private func handleStreamingContent(_ proxy: ScrollViewProxy) {
+        if isNearBottom {
+            scrollToBottom(proxy, animated: false)
+        } else {
+            hasNewOutputWhileScrolledUp = true
         }
     }
 
