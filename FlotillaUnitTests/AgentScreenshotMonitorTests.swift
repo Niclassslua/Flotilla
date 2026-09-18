@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 import CompanionKit
 @testable import Flotilla
@@ -70,5 +71,33 @@ final class AgentScreenshotMonitorTests: XCTestCase {
         ]
 
         XCTAssertEqual(AgentScreenshotMonitor.agentImages(in: events).map(\.base64), ["sent"])
+    }
+
+    @MainActor
+    func testMergingScreenshotsRetainsAnImageTrimmedFromTheTranscriptWindow() {
+        let sessionID = UUID()
+        let older = screenshot(id: "20:1", line: 20, sessionID: sessionID)
+        let newer = screenshot(id: "450:1", line: 450, sessionID: sessionID)
+
+        // This mirrors the 400-event transcript window after newer messages
+        // have pushed the original Claude screenshot out of it.
+        let merged = AgentScreenshotMonitor.merging([older], with: [newer])
+
+        XCTAssertEqual(merged.map(\.id), ["20:1", "450:1"])
+    }
+
+    @MainActor
+    private func screenshot(id: String, line: Int, sessionID: UUID) -> AgentScreenshot {
+        let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        return AgentScreenshot(
+            id: id,
+            position: .init(line: line, entry: 1),
+            sessionID: sessionID,
+            agent: .claudeCode,
+            image: NSImage(data: data)!,
+            data: data,
+            filename: nil,
+            timestamp: .now
+        )
     }
 }

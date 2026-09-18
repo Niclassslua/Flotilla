@@ -9,6 +9,10 @@ import CompanionKit
 struct AgentScreenshot: Identifiable {
     /// The transcript event id, stable for the life of the transcript.
     let id: String
+    /// Absolute position in the native transcript. The companion reader keeps
+    /// a rolling event window, so this remains the ordering authority after
+    /// the event that introduced an image has fallen out of that window.
+    let position: AgentScreenshotMonitor.EventPosition
     let sessionID: UUID
     let agent: AgentKind
     let image: NSImage
@@ -104,6 +108,7 @@ final class AgentScreenshotMonitor {
                   let image = NSImage(data: data) else { return nil }
             return AgentScreenshot(
                 id: item.id,
+                position: item.position,
                 sessionID: session.id,
                 agent: session.agent,
                 image: image,
@@ -112,7 +117,14 @@ final class AgentScreenshotMonitor {
                 timestamp: item.timestamp
             )
         }
-        self.screenshots = loadedScreenshots
+        // `CompanionTranscriptReader` caps its rendered event window at 400
+        // entries. Replacing this list with just that window made screenshots
+        // disappear after enough later Claude messages arrived. Keep images
+        // already decoded for this focused session, then merge in images that
+        // are still present in the newest window. Native positions are stable
+        // across the reader's trimming, so they also give the merged list its
+        // correct chronological order.
+        self.screenshots = Self.merging(self.screenshots, with: loadedScreenshots)
 
         let previousBaseline = baselines[session.id]
         if let currentMax = allFound.last?.position {
@@ -154,6 +166,17 @@ final class AgentScreenshotMonitor {
         let base64: String
         let filename: String?
         let timestamp: Date
+    }
+
+    static func merging(
+        _ existing: [AgentScreenshot],
+        with currentWindow: [AgentScreenshot]
+    ) -> [AgentScreenshot] {
+        var byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
+        for screenshot in currentWindow {
+            byID[screenshot.id] = screenshot
+        }
+        return byID.values.sorted { $0.position < $1.position }
     }
 
     /// Event positions come from the native transcript line and entry numbers,
