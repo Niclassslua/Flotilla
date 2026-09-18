@@ -74,6 +74,12 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: Flotilla
       configs:
+        Debug:
+          # Screen Recording consent is tied to the signed code identity. Keep
+          # Xcode-run builds on the developer's stable identity so consent
+          # survives an ordinary rebuild.
+          CODE_SIGN_IDENTITY: Apple Development
+          DEVELOPMENT_TEAM: UWAHVC4JTL
         Ephemeral:
           PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.ephemeral
           PRODUCT_NAME: Flotilla Ephemeral
