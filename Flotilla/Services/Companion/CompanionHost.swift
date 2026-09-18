@@ -73,6 +73,7 @@ final class CompanionHost {
     @ObservationIgnored private var queuedReads: [(CompanionRequest, UInt64, Peer)] = []
     @ObservationIgnored private var publishTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
+    @ObservationIgnored private var handyCheckTask: Task<CompanionSpeechEvent, Never>?
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
     @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog
     @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
@@ -759,7 +760,20 @@ final class CompanionHost {
 
     func checkHandyConnection() async {
         handyStatus = .checking
-        let result = await localSpeech.capabilities()
+        let result: CompanionSpeechEvent
+        if let handyCheckTask {
+            // Startup, settings onAppear, and Check Again can all arrive in
+            // the same run-loop turn. Share the in-flight handshake instead
+            // of opening several sockets and letting a stale failure replace
+            // a successful ready result.
+            result = await handyCheckTask.value
+        } else {
+            let speech = localSpeech
+            let task = Task { await speech.capabilities() }
+            handyCheckTask = task
+            result = await task.value
+            handyCheckTask = nil
+        }
         switch result {
         case let .capabilities(status, models):
             if status == "ready" {
