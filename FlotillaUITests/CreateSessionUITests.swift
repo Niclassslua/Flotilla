@@ -1,6 +1,6 @@
 import XCTest
 
-/// Covers the modal New Session window (`CommandBarDesign`, opened via ⌘N /
+/// Covers the modal New Session window (`TilesDesign`, opened via ⌘N /
 /// the sidebar button / the command palette). The home dashboard's inline
 /// composer (`LaunchpadDesign`) is covered separately in
 /// `HomeComposerUITests`.
@@ -50,10 +50,8 @@ final class CreateSessionUITests: XCTestCase {
     }
 
     /// Drives the launcher purely through accessibility identifiers, not
-    /// visible labels — a segmented-picker label match (`app.radioButtons["New
-    /// Worktree"]`) only worked because the old form happened to use
-    /// `.segmented` pickers everywhere; `CommandBarDesign` uses chips and an
-    /// inline result list instead.
+    /// visible labels, so the interaction contract remains stable even if the
+    /// compact Tile controls' copy changes.
     func testCreateGeneralAndWorktreeSessions() {
         let app = launchedApp()
 

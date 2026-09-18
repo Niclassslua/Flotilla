@@ -8,7 +8,7 @@ import DesignSystem
 /// Started life as one of four candidate modal designs ("Launchpad") — big
 /// agent cards, a project grid, a heavy footer — chosen for the home screen
 /// because that context is ambient and browsable, unlike the New Session
-/// window's keyboard-driven interruption (`CommandBarDesign`). Rebuilt here as
+/// window's keyboard-driven interruption (`TilesDesign`). Rebuilt here as
 /// an inline card rather than a modal: no `ScrollView` of its own (the
 /// dashboard already scrolls), no `.ignoresSafeArea()` backdrop (the dashboard
 /// paints its own), no footer bar — launch controls live at the foot of the

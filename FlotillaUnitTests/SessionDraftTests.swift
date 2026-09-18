@@ -29,7 +29,7 @@ private final class StubTmuxServerProbe: TmuxServerProbing, @unchecked Sendable 
     func serverIsUsable(tmuxExecutable: URL) -> Bool { usable }
 }
 
-/// `SessionDraft` is the state both `CommandBarDesign` (the modal launcher)
+/// `SessionDraft` is the state both `TilesDesign` (the modal launcher)
 /// and `LaunchpadDesign` (the home composer) edit. These pin the behaviour
 /// that differs between the two hosts: whether an empty goal blocks
 /// launching, and what a launch leaves behind in the draft afterward.

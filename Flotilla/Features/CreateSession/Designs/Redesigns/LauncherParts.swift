@@ -2,58 +2,12 @@ import SwiftUI
 import SessionKit
 import AgentKit
 import DesignSystem
-import SettingsKit
-
-extension LauncherStyle {
-    /// Overlay width. The classic bar's 660pt is what makes it cramped; each
-    /// newer style takes the room its layout actually needs.
-    var launcherWidth: CGFloat {
-        switch self {
-        case .classic: 660
-        case .controlDeck: 720
-        case .projectRail: 840
-        case .tiles: 740
-        case .sentence: 700
-        }
-    }
-
-    /// One line for the Settings picker and the in-launcher style menu.
-    var summary: String {
-        switch self {
-        case .classic: "One Spotlight-style line; everything else in a chip strip."
-        case .controlDeck: "Goal on top, then a labeled row each for agent, model, and workspace."
-        case .projectRail: "A searchable project list beside a large goal editor."
-        case .tiles: "Workspace, Agent, and Launch as three cards under the goal."
-        case .sentence: "Settings read as one sentence of inline controls, with the literal command below."
-        }
-    }
-}
-
 // MARK: - Surface
 
-private struct LauncherSnapshotKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    /// Set while rendering offscreen for comparison screenshots. Liquid Glass
-    /// samples what is behind the window, which an offscreen bitmap has none
-    /// of, so the surface falls back to an opaque fill there.
-    var launcherSnapshot: Bool {
-        get { self[LauncherSnapshotKey.self] }
-        set { self[LauncherSnapshotKey.self] = newValue }
-    }
-}
-
 private struct LauncherSurface: ViewModifier {
-    @Environment(\.launcherSnapshot) private var isSnapshot
-
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous)
         content
-            .background {
-                if isSnapshot { shape.fill(FlotillaColors.surface) }
-            }
             .glassEffect(.regular, in: shape)
             .overlay { shape.strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline) }
             .flotillaShadow(.level3)
@@ -108,9 +62,9 @@ struct LauncherEyebrow: View {
 
 // MARK: - Goal field
 
-/// The objective field every newer style shares, with the Command Bar's
-/// `@` project and `/` agent searches opening a results list beneath it.
-/// Return launches and opens, ⇧/⌥-Return inserts a newline, Escape cancels
+/// The objective field uses `@` project and `/` agent searches to open a
+/// results list beneath it. Return launches and opens, ⌥-Return inserts a
+/// newline, Escape cancels
 /// (or first closes an open search).
 struct LauncherGoalField: View {
     @Bindable var draft: SessionDraft
@@ -148,7 +102,7 @@ struct LauncherGoalField: View {
         if result == .handled { return .handled }
         switch press.key {
         case .return:
-            if press.modifiers.contains(.shift) || press.modifiers.contains(.option) { return .ignored }
+            if press.modifiers.contains(.option) { return .ignored }
             if draft.canLaunch { actions.launch(true) }
             return .handled
         case .escape:
@@ -410,107 +364,6 @@ struct LauncherProjectList: View {
         .accessibilityIdentifier(
             choice.isGeneral ? "CreateSession.Source.General" : "CreateSession.Project.\(choice.displayName)"
         )
-    }
-}
-
-/// A trigger that opens `LauncherProjectList` in the launcher's own view
-/// hierarchy. The New Session launcher is already an in-window overlay; using
-/// an AppKit popover below it gives macOS's text-completion remote view two
-/// competing containing windows and can raise an `NSInternalInconsistencyException`
-/// when a project row is chosen. Keeping this list in-window also makes its
-/// lifetime match the launcher that owns the draft.
-struct LauncherProjectButton<Label: View>: View {
-    @Bindable var draft: SessionDraft
-    @ViewBuilder var label: () -> Label
-    var presentationChanged: (Bool) -> Void = { _ in }
-
-    @State private var isPresented = false
-
-    var body: some View {
-        Button { isPresented.toggle() } label: { label() }
-            .buttonStyle(.plain)
-            .onChange(of: isPresented) { _, isPresented in
-                presentationChanged(isPresented)
-            }
-            .overlay(alignment: .bottomLeading) {
-                if isPresented {
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .overlay(alignment: .topLeading) {
-                            projectList
-                        }
-                }
-            }
-            .zIndex(isPresented ? 1 : 0)
-            .help("Choose the workspace")
-            .accessibilityIdentifier("CreateSession.ProjectPicker")
-            .accessibilityValue(draft.projectChoice.displayName)
-    }
-
-    private var projectList: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Workspace")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(FlotillaColors.textTertiary)
-                .textCase(.uppercase)
-                .padding(.horizontal, 10)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
-
-            LauncherProjectList(draft: draft) { isPresented = false }
-                // These margins and the row-card insets mirror the Model and
-                // Reasoning Effort popovers, while keeping this menu in-window
-                // for the launcher's AppKit safety constraint.
-                .padding(.horizontal, 6)
-        }
-            .padding(.bottom, FlotillaSpacing.small)
-            .frame(width: 300)
-            .background(
-                FlotillaColors.surfaceElevated,
-                in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                    .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-            }
-            .shadow(color: .black.opacity(0.3), radius: 14, y: 8)
-    }
-}
-
-// MARK: - Launch
-
-/// What will run and where: branch (or directory) and the argv.
-struct LauncherPreviewText: View {
-    let preview: SessionLaunchPreview
-
-    var body: some View {
-        HStack(spacing: FlotillaSpacing.small) {
-            if preview.isWorktree {
-                GitBranchIcon(size: FlotillaIconSize.xSmall)
-                    .foregroundStyle(FlotillaColors.statusReady)
-            } else {
-                Image(systemName: "shippingbox")
-                    .font(.system(size: FlotillaIconSize.xSmall))
-                    .foregroundStyle(FlotillaColors.textTertiary)
-            }
-            Text(preview.displayBranch ?? preview.displayDirectory)
-                .foregroundStyle(FlotillaColors.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Text("·").foregroundStyle(FlotillaColors.textTertiary)
-            Text(preview.command)
-                .foregroundStyle(FlotillaColors.textTertiary)
-                .lineLimit(1)
-            if let warning = preview.sharedCheckoutWarning {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(FlotillaColors.warning)
-                    .help(warning)
-                    .accessibilityLabel("Shared checkout")
-            }
-        }
-        .font(.system(size: 11, design: .monospaced))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("CreateSession.LaunchSummary")
     }
 }
 

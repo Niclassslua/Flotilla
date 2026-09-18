@@ -37,7 +37,7 @@ struct TilesDesign: View {
                 .padding(.top, FlotillaSpacing.small)
 
             HStack(spacing: FlotillaSpacing.medium) {
-                Text("⇧↩ new line  ·  ⌘↩ launch from any control")
+                Text("⌥↩ new line  ·  ⌘↩ launch from any control")
                     .font(FlotillaTypography.caption2)
                     .foregroundStyle(FlotillaColors.textTertiary)
                 Spacer(minLength: FlotillaSpacing.small)
@@ -75,6 +75,13 @@ struct TilesDesign: View {
             )
             Spacer(minLength: 0)
             LauncherIsolationPicker(draft: draft, fillsWidth: true)
+            if let warning = draft.preview.sharedCheckoutWarning {
+                Label("Shared checkout", systemImage: "exclamationmark.triangle.fill")
+                    .font(FlotillaTypography.caption2.weight(.medium))
+                    .foregroundStyle(FlotillaColors.warning)
+                    .help(warning)
+                    .accessibilityLabel("Shared checkout: \(warning)")
+            }
         }
     }
 
@@ -119,12 +126,6 @@ struct TilesDesign: View {
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .lineLimit(1)
-                if preview.sharedCheckoutWarning != nil {
-                    Label("Shared checkout", systemImage: "exclamationmark.triangle.fill")
-                        .font(FlotillaTypography.caption2.weight(.medium))
-                        .foregroundStyle(FlotillaColors.warning)
-                        .help(preview.sharedCheckoutWarning ?? "")
-                }
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("CreateSession.LaunchSummary")

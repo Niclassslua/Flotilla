@@ -317,10 +317,6 @@ struct FlotillaShell: View {
                 },
                 openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
                 defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode,
-                style: Binding(
-                    get: { settingsViewModel.settings.sessionDefaults.launcherStyle },
-                    set: { settingsViewModel.settings.sessionDefaults.launcherStyle = $0 }
-                ),
                 onDismiss: { navigator.presentedSheet = nil }
             )
         case .commandPalette:

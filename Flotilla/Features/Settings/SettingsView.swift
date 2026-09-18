@@ -335,23 +335,6 @@ private struct SessionSettingsPane: View {
                 }
             }
 
-            Section {
-                Picker("Layout", selection: $viewModel.settings.sessionDefaults.launcherStyle) {
-                    ForEach(LauncherStyle.allCases) { style in
-                        Text(style.displayName).tag(style)
-                    }
-                }
-                .accessibilityIdentifier("Settings.LauncherStylePicker")
-                Text(viewModel.settings.sessionDefaults.launcherStyle.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader("New Session Window", systemImage: "rectangle.3.group")
-            } footer: {
-                Text("Switch live from inside the window with ⌥⌘1–⌥⌘5 or the layout buttons above it. Every layout launches the same way.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .flotillaSettingsFormLayout()
     }

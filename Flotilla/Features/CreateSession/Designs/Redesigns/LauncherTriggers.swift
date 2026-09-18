@@ -3,7 +3,7 @@ import SessionKit
 import AgentKit
 import DesignSystem
 
-/// The Command Bar's typed shortcuts, shared by every newer launcher style:
+/// The New Session tiles' typed shortcuts:
 /// a goal starting with `@` searches projects, one starting with `/` switches
 /// agents. Only the *first* character counts — mid-sentence they are ordinary
 /// text, so an email address in a goal can't hijack the field.
@@ -93,7 +93,7 @@ final class LauncherTriggers {
             highlightedIndex = max(highlightedIndex - 1, 0)
             return .handled
         case .return:
-            if press.modifiers.contains(.shift) || press.modifiers.contains(.option) { return .ignored }
+            if press.modifiers.contains(.option) { return .ignored }
             selectHighlighted(draft)
             return .handled
         case .escape:

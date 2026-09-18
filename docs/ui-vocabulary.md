@@ -206,11 +206,9 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 
 | Say | What it is | Code |
 | --- | --- | --- |
-| **New Session window** | The modal launcher (⌘N, the navigator's New Session button, palette, "fix this commit"). Renders the command bar. | `CreateSessionView` — `Features/CreateSession/` |
-| **Command bar** | The Spotlight-style single-field design inside the New Session window: `@` = project search, `/` = agent switch, everything else is the goal. | `CommandBarDesign` |
-| **Chip strip** | The row of already-decided values (project, agent, isolation) under the command bar's query row. | `CommandBarDesign.chipStrip` |
-| **Summary line** | The dim monospace line stating exactly what will happen on launch (branch name, destination). Both the command bar and the composer render it. | `CommandBarDesign.summaryLine`, backed by the `SessionLaunchPreview` model |
-| **Session draft** | The shared editable state behind both the composer and the command bar. | `SessionDraft` |
+| **New Session window** | The modal launcher (⌘N, the navigator's New Session button, palette, "fix this commit"). It uses the Workspace, Agent, and Launch tiles. | `CreateSessionView`, `TilesDesign` — `Features/CreateSession/` |
+| **Workspace tile** / **Agent tile** / **Launch tile** | The three decisions in the New Session window: where the agent works, which provider/model it uses, and the command that will run. | `TilesDesign` |
+| **Session draft** | The shared editable state behind the home composer and the New Session tiles. | `SessionDraft` |
 | **Command palette** | ⌘K launcher for workspace commands, projects, and sessions. | `CommandPaletteView`, `PaletteRow`, `PaletteSectionTitle` |
 | **Palette panel** | The borderless floating panel that hosts it (dismisses on click-outside, unlike a sheet). | `CommandPalettePanel` |
 | **Shortcuts sheet** | The keyboard-shortcut reference. | `KeyboardShortcutsView` |
