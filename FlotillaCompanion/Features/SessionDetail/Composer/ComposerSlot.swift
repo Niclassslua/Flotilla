@@ -323,22 +323,45 @@ private struct PromptComposer: View {
 private struct AudioWaveformHistory: View {
     let levels: [CompanionAudioLevelSample]
     private let barCount = 48
+    private let sampleInterval = 0.2
 
     var body: some View {
-        GeometryReader { proxy in
-            let visibleLevels = Array(levels.suffix(barCount))
-            let emptyBars = barCount - visibleLevels.count
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<emptyBars, id: \.self) { _ in
-                    WaveformBar(level: 0, height: proxy.size.height)
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            Canvas { context, size in
+                let slotWidth = size.width / CGFloat(barCount)
+                let baselineWidth = min(4, slotWidth * 0.42)
+                let baselineHeight: CGFloat = 4
+                let baselineY = (size.height - baselineHeight) / 2
+
+                // Draw the quiet history first. Active samples are painted
+                // over the same fixed slots, never laid out beside it, so a
+                // new bar cannot push or overlap an older gray bar.
+                for index in 0..<barCount {
+                    let x = CGFloat(index) * slotWidth + (slotWidth - baselineWidth) / 2
+                    let rect = CGRect(x: x, y: baselineY, width: baselineWidth, height: baselineHeight)
+                    context.fill(Path(roundedRect: rect, cornerRadius: baselineHeight / 2),
+                                 with: .color(.white.opacity(0.28)))
                 }
-                ForEach(visibleLevels) { sample in
-                    WaveformBar(level: sample.level, height: proxy.size.height)
-                        .transition(.opacity)
+
+                let now = timeline.date.timeIntervalSinceReferenceDate
+                let historyDuration = Double(barCount) * sampleInterval
+                for sample in levels {
+                    let age = now - sample.timestamp
+                    guard age >= 0, age < historyDuration else { continue }
+
+                    let position = CGFloat(age / sampleInterval)
+                    let x = size.width - (position + 0.5) * slotWidth
+                    let barWidth = min(7, max(4, slotWidth * 0.62))
+                    let barHeight = max(6, CGFloat(sample.level) * (size.height - 4))
+                    let fadeIn = min(1, max(0, age / 0.75))
+                    let rect = CGRect(x: x - barWidth / 2,
+                                      y: (size.height - barHeight) / 2,
+                                      width: barWidth,
+                                      height: barHeight)
+                    context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
+                                 with: .color(.white.opacity(0.86 * fadeIn)))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .animation(.linear(duration: 0.22), value: visibleLevels)
         }
         .padding(.horizontal, 14)
         .mask {
@@ -355,18 +378,6 @@ private struct AudioWaveformHistory: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Microphone level history")
         .accessibilityValue(levels.isEmpty ? "Listening" : "Receiving audio")
-    }
-}
-
-private struct WaveformBar: View {
-    let level: Double
-    let height: CGFloat
-
-    var body: some View {
-        Capsule()
-            .fill(.white.opacity(level > 0.03 ? 0.82 : 0.28))
-            .frame(maxWidth: .infinity)
-            .frame(height: max(4, CGFloat(level) * (height - 4)))
     }
 }
 

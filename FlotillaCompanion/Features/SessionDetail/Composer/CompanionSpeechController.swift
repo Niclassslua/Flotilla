@@ -6,6 +6,7 @@ import Observation
 struct CompanionAudioLevelSample: Identifiable, Equatable, Sendable {
     let id: UInt64
     let level: Double
+    let timestamp: TimeInterval
 }
 
 private final class CompanionAudioCapture: @unchecked Sendable {
@@ -270,12 +271,19 @@ final class CompanionSpeechController {
         let smoothing: Double = level > smoothedAudioLevel ? 0.18 : 0.1
         smoothedAudioLevel += (level - smoothedAudioLevel) * smoothing
         // Keep the visual range expressive without snapping to either edge.
-        let displayLevel = min(0.92, smoothedAudioLevel * 1.2 + 0.02)
+        // Use the full visual range for quiet microphones too. The smoothing
+        // above keeps the meter fluid; this gain makes speech visibly tall
+        // without allowing normal input to pin it to the top.
+        let displayLevel = min(0.96, smoothedAudioLevel * 2.4 + 0.025)
         audioLevel = displayLevel
         let now = Date()
         guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.2 else { return }
         lastAudioLevelSampleAt = now
-        audioLevels.append(CompanionAudioLevelSample(id: nextAudioLevelID, level: displayLevel))
+        audioLevels.append(CompanionAudioLevelSample(
+            id: nextAudioLevelID,
+            level: displayLevel,
+            timestamp: now.timeIntervalSinceReferenceDate
+        ))
         nextAudioLevelID &+= 1
         if audioLevels.count > 96 {
             audioLevels.removeFirst(audioLevels.count - 96)
