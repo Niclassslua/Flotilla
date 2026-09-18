@@ -2,12 +2,10 @@ import Foundation
 import SessionKit
 import TranscriptKit
 import CompanionKit
-import os
 
 /// Reads a session's native transcript for the phone, re-parsing only when the
 /// file changed (docs/companion.md, A8).
 actor CompanionTranscriptReader {
-    private static let performance = Logger(subsystem: "com.niclassslua.flotilla", category: "CompanionPerformance")
     private let registry: TranscriptCodecRegistry
     private struct Cached {
         var url: URL
@@ -80,10 +78,6 @@ actor CompanionTranscriptReader {
     }
 
     func read(_ session: Session) -> SessionTranscript {
-        let started = Date()
-        defer {
-            Self.performance.debug("transcript read \(Date().timeIntervalSince(started), format: .fixed(precision: 4))s")
-        }
         guard let reader = registry.reader(for: session.agent) else {
             return SessionTranscript(unavailableReason: session.agent == .openCode ? Self.openCodeUnavailable : "No transcript is available for this session.")
         }
