@@ -282,7 +282,7 @@ final class CompanionSpeechController {
             adaptivePeak *= 0.995
         }
         let normalizedLevel = smoothedAudioLevel / max(adaptivePeak, 0.06)
-        let displayLevel = min(0.96, normalizedLevel * 0.86 + 0.025)
+        let displayLevel = min(0.96, normalizedLevel * 0.68 + 0.025)
         audioLevel = displayLevel
         let now = Date()
         guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.2 else { return }

@@ -189,6 +189,19 @@ private struct PromptComposer: View {
             }
 
             HStack(alignment: .center, spacing: 4) {
+                if speech.phase == .checking || speech.phase == .recording {
+                    Button {
+                        speech.cancel(store: store, sessionID: session.id)
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Cancel dictation")
+                    .accessibilityIdentifier("Composer.CancelDictation")
+                    .buttonStyle(.glass)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .frame(width: 42, height: 42)
+                }
+
                 if speech.phase == .recording {
                     AudioWaveformHistory(levels: speech.audioLevels)
                         .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)
@@ -346,20 +359,23 @@ private struct AudioWaveformHistory: View {
 
                 let now = timeline.date.timeIntervalSinceReferenceDate
                 let historyDuration = Double(barCount) * sampleInterval
-                for sample in levels {
-                    let age = now - sample.timestamp
+                let newestAge = max(0, now - (levels.last?.timestamp ?? now))
+                for (offset, sample) in levels.enumerated() {
+                    // Wall-clock delivery has tiny timing jitter. Use the
+                    // newest timestamp only as the moving anchor and place
+                    // every older sample on an exact fixed interval.
+                    let age = newestAge + Double(levels.count - 1 - offset) * sampleInterval
                     guard age >= 0, age < historyDuration else { continue }
 
                     let position = CGFloat(age / sampleInterval)
                     let x = size.width - (position + 0.5) * slotWidth
                     let barHeight = max(6, CGFloat(sample.level) * (size.height - 4))
-                    let fadeIn = min(1, max(0, age / 0.75))
                     let rect = CGRect(x: x - barWidth / 2,
                                       y: (size.height - barHeight) / 2,
                                       width: barWidth,
                                       height: barHeight)
                     context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
-                                 with: .color(.white.opacity(0.86 * fadeIn)))
+                                 with: .color(.white.opacity(0.86)))
                 }
             }
         }
