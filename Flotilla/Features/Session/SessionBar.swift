@@ -228,6 +228,8 @@ struct SessionBar: View {
                 set: { self.draftTitle = $0 }
             ))
             .textFieldStyle(.plain)
+            .autocorrectionDisabled()
+            .textContentType(nil)
             .focused($isEditingTitle)
             .frame(minWidth: 80, idealWidth: 160)
             // Focus is claimed here rather than in `beginRename`: a

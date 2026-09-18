@@ -257,6 +257,8 @@ private struct GeneralSettingsPane: View {
                     HStack(spacing: 8) {
                         TextField("Base Directory", text: $viewModel.settings.worktreeBaseDirectory)
                             .labelsHidden()
+                            .autocorrectionDisabled()
+                            .textContentType(nil)
                             .accessibilityIdentifier("Settings.WorktreeBaseDirectory")
                         Button("Choose…") { chooseWorktreeDirectory() }
                     }
@@ -515,6 +517,8 @@ private struct AgentSettingsPane: View {
                         HStack(spacing: 8) {
                             TextField("Find automatically", text: pathBinding(for: agent))
                                 .labelsHidden()
+                                .autocorrectionDisabled()
+                                .textContentType(nil)
                                 .accessibilityIdentifier(pathIdentifier(for: agent))
                             Button("Choose…") { chooseExecutable(for: agent) }
                         }

@@ -120,6 +120,8 @@ struct ReviewCommentEditor: View {
                     .lineLimit(1...6)
                     .font(FlotillaTypography.caption)
                     .foregroundStyle(FlotillaColors.textPrimary)
+                    .autocorrectionDisabled()
+                    .textContentType(nil)
                     .focused($isFocused)
                     .accessibilityIdentifier(AXID.reviewCommentEditor.rawValue)
             }

@@ -262,6 +262,8 @@ struct KnowledgeSearchField: View {
             TextField(prompt, text: $text)
                 .textFieldStyle(.plain)
                 .font(FlotillaTypography.caption)
+                .autocorrectionDisabled()
+                .textContentType(nil)
                 .accessibilityIdentifier(AXID.knowledgeSearchField.rawValue)
 
             if !text.isEmpty {

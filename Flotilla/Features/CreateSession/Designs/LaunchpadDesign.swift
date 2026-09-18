@@ -181,14 +181,13 @@ struct LaunchpadDesign: View {
             .controlSize(.small)
             .frame(maxWidth: 180)
             .accessibilityIdentifier("Home.ModelField")
-            if antigravityCoordinator.supportsEffort(for: draft) {
-                EffortLevelPicker(
-                    agent: draft.agent,
-                    model: draft.model,
-                    effort: antigravityCoordinator.effortBinding(for: draft),
-                    accessibilityIdentifier: "Home.EffortPicker"
-                )
-            }
+            EffortLevelPicker(
+                agent: draft.agent,
+                model: draft.model,
+                effort: antigravityCoordinator.effortBinding(for: draft),
+                accessibilityIdentifier: "Home.EffortPicker",
+                isVisible: antigravityCoordinator.supportsEffort(for: draft)
+            )
         }
     }
 
@@ -206,6 +205,7 @@ struct LaunchpadDesign: View {
                         .textFieldStyle(.plain)
                         .font(FlotillaTypography.callout)
                         .autocorrectionDisabled()
+                        .textContentType(nil)
                         .accessibilityIdentifier("Home.ProjectFilter")
                 }
                 .padding(.horizontal, FlotillaSpacing.medium)
@@ -342,6 +342,7 @@ struct LaunchpadDesign: View {
                 TextEditor(text: $draft.goal)
                     .font(.system(size: 14))
                     .scrollContentBackground(.hidden)
+                    .autocorrectionDisabled()
                     .padding(FlotillaSpacing.small)
                     .frame(minHeight: 60)
                     .focused($goalFocused)

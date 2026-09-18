@@ -47,6 +47,8 @@ struct ProjectPathSheet: View {
                     TextField(importsWorkspace ? "/path/to/workspace" : "/path/to/project", text: $path)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
+                        .autocorrectionDisabled()
+                        .textContentType(nil)
                     Button("Browse…", action: browse)
                 }
                 if importsWorkspace {

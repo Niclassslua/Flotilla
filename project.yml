@@ -223,7 +223,12 @@ targets:
       - package: GRDB.swift
         product: GRDB
     settings:
-      ENABLE_HARDENED_RUNTIME: NO
+      base:
+        ENABLE_HARDENED_RUNTIME: NO
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+          DEVELOPMENT_TEAM: UWAHVC4JTL
 
   FlotillaUITests:
     type: bundle.ui-testing
@@ -234,7 +239,12 @@ targets:
     dependencies:
       - target: Flotilla
     settings:
-      ENABLE_HARDENED_RUNTIME: NO
+      base:
+        ENABLE_HARDENED_RUNTIME: NO
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+          DEVELOPMENT_TEAM: UWAHVC4JTL
 
 schemes:
   Flotilla:

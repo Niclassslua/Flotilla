@@ -560,6 +560,8 @@ struct DiffPanelView: View {
                     TextField("Commit message", text: $viewModel.commitMessage)
                         .textFieldStyle(.plain)
                         .font(FlotillaTypography.callout)
+                        .autocorrectionDisabled()
+                        .textContentType(nil)
                         .focused($isCommitMessageFocused)
                         .onSubmit { if canCommit { Task { await viewModel.commit() } } }
                         .padding(.horizontal, FlotillaSpacing.small)

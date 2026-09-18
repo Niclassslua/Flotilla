@@ -325,6 +325,8 @@ struct FileBrowserView: View {
             TextField("Filter files…", text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 11.5, design: .monospaced))
+                .autocorrectionDisabled()
+                .textContentType(nil)
             if !searchText.isEmpty {
                 Button {
                     searchText = ""

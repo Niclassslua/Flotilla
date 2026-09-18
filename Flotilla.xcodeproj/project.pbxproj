@@ -46,6 +46,7 @@
 		14B5F80C3114B99FA1860023 /* SessionReviewViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA58B78299AE64F6052CFB3 /* SessionReviewViewModelTests.swift */; };
 		158BCD6C862F3D846B298674 /* tune.svg in Resources */ = {isa = PBXBuildFile; fileRef = 9157CC2DB6B0B8B42FDD71A5 /* tune.svg */; };
 		17378437B683F8C2F35545A1 /* MacsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C2BFD9B4F918438C55514D /* MacsView.swift */; };
+		18EFE6396FB741793FDA895A /* ViewBridgeCrashGuard.m in Sources */ = {isa = PBXBuildFile; fileRef = 404850BCFCB183E77711ED5F /* ViewBridgeCrashGuard.m */; };
 		195CD176EEA524BA2246BA0C /* RealPipelineReproTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BBC083783BD10EC9D3923E7 /* RealPipelineReproTests.swift */; };
 		1A2469DCF5080C17697C2E55 /* TranscriptCodecRegistry+Flotilla.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28FCDAAC18A71DF640AA50EC /* TranscriptCodecRegistry+Flotilla.swift */; };
 		1BA17EC4F8252BA8EF0247FB /* SessionReviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 050D3C7CFCF1EF9C4BAA6616 /* SessionReviewUITests.swift */; };
@@ -602,6 +603,7 @@
 		3E5808CB3A9D390526202628 /* Scenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scenario.swift; sourceTree = "<group>"; };
 		3E782E7FF5EA05CA2F213E13 /* MonacoHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonacoHostView.swift; sourceTree = "<group>"; };
 		3F7E6D3E8923F89B47F5C5A4 /* SessionGitSidebarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGitSidebarViewModel.swift; sourceTree = "<group>"; };
+		404850BCFCB183E77711ED5F /* ViewBridgeCrashGuard.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewBridgeCrashGuard.m; sourceTree = "<group>"; };
 		4100F4A408931C22C24A3C2D /* WorkspaceFileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileService.swift; sourceTree = "<group>"; };
 		426159ED897D3ACC72D28DB4 /* RemoteCompanionDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteCompanionDataSource.swift; sourceTree = "<group>"; };
 		432F0F0C96BAE89BBBB0521B /* AppStoreLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreLifecycleTests.swift; sourceTree = "<group>"; };
@@ -839,6 +841,7 @@
 		D87DE3D8544D9CDB8E53188D /* PlanCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanCard.swift; sourceTree = "<group>"; };
 		D8D5B646A92E01E7E80DFC01 /* KnowledgeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeDetailView.swift; sourceTree = "<group>"; };
 		D8F00DEE0E8ADB9286C29903 /* WorkspaceFileServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileServicing.swift; sourceTree = "<group>"; };
+		D96A8974E2D02E53D3F0B4C2 /* ViewBridgeCrashGuard.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViewBridgeCrashGuard.h; sourceTree = "<group>"; };
 		D9A4531D93B3A63280F51879 /* TerminalUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalUITests.swift; sourceTree = "<group>"; };
 		D9BD989755A64D4561511867 /* react_ts.svg */ = {isa = PBXFileReference; path = react_ts.svg; sourceTree = "<group>"; };
 		D9CA8721FFE982E28B49BC12 /* DiffAndFilesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffAndFilesUITests.swift; sourceTree = "<group>"; };
@@ -1192,6 +1195,8 @@
 				843F419F380054574BA3445D /* SessionStatusTrace.swift */,
 				C038C5B8AB4AE5F31A21ECD0 /* TmuxSessionWrapping.swift */,
 				28FCDAAC18A71DF640AA50EC /* TranscriptCodecRegistry+Flotilla.swift */,
+				D96A8974E2D02E53D3F0B4C2 /* ViewBridgeCrashGuard.h */,
+				404850BCFCB183E77711ED5F /* ViewBridgeCrashGuard.m */,
 				493B1EA7A245C951392A9EE8 /* Companion */,
 			);
 			path = Services;
@@ -2433,6 +2438,7 @@
 				E869833291FD222D50F4143B /* TmuxSessionWrapping.swift in Sources */,
 				1A2469DCF5080C17697C2E55 /* TranscriptCodecRegistry+Flotilla.swift in Sources */,
 				E48462CC0334836D16CCBA14 /* UITestWindowPlacer.swift in Sources */,
+				18EFE6396FB741793FDA895A /* ViewBridgeCrashGuard.m in Sources */,
 				C3FD248DBA8583AC3D6865FF /* WorkspaceFileDiscovery.swift in Sources */,
 				00FBDF4B7A32C262D46DB5B8 /* WorkspaceFileService.swift in Sources */,
 				2C21F9D390BF90B937B675E9 /* WorkspaceFileServicing.swift in Sources */,
@@ -2555,7 +2561,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = UWAHVC4JTL;
 				ENABLE_HARDENED_RUNTIME = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -3025,7 +3033,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = UWAHVC4JTL;
 				ENABLE_HARDENED_RUNTIME = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -41,6 +41,8 @@ struct ReviewFileList: View {
             TextField("Search…", text: $query)
                 .textFieldStyle(.plain)
                 .font(FlotillaTypography.callout)
+                .autocorrectionDisabled()
+                .textContentType(nil)
                 .foregroundStyle(FlotillaColors.textPrimary)
             if !query.isEmpty {
                 Button {

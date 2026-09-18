@@ -294,6 +294,8 @@ struct ModelPickerView: View {
                 TextField("Model name or slug", text: $customText)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 11))
+                    .autocorrectionDisabled()
+                    .textContentType(nil)
                     .padding(.horizontal, 10)
                     .padding(.bottom, 4)
                     .onChange(of: customText) { _, newValue in

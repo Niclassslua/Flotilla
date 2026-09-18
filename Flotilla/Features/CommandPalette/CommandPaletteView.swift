@@ -71,6 +71,8 @@ struct CommandPaletteView: View {
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($isFocused)
+                    .autocorrectionDisabled()
+                    .textContentType(nil)
                     // Belt and suspenders alongside the `.onKeyPress` below and
                     // `EscapeKeyCatcher` at the presentation layer: a focused
                     // NSTextField can consume Escape internally via its own

@@ -548,6 +548,8 @@ struct HomeProjectsGallery: View {
             TextField("Filter projects by name or path…", text: $searchText)
                 .textFieldStyle(.plain)
                 .font(FlotillaTypography.body)
+                .autocorrectionDisabled()
+                .textContentType(nil)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

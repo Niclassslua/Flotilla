@@ -29,6 +29,9 @@ struct FlotillaApp: App {
 
     private static let isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
 
+    @_silgen_name("InstallViewBridgeCrashGuard")
+    private static func installViewBridgeCrashGuard()
+
     init() {
 #if FLOTILLA_EPHEMERAL
         // AppKit creates its split-view and window autosave keys before the
@@ -38,6 +41,8 @@ struct FlotillaApp: App {
         // again once the native views exist.
         UserDefaults.standard.removePersistentDomain(forName: "com.niclassslua.flotilla.ephemeral")
 #endif
+
+        Self.installViewBridgeCrashGuard()
 
         // Flotilla is a single-window workspace app with its own navigation
         // model; suppress AppKit's automatic window tabbing so the View menu

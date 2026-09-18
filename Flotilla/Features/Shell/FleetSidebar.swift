@@ -32,6 +32,8 @@ struct SessionsSidebar: View {
                 TextField("Search sessions…", text: $searchText)
                     .textFieldStyle(.plain)
                     .font(FlotillaTypography.caption)
+                    .autocorrectionDisabled()
+                    .textContentType(nil)
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
                         Image(systemName: "xmark.circle.fill")

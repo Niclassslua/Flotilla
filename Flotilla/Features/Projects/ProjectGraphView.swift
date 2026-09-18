@@ -206,6 +206,8 @@ struct ProjectGraphView: View {
             TextField("Search commits…", text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
                 .font(FlotillaTypography.caption)
+                .autocorrectionDisabled()
+                .textContentType(nil)
                 .accessibilityIdentifier("ProjectGraph.SearchField")
             if viewModel.isSearching {
                 Button {

@@ -202,6 +202,8 @@ struct SessionGitSidebar: View {
         VStack(spacing: FlotillaSpacing.small) {
             TextField("Commit message", text: $viewModel.commitMessage)
                 .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .textContentType(nil)
                 .focused($isCommitFieldFocused)
                 .onSubmit {
                     if viewModel.canCommit { Task { await viewModel.commit() } }
@@ -269,6 +271,8 @@ struct SessionGitSidebar: View {
             HStack(spacing: FlotillaSpacing.small) {
                 TextField("Branch name", text: $branchDraft)
                     .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    .textContentType(nil)
                     .focused($isBranchFieldFocused)
                     .onSubmit(createBranch)
                     .accessibilityIdentifier("GitSidebar.Branches.Name")

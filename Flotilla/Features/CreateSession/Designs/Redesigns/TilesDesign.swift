@@ -74,7 +74,6 @@ struct TilesDesign: View {
                 isPresented: $isWorkspacePickerPresented
             )
             Spacer(minLength: 0)
-            LauncherIsolationPicker(draft: draft, fillsWidth: true)
             if let warning = draft.preview.sharedCheckoutWarning {
                 Label("Shared checkout", systemImage: "exclamationmark.triangle.fill")
                     .font(FlotillaTypography.caption2.weight(.medium))
@@ -82,6 +81,7 @@ struct TilesDesign: View {
                     .help(warning)
                     .accessibilityLabel("Shared checkout: \(warning)")
             }
+            LauncherIsolationPicker(draft: draft, fillsWidth: true)
         }
     }
 
