@@ -181,6 +181,14 @@ actor HandySpeechClient: HandySpeechServing {
 
     func start(_ request: CompanionSpeechStart) async -> CompanionSpeechEvent {
         do {
+            // The Handy process can be restarted independently of Flotilla.
+            // In that case the actor may still hold a descriptor connected to
+            // the previous server instance; capability checks intentionally
+            // use a separate probe socket and therefore do not refresh it.
+            // A transcription start is a new session, so always replace the
+            // cached streaming connection before sending the request.
+            socket?.close()
+            socket = nil
             let socket = try await connect()
             let corrections = request.spokenCorrections.map { ["spoken": $0.spoken, "written": $0.written] }
             let message: [String: Any] = [
