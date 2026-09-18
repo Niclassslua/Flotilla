@@ -114,6 +114,20 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertEqual(decoded.sessionDefaults.defaultAgentRawValue, "claudeCode")
     }
 
+    func testLauncherStyleDefaultsToClassicAndRoundTrips() throws {
+        let legacy = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"sessionDefaults":{"createWorktreeByDefault":false}}"#.utf8))
+        XCTAssertEqual(legacy.sessionDefaults.launcherStyle, .classic)
+
+        let unknown = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"sessionDefaults":{"launcherStyle":"hologram","createWorktreeByDefault":false}}"#.utf8))
+        XCTAssertEqual(unknown.sessionDefaults.launcherStyle, .classic)
+        XCTAssertFalse(unknown.sessionDefaults.createWorktreeByDefault)
+
+        var settings = AppSettings()
+        settings.sessionDefaults.launcherStyle = .sentence
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(decoded.sessionDefaults.launcherStyle, .sentence)
+    }
+
     func testLegacySessionDefaultsPositionalIntDecodesToString() throws {
         let json = Data(#"{"sessionDefaults":{"defaultAgentRawValue":1}}"#.utf8)
         let decoded = try JSONDecoder().decode(AppSettings.self, from: json)
