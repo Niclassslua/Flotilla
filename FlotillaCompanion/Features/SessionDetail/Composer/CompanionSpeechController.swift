@@ -132,6 +132,7 @@ final class CompanionSpeechController {
     private var smoothedAudioLevel = 0.0
     private var adaptivePeak = 0.18
     private var nextAudioLevelID: UInt64 = 0
+    private var nextAudioLevelTimestamp: TimeInterval?
 
     func checkAvailability(store: CompanionStore, sessionID: UUID) async {
         guard let macID = store.data.macID(for: sessionID) else {
@@ -228,6 +229,7 @@ final class CompanionSpeechController {
         audioLevel = 0
         smoothedAudioLevel = 0
         adaptivePeak = 0.18
+        nextAudioLevelTimestamp = nil
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         await pump?.value
@@ -254,6 +256,7 @@ final class CompanionSpeechController {
         audioLevel = 0
         smoothedAudioLevel = 0
         adaptivePeak = 0.18
+        nextAudioLevelTimestamp = nil
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         pump?.cancel()
@@ -287,10 +290,12 @@ final class CompanionSpeechController {
         let now = Date()
         guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.2 else { return }
         lastAudioLevelSampleAt = now
+        let timestamp = nextAudioLevelTimestamp ?? now.timeIntervalSinceReferenceDate
+        nextAudioLevelTimestamp = timestamp + 0.2
         audioLevels.append(CompanionAudioLevelSample(
             id: nextAudioLevelID,
             level: displayLevel,
-            timestamp: now.timeIntervalSinceReferenceDate
+            timestamp: timestamp
         ))
         nextAudioLevelID &+= 1
         if audioLevels.count > 96 {
@@ -307,6 +312,7 @@ final class CompanionSpeechController {
         audioLevel = 0
         smoothedAudioLevel = 0
         adaptivePeak = 0.18
+        nextAudioLevelTimestamp = nil
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         pump?.cancel()

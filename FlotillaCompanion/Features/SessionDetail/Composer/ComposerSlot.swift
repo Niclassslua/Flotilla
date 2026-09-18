@@ -198,6 +198,7 @@ private struct PromptComposer: View {
                     .accessibilityLabel("Cancel dictation")
                     .accessibilityIdentifier("Composer.CancelDictation")
                     .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
                     .foregroundStyle(FlotillaColors.textSecondary)
                     .frame(width: 42, height: 42)
                 }
@@ -335,7 +336,7 @@ private struct PromptComposer: View {
 
 private struct AudioWaveformHistory: View {
     let levels: [CompanionAudioLevelSample]
-    private let barCount = 48
+    private let barCount = 36
     private let sampleInterval = 0.2
 
     var body: some View {
@@ -347,23 +348,25 @@ private struct AudioWaveformHistory: View {
                 let baselineHeight: CGFloat = 4
                 let baselineY = (size.height - baselineHeight) / 2
 
-                // Draw the quiet history first. Active samples are painted
-                // over the same fixed slots, never laid out beside it, so a
-                // new bar cannot push or overlap an older gray bar.
+                let now = timeline.date.timeIntervalSinceReferenceDate
+                let historyDuration = Double(barCount) * sampleInterval
+                let newestAge = max(0, now - (levels.last?.timestamp ?? now))
+
+                // The gray baseline shares the same moving time grid as the
+                // active samples. It enters at the right and exits at the
+                // left instead of sitting statically underneath the meter.
                 for index in 0..<barCount {
-                    let x = CGFloat(index) * slotWidth + (slotWidth - baselineWidth) / 2
+                    let age = newestAge + Double(index) * sampleInterval
+                    let position = CGFloat(age / sampleInterval)
+                    let x = size.width - (position + 0.5) * slotWidth
                     let rect = CGRect(x: x, y: baselineY, width: baselineWidth, height: baselineHeight)
                     context.fill(Path(roundedRect: rect, cornerRadius: baselineHeight / 2),
                                  with: .color(.white.opacity(0.28)))
                 }
 
-                let now = timeline.date.timeIntervalSinceReferenceDate
-                let historyDuration = Double(barCount) * sampleInterval
-                let newestAge = max(0, now - (levels.last?.timestamp ?? now))
                 for (offset, sample) in levels.enumerated() {
-                    // Wall-clock delivery has tiny timing jitter. Use the
-                    // newest timestamp only as the moving anchor and place
-                    // every older sample on an exact fixed interval.
+                    // Sample timestamps are logical 200 ms ticks, not audio
+                    // callback times, so delivery jitter cannot shake the grid.
                     let age = newestAge + Double(levels.count - 1 - offset) * sampleInterval
                     guard age >= 0, age < historyDuration else { continue }
 
