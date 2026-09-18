@@ -83,6 +83,7 @@ struct LauncherGoalField: View {
                 .font(.system(size: fontSize, weight: .regular))
                 .lineLimit(lines)
                 .focused($isFocused)
+                .autocorrectionDisabled()
                 .onKeyPress { press in handle(press) }
                 .onChange(of: draft.goal) { _, goal in
                     triggers.sync(goal: goal)
@@ -272,6 +273,7 @@ struct LauncherProjectList: View {
                     TextField("Filter projects", text: $query)
                         .textFieldStyle(.plain)
                         .font(FlotillaTypography.caption)
+                        .autocorrectionDisabled()
                         .accessibilityIdentifier("CreateSession.ProjectFilter")
                 }
                 .padding(.horizontal, 10)

@@ -205,6 +205,7 @@ struct LaunchpadDesign: View {
                     TextField("Filter projects…", text: $projectQuery)
                         .textFieldStyle(.plain)
                         .font(FlotillaTypography.callout)
+                        .autocorrectionDisabled()
                         .accessibilityIdentifier("Home.ProjectFilter")
                 }
                 .padding(.horizontal, FlotillaSpacing.medium)

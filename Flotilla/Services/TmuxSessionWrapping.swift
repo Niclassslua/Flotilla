@@ -440,7 +440,7 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         guard (try? process.run()) != nil else { return }
 
         let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .userInitiated).async {
             process.waitUntilExit()
             done.signal()
         }
@@ -467,7 +467,7 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
 
         let done = DispatchSemaphore(value: 0)
         var data = Data()
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .userInitiated).async {
             data = outputPipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             done.signal()
