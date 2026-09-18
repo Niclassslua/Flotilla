@@ -122,6 +122,7 @@ final class CompanionSpeechController {
     private var capture: CompanionAudioCapture?
     private var pump: Task<Void, Never>?
     private var generation: UInt64 = 0
+    private var lastAudioLevelSampleAt = Date.distantPast
 
     func checkAvailability(store: CompanionStore, sessionID: UUID) async {
         guard let macID = store.data.macID(for: sessionID) else {
@@ -217,6 +218,7 @@ final class CompanionSpeechController {
         capture = nil
         audioLevel = 0
         audioLevels.removeAll(keepingCapacity: true)
+        lastAudioLevelSampleAt = .distantPast
         await pump?.value
         pump = nil
         guard phase == .processing else { return nil }
@@ -240,6 +242,7 @@ final class CompanionSpeechController {
         capture = nil
         audioLevel = 0
         audioLevels.removeAll(keepingCapacity: true)
+        lastAudioLevelSampleAt = .distantPast
         pump?.cancel()
         pump = nil
         if let id = requestID, let macID = store.data.macID(for: sessionID) {
@@ -256,6 +259,9 @@ final class CompanionSpeechController {
     private func recordAudioLevel(_ level: Double) {
         guard phase == .recording else { return }
         audioLevel = level
+        let now = Date()
+        guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.16 else { return }
+        lastAudioLevelSampleAt = now
         audioLevels.append(level)
         if audioLevels.count > 96 {
             audioLevels.removeFirst(audioLevels.count - 96)
@@ -270,6 +276,7 @@ final class CompanionSpeechController {
         capture = nil
         audioLevel = 0
         audioLevels.removeAll(keepingCapacity: true)
+        lastAudioLevelSampleAt = .distantPast
         pump?.cancel()
         pump = nil
         requestID = nil
