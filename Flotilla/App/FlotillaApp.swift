@@ -28,6 +28,9 @@ struct FlotillaApp: App {
     private let foregroundNotificationGate: OSAllocatedUnfairLock<Bool>
 
     private static let isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
+    /// A development-only route used to render the picker exploration without
+    /// wiring an unfinished concept into the live session composer.
+    private static let showsPickerConceptGallery = ProcessInfo.processInfo.environment["FLOTILLA_PICKER_CONCEPT_GALLERY"] == "1"
 
     init() {
 #if FLOTILLA_EPHEMERAL
@@ -187,24 +190,29 @@ struct FlotillaApp: App {
 
     var body: some Scene {
         WindowGroup {
-            FlotillaShell(
-                store: store,
-                terminalManager: terminalManager,
-                navigator: navigator,
-                hookCoordinator: hookCoordinator,
-                startupCheck: startupCheck,
-                settingsViewModel: settingsViewModel,
-                // The demo fleet has no live PTYs, so the real screen
-                // reader would report nothing and every card's output line
-                // would render empty.
-                screenReader: Self.isBoardDemo
-                    ? BoardDemoScreenReader()
-                    : hookCoordinator.screenReader
-            )
-            .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
-            .environment(\.editorFontSize, settingsViewModel.settings.terminal.editorFontSize)
-            .onChange(of: settingsViewModel.settings.notifications.delivery) { _, delivery in
-                foregroundNotificationGate.withLock { $0 = (delivery == .always) }
+            if Self.showsPickerConceptGallery {
+                ModelEffortPickerConceptGallery()
+                    .preferredColorScheme(.dark)
+            } else {
+                FlotillaShell(
+                    store: store,
+                    terminalManager: terminalManager,
+                    navigator: navigator,
+                    hookCoordinator: hookCoordinator,
+                    startupCheck: startupCheck,
+                    settingsViewModel: settingsViewModel,
+                    // The demo fleet has no live PTYs, so the real screen
+                    // reader would report nothing and every card's output line
+                    // would render empty.
+                    screenReader: Self.isBoardDemo
+                        ? BoardDemoScreenReader()
+                        : hookCoordinator.screenReader
+                )
+                .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
+                .environment(\.editorFontSize, settingsViewModel.settings.terminal.editorFontSize)
+                .onChange(of: settingsViewModel.settings.notifications.delivery) { _, delivery in
+                    foregroundNotificationGate.withLock { $0 = (delivery == .always) }
+                }
             }
         }
         .windowToolbarStyle(.unified(showsTitle: false))
