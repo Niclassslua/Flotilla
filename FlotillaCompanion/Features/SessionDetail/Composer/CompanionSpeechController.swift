@@ -130,6 +130,7 @@ final class CompanionSpeechController {
     private var generation: UInt64 = 0
     private var lastAudioLevelSampleAt = Date.distantPast
     private var smoothedAudioLevel = 0.0
+    private var adaptivePeak = 0.18
     private var nextAudioLevelID: UInt64 = 0
 
     func checkAvailability(store: CompanionStore, sessionID: UUID) async {
@@ -226,6 +227,7 @@ final class CompanionSpeechController {
         capture = nil
         audioLevel = 0
         smoothedAudioLevel = 0
+        adaptivePeak = 0.18
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         await pump?.value
@@ -251,6 +253,7 @@ final class CompanionSpeechController {
         capture = nil
         audioLevel = 0
         smoothedAudioLevel = 0
+        adaptivePeak = 0.18
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         pump?.cancel()
@@ -270,11 +273,16 @@ final class CompanionSpeechController {
         guard phase == .recording else { return }
         let smoothing: Double = level > smoothedAudioLevel ? 0.18 : 0.1
         smoothedAudioLevel += (level - smoothedAudioLevel) * smoothing
-        // Keep the visual range expressive without snapping to either edge.
-        // Use the full visual range for quiet microphones too. The smoothing
-        // above keeps the meter fluid; this gain makes speech visibly tall
-        // without allowing normal input to pin it to the top.
-        let displayLevel = min(0.96, smoothedAudioLevel * 2.4 + 0.025)
+        // Follow the recent speech envelope so quieter microphones still use
+        // the available height. The asymmetric release prevents the scale
+        // from jumping whenever a single louder sample arrives.
+        if smoothedAudioLevel > adaptivePeak {
+            adaptivePeak += (smoothedAudioLevel - adaptivePeak) * 0.12
+        } else {
+            adaptivePeak *= 0.995
+        }
+        let normalizedLevel = smoothedAudioLevel / max(adaptivePeak, 0.06)
+        let displayLevel = min(0.96, normalizedLevel * 0.86 + 0.025)
         audioLevel = displayLevel
         let now = Date()
         guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.2 else { return }
@@ -298,6 +306,7 @@ final class CompanionSpeechController {
         capture = nil
         audioLevel = 0
         smoothedAudioLevel = 0
+        adaptivePeak = 0.18
         audioLevels.removeAll(keepingCapacity: true)
         lastAudioLevelSampleAt = .distantPast
         pump?.cancel()

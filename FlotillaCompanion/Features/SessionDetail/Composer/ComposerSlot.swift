@@ -329,7 +329,8 @@ private struct AudioWaveformHistory: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
             Canvas { context, size in
                 let slotWidth = size.width / CGFloat(barCount)
-                let baselineWidth = min(4, slotWidth * 0.42)
+                let barWidth = min(7, max(4, slotWidth * 0.62))
+                let baselineWidth = barWidth
                 let baselineHeight: CGFloat = 4
                 let baselineY = (size.height - baselineHeight) / 2
 
@@ -351,7 +352,6 @@ private struct AudioWaveformHistory: View {
 
                     let position = CGFloat(age / sampleInterval)
                     let x = size.width - (position + 0.5) * slotWidth
-                    let barWidth = min(7, max(4, slotWidth * 0.62))
                     let barHeight = max(6, CGFloat(sample.level) * (size.height - 4))
                     let fadeIn = min(1, max(0, age / 0.75))
                     let rect = CGRect(x: x - barWidth / 2,
