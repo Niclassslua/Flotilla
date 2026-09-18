@@ -181,18 +181,52 @@ public enum CommitAttributionMode: String, Codable, CaseIterable, Sendable, Iden
     }
 }
 
+/// Which layout the New Session window uses. Purely presentational: every
+/// style edits the same draft and launches through the same path.
+public enum LauncherStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// The original single-line, Spotlight-style Command Bar.
+    case classic
+    /// Command Bar with one labeled row per decision.
+    case controlDeck
+    /// A permanent, searchable project list beside the goal editor.
+    case projectRail
+    /// Workspace, Agent, and Launch as three cards under the goal.
+    case tiles
+    /// The configuration written as one sentence of inline controls.
+    case sentence
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .classic: "Command Bar"
+        case .controlDeck: "Control Deck"
+        case .projectRail: "Project Rail"
+        case .tiles: "Tiles"
+        case .sentence: "Sentence"
+        }
+    }
+}
+
 public struct SessionDefaults: Codable, Equatable, Sendable {
     public var createWorktreeByDefault: Bool
     public var defaultAgentRawValue: String = "claudeCode"
+    public var launcherStyle: LauncherStyle = .classic
     /// Drives session title, branch name, and worktree path together. See
     /// `SessionNamingSource`'s doc comment for why this used to be two
     /// settings and isn't anymore.
     public var namingSource: SessionNamingSource
 
-    public init(createWorktreeByDefault: Bool = true, defaultAgentRawValue: String = "claudeCode", namingSource: SessionNamingSource = .appleIntelligence) {
+    public init(
+        createWorktreeByDefault: Bool = true,
+        defaultAgentRawValue: String = "claudeCode",
+        namingSource: SessionNamingSource = .appleIntelligence,
+        launcherStyle: LauncherStyle = .classic
+    ) {
         self.createWorktreeByDefault = createWorktreeByDefault
         self.defaultAgentRawValue = defaultAgentRawValue
         self.namingSource = namingSource
+        self.launcherStyle = launcherStyle
     }
 
     /// Not `private`: `AppSettings.init(from:)` reads `.namingSource` and
@@ -204,6 +238,7 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
         case namingSource
         case titleNamingSource
         case agentManagedTitleEnabled
+        case launcherStyle
     }
 
     // Hand-written rather than synthesized: `SettingsStoring` decodes the
@@ -221,6 +256,9 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         createWorktreeByDefault = try container.decodeIfPresent(Bool.self, forKey: .createWorktreeByDefault) ?? true
+        // `try?`: an unknown style (written by a newer build) falls back
+        // rather than failing the whole settings decode.
+        launcherStyle = (try? container.decodeIfPresent(LauncherStyle.self, forKey: .launcherStyle)) ?? .classic
         if let source = try container.decodeIfPresent(SessionNamingSource.self, forKey: .namingSource) {
             namingSource = source
         } else if let legacyTitle = try container.decodeIfPresent(SessionNamingSource.self, forKey: .titleNamingSource) {
@@ -249,6 +287,7 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
         try container.encode(createWorktreeByDefault, forKey: .createWorktreeByDefault)
         try container.encode(defaultAgentRawValue, forKey: .defaultAgentRawValue)
         try container.encode(namingSource, forKey: .namingSource)
+        try container.encode(launcherStyle, forKey: .launcherStyle)
     }
 }
 

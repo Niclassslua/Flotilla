@@ -156,6 +156,10 @@ struct FlotillaApp: App {
             }
         }
 
+#if DEBUG
+        LauncherSnapshotRenderer.renderIfRequested(store: appStore)
+#endif
+
         // No-op unless FLOTILLA_PERF=1 — see PerfLog.
         MainThreadStallMonitor.shared.start()
 
