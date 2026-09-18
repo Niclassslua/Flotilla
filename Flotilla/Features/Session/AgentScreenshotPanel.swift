@@ -32,7 +32,14 @@ struct AgentScreenshotPanel: View {
         .sheet(isPresented: $isViewerPresented) {
             if screenshots.indices.contains(index) {
                 AgentScreenshotViewerSheet(
-                    screenshot: screenshots[index],
+                    screenshots: screenshots,
+                    selectedIndex: Binding(
+                        get: { index },
+                        set: { newIndex in
+                            guard screenshots.indices.contains(newIndex) else { return }
+                            pinnedIndex = newIndex == screenshots.count - 1 ? nil : newIndex
+                        }
+                    ),
                     onClose: { isViewerPresented = false }
                 )
             }
@@ -158,7 +165,8 @@ struct AgentScreenshotPanel: View {
 
 /// Full-size interactive zoomable and pannable image viewer modal sheet for macOS.
 struct AgentScreenshotViewerSheet: View {
-    let screenshot: AgentScreenshot
+    let screenshots: [AgentScreenshot]
+    @Binding var selectedIndex: Int
     let onClose: () -> Void
 
     @State private var scale: CGFloat = 1.0
@@ -179,15 +187,35 @@ struct AgentScreenshotViewerSheet: View {
         Int(round(scale * 100))
     }
 
+    private var screenshot: AgentScreenshot {
+        screenshots[selectedIndex]
+    }
+
+    private var canShowPrevious: Bool {
+        selectedIndex > 0
+    }
+
+    private var canShowNext: Bool {
+        selectedIndex < screenshots.count - 1
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            viewport
+        Group {
+            if screenshots.indices.contains(selectedIndex) {
+                VStack(spacing: 0) {
+                    header
+                    Divider()
+                    viewport
+                }
+            }
         }
         .frame(minWidth: 780, idealWidth: 1040, maxWidth: 1600, minHeight: 560, idealHeight: 780, maxHeight: 1100)
         .background(FlotillaColors.canvas)
         .onExitCommand(perform: onClose)
+        .onChange(of: screenshot.id) { _, _ in
+            resetZoom()
+            copied = false
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.agentScreenshotViewerSheet.rawValue)
     }
@@ -216,6 +244,10 @@ struct AgentScreenshotViewerSheet: View {
             }
 
             Spacer(minLength: FlotillaSpacing.medium)
+
+            if screenshots.count > 1 {
+                screenshotPager
+            }
 
             // Zoom Controls
             HStack(spacing: 3) {
@@ -315,6 +347,67 @@ struct AgentScreenshotViewerSheet: View {
         .padding(.horizontal, FlotillaSpacing.large)
         .frame(height: 48)
         .background(FlotillaColors.surface)
+    }
+
+    private var screenshotPager: some View {
+        HStack(spacing: 3) {
+            Button {
+                selectedIndex = max(selectedIndex - 1, 0)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 26, height: 26)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canShowPrevious)
+            .help("Previous screenshot (←)")
+            .keyboardShortcut(.leftArrow)
+            .accessibilityLabel("Previous screenshot")
+            .accessibilityIdentifier(AXID.agentScreenshotViewerPrevious.rawValue)
+
+            Text("\(selectedIndex + 1) of \(screenshots.count)")
+                .font(FlotillaTypography.caption2.monospacedDigit().weight(.medium))
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .frame(minWidth: 48)
+
+            Button {
+                selectedIndex = min(selectedIndex + 1, screenshots.count - 1)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 26, height: 26)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canShowNext)
+            .help("Next screenshot (→)")
+            .keyboardShortcut(.rightArrow)
+            .accessibilityLabel("Next screenshot")
+            .accessibilityIdentifier(AXID.agentScreenshotViewerNext.rawValue)
+        }
+        .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
+        .padding(.horizontal, 5)
+        .padding(.vertical, 3)
+        .background(
+            FlotillaColors.surfaceElevated,
+            in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Screenshot navigation")
+        .accessibilityValue("Screenshot \(selectedIndex + 1) of \(screenshots.count)")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                guard canShowNext else { return }
+                selectedIndex += 1
+            case .decrement:
+                guard canShowPrevious else { return }
+                selectedIndex -= 1
+            @unknown default:
+                break
+            }
+        }
     }
 
     private var viewport: some View {

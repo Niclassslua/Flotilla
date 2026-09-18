@@ -52,6 +52,8 @@ public enum AXID: String, Sendable {
     case agentScreenshotPanelClose = "AgentScreenshotPanel.Close"
     case agentScreenshotPanelImage = "AgentScreenshotPanel.Image"
     case agentScreenshotViewerSheet = "AgentScreenshotViewerSheet"
+    case agentScreenshotViewerPrevious = "AgentScreenshotViewerSheet.Previous"
+    case agentScreenshotViewerNext = "AgentScreenshotViewerSheet.Next"
     case agentScreenshotViewerClose = "AgentScreenshotViewerSheet.Close"
 
     // MARK: - Git Sidebar
