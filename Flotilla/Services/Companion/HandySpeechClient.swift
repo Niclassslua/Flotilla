@@ -17,6 +17,7 @@ private enum HandySpeechError: Error {
 }
 
 private final class HandySpeechSocket: @unchecked Sendable {
+    private static let receiveTimeout = timeval(tv_sec: 10, tv_usec: 0)
     private let fd: Int32
     private let lock = NSLock()
     private var closed = false
@@ -24,10 +25,12 @@ private final class HandySpeechSocket: @unchecked Sendable {
     init() throws {
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw HandySpeechError.unavailable }
-        let support = try FileManager.default.url(for: .applicationSupportDirectory,
-                                                   in: .userDomainMask, appropriateFor: nil,
-                                                   create: false)
-        let path = support.appending(path: "Handy/transcription-v1.sock").path
+        // Handy is a direct-download app and publishes this endpoint in the
+        // user's shared Application Support directory. Do not derive this
+        // from Flotilla's application-support URL: sandboxed or containerized
+        // builds would otherwise look in Flotilla's private container.
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appending(path: "Library/Application Support/Handy/transcription-v1.sock").path
         let bytes = Array(path.utf8)
         var address = sockaddr_un()
         guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
@@ -52,6 +55,9 @@ private final class HandySpeechSocket: @unchecked Sendable {
         var noSigPipe: Int32 = 1
         _ = Darwin.setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE,
                               &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+        var receiveTimeout = Self.receiveTimeout
+        _ = Darwin.setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
+                              &receiveTimeout, socklen_t(MemoryLayout<timeval>.size))
         self.fd = fd
     }
 
@@ -143,6 +149,8 @@ actor HandySpeechClient: HandySpeechServing {
             self.socket = nil
             return event
         } catch {
+            socket?.close()
+            self.socket = nil
             return .failed(requestID: nil, code: "unavailable", message: "Handy is unavailable on this Mac.", retryable: true)
         }
     }
