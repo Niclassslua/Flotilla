@@ -6,7 +6,6 @@ import Observation
 struct CompanionAudioLevelSample: Identifiable, Equatable, Sendable {
     let id: UInt64
     let level: Double
-    let timestamp: TimeInterval
 }
 
 private final class CompanionAudioCapture: @unchecked Sendable {
@@ -124,15 +123,13 @@ final class CompanionSpeechController {
     private(set) var isAvailable: Bool = false
     private(set) var audioLevel: Double = 0
     private(set) var audioLevels: [CompanionAudioLevelSample] = []
+    private(set) var audioStartTime: TimeInterval?
     private var requestID: UUID?
     private var capture: CompanionAudioCapture?
     private var pump: Task<Void, Never>?
     private var generation: UInt64 = 0
-    private var lastAudioLevelSampleAt = Date.distantPast
     private var smoothedAudioLevel = 0.0
     private var adaptivePeak = 0.18
-    private var nextAudioLevelID: UInt64 = 0
-    private var nextAudioLevelTimestamp: TimeInterval?
 
     func checkAvailability(store: CompanionStore, sessionID: UUID) async {
         guard let macID = store.data.macID(for: sessionID) else {
@@ -187,6 +184,7 @@ final class CompanionSpeechController {
             )
             self.capture = capture
             try capture.start()
+            audioStartTime = Date().timeIntervalSinceReferenceDate
             phase = .recording
             pump = Task { [weak self] in
                 var sequence = 0
@@ -229,9 +227,8 @@ final class CompanionSpeechController {
         audioLevel = 0
         smoothedAudioLevel = 0
         adaptivePeak = 0.18
-        nextAudioLevelTimestamp = nil
+        audioStartTime = nil
         audioLevels.removeAll(keepingCapacity: true)
-        lastAudioLevelSampleAt = .distantPast
         await pump?.value
         pump = nil
         guard phase == .processing else { return nil }
@@ -256,9 +253,8 @@ final class CompanionSpeechController {
         audioLevel = 0
         smoothedAudioLevel = 0
         adaptivePeak = 0.18
-        nextAudioLevelTimestamp = nil
+        audioStartTime = nil
         audioLevels.removeAll(keepingCapacity: true)
-        lastAudioLevelSampleAt = .distantPast
         pump?.cancel()
         pump = nil
         if let id = requestID, let macID = store.data.macID(for: sessionID) {
@@ -287,17 +283,21 @@ final class CompanionSpeechController {
         let normalizedLevel = smoothedAudioLevel / max(adaptivePeak, 0.06)
         let displayLevel = min(0.96, normalizedLevel * 0.68 + 0.025)
         audioLevel = displayLevel
-        let now = Date()
-        guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.2 else { return }
-        lastAudioLevelSampleAt = now
-        let timestamp = nextAudioLevelTimestamp ?? now.timeIntervalSinceReferenceDate
-        nextAudioLevelTimestamp = timestamp + 0.2
-        audioLevels.append(CompanionAudioLevelSample(
-            id: nextAudioLevelID,
-            level: displayLevel,
-            timestamp: timestamp
-        ))
-        nextAudioLevelID &+= 1
+        guard let audioStartTime else { return }
+        let elapsed = Date().timeIntervalSinceReferenceDate - audioStartTime
+        let tick = UInt64(max(0, elapsed / 0.2).rounded(.down))
+        if let last = audioLevels.last, last.id == tick {
+            // Only the current slot may grow. Earlier peaks stay frozen.
+            if displayLevel > last.level {
+                audioLevels[audioLevels.count - 1] = CompanionAudioLevelSample(
+                    id: tick, level: displayLevel
+                )
+            }
+        } else {
+            audioLevels.append(CompanionAudioLevelSample(
+                id: tick, level: displayLevel
+            ))
+        }
         if audioLevels.count > 96 {
             audioLevels.removeFirst(audioLevels.count - 96)
         }
@@ -312,9 +312,8 @@ final class CompanionSpeechController {
         audioLevel = 0
         smoothedAudioLevel = 0
         adaptivePeak = 0.18
-        nextAudioLevelTimestamp = nil
+        audioStartTime = nil
         audioLevels.removeAll(keepingCapacity: true)
-        lastAudioLevelSampleAt = .distantPast
         pump?.cancel()
         pump = nil
         requestID = nil

@@ -204,7 +204,8 @@ private struct PromptComposer: View {
                 }
 
                 if speech.phase == .recording {
-                    AudioWaveformHistory(levels: speech.audioLevels)
+                    AudioWaveformHistory(levels: speech.audioLevels,
+                                         startTime: speech.audioStartTime)
                         .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)
                         .accessibilityIdentifier("Composer.AudioWaveform")
                 } else {
@@ -336,49 +337,38 @@ private struct PromptComposer: View {
 
 private struct AudioWaveformHistory: View {
     let levels: [CompanionAudioLevelSample]
+    let startTime: TimeInterval?
     private let barCount = 36
     private let sampleInterval = 0.2
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
             Canvas { context, size in
                 let slotWidth = size.width / CGFloat(barCount)
                 let barWidth = min(7, max(4, slotWidth * 0.62))
-                let baselineWidth = barWidth
                 let baselineHeight: CGFloat = 4
-                let baselineY = (size.height - baselineHeight) / 2
-
                 let now = timeline.date.timeIntervalSinceReferenceDate
-                let historyDuration = Double(barCount) * sampleInterval
-                let newestAge = max(0, now - (levels.last?.timestamp ?? now))
+                let elapsed = max(0, (now - (startTime ?? now)) / sampleInterval)
+                let currentTick = Int(elapsed.rounded(.down))
+                let progress = CGFloat(elapsed - Double(currentTick))
+                let samples = Dictionary(uniqueKeysWithValues: levels.map { ($0.id, $0.level) })
 
-                // The gray baseline shares the same moving time grid as the
-                // active samples. It enters at the right and exits at the
-                // left instead of sitting statically underneath the meter.
-                for index in 0..<barCount {
-                    let age = newestAge + Double(index) * sampleInterval
-                    let position = CGFloat(age / sampleInterval)
-                    let x = size.width - (position + 0.5) * slotWidth
-                    let rect = CGRect(x: x, y: baselineY, width: baselineWidth, height: baselineHeight)
-                    context.fill(Path(roundedRect: rect, cornerRadius: baselineHeight / 2),
-                                 with: .color(.white.opacity(0.28)))
-                }
-
-                for (offset, sample) in levels.enumerated() {
-                    // Sample timestamps are logical 200 ms ticks, not audio
-                    // callback times, so delivery jitter cannot shake the grid.
-                    let age = newestAge + Double(levels.count - 1 - offset) * sampleInterval
-                    guard age >= 0, age < historyDuration else { continue }
-
-                    let position = CGFloat(age / sampleInterval)
-                    let x = size.width - (position + 0.5) * slotWidth
-                    let barHeight = max(6, CGFloat(sample.level) * (size.height - 4))
+                // Each slot is drawn once: gray before audio arrives, or a
+                // single speech bar afterward. Every slot uses the same
+                // recording clock, including when callbacks are delayed.
+                for offset in -1...barCount {
+                    let tick = currentTick - offset
+                    let x = size.width - (CGFloat(offset) + 0.5 + progress) * slotWidth
+                    guard x + barWidth / 2 > 0, x - barWidth / 2 < size.width else { continue }
+                    let level = tick >= 0 ? samples[UInt64(tick)] : nil
+                    let barHeight = level.map { max(6, CGFloat($0) * (size.height - 4)) }
+                        ?? baselineHeight
                     let rect = CGRect(x: x - barWidth / 2,
                                       y: (size.height - barHeight) / 2,
                                       width: barWidth,
                                       height: barHeight)
                     context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
-                                 with: .color(.white.opacity(0.86)))
+                                 with: .color(.white.opacity(level == nil ? 0.28 : 0.86)))
                 }
             }
         }
