@@ -82,6 +82,7 @@ final class CompanionHost {
     private final class Peer {
         let deviceID: String
         let session: ServerSideSession
+        let speech: any HandySpeechServing
         var subscribedSessionID: UUID?
         var subscriptionGeneration: UInt64 = 0
         var lastFleet: FleetSnapshot?
@@ -92,9 +93,11 @@ final class CompanionHost {
         var isPublishingTranscript = false
         var transcriptPublishPending = false
 
-        init(deviceID: String, session: ServerSideSession) {
+        init(deviceID: String, session: ServerSideSession,
+             speech: any HandySpeechServing = HandySpeechClient()) {
             self.deviceID = deviceID
             self.session = session
+            self.speech = speech
         }
     }
 
@@ -430,9 +433,11 @@ final class CompanionHost {
             Task { @MainActor in
                 guard let self else { return }
                 let sessionID = self.peers[key]?.subscribedSessionID
+                let departing = self.peers[key]
                 self.peers[key] = nil
                 self.queuedReads.removeAll { ObjectIdentifier($0.2) == key }
                 self.connectedDeviceIDs = Set(self.peers.values.map(\.deviceID))
+                if let departing { await departing.speech.close() }
                 if let sessionID {
                     await self.stopWatchingIfUnneeded(sessionID)
                 }
@@ -455,6 +460,22 @@ final class CompanionHost {
 
     private func handle(_ message: ClientMessage, from peer: Peer) async {
         switch message {
+        case .speechCapabilities:
+            try? peer.session.send(.speech(await peer.speech.capabilities()))
+        case let .speechStart(request):
+            try? peer.session.send(.speech(await peer.speech.start(request)))
+        case let .speechAudio(requestID, sequence, pcm):
+            guard pcm.count <= 3_200 else {
+                try? peer.session.send(.speech(.failed(requestID: requestID, code: "invalidAudio",
+                    message: "Audio chunk is too large.", retryable: false)))
+                return
+            }
+            try? peer.session.send(.speech(await peer.speech.audio(requestID: requestID,
+                                                                    sequence: sequence, pcm: pcm)))
+        case let .speechFinish(requestID):
+            try? peer.session.send(.speech(await peer.speech.finish(requestID: requestID)))
+        case let .speechCancel(requestID):
+            try? peer.session.send(.speech(await peer.speech.cancel(requestID: requestID)))
         case .ping:
             try? peer.session.send(.pong)
         case let .subscribe(sessionID):

@@ -222,6 +222,23 @@ final class MockCompanionDataSource: CompanionDataSource {
         mutateSession(sessionID) { $0.status = .readyForReview }
     }
 
+    func speech(_ message: ClientMessage, on macID: MacHost.ID) async throws -> CompanionSpeechEvent {
+        switch message {
+        case .speechCapabilities:
+            .capabilities(status: "ready", models: ["Demo local model"])
+        case let .speechStart(request):
+            .started(requestID: request.requestID, modelID: "Demo local model")
+        case let .speechAudio(requestID, sequence, _):
+            .audioAck(requestID: requestID, nextSequence: sequence + 1)
+        case let .speechFinish(requestID):
+            .final(requestID: requestID, revision: 1, text: "Demo dictated text")
+        case let .speechCancel(requestID):
+            .cancelled(requestID: requestID)
+        default:
+            .failed(requestID: nil, code: "invalidRequest", message: "Unsupported demo request.", retryable: false)
+        }
+    }
+
     func createSession(_ request: NewSessionRequest, on macID: MacHost.ID) async throws -> CompanionSession.ID {
         let title = Self.title(from: request.goal)
         let session = CompanionSession(

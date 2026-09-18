@@ -39,6 +39,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Flotilla uses the camera to scan the pairing code shown on your Mac.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Flotilla uses the microphone for dictation via Handy.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Flotilla connects to your Mac on the local network to show and control your sessions.</string>
 	<key>NSSupportsLiveActivities</key>

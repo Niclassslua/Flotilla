@@ -33,6 +33,7 @@ final class MacConnection {
     @ObservationIgnored private var session: ClientSideSession?
     @ObservationIgnored private var nextRequestID: UInt64 = 1
     @ObservationIgnored private var waiting: [UInt64: CheckedContinuation<CompanionResponse, Error>] = [:]
+    @ObservationIgnored private var speechWaiter: CheckedContinuation<CompanionSpeechEvent, Error>?
     @ObservationIgnored private var focusedSessionID: UUID?
     @ObservationIgnored private var focusStartedAt: Date?
     @ObservationIgnored private var transcriptRevisions: [UUID: UInt64] = [:]
@@ -318,6 +319,8 @@ final class MacConnection {
         let pending = waiting
         waiting = [:]
         pending.values.forEach { $0.resume(throwing: error) }
+        speechWaiter?.resume(throwing: error)
+        speechWaiter = nil
     }
 
     // MARK: - Incoming
@@ -371,6 +374,9 @@ final class MacConnection {
             saveCache()
         case let .response(id, response):
             waiting.removeValue(forKey: id)?.resume(returning: response)
+        case let .speech(event):
+            speechWaiter?.resume(returning: event)
+            speechWaiter = nil
         case .pong:
             break
         case let .addressUpdate(candidates):
@@ -529,6 +535,29 @@ final class MacConnection {
                 try session.send(.request(id: id, request))
             } catch {
                 waiting.removeValue(forKey: id)?.resume(throwing: CompanionActionError.unreachable)
+            }
+        }
+    }
+
+    func speech(_ message: ClientMessage) async throws -> CompanionSpeechEvent {
+        guard let session else { throw CompanionActionError.unreachable }
+        guard speechWaiter == nil else {
+            throw CompanionActionError(message: "Another speech operation is in progress.")
+        }
+        let timeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(120))
+            guard !Task.isCancelled else { return }
+            self?.speechWaiter?.resume(throwing: CompanionActionError(message: "Speech request timed out."))
+            self?.speechWaiter = nil
+        }
+        defer { timeout.cancel() }
+        return try await withCheckedThrowingContinuation { continuation in
+            speechWaiter = continuation
+            do {
+                try session.send(message)
+            } catch {
+                speechWaiter = nil
+                continuation.resume(throwing: CompanionActionError.unreachable)
             }
         }
     }

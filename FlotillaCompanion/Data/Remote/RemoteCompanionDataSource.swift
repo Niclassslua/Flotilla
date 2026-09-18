@@ -69,6 +69,11 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         connections.first { $0.record.macID == macID }
     }
 
+    func speech(_ message: ClientMessage, on macID: MacHost.ID) async throws -> CompanionSpeechEvent {
+        guard let connection = connection(macID) else { throw CompanionActionError.unreachable }
+        return try await connection.speech(message)
+    }
+
     private func connection(forSession sessionID: UUID) -> MacConnection? {
         connections.first { $0.fleet?.sessions.contains { $0.id == sessionID } ?? false }
     }

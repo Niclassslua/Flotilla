@@ -2,6 +2,7 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 import CompanionKit
+import AVFoundation
 
 /// The one place anything that needs the user appears.
 ///
@@ -147,7 +148,9 @@ private struct PromptComposer: View {
     let isActionable: Bool
 
     @Environment(CompanionStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
     @State private var text = ""
+    @State private var speech = CompanionSpeechController()
     @FocusState private var isFocused: Bool
     @State private var sendCount = 0
     @State private var stopCount = 0
@@ -155,63 +158,138 @@ private struct PromptComposer: View {
     var body: some View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // Stop sits where Send is while the agent works and there's nothing to send.
-        let showsStop = trimmed.isEmpty && (session.status == .working || isStopping)
+        let showsStop = trimmed.isEmpty && speech.phase == .idle &&
+            (session.status == .working || isStopping)
 
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField(placeholder, text: $text, axis: .vertical)
-                .lineLimit(1...6)
-                .focused($isFocused)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .accessibilityIdentifier("Composer.TextField")
-
-            Group {
-                if showsStop {
-                    Button {
-                        stopCount += 1
-                        Task { await store.stop(session.id) }
-                    } label: {
-                        if isStopping {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "stop.fill")
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            if speech.phase != .idle {
+                HStack(spacing: 6) {
+                    switch speech.phase {
+                    case .checking:
+                        ProgressView().controlSize(.mini)
+                        Text("Checking Handy…")
+                    case .recording:
+                        Image(systemName: "waveform").foregroundStyle(.red)
+                        Text("Recording · tap microphone to finish")
+                    case .processing:
+                        ProgressView().controlSize(.mini)
+                        Text("Transcribing on Mac…")
+                    case .failed(let message):
+                        Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
+                        Text(message)
+                        Button("Dismiss") { speech.dismissError() }
+                    case .idle:
+                        EmptyView()
                     }
-                    .accessibilityLabel(isStopping ? "Stopping" : "Stop")
-                    .accessibilityIdentifier("Composer.Stop")
-                    .disabled(isStopping)
-                    .buttonStyle(.glass)
-                    .foregroundStyle(FlotillaColors.textPrimary)
-                } else {
-                    Button {
-                        sendCount += 1
-                        let prompt = trimmed
-                        text = ""
-                        Task {
-                            let sent = await store.sendPrompt(prompt, to: session.id)
-                            if !sent { text = prompt }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up")
-                    }
-                    .accessibilityLabel("Send")
-                    .accessibilityIdentifier("Composer.Send")
-                    .disabled(trimmed.isEmpty)
-                    .tint(FlotillaColors.accent)
+                    Spacer(minLength: 0)
                 }
+                .font(.caption)
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .padding(.horizontal, 14)
+                .accessibilityIdentifier("Composer.SpeechStatus")
             }
-            .font(.body.weight(.semibold))
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.circle)
-            .controlSize(.large)
-            .padding(4)
+
+            HStack(alignment: .bottom, spacing: 4) {
+                TextField(placeholder, text: $text, axis: .vertical)
+                    .lineLimit(1...6)
+                    .focused($isFocused)
+                    .padding(.leading, 14)
+                    .padding(.trailing, 4)
+                    .padding(.vertical, 10)
+                    .accessibilityIdentifier("Composer.TextField")
+
+                HStack(spacing: 6) {
+                    Button {
+                        if speech.phase == .recording {
+                            Task { await finishDictation() }
+                        } else if speech.phase == .idle {
+                            Task { await speech.begin(store: store, sessionID: session.id) }
+                        }
+                    } label: {
+                        Image(systemName: speech.phase == .recording ? "stop.circle.fill" : "mic.fill")
+                    }
+                    .accessibilityLabel(speech.phase == .recording ? "Finish dictation" : "Dictate")
+                    .accessibilityIdentifier("Composer.Dictate")
+                    .disabled(speech.phase == .checking || speech.phase == .processing)
+                    .buttonStyle(.glass)
+                    .foregroundStyle(speech.phase == .recording ? .red : FlotillaColors.textSecondary)
+
+                    Group {
+                        if showsStop {
+                            Button {
+                                stopCount += 1
+                                Task { await store.stop(session.id) }
+                            } label: {
+                                if isStopping {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "stop.fill")
+                                }
+                            }
+                            .accessibilityLabel(isStopping ? "Stopping" : "Stop")
+                            .accessibilityIdentifier("Composer.Stop")
+                            .disabled(isStopping)
+                            .buttonStyle(.glass)
+                            .foregroundStyle(FlotillaColors.textPrimary)
+                        } else {
+                            Button {
+                                if speech.phase == .recording {
+                                    Task { await finishDictation() }
+                                    return
+                                }
+                                sendCount += 1
+                                let prompt = trimmed
+                                let previous = text
+                                text = ""
+                                Task {
+                                    let sent = await store.sendPrompt(prompt, to: session.id)
+                                    if !sent { text = previous }
+                                }
+                            } label: {
+                                Image(systemName: "arrow.up")
+                            }
+                            .accessibilityLabel("Send")
+                            .accessibilityIdentifier("Composer.Send")
+                            .disabled(trimmed.isEmpty && speech.phase != .recording || speech.phase == .processing)
+                            .buttonStyle(.glassProminent)
+                            .tint(FlotillaColors.accent)
+                        }
+                    }
+                }
+                .font(.body.weight(.semibold))
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+                .padding(.trailing, 4)
+                .padding(.bottom, 4)
+            }
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .disabled(!isActionable)
         .onAppear { text = store.promptDraft(for: session.id) }
-        .onChange(of: text) { _, newValue in store.savePromptDraft(newValue, for: session.id) }
+        .onDisappear { speech.cancel(store: store, sessionID: session.id) }
+        .onChange(of: text) { _, newValue in
+            store.savePromptDraft(newValue, for: session.id)
+        }
+        .onChange(of: isActionable) { _, actionable in
+            if !actionable { speech.cancel(store: store, sessionID: session.id) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { speech.cancel(store: store, sessionID: session.id) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in
+            speech.cancel(store: store, sessionID: session.id)
+        }
         .modifier(HapticsOnChange(value: sendCount, feedback: .impact(weight: .medium)))
         .modifier(HapticsOnChange(value: stopCount, feedback: .warning))
+    }
+
+    private func finishDictation() async {
+        guard let result = await speech.finish(store: store, sessionID: session.id),
+              !result.isEmpty else { return }
+        if !text.isEmpty && !text.hasSuffix(" ") {
+            text.append(" ")
+        }
+        text.append(result)
     }
 
     private var placeholder: String {

@@ -17,6 +17,11 @@ public enum ClientMessage: Hashable, Codable, Sendable {
     case resyncFleet
     case unsubscribe
     case request(id: UInt64, CompanionRequest)
+    case speechCapabilities
+    case speechStart(CompanionSpeechStart)
+    case speechAudio(requestID: UUID, sequence: Int, pcm: Data)
+    case speechFinish(requestID: UUID)
+    case speechCancel(requestID: UUID)
     case ping
 }
 
@@ -43,6 +48,7 @@ public enum ServerMessage: Hashable, Codable, Sendable {
     case transcriptSnapshot(sessionID: UUID, revision: UInt64, SessionTranscript)
     case transcriptDelta(sessionID: UUID, TranscriptDelta)
     case response(id: UInt64, CompanionResponse)
+    case speech(CompanionSpeechEvent)
     case pong
     /// The Mac's current reachable addresses, sent whenever they change (e.g.
     /// Tailscale connects after pairing) so an already-paired phone learns a

@@ -113,6 +113,7 @@ targets:
       properties:
         CFBundleDisplayName: Flotilla
         NSCameraUsageDescription: Flotilla uses the camera to scan the pairing code shown on your Mac.
+        NSMicrophoneUsageDescription: Flotilla uses the microphone for dictation via Handy.
         NSLocalNetworkUsageDescription: Flotilla connects to your Mac on the local network to show and control your sessions.
         NSBonjourServices:
           - _flotilla-comp._tcp
