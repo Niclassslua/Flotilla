@@ -17,8 +17,7 @@ struct FlotillaShell: View {
     @Bindable var startupCheck: StartupCheckViewModel
     @Bindable var settingsViewModel: SettingsViewModel
     @State var activityStore: SessionActivityStore
-    @Namespace private var createSessionNamespace
-    @State private var createSessionFromSidebar = false
+    @State private var createSessionProgress: CGFloat = 0
 
     init(
         store: AppStore,
@@ -54,6 +53,7 @@ struct FlotillaShell: View {
                 }
             overlayPresentation
         }
+        .animation(reduceMotion ? nil : FlotillaMotion.snappy.curve, value: navigator.presentedSheet)
         .task {
             await restoreWorkspaceSelection()
             applyTerminalPreferences()
@@ -178,14 +178,7 @@ struct FlotillaShell: View {
                     store.selectedSessionID = id
                 },
                 onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
-                onCreateSession: {
-                    createSessionFromSidebar = true
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
-                        navigator.presentedSheet = .createSession
-                    }
-                },
-                createSessionNamespace: createSessionNamespace,
-                isCreateSessionExpanding: createSessionFromSidebar && isCreateSessionPresented,
+                onCreateSession: { presentCreateSession() },
                 gridMembership: gridMembership
             )
             .navigationSplitViewColumnWidth(
@@ -209,7 +202,7 @@ struct FlotillaShell: View {
                     navigator.selection = .project(id)
                     store.selectedProjectID = id
                 },
-                onCreateSession: { navigator.presentedSheet = .createSession },
+                onCreateSession: { presentCreateSession() },
                 onCommandPalette: { navigator.presentedSheet = .commandPalette }
             )
             // Declared on the detail column rather than on the `ZStack` that
@@ -261,11 +254,41 @@ struct FlotillaShell: View {
         return false
     }
 
-    private func dismissOverlay() {
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
+    private func presentCreateSession() {
+        createSessionProgress = reduceMotion ? 1 : 0
+        navigator.presentedSheet = .createSession
+    }
+
+    private func scheduleCreateSessionEntrance(after delay: Duration) {
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard isCreateSessionPresented, createSessionProgress == 0 else { return }
+            withAnimation(.snappy(duration: 0.26)) {
+                createSessionProgress = 1
+            }
+        }
+    }
+
+    private func dismissCreateSession() {
+        if reduceMotion {
             navigator.presentedSheet = nil
+            createSessionProgress = 0
+            return
+        }
+        withAnimation(.easeIn(duration: 0.18), completionCriteria: .logicallyComplete) {
+            createSessionProgress = 0
         } completion: {
-            createSessionFromSidebar = false
+            navigator.presentedSheet = nil
+        }
+    }
+
+    private func dismissOverlay() {
+        if isCreateSessionPresented {
+            dismissCreateSession()
+            return
+        }
+        withAnimation(reduceMotion ? nil : FlotillaMotion.snappy.curve) {
+            navigator.presentedSheet = nil
         }
     }
 
@@ -296,7 +319,7 @@ struct FlotillaShell: View {
         if let sheet = navigator.presentedSheet, isOverlayStyleSheet(sheet) {
             ZStack {
                 Rectangle()
-                    .fill(Color.black.opacity(0.55))
+                    .fill(Color.black.opacity(0.55 * (isCreateSessionPresented ? createSessionProgress : 1)))
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { dismissOverlay() }
@@ -309,6 +332,7 @@ struct FlotillaShell: View {
                     }
             }
             .zIndex(1)
+            .transition(isCreateSessionPresented ? .identity : .opacity)
             .onExitCommand { dismissOverlay() }
             // Belt and suspenders: `.onExitCommand`/`.keyboardShortcut(.cancelAction)`
             // only fire if nothing focused inside the overlay consumes Escape
@@ -318,20 +342,31 @@ struct FlotillaShell: View {
             // of any responder's own handling, so focus inside the overlay
             // can't swallow it.
             .background(EscapeKeyCatcher { dismissOverlay() })
-            .animation(createSessionFromSidebar ? nil : FlotillaMotion.snappy.curve, value: navigator.presentedSheet)
         }
     }
 
     @ViewBuilder
     private func overlaySheetContent(_ sheet: WorkspaceSheet) -> some View {
-        if case .createSession = sheet, createSessionFromSidebar {
-            sheetContent(sheet)
-                .matchedGeometryEffect(id: "createSession", in: createSessionNamespace)
-                .transition(.opacity)
+        if case .createSession = sheet {
+            createSessionAnimatedContent(sheet)
+                .transition(.identity)
         } else {
             sheetContent(sheet)
                 .transition(.scale(scale: 0.97).combined(with: .opacity))
         }
+    }
+
+    private func createSessionAnimatedContent(_ sheet: WorkspaceSheet) -> some View {
+        let remaining = 1 - createSessionProgress
+        return sheetContent(sheet)
+            .opacity(Double(createSessionProgress))
+            .scaleEffect(1 - 0.12 * remaining)
+            .offset(y: 54 * remaining)
+            .onAppear {
+                // Commit the starting transform before animating its progress.
+                if reduceMotion { createSessionProgress = 1 }
+                else { scheduleCreateSessionEntrance(after: .milliseconds(50)) }
+            }
     }
 
     @ViewBuilder
@@ -436,7 +471,7 @@ struct FlotillaShell: View {
     private func perform(_ command: WorkspaceCommand) {
         switch command {
         case .newSession:
-            navigator.presentedSheet = .createSession
+            presentCreateSession()
         case .showHome:
             navigator.restoreHomeSelection()
         case .showSessions:

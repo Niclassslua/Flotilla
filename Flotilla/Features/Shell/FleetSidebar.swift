@@ -16,8 +16,6 @@ struct SessionsSidebar: View {
     let onOpenSession: (UUID) -> Void
     let onRequestDelete: (UUID) -> Void
     let onCreateSession: () -> Void
-    let createSessionNamespace: Namespace.ID
-    let isCreateSessionExpanding: Bool
     /// Whether the grid is the current presentation, which is the only context
     /// where a row's grid-membership control means anything. It no longer
     /// changes what *clicking* a row does — see `SessionSidebarRow`.
@@ -85,26 +83,19 @@ struct SessionsSidebar: View {
             .overlay(alignment: .bottomLeading) {
                 // The 36-point glass stays visually compact; its 44-point
                 // frame preserves a comfortable pointer/accessibility target.
-                Group {
-                    if isCreateSessionExpanding {
-                        Color.clear.frame(width: 44, height: 44)
-                    } else {
-                        Button(action: onCreateSession) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(FlotillaColors.textPrimary)
-                                .frame(width: 36, height: 36)
-                                .glassEffect(.regular.interactive(), in: .circle)
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .matchedGeometryEffect(id: "createSession", in: createSessionNamespace)
-                        .help("Create new session (⌘N)")
-                        .accessibilityLabel("New Session")
-                        .accessibilityIdentifier("NewSessionButton")
-                    }
+                Button(action: onCreateSession) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(FlotillaColors.textPrimary)
+                        .frame(width: 36, height: 36)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help("Create new session (⌘N)")
+                .accessibilityLabel("New Session")
+                .accessibilityIdentifier("NewSessionButton")
                 .padding(.leading, 10)
                 .padding(.bottom, 10)
             }
