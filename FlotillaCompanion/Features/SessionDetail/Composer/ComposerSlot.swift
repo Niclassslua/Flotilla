@@ -321,7 +321,7 @@ private struct PromptComposer: View {
 }
 
 private struct AudioWaveformHistory: View {
-    let levels: [Double]
+    let levels: [CompanionAudioLevelSample]
     private let barCount = 48
 
     var body: some View {
@@ -329,16 +329,16 @@ private struct AudioWaveformHistory: View {
             let visibleLevels = Array(levels.suffix(barCount))
             let emptyBars = barCount - visibleLevels.count
             HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    let level = index < emptyBars ? 0 : visibleLevels[index - emptyBars]
-                    Capsule()
-                        .fill(.white.opacity(level > 0.03 ? 0.82 : 0.28))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: max(3, CGFloat(level) * (proxy.size.height - 4)))
-                        .animation(.easeInOut(duration: 0.26), value: level)
+                ForEach(0..<emptyBars, id: \.self) { _ in
+                    WaveformBar(level: 0, height: proxy.size.height)
+                }
+                ForEach(visibleLevels) { sample in
+                    WaveformBar(level: sample.level, height: proxy.size.height)
+                        .transition(.opacity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(.linear(duration: 0.22), value: visibleLevels)
         }
         .padding(.horizontal, 14)
         .mask {
@@ -355,6 +355,18 @@ private struct AudioWaveformHistory: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Microphone level history")
         .accessibilityValue(levels.isEmpty ? "Listening" : "Receiving audio")
+    }
+}
+
+private struct WaveformBar: View {
+    let level: Double
+    let height: CGFloat
+
+    var body: some View {
+        Capsule()
+            .fill(.white.opacity(level > 0.03 ? 0.82 : 0.28))
+            .frame(maxWidth: .infinity)
+            .frame(height: max(4, CGFloat(level) * (height - 4)))
     }
 }
 

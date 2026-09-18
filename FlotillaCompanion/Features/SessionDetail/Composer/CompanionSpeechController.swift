@@ -3,6 +3,11 @@ import CompanionKit
 import Foundation
 import Observation
 
+struct CompanionAudioLevelSample: Identifiable, Equatable, Sendable {
+    let id: UInt64
+    let level: Double
+}
+
 private final class CompanionAudioCapture: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000,
@@ -117,13 +122,14 @@ final class CompanionSpeechController {
     private(set) var phase: Phase = .idle
     private(set) var isAvailable: Bool = false
     private(set) var audioLevel: Double = 0
-    private(set) var audioLevels: [Double] = []
+    private(set) var audioLevels: [CompanionAudioLevelSample] = []
     private var requestID: UUID?
     private var capture: CompanionAudioCapture?
     private var pump: Task<Void, Never>?
     private var generation: UInt64 = 0
     private var lastAudioLevelSampleAt = Date.distantPast
     private var smoothedAudioLevel = 0.0
+    private var nextAudioLevelID: UInt64 = 0
 
     func checkAvailability(store: CompanionStore, sessionID: UUID) async {
         guard let macID = store.data.macID(for: sessionID) else {
@@ -264,12 +270,13 @@ final class CompanionSpeechController {
         let smoothing: Double = level > smoothedAudioLevel ? 0.18 : 0.1
         smoothedAudioLevel += (level - smoothedAudioLevel) * smoothing
         // Keep the visual range expressive without snapping to either edge.
-        let displayLevel = min(0.86, smoothedAudioLevel * 0.78 + 0.02)
+        let displayLevel = min(0.92, smoothedAudioLevel * 1.2 + 0.02)
         audioLevel = displayLevel
         let now = Date()
         guard now.timeIntervalSince(lastAudioLevelSampleAt) >= 0.2 else { return }
         lastAudioLevelSampleAt = now
-        audioLevels.append(displayLevel)
+        audioLevels.append(CompanionAudioLevelSample(id: nextAudioLevelID, level: displayLevel))
+        nextAudioLevelID &+= 1
         if audioLevels.count > 96 {
             audioLevels.removeFirst(audioLevels.count - 96)
         }
