@@ -72,54 +72,54 @@ struct CreateSessionView: View {
         // behind the glass card was visible as a "box" peeking past the
         // card's rounded corners. The design's own `.glassEffect` shape is
         // the entire visible surface now.
-        LauncherStyleBody(style: style, draft: draft, store: store, actions: actions)
-            .frame(width: style.launcherWidth)
-            .overlay { dropHighlight }
-            .overlay(alignment: .topTrailing) { styleMenu }
-            .background { styleShortcuts }
-            .dropDestination(for: URL.self) { urls, _ in
-                receiveDrop(urls)
-            } isTargeted: { targeted in
-                isTargetedForDrop = targeted
-            }
-            .animation(FlotillaMotion.snappy.curve, value: style)
+        VStack(spacing: FlotillaSpacing.small) {
+            styleSwitcher
+            LauncherStyleBody(style: style, draft: draft, store: store, actions: actions)
+                .frame(width: style.launcherWidth)
+                .overlay { dropHighlight }
+        }
+        .background { styleShortcuts }
+        .dropDestination(for: URL.self) { urls, _ in
+            receiveDrop(urls)
+        } isTargeted: { targeted in
+            isTargetedForDrop = targeted
+        }
+        .animation(FlotillaMotion.snappy.curve, value: style)
     }
 
     // MARK: - Style switching
 
-    /// Sits just above the panel's top-right corner: visible enough to find,
-    /// outside the panel so it never competes with the launcher's own controls.
-    private var styleMenu: some View {
-        Menu {
-            Picker("Layout", selection: $style) {
-                ForEach(LauncherStyle.allCases) { candidate in
-                    Text(candidate.displayName).tag(candidate)
+    /// Every layout as a one-click pill above the panel. Laid out inside this
+    /// view's bounds on purpose: the overlay host treats any click outside
+    /// its content as "dismiss", so an offset control up here would close the
+    /// window instead of switching layouts.
+    private var styleSwitcher: some View {
+        HStack(spacing: 2) {
+            ForEach(Array(LauncherStyle.allCases.enumerated()), id: \.element) { index, candidate in
+                let isSelected = candidate == style
+                Button {
+                    style = candidate
+                } label: {
+                    Text(candidate.displayName)
+                        .font(FlotillaTypography.caption2.weight(isSelected ? .semibold : .medium))
+                        .foregroundStyle(isSelected ? FlotillaColors.accentContent : FlotillaColors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 22)
+                        .background(isSelected ? FlotillaColors.accent : .clear, in: Capsule())
+                        .contentShape(Capsule())
                 }
+                .buttonStyle(.plain)
+                .help("\(candidate.summary) (⌥⌘\(index + 1))")
+                .accessibilityIdentifier("CreateSession.Layout.\(candidate.rawValue)")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
-            .pickerStyle(.inline)
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "rectangle.3.group")
-                Text(style.displayName)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 7, weight: .bold))
-            }
-            .font(FlotillaTypography.caption2.weight(.medium))
-            .foregroundStyle(FlotillaColors.textSecondary)
-            .padding(.horizontal, FlotillaSpacing.small)
-            .padding(.vertical, 3)
-            .background(FlotillaColors.surfaceElevated, in: Capsule())
-            .overlay(Capsule().strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline))
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .offset(y: -30)
-        .help("New Session layout (⌥⌘1–⌥⌘5)")
-        .accessibilityIdentifier("CreateSession.LayoutMenu")
+        .padding(2)
+        .background(FlotillaColors.surfaceElevated, in: Capsule())
+        .overlay(Capsule().strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("CreateSession.LayoutSwitcher")
         .accessibilityLabel("New Session layout")
-        .accessibilityValue(style.displayName)
     }
 
     private var styleShortcuts: some View {
