@@ -741,8 +741,6 @@ final class CompanionHost {
         )
         if !store.sessions.isEmpty && snapshot.sessions.isEmpty {
             Self.syncLog.error("BUG fleet mapping dropped all sessions storeSessions=\(self.store.sessions.count) projects=\(snapshot.projects.count)")
-        } else {
-            Self.syncLog.debug("built fleet storeSessions=\(self.store.sessions.count) snapshotSessions=\(snapshot.sessions.count) projects=\(snapshot.projects.count)")
         }
         return snapshot
     }
