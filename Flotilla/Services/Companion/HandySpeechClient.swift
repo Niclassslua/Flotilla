@@ -91,7 +91,7 @@ private final class HandySpeechSocket: @unchecked Sendable {
     }
 
     private func send(_ payload: Data) throws {
-        guard payload.count <= 16 * 1024 else { throw HandySpeechError.invalidResponse }
+        guard payload.count <= 64 * 1024 else { throw HandySpeechError.invalidResponse }
         var length = UInt32(payload.count).bigEndian
         let header = withUnsafeBytes(of: &length) { Data($0) }
         try writeAll(header)
@@ -101,7 +101,7 @@ private final class HandySpeechSocket: @unchecked Sendable {
     private func receive() throws -> [String: Any] {
         let header = try readExactly(4)
         let length = header.reduce(0) { ($0 << 8) | Int($1) }
-        guard length > 0, length <= 16 * 1024 else { throw HandySpeechError.invalidResponse }
+        guard length > 0, length <= 64 * 1024 else { throw HandySpeechError.invalidResponse }
         let payload = try readExactly(length)
         guard let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any] else {
             throw HandySpeechError.invalidResponse
