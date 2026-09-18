@@ -74,7 +74,6 @@ final class CompanionHost {
     @ObservationIgnored private var publishTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptPublishTask: Task<Void, Never>?
     @ObservationIgnored private var handyCheckTask: Task<CompanionSpeechEvent, Never>?
-    @ObservationIgnored private var handyCheckGeneration: UInt64 = 0
     @ObservationIgnored private var pairingExpiryTask: Task<Void, Never>?
     @ObservationIgnored private var cachedCatalog: CompanionKit.AgentCatalog
     @ObservationIgnored private var lastPublishedCandidates: [HostCandidate]?
@@ -760,24 +759,25 @@ final class CompanionHost {
     // MARK: - Handy Speech to Text
 
     func checkHandyConnection() async {
-        handyCheckGeneration &+= 1
-        let generation = handyCheckGeneration
-        handyStatus = .checking
-        let result: CompanionSpeechEvent
         if let handyCheckTask {
             // Startup, settings onAppear, and Check Again can all arrive in
             // the same run-loop turn. Share the in-flight handshake instead
-            // of opening several sockets and letting a stale failure replace
-            // a successful ready result.
-            result = await handyCheckTask.value
-        } else {
-            let speech = localSpeech
-            let task = Task { await speech.capabilities() }
-            handyCheckTask = task
-            result = await task.value
-            handyCheckTask = nil
+            // of opening several sockets. The task that creates the probe is
+            // the sole owner of publishing its result; callers that arrive
+            // while it is running simply wait for that same result. This is
+            // important because SwiftUI can re-run onAppear while the
+            // settings view is being rebuilt.
+            _ = await handyCheckTask.value
+            return
         }
-        guard generation == handyCheckGeneration else { return }
+
+        handyStatus = .checking
+        let speech = localSpeech
+        let task = Task { await speech.capabilities() }
+        handyCheckTask = task
+        let result = await task.value
+        handyCheckTask = nil
+
         switch result {
         case let .capabilities(status, models):
             if status == "ready" {
