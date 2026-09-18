@@ -169,7 +169,6 @@
 		583001C169BABB8C3837EF62 /* DiffPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47A8019491687751346DAF32 /* DiffPanelView.swift */; };
 		591BE56C98E7462CA96F3C07 /* TranscriptSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA9AE1868B199B23A35B91E /* TranscriptSearch.swift */; };
 		5B4DA6C73B9B52469D9BCB42 /* StartupCheckViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF340064A54FDCE8C0161558 /* StartupCheckViewModel.swift */; };
-		5D76E50BB9780F467D7445F9 /* ModelEffortPickerConcepts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5492B20FD8D4D0FC471D27B0 /* ModelEffortPickerConcepts.swift */; };
 		5EDA08488E35BB0D519DDB39 /* font.svg in Resources */ = {isa = PBXBuildFile; fileRef = 04A4E317BD2ED88291A5138F /* font.svg */; };
 		5EDF88CD1D89CAB1D8A7228F /* DiffPanelViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BEFAC379C76D4AE91B6696 /* DiffPanelViewModelTests.swift */; };
 		5F306FD048B5795A6DC38471 /* SessionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2E8E12BEEF83058926206E /* SessionCard.swift */; };
@@ -647,7 +646,6 @@
 		524067025CC0F020E1592028 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
 		5253C4FE0F3C9418B5B45F38 /* lock.svg */ = {isa = PBXFileReference; path = lock.svg; sourceTree = "<group>"; };
 		53EC857A8CBE65A402545C21 /* FlotillaCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlotillaCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		5492B20FD8D4D0FC471D27B0 /* ModelEffortPickerConcepts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelEffortPickerConcepts.swift; sourceTree = "<group>"; };
 		555E4B7984B36066BEE0FFE8 /* KnowledgeActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeActions.swift; sourceTree = "<group>"; };
 		55AC108CFFA20A3D4EE6A5C1 /* SessionLaunchPreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchPreviewTests.swift; sourceTree = "<group>"; };
 		574B82EAE6596EA2D265D335 /* folder-config.svg */ = {isa = PBXFileReference; path = "folder-config.svg"; sourceTree = "<group>"; };
@@ -1364,7 +1362,6 @@
 				1431D6F1F2780952A6697EB2 /* GitBranchIcon.swift */,
 				E178BD5EBC01AC5A04E68745 /* GitIcon.swift */,
 				26D1F33C25387BC4967D4692 /* MaterialFileIcon.swift */,
-				5492B20FD8D4D0FC471D27B0 /* ModelEffortPickerConcepts.swift */,
 				3802ED76F644B170E26A3B8C /* ModelPickerView.swift */,
 				17F1832CC0C919E3FE365BA8 /* SessionElapsed.swift */,
 				774460E09372B50991B8E9AB /* StatusBadge.swift */,
@@ -2385,7 +2382,6 @@
 				B4A38809E4CFB671B5376798 /* MarkdownView.swift in Sources */,
 				96BE1000E5DDE993140FA686 /* MaterialFileIcon.swift in Sources */,
 				FF2A5E1E8E8273105A55479D /* MissionControlGrid.swift in Sources */,
-				5D76E50BB9780F467D7445F9 /* ModelEffortPickerConcepts.swift in Sources */,
 				98A2E8E182BC535DDFCC5577 /* ModelPickerView.swift in Sources */,
 				35C2A7D5F5438BF9023DE5D2 /* MonacoHostView.swift in Sources */,
 				22D07401DDBD8084087F20C7 /* OpenCodeCompanionAdapter.swift in Sources */,
