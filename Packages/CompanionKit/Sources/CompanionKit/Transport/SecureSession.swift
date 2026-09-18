@@ -35,7 +35,10 @@ public final class SecureSession<Outgoing: Encodable & Sendable, Incoming: Decod
         Task { [weak self] in await self?.receiveLoop() }
     }
 
-    public var endpoint: NWEndpoint? { frames.connection.currentPath?.remoteEndpoint }
+    public var endpoint: NWEndpoint? {
+        guard frames.isConnected else { return nil }
+        return frames.connection.currentPath?.remoteEndpoint
+    }
 
     /// Seals and enqueues atomically, so counters match the wire order.
     public func send(_ message: Outgoing) throws {

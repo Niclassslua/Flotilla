@@ -67,10 +67,16 @@ struct SessionDetailView: View {
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - Self.nearBottomThreshold
             } action: { _, isNear in
-                isNearBottom = isNear
+                if isNearBottom != isNear {
+                    isNearBottom = isNear
+                }
                 if isNear {
-                    hasNewOutputWhileScrolledUp = false
-                    newOutputCount = 0
+                    if hasNewOutputWhileScrolledUp {
+                        hasNewOutputWhileScrolledUp = false
+                    }
+                    if newOutputCount != 0 {
+                        newOutputCount = 0
+                    }
                 }
             }
             .onChange(of: transcript.events.count) { _, _ in handleNewContent(proxy) }
@@ -95,7 +101,6 @@ struct SessionDetailView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(FlotillaColors.canvas)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { containerHeight = $0 }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 SessionHeader(
@@ -144,6 +149,11 @@ struct SessionDetailView: View {
                     isActionable: isActionable,
                     maxCardHeight: containerHeight * 0.55
                 )
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
+            if abs(containerHeight - newHeight) > 1 {
+                containerHeight = newHeight
             }
         }
         .navigationTitle(session.title)

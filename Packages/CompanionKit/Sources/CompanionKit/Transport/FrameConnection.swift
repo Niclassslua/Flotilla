@@ -25,9 +25,14 @@ public final class FrameConnection: @unchecked Sendable {
     private let lock = NSLock()
     private var readyContinuation: CheckedContinuation<Void, Error>?
     private var isReady = false
+    private var isCancelled = false
     private var stateHandlers: [@Sendable (NWConnection.State) -> Void] = []
     private var queuedBytes = 0
     private let maximumQueuedBytes = 16 * 1024 * 1024
+
+    public var isConnected: Bool {
+        lock.withLock { isReady && !isCancelled }
+    }
 
     public init(connection: NWConnection, label: String = "companion.connection") {
         self.connection = connection
@@ -46,7 +51,10 @@ public final class FrameConnection: @unchecked Sendable {
 
     /// Observes state changes after `start`, for detecting a dropped link.
     public func onStateChange(_ handler: @escaping @Sendable (NWConnection.State) -> Void) {
-        lock.withLock { stateHandlers.append(handler) }
+        lock.withLock {
+            guard !isCancelled else { return }
+            stateHandlers.append(handler)
+        }
     }
 
     /// Starts the connection and waits until it is ready.
@@ -76,6 +84,7 @@ public final class FrameConnection: @unchecked Sendable {
 
     private func handle(_ state: NWConnection.State) {
         let (continuation, handlers): (CheckedContinuation<Void, Error>?, [@Sendable (NWConnection.State) -> Void]) = lock.withLock {
+            if isCancelled { return (nil, []) }
             var toResume: CheckedContinuation<Void, Error>?
             switch state {
             case .ready:
@@ -83,6 +92,10 @@ public final class FrameConnection: @unchecked Sendable {
                 toResume = readyContinuation
             case .failed, .cancelled, .waiting:
                 if !isReady { toResume = readyContinuation }
+                if case .cancelled = state {
+                    isCancelled = true
+                    isReady = false
+                }
             default:
                 break
             }
@@ -170,6 +183,17 @@ public final class FrameConnection: @unchecked Sendable {
     }
 
     public func cancel() {
+        let (shouldCancel, continuation): (Bool, CheckedContinuation<Void, Error>?) = lock.withLock {
+            guard !isCancelled else { return (false, nil) }
+            isCancelled = true
+            isReady = false
+            let cont = readyContinuation
+            readyContinuation = nil
+            stateHandlers.removeAll()
+            return (true, cont)
+        }
+        guard shouldCancel else { return }
+        continuation?.resume(throwing: TransportError.closed)
         connection.cancel()
     }
 
