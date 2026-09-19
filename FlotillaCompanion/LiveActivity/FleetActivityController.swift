@@ -98,6 +98,13 @@ final class FleetActivityController {
     /// The urgent sessions at the moment the user swiped the activity away.
     /// It stays gone until that set changes.
     private var dismissedFor: Set<UUID>?
+    /// Chains calls to `sync` so one always finishes touching `activity`
+    /// before the next starts. `RootView` restarts its `.task(id:)` on
+    /// almost every session update, so without this, two overlapping calls
+    /// can each suspend at `Activity.request` while `activity` is still
+    /// `nil`, and both end up requesting one — leaving a duplicate, frozen
+    /// activity behind that nothing ever updates again.
+    private var lastSync: Task<Void, Never>?
 
     /// How long a finished fleet's final state lingers on the Lock Screen.
     private static let finishedLinger: TimeInterval = 15 * 60
@@ -107,6 +114,16 @@ final class FleetActivityController {
     static let backgroundStaleAfter: TimeInterval = 2.5
 
     func sync(_ snapshot: FleetActivitySnapshot?) async {
+        let previous = lastSync
+        let task = Task { [weak self] in
+            await previous?.value
+            await self?.performSync(snapshot)
+        }
+        lastSync = task
+        await task.value
+    }
+
+    private func performSync(_ snapshot: FleetActivitySnapshot?) async {
         adoptExistingIfNeeded(macID: snapshot?.macID)
 
         if let current = activity {
