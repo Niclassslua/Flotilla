@@ -54,7 +54,11 @@ struct CreateSessionSheet: View {
                     }
                     if projectID != nil {
                         Toggle("New worktree", isOn: $createWorktree.animation())
-                        if createWorktree { Toggle("Fetch first", isOn: $fetchFirst) }
+                            .tint(.green)
+                        if createWorktree {
+                            Toggle("Fetch first", isOn: $fetchFirst)
+                                .tint(.green)
+                        }
                     }
                 }
 
