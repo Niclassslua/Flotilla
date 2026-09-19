@@ -1,12 +1,13 @@
 import SwiftUI
 import Charts
 import SessionKit
+import GitKit
 import DesignSystem
 
 // MARK: - Model
 
-/// One agent's commits over the last 30 days. Slices come in `AgentKind`
-/// order so a colour always means the same agent.
+/// One agent's commits over the window, in `AgentKind` order so a color
+/// always means the same agent.
 struct AgentShareSlice: Identifiable {
     let agent: AgentKind
     let count: Int
@@ -26,27 +27,25 @@ struct AgentShareSlice: Identifiable {
 
 // MARK: - View
 
-/// A donut of which agents wrote your commits, with a logo legend beside
-/// it. The pair is centred in whatever height the card is given, so the
-/// card ends level with Weekly rhythm beside it.
-struct AgentShareView: View {
+/// A donut of which agents wrote the fleet's commits, sized from a bare
+/// ring (small) through a ring-plus-legend (medium) to a ring, legend and a
+/// per-agent lines table (large).
+struct AgentShareWidgetContent: View {
+    let size: HomeWidgetSize
     let contributions: [HomeContributor: Int]
+    var linesByContributor: [HomeContributor: GitDiffStat] = [:]
 
     @State private var selectedCount: Int?
 
     private var slices: [AgentShareSlice] { AgentShareSlice.slices(from: contributions) }
-    /// Commits by any agent — the ring's whole.
     private var agentTotal: Int { slices.map(\.count).reduce(0, +) }
-    /// Every commit in the window, yours included.
     private var allCommits: Int { contributions.values.reduce(0, +) }
 
-    /// How much of all your work agents did.
     private var agentPercent: Int {
         guard allCommits > 0 else { return 0 }
         return Int((Double(agentTotal) / Double(allCommits) * 100).rounded())
     }
 
-    /// An agent's share of the agent commits.
     private func percent(_ slice: AgentShareSlice) -> Int {
         guard agentTotal > 0 else { return 0 }
         return Int((Double(slice.count) / Double(agentTotal) * 100).rounded())
@@ -71,36 +70,43 @@ struct AgentShareView: View {
 
     var body: some View {
         if slices.isEmpty {
-            Text("No agent commits in the last 30 days.")
-                .font(FlotillaTypography.callout)
-                .foregroundStyle(FlotillaColors.textTertiary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            HomeWidgetAllClearState(message: "No agent commits in this window.")
         } else {
-            HStack(alignment: .center, spacing: FlotillaSpacing.xxLarge) {
-                ring
-                legend
+            switch size {
+            case .small:
+                ring(diameter: 108)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .large:
+                VStack(spacing: FlotillaSpacing.medium) {
+                    HStack(alignment: .center, spacing: FlotillaSpacing.xxLarge) {
+                        ring(diameter: 140)
+                        legend
+                    }
+                    Divider().opacity(0.5)
+                    linesTable
+                }
+            default:
+                HStack(alignment: .center, spacing: FlotillaSpacing.xxLarge) {
+                    ring(diameter: 140)
+                    legend
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private var ring: some View {
+    private func ring(diameter: CGFloat) -> some View {
         Chart(slices) { slice in
-            SectorMark(
-                angle: .value("Commits", slice.count),
-                innerRadius: .ratio(0.75),
-                angularInset: 1.5
-            )
-            .cornerRadius(4)
-            .foregroundStyle(slice.color)
-            .opacity(selected == nil || selected?.id == slice.id ? 1 : 0.35)
+            SectorMark(angle: .value("Commits", slice.count), innerRadius: .ratio(0.75), angularInset: 1.5)
+                .cornerRadius(4)
+                .foregroundStyle(slice.color)
+                .opacity(selected == nil || selected?.id == slice.id ? 1 : 0.35)
         }
         .chartAngleSelection(value: $selectedCount)
         .chartBackground { _ in
             if let featured {
                 VStack(spacing: 3) {
-                    ProviderLogo(agent: featured.agent)
-                        .frame(width: 22, height: 22)
+                    ProviderLogo(agent: featured.agent).frame(width: 22, height: 22)
                     Text("\(percent(featured))%")
                         .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
                         .foregroundStyle(FlotillaColors.textPrimary)
@@ -113,15 +119,14 @@ struct AgentShareView: View {
                 .animation(.snappy, value: featured.id)
             }
         }
-        .frame(width: 160, height: 160)
+        .frame(width: diameter, height: diameter)
     }
 
     private var legend: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.medium + 2) {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.medium - 2) {
             ForEach(slices) { slice in
                 HStack(spacing: FlotillaSpacing.small) {
-                    ProviderLogo(agent: slice.agent)
-                        .frame(width: 18, height: 18)
+                    ProviderLogo(agent: slice.agent).frame(width: 18, height: 18)
                     Text(slice.agent.displayName)
                         .font(FlotillaTypography.callout)
                         .foregroundStyle(FlotillaColors.textPrimary)
@@ -143,6 +148,31 @@ struct AgentShareView: View {
             Text("\(agentTotal) of \(allCommits) commits by agents · \(agentPercent)%")
                 .font(FlotillaTypography.caption.monospacedDigit())
                 .foregroundStyle(FlotillaColors.textTertiary)
+        }
+    }
+
+    /// Large-only: lines changed and commit share per agent, alongside the
+    /// commit counts the ring and legend already show.
+    private var linesTable: some View {
+        VStack(spacing: 4) {
+            ForEach(slices) { slice in
+                let stat = linesByContributor[.agent(slice.agent)] ?? .zero
+                HStack(spacing: FlotillaSpacing.small) {
+                    Text(slice.agent.displayName)
+                        .font(FlotillaTypography.caption.weight(.medium))
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                        .frame(width: 90, alignment: .leading)
+                    Text("\(slice.count) commits")
+                        .font(FlotillaTypography.caption2)
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                    Spacer(minLength: 4)
+                    Text("+\(stat.additions.formatted(.number.notation(.compactName)))")
+                        .foregroundStyle(FlotillaColors.diffAdded)
+                    Text("−\(stat.deletions.formatted(.number.notation(.compactName)))")
+                        .foregroundStyle(FlotillaColors.diffRemoved)
+                }
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+            }
         }
     }
 }

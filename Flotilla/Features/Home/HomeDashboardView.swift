@@ -13,6 +13,7 @@ import DesignSystem
 struct HomeDashboardView: View {
     @Bindable var store: AppStore
     let openProject: (UUID) -> Void
+    let openSession: (UUID) -> Void
     @Bindable var settingsViewModel: SettingsViewModel
     let insights: HomeInsights
 
@@ -35,7 +36,7 @@ struct HomeDashboardView: View {
                 greeting
                 projectsSection
                 if !store.projects.isEmpty {
-                    HomeStatsSection(activity: insights.activity, projects: store.projects)
+                    HomeWidgetGrid(store: store, settingsViewModel: settingsViewModel, insights: insights, openSession: openSession)
                 }
             }
             .padding(.horizontal, FlotillaSpacing.xxLarge + FlotillaSpacing.small)
@@ -45,9 +46,6 @@ struct HomeDashboardView: View {
             .frame(maxWidth: .infinity)
         }
         .background { harborGradient.ignoresSafeArea() }
-        .task(id: store.projects.map(\.id)) {
-            await insights.refresh(store: store)
-        }
         .sheet(item: $presentedSheet) { sheet in
             ProjectPathSheet(importsWorkspace: sheet == .importWorkspace) { paths in
                 for path in paths { store.addProject(at: path) }
@@ -207,6 +205,7 @@ struct HomeSectionTitle: View {
     HomeDashboardView(
         store: HomePreviewData.makeStore(),
         openProject: { _ in },
+        openSession: { _ in },
         settingsViewModel: SettingsViewModel(
             store: UserDefaultsSettingsStore(defaultWorktreeBaseDirectory: NSTemporaryDirectory())
         ),

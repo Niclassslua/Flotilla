@@ -17,6 +17,12 @@ public final class HookEventReceiver: @unchecked Sendable {
     private let pollInterval: Duration
     private let continuation: AsyncStream<SessionStatusObservation>.Continuation
     public let observationStream: AsyncStream<SessionStatusObservation>
+    /// A permission ask, for Home's Top permissions widget. Separate from
+    /// `observationStream` because one hook line can produce both a status
+    /// observation and a permission event (a `PermissionRequest` is both
+    /// "the session is now waiting" and "here's what it asked for").
+    private let permissionContinuation: AsyncStream<HookPermissionRequestEvent>.Continuation
+    public let permissionRequestStream: AsyncStream<HookPermissionRequestEvent>
     private let taskLock = NSLock()
     private var task: Task<Void, Never>?
 
@@ -27,6 +33,9 @@ public final class HookEventReceiver: @unchecked Sendable {
         var continuation: AsyncStream<SessionStatusObservation>.Continuation!
         self.observationStream = AsyncStream { continuation = $0 }
         self.continuation = continuation
+        var permissionContinuation: AsyncStream<HookPermissionRequestEvent>.Continuation!
+        self.permissionRequestStream = AsyncStream { permissionContinuation = $0 }
+        self.permissionContinuation = permissionContinuation
     }
 
     public func start() {
@@ -37,6 +46,7 @@ public final class HookEventReceiver: @unchecked Sendable {
         let agent = self.agent
         let pollInterval = self.pollInterval
         let continuation = self.continuation
+        let permissionContinuation = self.permissionContinuation
 
         task = Task {
             var readOffset: UInt64 = 0
@@ -70,6 +80,9 @@ public final class HookEventReceiver: @unchecked Sendable {
                                 if let observation = Self.observation(forLine: line, agent: agent) {
                                     continuation.yield(observation)
                                 }
+                                if let permission = Self.permissionRequestEvent(forLine: line, agent: agent) {
+                                    permissionContinuation.yield(permission)
+                                }
                             }
                         }
                     }
@@ -90,6 +103,7 @@ public final class HookEventReceiver: @unchecked Sendable {
     deinit {
         task?.cancel()
         continuation.finish()
+        permissionContinuation.finish()
     }
 
     static func observation(forLine line: String, agent: AgentKind) -> SessionStatusObservation? {
@@ -414,5 +428,58 @@ public final class HookEventReceiver: @unchecked Sendable {
         let arguments = (toolCall["args"] as? [String: Any]) ?? (payload["args"] as? [String: Any])
         let metadata = arguments?["ArtifactMetadata"] as? [String: Any]
         return metadata?["RequestFeedback"] as? Bool == true
+    }
+
+    // MARK: - Permission requests
+
+    /// Claude and Codex only, matching `permissionRequestEvent`'s own
+    /// restriction below — OpenCode's `permission.asked` line carries no
+    /// tool name or arguments, and Antigravity has no permission hook.
+    static func permissionRequestEvent(forLine line: String, agent: AgentKind) -> HookPermissionRequestEvent? {
+        guard agent == .claudeCode || agent == .codexCLI else { return nil }
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["hook_event_name"] as? String == "PermissionRequest",
+              let toolName = object["tool_name"] as? String else { return nil }
+        let input = object["tool_input"] as? [String: Any] ?? [:]
+        return HookPermissionRequestEvent(
+            agent: agent,
+            toolName: toolName,
+            primaryArgument: primaryArgument(toolName: toolName, input: input),
+            timestamp: .now
+        )
+    }
+
+    /// The one argument `PermissionPattern.normalize` needs to build a
+    /// human-readable pattern: a shell command, a file path, or a URL,
+    /// whichever this tool's input carries.
+    private static func primaryArgument(toolName: String, input: [String: Any]) -> String? {
+        switch toolName.lowercased() {
+        case "bash", "shell", "exec", "local_shell":
+            input["command"] as? String
+        case "edit", "write", "multiedit", "notebookedit":
+            (input["file_path"] as? String) ?? (input["path"] as? String)
+        case "webfetch":
+            input["url"] as? String
+        default:
+            nil
+        }
+    }
+}
+
+/// One permission ask, distilled from a hook event to what
+/// `PermissionPattern.normalize` (in the app layer) needs to group it — no
+/// `Any` in the public type, so the stream stays `Sendable`.
+public struct HookPermissionRequestEvent: Sendable, Equatable {
+    public let agent: AgentKind
+    public let toolName: String
+    public let primaryArgument: String?
+    public let timestamp: Date
+
+    public init(agent: AgentKind, toolName: String, primaryArgument: String?, timestamp: Date) {
+        self.agent = agent
+        self.toolName = toolName
+        self.primaryArgument = primaryArgument
+        self.timestamp = timestamp
     }
 }

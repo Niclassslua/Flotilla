@@ -497,6 +497,14 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
     /// stays free of the app's navigation types — `SessionGroup` in the app
     /// layer owns the parsing.
     public var sessionGroup: String
+    /// Home's widget grid, in placement order. `nil` means the user never
+    /// customized it and the app's default layout applies — so a later
+    /// default change reaches everyone who hasn't built their own.
+    public var homeWidgets: [HomeWidgetEntry]?
+    /// Schema version of `homeWidgets`, for migrating saved layouts.
+    public var homeWidgetsVersion: Int
+    /// The one-time "Customize Home" hint has been shown and dismissed.
+    public var homeCustomizeHintShown: Bool
 
     public init(
         selectedSessionID: String? = nil,
@@ -508,7 +516,10 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         gridDimEnabled: Bool = false,
         gridDimIntensity: Double = 0.4,
         sidebarRailLabels: Bool = false,
-        sessionGroup: String = "all"
+        sessionGroup: String = "all",
+        homeWidgets: [HomeWidgetEntry]? = nil,
+        homeWidgetsVersion: Int = HomeWidgetEntry.currentVersion,
+        homeCustomizeHintShown: Bool = false
     ) {
         self.selectedSessionID = selectedSessionID
         self.viewMode = viewMode
@@ -520,12 +531,15 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         self.gridDimIntensity = gridDimIntensity
         self.sidebarRailLabels = sidebarRailLabels
         self.sessionGroup = sessionGroup
+        self.homeWidgets = homeWidgets
+        self.homeWidgetsVersion = homeWidgetsVersion
+        self.homeCustomizeHintShown = homeCustomizeHintShown
     }
 
     private enum CodingKeys: String, CodingKey {
         case selectedSessionID, viewMode, detailPanel, gridColumnCount, gridRowCount
         case gridSelectedSessionIDs, gridDimEnabled, gridDimIntensity, sidebarRailLabels
-        case sessionGroup
+        case sessionGroup, homeWidgets, homeWidgetsVersion, homeCustomizeHintShown
     }
 
     public init(from decoder: Decoder) throws {
@@ -540,6 +554,11 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         gridDimIntensity = try container.decodeIfPresent(Double.self, forKey: .gridDimIntensity) ?? 0.4
         sidebarRailLabels = try container.decodeIfPresent(Bool.self, forKey: .sidebarRailLabels) ?? false
         sessionGroup = try container.decodeIfPresent(String.self, forKey: .sessionGroup) ?? "all"
+        // A layout that fails to decode falls back to the default rather
+        // than taking the rest of the settings file down with it.
+        homeWidgets = (try? container.decodeIfPresent([HomeWidgetEntry].self, forKey: .homeWidgets)) ?? nil
+        homeWidgetsVersion = try container.decodeIfPresent(Int.self, forKey: .homeWidgetsVersion) ?? HomeWidgetEntry.currentVersion
+        homeCustomizeHintShown = try container.decodeIfPresent(Bool.self, forKey: .homeCustomizeHintShown) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -554,8 +573,49 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         try container.encodeIfPresent(gridDimIntensity, forKey: .gridDimIntensity)
         try container.encodeIfPresent(sidebarRailLabels, forKey: .sidebarRailLabels)
         try container.encodeIfPresent(sessionGroup, forKey: .sessionGroup)
+        try container.encodeIfPresent(homeWidgets, forKey: .homeWidgets)
+        try container.encode(homeWidgetsVersion, forKey: .homeWidgetsVersion)
+        try container.encode(homeCustomizeHintShown, forKey: .homeCustomizeHintShown)
     }
 
+}
+
+/// One placed widget on Home. Kind and size are raw strings so SettingsKit
+/// stays free of the app's widget types — `HomeWidgetKind` in the app layer
+/// owns the parsing and drops kinds it doesn't know.
+public struct HomeWidgetEntry: Codable, Equatable, Hashable, Sendable, Identifiable {
+    public static let currentVersion = 1
+
+    public var id: UUID
+    public var kind: String
+    public var size: String
+    public var config: HomeWidgetConfig
+
+    public init(id: UUID = UUID(), kind: String, size: String, config: HomeWidgetConfig = HomeWidgetConfig()) {
+        self.id = id
+        self.kind = kind
+        self.size = size
+        self.config = config
+    }
+}
+
+/// A widget instance's own settings. Every field is optional: `nil` is the
+/// widget's default, which is what lets two copies of one widget differ.
+public struct HomeWidgetConfig: Codable, Equatable, Hashable, Sendable {
+    /// A project's UUID string; `nil` is "All projects".
+    public var projectID: String?
+    /// The widget's time window in days; `nil` is its default window.
+    public var timeWindowDays: Int?
+    /// An `AgentKind` raw value; `nil` is every agent.
+    public var agent: String?
+
+    public init(projectID: String? = nil, timeWindowDays: Int? = nil, agent: String? = nil) {
+        self.projectID = projectID
+        self.timeWindowDays = timeWindowDays
+        self.agent = agent
+    }
+
+    public var isDefault: Bool { projectID == nil && timeWindowDays == nil && agent == nil }
 }
 
 public struct AppSettings: Codable, Equatable, Sendable {

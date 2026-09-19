@@ -358,6 +358,12 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     /// More specific meaning for `waitingForInput`; always `nil` in every
     /// other status.
     public var waitingReason: SessionWaitingReason?
+    /// When `status` last changed. `nil` for a session created before this
+    /// field existed and never transitioned since — Home's Needs you widget
+    /// falls back to `lastActiveAt` in that case. Set alongside `status` by
+    /// `SessionStatusMachine.transition` and `AppStore.applyObservedStatus`,
+    /// never directly.
+    public var statusChangedAt: Date?
     /// Kanban board column assignment (for custom column mode)
     public var kanbanColumnID: UUID?
     /// Workflow stage (for workflow column mode)
@@ -394,6 +400,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         worktree: WorktreeInfo? = nil,
         status: SessionStatus? = nil,
         waitingReason: SessionWaitingReason? = nil,
+        statusChangedAt: Date? = nil,
         kanbanColumnID: UUID? = nil,
         workflowStage: WorkflowStage? = nil,
         startingMode: SessionMode = .act,
@@ -415,6 +422,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         self.worktree = worktree
         self.status = status
         self.waitingReason = status == .waitingForInput ? waitingReason : nil
+        self.statusChangedAt = statusChangedAt
         self.kanbanColumnID = kanbanColumnID
         self.workflowStage = workflowStage
         self.startingMode = startingMode

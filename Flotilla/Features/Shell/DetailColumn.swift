@@ -66,6 +66,7 @@ struct DetailColumn: View {
         HomeDashboardView(
             store: store,
             openProject: onOpenProject,
+            openSession: onOpenSession,
             settingsViewModel: settingsViewModel,
             insights: homeInsights
         )
