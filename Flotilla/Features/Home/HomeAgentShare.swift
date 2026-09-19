@@ -12,14 +12,7 @@ struct AgentShareSlice: Identifiable {
     let count: Int
     var id: AgentKind { agent }
 
-    var color: Color {
-        switch agent {
-        // Antigravity's anchor azure sits right next to Codex's indigo;
-        // its green brand stop keeps the two apart.
-        case .antigravity: AgentBrand.antigravityGradientColors[1]
-        default: AgentBrand.accentColor(for: agent)
-        }
-    }
+    var color: Color { AgentBrand.accentColor(for: agent) }
 
     /// Agents only — your own commits are the baseline the share is
     /// measured against, not a slice of it.
