@@ -27,10 +27,13 @@ struct CompanionSettingsView: View {
 
                 Section {
                     Toggle("Agent is waiting for input", isOn: $store.notificationPreferences.waitingForInputEnabled)
+                        .tint(.green)
                         .listRowBackground(FlotillaColors.surface)
                     Toggle("Ready for review", isOn: $store.notificationPreferences.readyForReviewEnabled)
+                        .tint(.green)
                         .listRowBackground(FlotillaColors.surface)
                     Toggle("Session crashed", isOn: $store.notificationPreferences.crashedEnabled)
+                        .tint(.green)
                         .listRowBackground(FlotillaColors.surface)
                 } header: {
                     Text("Notifications")

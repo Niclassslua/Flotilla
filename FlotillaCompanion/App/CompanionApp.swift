@@ -14,6 +14,10 @@ struct CompanionApp: App {
                 .preferredColorScheme(appearance.colorScheme)
                 // Orange is reserved for primary actions, so ordinary chrome
                 // (back buttons, toolbar items) takes the text colour instead.
+                // Note: .tint here cascades to child views; controls with standard
+                // system colors (like Toggle switches, which Apple HIG defines as green)
+                // must explicitly set .tint(.green) so they don't inherit textPrimary
+                // (which in dark/night mode renders an active switch completely white).
                 .tint(FlotillaColors.textPrimary)
         }
     }
