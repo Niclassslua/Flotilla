@@ -179,6 +179,10 @@ public struct FlotillaColors: Sendable {
         FlotillaAccent.currentColor
     }
 
+    public static var originalAccent: Color {
+        FlotillaAccent.originalColor
+    }
+
     public static let accentContent = Color.white
 
     // MARK: - Status (one per SessionStatus)

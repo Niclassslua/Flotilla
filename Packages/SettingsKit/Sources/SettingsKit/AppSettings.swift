@@ -609,7 +609,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
         appearance: AppearanceMode = .system,
-        accentColor: String = "orange",
+        accentColor: String = "original",
         workspace: WorkspacePreferences = WorkspacePreferences(),
         sessionDefaults: SessionDefaults = SessionDefaults(),
         terminal: TerminalPreferences = TerminalPreferences(),
@@ -634,7 +634,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
         appearance: AppearanceMode = .system,
-        accentColor: String = "orange",
+        accentColor: String = "original",
         workspace: WorkspacePreferences = WorkspacePreferences(),
         sessionDefaults: SessionDefaults = SessionDefaults(),
         terminal: TerminalPreferences = TerminalPreferences(),
@@ -704,7 +704,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription = try container.decodeIfPresent(OpenCodeSubscription.self, forKey: .openCodeSubscription) ?? .none
         worktreeBaseDirectory = try container.decodeIfPresent(String.self, forKey: .worktreeBaseDirectory) ?? ""
         appearance = try container.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
-        accentColor = try container.decodeIfPresent(String.self, forKey: .accentColor) ?? "orange"
+        accentColor = try container.decodeIfPresent(String.self, forKey: .accentColor) ?? "original"
         workspace = try container.decodeIfPresent(WorkspacePreferences.self, forKey: .workspace) ?? WorkspacePreferences()
         sessionDefaults = try container.decodeIfPresent(SessionDefaults.self, forKey: .sessionDefaults) ?? SessionDefaults()
         terminal = try container.decodeIfPresent(TerminalPreferences.self, forKey: .terminal) ?? TerminalPreferences()
