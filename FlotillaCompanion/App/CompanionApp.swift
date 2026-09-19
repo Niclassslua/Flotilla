@@ -4,25 +4,43 @@ import CompanionKit
 
 @main
 struct CompanionApp: App {
-    @State private var store = CompanionEnvironment.makeStore()
+    @State private var store: CompanionStore
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
-    @AppStorage(FlotillaAccent.companionStorageKey) private var accentColor: String = FlotillaAccent.defaultID
 
     init() {
-        let storedAccent = UserDefaults.standard.string(forKey: FlotillaAccent.companionStorageKey) ?? FlotillaAccent.defaultID
-        FlotillaAccent.currentID = storedAccent
+        let store = CompanionEnvironment.makeStore()
+        _store = State(initialValue: store)
+        // Seed before the first frame so launch doesn't flash the default.
+        let defaults = UserDefaults.standard
+        FlotillaAccent.currentID = store.accentColor(
+            own: defaults.string(forKey: FlotillaAccent.companionStorageKey) ?? FlotillaAccent.defaultID,
+            followsMac: defaults.object(forKey: FlotillaAccent.companionFollowsMacStorageKey) as? Bool ?? true
+        )
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                .modifier(CompanionAccent())
                 .environment(store)
                 .preferredColorScheme(appearance.colorScheme)
-                .tint(FlotillaColors.accent)
-                .onChange(of: accentColor) { _, newColor in
-                    FlotillaAccent.currentID = newColor
-                }
         }
+    }
+}
+
+/// Keeps `FlotillaAccent` on the paired Mac's accent while following it
+/// (the default), otherwise on the one picked in this iPhone's settings.
+private struct CompanionAccent: ViewModifier {
+    @Environment(CompanionStore.self) private var store
+    @AppStorage(FlotillaAccent.companionStorageKey) private var ownAccent: String = FlotillaAccent.defaultID
+    @AppStorage(FlotillaAccent.companionFollowsMacStorageKey) private var followsMac = true
+
+    func body(content: Content) -> some View {
+        content
+            .tint(FlotillaColors.accent)
+            .onChange(of: store.accentColor(own: ownAccent, followsMac: followsMac), initial: true) { _, accent in
+                FlotillaAccent.currentID = accent
+            }
     }
 }
 

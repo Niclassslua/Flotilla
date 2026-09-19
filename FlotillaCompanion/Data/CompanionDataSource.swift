@@ -24,6 +24,8 @@ protocol CompanionDataSource: AnyObject, Observable {
     func sessions(on macID: MacHost.ID) -> [CompanionSession]
     func projects(on macID: MacHost.ID) -> [ProjectSummary]
     func catalog(on macID: MacHost.ID) -> AgentCatalog
+    /// The Mac's accent color from its last fleet, if it sends one.
+    func accentColor(on macID: MacHost.ID) -> String?
     func session(_ id: CompanionSession.ID) -> CompanionSession?
     func macID(for sessionID: CompanionSession.ID) -> MacHost.ID?
     func transcript(for sessionID: CompanionSession.ID) -> SessionTranscript

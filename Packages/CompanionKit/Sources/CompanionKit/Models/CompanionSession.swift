@@ -118,6 +118,9 @@ public struct FleetSnapshot: Hashable, Codable, Sendable {
     public var catalog: AgentCatalog
     /// Sessions with a pending interaction the phone can answer.
     public var pending: [UUID: [PendingInteraction]]
+    /// The Mac's accent color as a `FlotillaAccent` value ("orange",
+    /// "system", "#RRGGBB"). Absent from Macs that predate accent sync.
+    public var accentColor: String?
 
     public init(
         macID: String,
@@ -125,7 +128,8 @@ public struct FleetSnapshot: Hashable, Codable, Sendable {
         sessions: [CompanionSession],
         projects: [ProjectSummary],
         catalog: AgentCatalog,
-        pending: [UUID: [PendingInteraction]] = [:]
+        pending: [UUID: [PendingInteraction]] = [:],
+        accentColor: String? = nil
     ) {
         self.macID = macID
         self.macName = macName
@@ -133,6 +137,7 @@ public struct FleetSnapshot: Hashable, Codable, Sendable {
         self.projects = projects
         self.catalog = catalog
         self.pending = pending
+        self.accentColor = accentColor
     }
 }
 
@@ -147,6 +152,7 @@ public struct FleetDelta: Hashable, Codable, Sendable {
     public var projects: [ProjectSummary]?
     public var catalog: AgentCatalog?
     public var macName: String?
+    public var accentColor: String?
 
     public static func make(from old: FleetSnapshot, to new: FleetSnapshot, baseRevision: UInt64) -> Self {
         let prior = Dictionary(uniqueKeysWithValues: old.sessions.map { ($0.id, $0) })
@@ -162,7 +168,8 @@ public struct FleetDelta: Hashable, Codable, Sendable {
             }),
             projects: old.projects == new.projects ? nil : new.projects,
             catalog: old.catalog == new.catalog ? nil : new.catalog,
-            macName: old.macName == new.macName ? nil : new.macName
+            macName: old.macName == new.macName ? nil : new.macName,
+            accentColor: old.accentColor == new.accentColor ? nil : new.accentColor
         )
     }
 
@@ -182,6 +189,7 @@ public struct FleetDelta: Hashable, Codable, Sendable {
         if let projects { result.projects = projects }
         if let catalog { result.catalog = catalog }
         if let macName { result.macName = macName }
+        if let accentColor { result.accentColor = accentColor }
         return result
     }
 }

@@ -8,6 +8,7 @@ struct CompanionSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
     @AppStorage(FlotillaAccent.companionStorageKey) private var accentColor: String = FlotillaAccent.defaultID
+    @AppStorage(FlotillaAccent.companionFollowsMacStorageKey) private var accentFollowsMac = true
     @State private var isConfirmingClearAll = false
 
     var body: some View {
@@ -27,13 +28,23 @@ struct CompanionSettingsView: View {
                 }
 
                 Section {
-                    AccentColorPicker(
-                        accentColor: $accentColor,
-                        customStorageKey: "companion.appearance.custom-accent"
-                    )
-                    .listRowBackground(FlotillaColors.surface)
+                    Toggle("Match Mac", isOn: $accentFollowsMac)
+                        .tint(.green)
+                        .listRowBackground(FlotillaColors.surface)
+                        .accessibilityIdentifier("companion.settings.accent.follows-mac")
+                    if !accentFollowsMac {
+                        AccentColorPicker(
+                            accentColor: $accentColor,
+                            customStorageKey: "companion.appearance.custom-accent"
+                        )
+                        .listRowBackground(FlotillaColors.surface)
+                    }
                 } header: {
                     Text("Accent Color")
+                } footer: {
+                    Text(accentFollowsMac
+                        ? "Uses the accent color set in Flotilla on your Mac."
+                        : "Uses the accent color picked here, whatever your Mac uses.")
                 }
 
                 Section {
