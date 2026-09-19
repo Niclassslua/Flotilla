@@ -119,6 +119,18 @@ final class CompanionStore {
         observeDataChanges()
         return data.catalog(on: macID)
     }
+    /// The accent of the last Mac viewed, else of any paired Mac that sends one.
+    var macAccentColor: String? {
+        observeDataChanges()
+        if let lastMacID, let accent = data.accentColor(on: lastMacID) { return accent }
+        return data.macs.lazy.compactMap { self.data.accentColor(on: $0.id) }.first
+    }
+
+    /// The accent the phone shows: the Mac's while following it, else its own.
+    func accentColor(own: String, followsMac: Bool) -> String {
+        followsMac ? (macAccentColor ?? own) : own
+    }
+
     func session(_ id: CompanionSession.ID) -> CompanionSession? { data.session(id) }
     func transcript(for id: CompanionSession.ID) -> SessionTranscript { data.transcript(for: id) }
     func pendingInteractions(for id: CompanionSession.ID) -> [PendingInteraction] { data.pendingInteractions(for: id) }

@@ -5,11 +5,14 @@ import AppKit
 import UIKit
 #endif
 import os
+import Observation
 
 public enum FlotillaAccent: Sendable {
     public static let defaultID = "orange"
     public static let customStorageKey = "settings.appearance.custom-accent"
     public static let companionStorageKey = "companion.accent-color"
+    /// Whether the companion follows the paired Mac's accent (default on).
+    public static let companionFollowsMacStorageKey = "companion.accent-follows-mac"
 
     public struct Option: Identifiable, Sendable, Equatable {
         public let id: String
@@ -66,30 +69,41 @@ public enum FlotillaAccent: Sendable {
         initialState: AccentState(id: defaultID, color: makeColor(for: defaultID))
     )
 
+    /// Observation hook for the lock-protected state. Views that read
+    /// `currentID`/`currentColor` (and so `FlotillaColors.accent`) in `body`
+    /// are invalidated when the accent changes — without it, windows kept
+    /// their old accent until something else re-rendered them.
+    private final class AccentObservation: Observable, Sendable {
+        static let shared = AccentObservation()
+        private let registrar = ObservationRegistrar()
+        var accent: Void { () }
+
+        func access() {
+            registrar.access(self, keyPath: \.accent)
+        }
+
+        func mutate(_ body: () -> Void) {
+            registrar.withMutation(of: self, keyPath: \.accent, body)
+        }
+    }
+
     public static var currentID: String {
-        get { lock.withLock { $0.id } }
+        get {
+            AccentObservation.shared.access()
+            return lock.withLock { $0.id }
+        }
         set {
-            let changed = lock.withLock { state -> Bool in
-                guard state.id != newValue else { return false }
-                state.id = newValue
-                state.color = makeColor(for: newValue)
-                return true
-            }
-            if changed {
-                #if os(macOS)
-                DispatchQueue.main.async {
-                    for window in NSApp?.windows ?? [] {
-                        window.contentView?.needsDisplay = true
-                        window.viewsNeedDisplay = true
-                    }
-                }
-                #endif
+            guard lock.withLock({ $0.id }) != newValue else { return }
+            let color = makeColor(for: newValue)
+            AccentObservation.shared.mutate {
+                lock.withLock { $0 = AccentState(id: newValue, color: color) }
             }
         }
     }
 
     public static var currentColor: Color {
-        lock.withLock { $0.color }
+        AccentObservation.shared.access()
+        return lock.withLock { $0.color }
     }
 
     public static func platformColor(for value: String, isDark: Bool = true) -> PlatformColor {

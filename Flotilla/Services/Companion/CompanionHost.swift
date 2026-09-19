@@ -1,5 +1,6 @@
 import AppKit
 import CompanionKit
+import DesignSystem
 import Foundation
 import GitKit
 import HooksKit
@@ -806,6 +807,8 @@ final class CompanionHost {
             sessions: store.sessions,
             projects: store.projects,
             catalog: cachedCatalog,
+            // The 1s publish tick picks up accent changes within a second.
+            accentColor: FlotillaAccent.currentID,
             context: { session in
                 CompanionSnapshotBuilder.SessionContext(
                     diffStat: store.diffStatStore.stat(for: session.id),

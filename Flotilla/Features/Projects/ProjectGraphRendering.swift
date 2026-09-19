@@ -283,6 +283,8 @@ struct GraphLanePainter: View {
     private static let dimOpacity: CGFloat = 0.32
 
     var body: some View {
+        // Read here, not inside the renderer, so an accent change re-renders.
+        let accent = FlotillaColors.accent
         Canvas(rendersAsynchronously: false) { context, size in
             let midY = size.height / 2
             let dotX = GraphMetrics.laneCentre(row.lane)
@@ -302,7 +304,7 @@ struct GraphLanePainter: View {
                 )
             }
 
-            drawDot(in: &context, at: CGPoint(x: dotX, y: midY))
+            drawDot(in: &context, at: CGPoint(x: dotX, y: midY), accent: accent)
         }
     }
 
@@ -379,7 +381,7 @@ struct GraphLanePainter: View {
 
     private var haloRadius: CGFloat { dotRadius + 2.4 }
 
-    private func drawDot(in context: inout GraphicsContext, at centre: CGPoint) {
+    private func drawDot(in context: inout GraphicsContext, at centre: CGPoint, accent: Color) {
         let color = GraphPalette.lane(row.colorIndex)
         let dims = highlightedColorIndex != nil && highlightedColorIndex != row.colorIndex
         let tint = color.opacity(dims ? 0.45 : 1)
@@ -405,7 +407,7 @@ struct GraphLanePainter: View {
         }
 
         if isSelected {
-            context.stroke(circle(dotRadius + 4.2), with: .color(FlotillaColors.accent), lineWidth: 1.5)
+            context.stroke(circle(dotRadius + 4.2), with: .color(accent), lineWidth: 1.5)
         }
     }
 }

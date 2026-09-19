@@ -30,6 +30,7 @@ enum CompanionSnapshotBuilder {
         sessions: [Session],
         projects: [Project],
         catalog: CompanionKit.AgentCatalog? = nil,
+        accentColor: String? = nil,
         context: (Session) -> SessionContext
     ) -> FleetSnapshot {
         var pending: [UUID: [PendingInteraction]] = [:]
@@ -53,7 +54,8 @@ enum CompanionSnapshotBuilder {
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
                 .map { ProjectSummary(id: $0.id, name: $0.name) },
             catalog: catalog ?? self.catalog(),
-            pending: pending
+            pending: pending,
+            accentColor: accentColor
         )
     }
 

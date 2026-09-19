@@ -65,6 +65,10 @@ final class MockCompanionDataSource: CompanionDataSource {
         .fallback
     }
 
+    func accentColor(on macID: MacHost.ID) -> String? {
+        nil
+    }
+
     func session(_ id: CompanionSession.ID) -> CompanionSession? {
         sessionsByMac.values.lazy.flatMap { $0 }.first { $0.id == id }.map(Self.withDemoHandoffTargets)
     }

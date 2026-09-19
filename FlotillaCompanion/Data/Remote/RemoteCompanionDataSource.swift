@@ -121,6 +121,10 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         connection(macID)?.fleet?.catalog ?? .fallback
     }
 
+    func accentColor(on macID: MacHost.ID) -> String? {
+        connection(macID)?.fleet?.accentColor
+    }
+
     func session(_ id: CompanionSession.ID) -> CompanionSession? {
         guard let connection = connection(forSession: id),
               var session = connection.fleet?.sessions.first(where: { $0.id == id }) else { return nil }

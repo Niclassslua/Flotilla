@@ -78,6 +78,22 @@ final class MessageCodingTests: XCTestCase {
         XCTAssertEqual(try CompanionJSON.decode(ServerMessage.self, from: CompanionJSON.encode(message)), message)
     }
 
+    func testFleetDeltaCarriesAccentChangesOnly() throws {
+        let old = FleetSnapshot(macID: "m", macName: "Studio", sessions: [], projects: [], catalog: .fallback, accentColor: "orange")
+        var recolored = old
+        recolored.accentColor = "#3366FF"
+        let delta = FleetDelta.make(from: old, to: recolored, baseRevision: 0)
+        XCTAssertEqual(delta.accentColor, "#3366FF")
+        XCTAssertEqual(delta.applying(to: old, revision: 0), recolored)
+        XCTAssertNil(FleetDelta.make(from: old, to: old, baseRevision: 0).accentColor)
+    }
+
+    func testFleetSnapshotFromMacWithoutAccentDecodes() throws {
+        let snapshot = FleetSnapshot(macID: "m", macName: "Studio", sessions: [], projects: [], catalog: .fallback)
+        let decoded = try CompanionJSON.decode(FleetSnapshot.self, from: CompanionJSON.encode(snapshot))
+        XCTAssertNil(decoded.accentColor)
+    }
+
     func testFleetSnapshotWithPendingInteractionsRoundTrips() throws {
         let sessionID = UUID()
         let snapshot = FleetSnapshot(
