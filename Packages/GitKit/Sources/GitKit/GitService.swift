@@ -79,18 +79,20 @@ public struct FileDiffHunk: Equatable, Sendable {
 /// staged, unstaged, and untracked changes. Used for compact `+12 −4`
 /// badges in the UI, where the full `FileDiff` payload would be wasteful.
 public struct GitDiffStat: Equatable, Sendable {
+    public var files: Int
     public var additions: Int
     public var deletions: Int
 
-    public init(additions: Int, deletions: Int) {
+    public init(files: Int = 0, additions: Int, deletions: Int) {
+        self.files = files
         self.additions = additions
         self.deletions = deletions
     }
 
-    public var isEmpty: Bool { additions == 0 && deletions == 0 }
+    public var isEmpty: Bool { files == 0 && additions == 0 && deletions == 0 }
 
     public static func + (lhs: GitDiffStat, rhs: GitDiffStat) -> GitDiffStat {
-        GitDiffStat(additions: lhs.additions + rhs.additions, deletions: lhs.deletions + rhs.deletions)
+        GitDiffStat(files: lhs.files + rhs.files, additions: lhs.additions + rhs.additions, deletions: lhs.deletions + rhs.deletions)
     }
 }
 
@@ -442,13 +444,17 @@ public struct GitService: GitServiceProtocol {
         async let statusRequest = status(at: repoPath)
         let (staged, unstaged, status) = try await (stagedRequest, unstagedRequest, statusRequest)
 
-        var stat = Self.parseNumstat(staged.stdout) + Self.parseNumstat(unstaged.stdout)
+        var lineStat = Self.parseNumstat(staged.stdout) + Self.parseNumstat(unstaged.stdout)
         for entry in status.entries where entry.isUntracked {
             let url = repoPath.appendingPathComponent(entry.path)
             guard let data = try? Data(contentsOf: url), !data.contains(0) else { continue }
-            stat = stat + GitDiffStat(additions: Self.lineCount(of: data), deletions: 0)
+            lineStat = lineStat + GitDiffStat(files: 0, additions: Self.lineCount(of: data), deletions: 0)
         }
-        return stat
+        // File count comes from `status`, one entry per changed path, so a
+        // file touched in both the staged and unstaged areas is counted once
+        // — matching what "N files" means to a human reviewing the diff,
+        // unlike the numstat line sums above which double-count it.
+        return GitDiffStat(files: status.entries.count, additions: lineStat.additions, deletions: lineStat.deletions)
     }
 
     /// Line count the way git counts them: one per `\n`, plus one for a
@@ -1123,13 +1129,13 @@ public struct GitService: GitServiceProtocol {
     /// contribute zero). `public` for the same direct unit-testability
     /// reason as `parseUnifiedDiff`.
     public static func parseNumstat(_ raw: String) -> GitDiffStat {
-        var stat = GitDiffStat(additions: 0, deletions: 0)
+        var stat = GitDiffStat(files: 0, additions: 0, deletions: 0)
         for rawLine in raw.split(separator: "\n", omittingEmptySubsequences: true) {
             let fields = rawLine.split(separator: "\t")
             guard fields.count >= 2,
                   let added = Int(fields[0]),
                   let deleted = Int(fields[1]) else { continue }
-            stat = stat + GitDiffStat(additions: added, deletions: deleted)
+            stat = stat + GitDiffStat(files: 1, additions: added, deletions: deleted)
         }
         return stat
     }

@@ -40,7 +40,7 @@ final class GitLogParsingTests: XCTestCase {
         XCTAssertEqual(commit?.shortSHA, "a1b2c3d")
         XCTAssertEqual(commit?.subject, "fix(git): drain the pipe")
         XCTAssertEqual(commit?.body, "A body line.")
-        XCTAssertEqual(commit?.stat, GitDiffStat(additions: 48, deletions: 20))
+        XCTAssertEqual(commit?.stat, GitDiffStat(files: 2, additions: 48, deletions: 20))
         XCTAssertEqual(commit?.changedFileCount, 2)
         XCTAssertEqual(commit?.authorDate, Date(timeIntervalSince1970: 1_787_170_585))
         XCTAssertFalse(commit?.isMerge ?? true)
@@ -54,7 +54,7 @@ final class GitLogParsingTests: XCTestCase {
         let commits = GitService.parseLog(raw)
 
         XCTAssertEqual(commits.first?.body, body)
-        XCTAssertEqual(commits.first?.stat, GitDiffStat(additions: 5, deletions: 1))
+        XCTAssertEqual(commits.first?.stat, GitDiffStat(files: 1, additions: 5, deletions: 1))
         XCTAssertEqual(commits.first?.changedFileCount, 1)
     }
 
@@ -86,7 +86,7 @@ final class GitLogParsingTests: XCTestCase {
 
     func testBinaryFileCountsAsChangedButContributesNoLines() {
         let commits = GitService.parseLog(record(tail: "\n\n-\t-\timage.png\n4\t2\tcode.swift\n"))
-        XCTAssertEqual(commits.first?.stat, GitDiffStat(additions: 4, deletions: 2))
+        XCTAssertEqual(commits.first?.stat, GitDiffStat(files: 1, additions: 4, deletions: 2), "numstat can't parse the binary line, so it doesn't contribute a file")
         XCTAssertEqual(commits.first?.changedFileCount, 2, "a binary file still changed")
     }
 

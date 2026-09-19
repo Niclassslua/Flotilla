@@ -73,12 +73,12 @@ final class UnifiedDiffParsingTests: XCTestCase {
 final class NumstatParsingTests: XCTestCase {
     func testSumsMultipleFiles() {
         let raw = "10\t2\tfile1.swift\n3\t0\tfile2.swift\n"
-        XCTAssertEqual(GitService.parseNumstat(raw), GitDiffStat(additions: 13, deletions: 2))
+        XCTAssertEqual(GitService.parseNumstat(raw), GitDiffStat(files: 2, additions: 13, deletions: 2))
     }
 
     func testBinaryFilesContributeZero() {
         let raw = "-\t-\timage.png\n5\t1\tcode.swift\n"
-        XCTAssertEqual(GitService.parseNumstat(raw), GitDiffStat(additions: 5, deletions: 1))
+        XCTAssertEqual(GitService.parseNumstat(raw), GitDiffStat(files: 1, additions: 5, deletions: 1))
     }
 
     func testEmptyInputIsZero() {
@@ -182,7 +182,8 @@ final class GitServiceRealRepoTests: XCTestCase {
         let stat = try await service.diffStat(at: repoPath)
 
         // Staged: +2 −1. Unstaged: +1 −0. Untracked NEW.md: +3 −0.
-        XCTAssertEqual(stat, GitDiffStat(additions: 6, deletions: 1))
+        // Files: README.md and NEW.md, one entry each in git status.
+        XCTAssertEqual(stat, GitDiffStat(files: 2, additions: 6, deletions: 1))
     }
 
     func testDiffStatIsZeroForCleanTree() async throws {
@@ -459,7 +460,7 @@ final class GitServiceRealRepoTests: XCTestCase {
         let commits = try await service.log(at: repoPath, ref: nil, skip: 0, maxCount: 100)
 
         XCTAssertEqual(commits.map(\.subject), ["feat: add a", "init"])
-        XCTAssertEqual(commits.first?.stat, GitDiffStat(additions: 2, deletions: 0))
+        XCTAssertEqual(commits.first?.stat, GitDiffStat(files: 1, additions: 2, deletions: 0))
         XCTAssertEqual(commits.first?.changedFileCount, 1)
         XCTAssertEqual(commits.first?.authorName, "Flotilla Tests")
         XCTAssertEqual(commits.first?.authorEmail, "flotilla-tests@example.com")

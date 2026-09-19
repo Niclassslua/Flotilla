@@ -118,7 +118,7 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
     }
 
     private func context(answerable: [PendingInteraction] = []) -> CompanionSnapshotBuilder.SessionContext {
-        .init(diffStat: GitDiffStat(additions: 12, deletions: 4), handoffTargets: [.codexCLI], isProcessLive: true, answerable: answerable)
+        .init(diffStat: GitDiffStat(files: 3, additions: 12, deletions: 4), handoffTargets: [.codexCLI], isProcessLive: true, answerable: answerable)
     }
 
     func testWaitingSessionWithoutABridgeRequestGetsANeedsTerminalCard() {
@@ -169,7 +169,7 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
 
         XCTAssertEqual(mapped.branch, "flotilla/fix")
         XCTAssertTrue(mapped.hasWorktree)
-        XCTAssertEqual(mapped.diffStat, DiffStat(files: 0, additions: 12, deletions: 4))
+        XCTAssertEqual(mapped.diffStat, DiffStat(files: 3, additions: 12, deletions: 4))
         XCTAssertEqual(mapped.crashReason, CompanionSnapshotBuilder.crashReason)
         XCTAssertTrue(mapped.hasTranscript, "OpenCode's transcript comes from its server")
         XCTAssertTrue(CompanionSnapshotBuilder.snapshot(macID: "m", macName: "S", sessions: [crashed], projects: [], context: { _ in self.context() }).pending.isEmpty)

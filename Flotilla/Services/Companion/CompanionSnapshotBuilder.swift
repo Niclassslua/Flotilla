@@ -71,7 +71,7 @@ enum CompanionSnapshotBuilder {
             hasWorktree: session.worktree != nil,
             isProcessLive: context.isProcessLive,
             updatedAt: session.lastActiveAt,
-            diffStat: context.diffStat.flatMap { $0.isEmpty ? nil : DiffStat(files: 0, additions: $0.additions, deletions: $0.deletions) },
+            diffStat: context.diffStat.flatMap { $0.isEmpty ? nil : DiffStat(files: $0.files, additions: $0.additions, deletions: $0.deletions) },
             attentionSummary: cards.first?.attentionSummary,
             crashReason: session.status == .crashed ? crashReason : nil,
             handoffTargets: context.handoffTargets,
