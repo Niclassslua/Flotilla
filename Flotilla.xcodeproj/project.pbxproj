@@ -149,6 +149,7 @@
 		4B733F632936F80343509855 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524067025CC0F020E1592028 /* ProjectDetailView.swift */; };
 		4C5434D1CEA3C035290C3AAB /* ProjectWorkspaceChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096ED8CE6B6F1EE531BD480C /* ProjectWorkspaceChrome.swift */; };
 		4C6ED34B87B3AF3DC7B0F9A7 /* typescript.svg in Resources */ = {isa = PBXBuildFile; fileRef = E4129D9B51A69DC7D9B98130 /* typescript.svg */; };
+		4CEEB2C49A3AF85218AAC170 /* HomeAgentShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BA452B9E090BA91113BB48 /* HomeAgentShare.swift */; };
 		4D4B19D395CDE28482330590 /* c.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5C2D50B6652163301BEF829D /* c.svg */; };
 		4FCC07422567B58E178B2DAD /* ClaudeCompanionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CB015868F514EE2C71C4426 /* ClaudeCompanionAdapter.swift */; };
 		4FE684C14DD32C29DF7AEF73 /* DiffAndFilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9CA8721FFE982E28B49BC12 /* DiffAndFilesUITests.swift */; };
@@ -822,6 +823,7 @@
 		BECCD7A6308B107F37525D5D /* TerminalPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPipelineTests.swift; sourceTree = "<group>"; };
 		C038C5B8AB4AE5F31A21ECD0 /* TmuxSessionWrapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TmuxSessionWrapping.swift; sourceTree = "<group>"; };
 		C1A53AAFB27915EB20686B84 /* SessionGroupBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGroupBar.swift; sourceTree = "<group>"; };
+		C1BA452B9E090BA91113BB48 /* HomeAgentShare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeAgentShare.swift; sourceTree = "<group>"; };
 		C1C8B09D3B46D48A26D09B62 /* video.svg */ = {isa = PBXFileReference; path = video.svg; sourceTree = "<group>"; };
 		C2EF3700AF5B4EB6E32DE2A9 /* CodexTranscriptCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexTranscriptCodecTests.swift; sourceTree = "<group>"; };
 		C317F155B41EC64784FE603E /* SessionKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SessionKit; path = Packages/SessionKit; sourceTree = SOURCE_ROOT; };
@@ -1228,6 +1230,7 @@
 		2C84221F234AD1816D69FB84 /* Home */ = {
 			isa = PBXGroup;
 			children = (
+				C1BA452B9E090BA91113BB48 /* HomeAgentShare.swift */,
 				DEFE44DA481970CBCB874EFE /* HomeComponents.swift */,
 				8BDC9600CEDB1A97835AA0DB /* HomeDashboardView.swift */,
 				EADF22401AA1CA2426BA2730 /* HomeInsights.swift */,
@@ -2383,6 +2386,7 @@
 				28C7BC6A5A4E7DF5FA5AB635 /* GridZoomGestures.swift in Sources */,
 				BAA6BF671AB4B98AEE62648C /* HandoffService.swift in Sources */,
 				1D8CE0EBDD8D1E32AD37BAAE /* HandySpeechClient.swift in Sources */,
+				4CEEB2C49A3AF85218AAC170 /* HomeAgentShare.swift in Sources */,
 				B115C276FE1CE39BF8794C37 /* HomeComponents.swift in Sources */,
 				7BFAB0B2AC59BD75747DDE01 /* HomeDashboardView.swift in Sources */,
 				050DA004C932759910E1419F /* HomeInsights.swift in Sources */,

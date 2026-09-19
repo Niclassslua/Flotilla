@@ -27,9 +27,10 @@ struct HomeProjectCard: View {
     private var tint: Color { ProjectMark.tint(for: project) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.large) {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
             header
-            repoStateRow
+            metaRow
+            statusRow
         }
         .padding(FlotillaSpacing.large + 2)
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -66,7 +67,7 @@ struct HomeProjectCard: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: FlotillaSpacing.medium) {
+        HStack(alignment: .center, spacing: FlotillaSpacing.medium) {
             ProjectMark(title: project.name, tint: tint, size: 38)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -84,14 +85,42 @@ struct HomeProjectCard: View {
             }
 
             Spacer(minLength: FlotillaSpacing.small)
-
-            sessionHint
             moreMenu
         }
     }
 
     private var abbreviatedPath: String {
         (project.rootPath.path as NSString).abbreviatingWithTildeInPath
+    }
+
+    // MARK: - Meta Row
+
+    /// Branch and worktrees on the left, sessions on the right. Only the
+    /// branch name may shorten; everything else keeps its full width.
+    private var metaRow: some View {
+        HStack(spacing: FlotillaSpacing.medium) {
+            if let branch = repoState?.branch {
+                HStack(spacing: 5) {
+                    GitBranchIcon(size: 11)
+                    Text(BranchNaming.displayName(for: branch))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .layoutPriority(-1)
+                .help(branch)
+            }
+            if let worktrees = repoState?.worktreeCount, worktrees > 0 {
+                Label("\(worktrees) worktree\(worktrees == 1 ? "" : "s")", systemImage: "square.stack.3d.down.right")
+                    .font(FlotillaTypography.caption.monospacedDigit())
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .fixedSize()
+            }
+            Spacer(minLength: FlotillaSpacing.small)
+            sessionHint
+        }
+        .frame(height: 18)
     }
 
     /// "1 needs you · 2 working" — counts only, most urgent first. Nothing at
@@ -109,10 +138,7 @@ struct HomeProjectCard: View {
                     hintDot(FlotillaColors.statusWorking, "\(working) working")
                 }
             }
-            .padding(.horizontal, FlotillaSpacing.small + 2)
-            .padding(.vertical, 4)
-            .background(FlotillaColors.textPrimary.opacity(0.06), in: Capsule())
-            .padding(.top, 4)
+            .fixedSize()
         }
     }
 
@@ -120,66 +146,24 @@ struct HomeProjectCard: View {
         HStack(spacing: 5) {
             Circle().fill(color).frame(width: 6, height: 6)
             Text(label)
-                .font(FlotillaTypography.caption2.weight(.medium))
+                .font(FlotillaTypography.caption.weight(.medium))
                 .foregroundStyle(FlotillaColors.textSecondary)
-                .fixedSize()
         }
     }
 
-    // MARK: - Repository State
+    // MARK: - Status Row
 
+    /// The loose ends, as left-aligned pills — or one "Clean" pill when there
+    /// are none. Wraps rather than squeezing when the card is narrow.
     @ViewBuilder
-    private var repoStateRow: some View {
+    private var statusRow: some View {
         if let state = repoState {
-            HStack(spacing: FlotillaSpacing.small) {
-                if let branch = state.branch {
-                    chip {
-                        GitBranchIcon(size: 11)
-                        Text(BranchNaming.displayName(for: branch))
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .frame(maxWidth: 170, alignment: .leading)
-                }
-
-                if state.isSettled {
-                    chip(tint: FlotillaColors.success) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 9, weight: .bold))
-                        Text("Clean")
-                    }
-                } else {
-                    if state.hasUncommittedWork {
-                        chip(tint: FlotillaColors.warning) {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 9, weight: .bold))
-                            Text("\(state.changedFileCount) uncommitted")
-                            if !state.diffStat.isEmpty {
-                                Text("+\(state.diffStat.additions)").foregroundStyle(FlotillaColors.diffAdded)
-                                Text("−\(state.diffStat.deletions)").foregroundStyle(FlotillaColors.diffRemoved)
-                            }
-                        }
-                    }
-                    if state.unpushedCount > 0 {
-                        chip(tint: FlotillaColors.statusReady) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 9, weight: .bold))
-                            Text("\(state.unpushedCount) unpushed")
-                        }
-                    }
-                }
-
-                if state.worktreeCount > 0 {
-                    chip {
-                        Image(systemName: "square.stack.3d.down.right")
-                            .font(.system(size: 9, weight: .semibold))
-                        Text("\(state.worktreeCount) worktree\(state.worktreeCount == 1 ? "" : "s")")
-                    }
-                }
-                Spacer(minLength: 0)
+            let pills = statusPills(state)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: FlotillaSpacing.small) { pills }
+                VStack(alignment: .leading, spacing: FlotillaSpacing.small) { pills }
             }
-            .font(FlotillaTypography.caption.monospacedDigit())
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             HStack(spacing: FlotillaSpacing.small) {
                 ProgressView().controlSize(.mini)
@@ -187,19 +171,52 @@ struct HomeProjectCard: View {
                     .font(FlotillaTypography.caption)
                     .foregroundStyle(FlotillaColors.textTertiary)
             }
-            .frame(height: 24)
+            .frame(height: 26)
         }
     }
 
-    /// A capsule of repository state. Tinted chips are the loose ends; the
-    /// untinted ones are context.
-    private func chip<Content: View>(tint: Color? = nil, @ViewBuilder _ content: () -> Content) -> some View {
-        HStack(spacing: 5) { content() }
-            .foregroundStyle(tint ?? FlotillaColors.textSecondary)
-            .padding(.horizontal, FlotillaSpacing.small + 1)
-            .frame(height: 24)
-            .background((tint ?? FlotillaColors.textPrimary).opacity(tint == nil ? 0.06 : 0.13), in: Capsule())
-            .fixedSize(horizontal: tint != nil, vertical: false)
+    @ViewBuilder
+    private func statusPills(_ state: HomeRepoState) -> some View {
+        if state.isSettled {
+            pill("checkmark", "Clean", tint: FlotillaColors.success)
+        }
+        if state.hasUncommittedWork {
+            pill("pencil", "\(state.changedFileCount) uncommitted", tint: FlotillaColors.warning) {
+                // Line counts only when there are lines — an untracked folder
+                // or binary file is uncommitted work with no "+0 −0" to show.
+                if state.diffStat.additions > 0 {
+                    Text("+\(state.diffStat.additions.formatted(.number.notation(.compactName)))")
+                        .foregroundStyle(FlotillaColors.diffAdded)
+                }
+                if state.diffStat.deletions > 0 {
+                    Text("−\(state.diffStat.deletions.formatted(.number.notation(.compactName)))")
+                        .foregroundStyle(FlotillaColors.diffRemoved)
+                }
+            }
+        }
+        if state.unpushedCount > 0 {
+            pill("arrow.up", "\(state.unpushedCount) unpushed", tint: FlotillaColors.statusReady)
+        }
+    }
+
+    private func pill<Extra: View>(
+        _ systemImage: String,
+        _ title: String,
+        tint: Color,
+        @ViewBuilder extra: () -> Extra = { EmptyView() }
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 9, weight: .bold))
+            Text(title)
+            extra()
+        }
+        .font(FlotillaTypography.caption.weight(.medium).monospacedDigit())
+        .foregroundStyle(tint)
+        .padding(.horizontal, FlotillaSpacing.small + 2)
+        .frame(height: 26)
+        .background(tint.opacity(0.13), in: Capsule())
+        .fixedSize()
     }
 
     // MARK: - Menu
