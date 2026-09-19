@@ -7,10 +7,6 @@ import DesignSystem
 /// rather than adaptive tokens — brand marks don't shift for light/dark the
 /// way UI chrome does.
 enum AgentBrand {
-    /// The flat blue the home composer's Antigravity wash paints
-    /// (`LaunchpadDesign.backdrop`), in place of the brand gradient.
-    static let antigravityBackground = Color(red: 0x44 / 255, green: 0x7F / 255, blue: 0xED / 255) // #447FED
-
     /// Antigravity's 5-stop loop — first and last stop match, so it closes
     /// cleanly as a sweep. Nothing paints this as a sweep any more; it
     /// survives as the source of the individual brand stops that

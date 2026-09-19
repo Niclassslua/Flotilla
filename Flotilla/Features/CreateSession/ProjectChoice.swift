@@ -68,9 +68,9 @@ enum ProjectChoice: Hashable, Identifiable {
 // MARK: - Candidate list
 
 enum ProjectChoiceCatalog {
-    /// Known projects ordered by their most recently active session, matching
-    /// `HomeContext.recentProjects(limit:)` — `Project` carries no timestamp of
-    /// its own, so recency has to be derived from its sessions. The list
+    /// Known projects ordered by their most recently active session —
+    /// `Project` carries no timestamp of its own, so recency has to be
+    /// derived from its sessions. The list
     /// reorders as work moves, which is the whole point: the repo you touched
     /// last is the one you almost certainly want next.
     @MainActor

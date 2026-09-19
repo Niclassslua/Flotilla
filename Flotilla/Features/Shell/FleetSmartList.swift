@@ -31,8 +31,7 @@ enum FleetSmartList: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 
     /// `needsYou` deliberately spans two statuses: a crashed agent and a
-    /// blocked one both need a human, and `HomeContext.attentionSessions`
-    /// already groups them that way. The distinction survives in each row's
+    /// blocked one both need a human. The distinction survives in each row's
     /// own status word — it is not lost, just not made into a fourth list.
     func matches(_ session: Session) -> Bool {
         switch self {

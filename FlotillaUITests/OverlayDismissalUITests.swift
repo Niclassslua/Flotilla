@@ -39,13 +39,13 @@ final class OverlayDismissalUITests: XCTestCase {
         app.descendants(matching: .any)[identifier].firstMatch
     }
 
-    /// The home composer's launch button sits behind both overlays at a known,
-    /// stable location — clicking it only succeeds if the scrim isn't actually
-    /// intercepting hits.
+    /// The home greeting sits behind both overlays at a known, stable
+    /// location and does nothing when clicked — so the click only lands if the
+    /// scrim isn't actually intercepting hits.
     private func clickBehindOverlay(_ app: XCUIApplication) {
-        let homeLaunchButton = element(app, .homeLaunchButton)
-        XCTAssertTrue(homeLaunchButton.exists)
-        homeLaunchButton.click()
+        let homeGreeting = element(app, .homeGreeting)
+        XCTAssertTrue(homeGreeting.exists)
+        homeGreeting.click()
     }
 
     func testClickOutsideDismissesCreateSessionModal() {

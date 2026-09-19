@@ -343,10 +343,8 @@ final class VocabularyScreenshotUITests: XCTestCase {
 
         shootWindow(app, "01-home-dashboard", "Shell and Home dashboard")
         shootElement(app, id: .homeDashboard, "02-home-dashboard-element", "Home dashboard")
-        shootElement(app, id: .homeAttentionQueue, "03-home-attention-queue", "Attention queue")
-        shootElement(app, id: .homeRecentSessions, "04-home-recent-sessions", "Recent sessions")
-        shootElement(app, id: .homeRecentProjects, "05-home-projects-gallery", "Projects gallery")
-        shootElement(app, id: .homeLaunchSummary, "06-composer-summary-line", "Composer summary")
+        shootElement(app, id: .homeStats, "03-home-activity-stats", "Activity stats")
+        shootElement(app, id: .homeRecentProjects, "05-home-projects-gallery", "Project cards")
 
         goToSessions(app)
         shootWindow(app, "07-sessions-focus", "Sessions facet and Focus presentation")

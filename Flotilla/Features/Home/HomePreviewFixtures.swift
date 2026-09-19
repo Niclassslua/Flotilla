@@ -335,19 +335,5 @@ enum HomePreviewData {
             worktreeBaseDirectoryProvider: { URL(fileURLWithPath: NSTemporaryDirectory()) }
         )
     }
-
-    @MainActor
-    static func makeContext() -> HomeContext {
-        let store = makeStore()
-        return HomeContext(
-            store: store,
-            settings: AppSettings(),
-            activityStore: nil,
-            openCodeSubscription: .none,
-            defaultAgent: .claudeCode,
-            openProject: { _ in },
-            openSession: { _ in }
-        )
-    }
 }
 #endif

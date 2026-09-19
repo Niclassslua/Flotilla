@@ -224,22 +224,9 @@ public enum AXID: String, Sendable {
 
     // MARK: - Home Dashboard
     case homeDashboard = "HomeDashboard"
-    case homeGoalField = "Home.GoalField"
     case homeRecentProjects = "Home.RecentProjects"
-    case homeRecentSessions = "Home.RecentSessions"
-    case homeAttentionQueue = "Home.AttentionQueue"
-    case homeAgentOption = "Home.Agent."
-    case homeProjectFilter = "Home.ProjectFilter"
-    case homeProjectTile = "Home.Project-"
-    case homeSourceGeneral = "Home.Source.General"
-    case homeChooseFolderButton = "Home.ChooseFolderButton"
-    case homeCheckoutMain = "Home.Checkout.Main"
-    case homeCheckoutWorktree = "Home.Checkout.Worktree"
-    case homeModelField = "Home.ModelField"
-    case homeEffortPicker = "Home.EffortPicker"
-    case homeLaunchSummary = "Home.LaunchSummary"
-    case homeLaunchButton = "Home.LaunchButton"
-    case homeBackgroundButton = "Home.BackgroundButton"
+    case homeGreeting = "Home.Greeting"
+    case homeStats = "Home.Stats"
     case projectCompactCardEllipsis = "ProjectCompactCard.Ellipsis-"
 
     // MARK: - Session Row (Legacy - preserved for test compatibility)
@@ -503,11 +490,6 @@ public enum AXID: String, Sendable {
     /// Creates a create session agent option identifier
     public static func createSessionAgentOption(_ agent: String) -> String {
         "CreateSession.Agent.\(agent)"
-    }
-
-    /// Creates a home agent option identifier
-    public static func homeAgentOption(_ agent: String) -> String {
-        "Home.Agent.\(agent)"
     }
 
     /// Creates a project git sub-tab identifier
