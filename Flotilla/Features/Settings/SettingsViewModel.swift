@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SettingsKit
+import DesignSystem
 
 @Observable
 @MainActor
@@ -10,6 +11,7 @@ final class SettingsViewModel {
     var settings: AppSettings {
         didSet {
             guard settings != oldValue else { return }
+            FlotillaAccent.currentID = settings.accentColor
             store.save(settings)
         }
     }
@@ -20,6 +22,8 @@ final class SettingsViewModel {
 
     init(store: SettingsStoring) {
         self.store = store
-        self.settings = store.load()
+        let loaded = store.load()
+        self.settings = loaded
+        FlotillaAccent.currentID = loaded.accentColor
     }
 }

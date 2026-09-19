@@ -7,6 +7,7 @@ struct CompanionSettingsView: View {
     @Environment(CompanionStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
+    @AppStorage(FlotillaAccent.companionStorageKey) private var accentColor: String = FlotillaAccent.defaultID
     @State private var isConfirmingClearAll = false
 
     var body: some View {
@@ -23,6 +24,16 @@ struct CompanionSettingsView: View {
                     Text("Appearance")
                 } footer: {
                     Text("These settings apply to this iPhone only. Flotilla's own settings stay on your Mac.")
+                }
+
+                Section {
+                    AccentColorPicker(
+                        accentColor: $accentColor,
+                        customStorageKey: "companion.appearance.custom-accent"
+                    )
+                    .listRowBackground(FlotillaColors.surface)
+                } header: {
+                    Text("Accent Color")
                 }
 
                 Section {

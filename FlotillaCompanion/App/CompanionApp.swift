@@ -6,19 +6,22 @@ import CompanionKit
 struct CompanionApp: App {
     @State private var store = CompanionEnvironment.makeStore()
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
+    @AppStorage(FlotillaAccent.companionStorageKey) private var accentColor: String = FlotillaAccent.defaultID
+
+    init() {
+        let storedAccent = UserDefaults.standard.string(forKey: FlotillaAccent.companionStorageKey) ?? FlotillaAccent.defaultID
+        FlotillaAccent.currentID = storedAccent
+    }
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(store)
                 .preferredColorScheme(appearance.colorScheme)
-                // Orange is reserved for primary actions, so ordinary chrome
-                // (back buttons, toolbar items) takes the text colour instead.
-                // Note: .tint here cascades to child views; controls with standard
-                // system colors (like Toggle switches, which Apple HIG defines as green)
-                // must explicitly set .tint(.green) so they don't inherit textPrimary
-                // (which in dark/night mode renders an active switch completely white).
-                .tint(FlotillaColors.textPrimary)
+                .tint(FlotillaColors.accent)
+                .onChange(of: accentColor) { _, newColor in
+                    FlotillaAccent.currentID = newColor
+                }
         }
     }
 }

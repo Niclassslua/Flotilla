@@ -2,10 +2,10 @@ import SwiftUI
 import SessionKit
 #if os(macOS)
 import AppKit
-typealias PlatformColor = NSColor
+public typealias PlatformColor = NSColor
 #else
 import UIKit
-typealias PlatformColor = UIColor
+public typealias PlatformColor = UIColor
 #endif
 
 // MARK: - Core Tokens
@@ -175,10 +175,9 @@ public struct FlotillaColors: Sendable {
     )
 
     // MARK: - Accent
-    public static let accent = dynamic(
-        dark: PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1),
-        light: PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
-    )
+    public static var accent: Color {
+        FlotillaAccent.currentColor
+    }
 
     public static let accentContent = Color.white
 

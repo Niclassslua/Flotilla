@@ -24,7 +24,7 @@ enum AgentBrand {
     /// is the anchor color its full gradient starts and ends on.
     static func accentColor(for kind: AgentKind) -> Color {
         switch kind {
-        case .claudeCode: FlotillaColors.accent
+        case .claudeCode: Color(red: 0.96, green: 0.36, blue: 0.16)
         case .codexCLI: Color(red: 0x40 / 255, green: 0x43 / 255, blue: 0xF5 / 255) // #4043F5
         case .openCode: .white // #FFFFFF
         case .antigravity: antigravityGradientColors[0]
@@ -53,7 +53,7 @@ enum AgentBrand {
         case .agents:
             return Color(red: 0.40, green: 0.70, blue: 0.65)
         case .claude, .codex:
-            return framework.agentKind.map(accentColor(for:)) ?? FlotillaColors.accent
+            return framework.agentKind.map(accentColor(for:)) ?? Color(red: 0.96, green: 0.36, blue: 0.16)
         }
     }
 
