@@ -65,6 +65,7 @@ struct AgentScreenshotPanel: View {
                 Image(systemName: "xmark")
                     .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
                     .frame(width: FlotillaControlHeight.small, height: FlotillaControlHeight.small)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(FlotillaColors.textSecondary)
@@ -209,7 +210,7 @@ struct AgentScreenshotViewerSheet: View {
                 }
             }
         }
-        .frame(minWidth: 780, idealWidth: 1040, maxWidth: 1600, minHeight: 560, idealHeight: 780, maxHeight: 1100)
+        .frame(minWidth: 960, idealWidth: 1280, maxWidth: 1920, minHeight: 680, idealHeight: 900, maxHeight: 1280)
         .background(FlotillaColors.canvas)
         .onExitCommand(perform: onClose)
         .onChange(of: screenshot.id) { _, _ in
@@ -221,7 +222,7 @@ struct AgentScreenshotViewerSheet: View {
     }
 
     private var header: some View {
-        HStack(spacing: FlotillaSpacing.medium) {
+        HStack(spacing: FlotillaSpacing.large) {
             HStack(spacing: FlotillaSpacing.small) {
                 ProviderLogo(agent: screenshot.agent)
                     .frame(width: 16, height: 16)
@@ -242,11 +243,13 @@ struct AgentScreenshotViewerSheet: View {
                     .foregroundStyle(FlotillaColors.textTertiary)
                 }
             }
+            .layoutPriority(-1)
 
-            Spacer(minLength: FlotillaSpacing.medium)
+            Spacer(minLength: FlotillaSpacing.small)
 
             if screenshots.count > 1 {
                 screenshotPager
+                    .layoutPriority(1)
             }
 
             // Zoom Controls
@@ -256,7 +259,8 @@ struct AgentScreenshotViewerSheet: View {
                 } label: {
                     Image(systemName: "minus.magnifyingglass")
                         .font(.system(size: FlotillaIconSize.small))
-                        .frame(width: 26, height: 26)
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(scale <= 0.25)
@@ -273,7 +277,8 @@ struct AgentScreenshotViewerSheet: View {
                 } label: {
                     Image(systemName: "plus.magnifyingglass")
                         .font(.system(size: FlotillaIconSize.small))
-                        .frame(width: 26, height: 26)
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(scale >= 6.0)
@@ -312,8 +317,9 @@ struct AgentScreenshotViewerSheet: View {
                 RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
                     .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
             )
+            .layoutPriority(1)
 
-            Spacer(minLength: FlotillaSpacing.medium)
+            Spacer(minLength: FlotillaSpacing.small)
 
             // Actions
             HStack(spacing: FlotillaSpacing.small) {
@@ -321,6 +327,7 @@ struct AgentScreenshotViewerSheet: View {
                     copy()
                 } label: {
                     Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .fixedSize()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -331,6 +338,7 @@ struct AgentScreenshotViewerSheet: View {
                     save()
                 } label: {
                     Label("Save…", systemImage: "square.and.arrow.down")
+                        .fixedSize()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -341,11 +349,13 @@ struct AgentScreenshotViewerSheet: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .tint(FlotillaColors.accent)
+                    .fixedSize()
                     .accessibilityIdentifier(AXID.agentScreenshotViewerClose.rawValue)
             }
+            .layoutPriority(1)
         }
         .padding(.horizontal, FlotillaSpacing.large)
-        .frame(height: 48)
+        .frame(height: 56)
         .background(FlotillaColors.surface)
     }
 
@@ -355,7 +365,8 @@ struct AgentScreenshotViewerSheet: View {
                 selectedIndex = max(selectedIndex - 1, 0)
             } label: {
                 Image(systemName: "chevron.left")
-                    .frame(width: 26, height: 26)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!canShowPrevious)
@@ -373,7 +384,8 @@ struct AgentScreenshotViewerSheet: View {
                 selectedIndex = min(selectedIndex + 1, screenshots.count - 1)
             } label: {
                 Image(systemName: "chevron.right")
-                    .frame(width: 26, height: 26)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!canShowNext)
