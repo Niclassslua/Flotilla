@@ -9,8 +9,9 @@ import SettingsKit
 /// sidebar's New Session button, the command palette, ⌘N, or a "fix this
 /// commit" shortcut.
 ///
-/// Tiles is the single focused layout for the New Session window. The
-/// card-grid `LaunchpadDesign` remains the separate home-dashboard composer.
+/// Tiles is the single focused layout for the New Session window, and this
+/// window is the only place sessions are created — Home no longer has a
+/// composer of its own.
 struct CreateSessionView: View {
     @Bindable var store: AppStore
     @Environment(\.dismiss) private var environmentDismiss

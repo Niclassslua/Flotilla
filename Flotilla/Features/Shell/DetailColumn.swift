@@ -21,6 +21,9 @@ struct DetailColumn: View {
     @State private var gitSidebarSessionID: UUID?
     @State private var screenshotMonitor = AgentScreenshotMonitor()
     @State private var isScreenshotsExplicitlyPresented = false
+    /// Lives here rather than in Home so revisiting Home shows the last
+    /// answer at once instead of re-reading every repository.
+    @State private var homeInsights = HomeInsights()
 
     var body: some View {
         let _ = navigator.presentedSheet
@@ -63,13 +66,8 @@ struct DetailColumn: View {
         HomeDashboardView(
             store: store,
             openProject: onOpenProject,
-            openSession: onOpenSession,
             settingsViewModel: settingsViewModel,
-            activityStore: activityStore,
-            terminalManager: terminalManager,
-            openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
-            highlightUnseenCommits: settingsViewModel.settings.git.highlightUnseenCommits,
-            defaultAgent: .claudeCode
+            insights: homeInsights
         )
     }
 

@@ -10,7 +10,7 @@ import SessionKit
 ///
 /// See `docs/ui-model.md` § 1 for the destination canon.
 enum WorkspaceDestination: Hashable {
-    /// The landing surface: attention, activity, projects, composer.
+    /// The landing surface: attention, activity, projects.
     case home
     /// The session collection, in one of its presentations.
     case sessions(WorkspacePresentation)

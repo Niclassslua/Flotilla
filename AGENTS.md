@@ -43,8 +43,8 @@ Flotilla/
 │   ├── App/                       # Lifecycle, AppEnvironment, AppStore, AXID
 │   ├── Features/                  # User-facing domain feature modules
 │   │   ├── Shell/                 # FlotillaShell, FleetSidebar, WorkspaceToolbar, Inspector
-│   │   ├── Home/                  # HomeDashboardView, Hero title, preview fixtures
-│   │   ├── CreateSession/         # CreateSessionView, Drafts, Launchpad & CommandBar designs
+│   │   ├── Home/                  # HomeDashboardView, project cards, activity stats, HomeInsights, preview fixtures
+│   │   ├── CreateSession/         # CreateSessionView (the only session launcher), Drafts, Tiles design
 │   │   ├── Grid/                  # MissionControlGrid, GridView, zoom gestures, layout engine
 │   │   ├── Session/               # TerminalHostView, TerminalManager, MonacoHost, editors
 │   │   ├── Projects/              # ProjectOverview, Git visualizer, graph, history, rules, Kanban

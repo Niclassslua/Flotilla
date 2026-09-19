@@ -60,14 +60,10 @@ Shown when the navigator's **Home** row is selected.
 
 | Say | What it is | Code |
 | --- | --- | --- |
-| **Home dashboard** | The whole scrolling Overview page: hero, composer, fleet sections, harbor gradient background. | `HomeDashboardView` — `Features/Home/` |
-| **Hero title** | The big Flotilla wordmark + fleet stats at the top. | `FlotillaHeroTitleView` |
-| **Composer** *(or "the launchpad")* | The always-visible session composer card on Home — agent cards, model controls, project tiles, goal field, isolation switch. | `LaunchpadDesign` — `Features/CreateSession/Designs/` |
-| **Attention queue** | The "needs you" section: sessions that can't progress without a human. Renders nothing when the fleet is healthy. | `HomeAttentionQueue` / `HomeAttentionRow` |
-| **Recent sessions list** | The most-recently-active sessions, with live telemetry. | `HomeRecentSessionsList` / `HomeSessionRow` |
-| **Projects gallery** | The grid of project tiles at the foot of Home. | `HomeProjectsGallery` |
-| **Fleet bar** | The horizontal status histogram — one segment per status, width by count. | `HomeFleetBar` |
-| **Fleet legend** | The count + label pairs under/next to the fleet bar. | `HomeFleetLegend` |
+| **Home dashboard** | The Overview page: a lobby for choosing a project. Greeting, project cards, and activity stats on the warm gradient. Home never creates sessions (⌘N does) and never lists them (the sidebar does). | `HomeDashboardView` — `Features/Home/` |
+| **Project card** | A large glass card per project: branch, uncommitted work, unpushed commits, open worktrees, and a one-line session hint ("1 needs you · 2 working"). Its ⋯ / context menu holds the project actions (open in editor, commit attribution, remove). | `HomeProjectCard` |
+| **Activity stats** | The section at the foot of Home: contribution heatmap, weekly rhythm, agent share, codebase growth — git history across every project. | `HomeStatsSection` |
+| **Home insights** | The cached, throttled git reads behind the cards and stats. | `HomeInsights` / `HomeRepoState` / `HomeActivity` |
 | **Activity line** | The agent's most recent terminal line, shown on live sessions only. | `HomeActivityLine` |
 | **Section header** (home) | The "Needs You" / "Recent" / "Projects" headers. | `HomeSectionHeader`, `HomeEmptyHint` |
 
@@ -291,7 +287,7 @@ These screenshots are navigation aids for the vocabulary above, not pixel-accura
 
 ![Sessions facet showing the navigation rail, session list, and detail column](images/ui-vocabulary/sessions-facet.png)
 
-The Home view above contains the **composer**, **summary line**, **attention queue**, **recent sessions**, and **projects gallery** named in sections 1 and 2.
+The Home view above shows the **project cards** and **activity stats** named in section 2.
 
 ### Fleet presentations and session cards
 

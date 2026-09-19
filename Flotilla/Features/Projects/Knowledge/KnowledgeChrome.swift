@@ -181,8 +181,8 @@ struct KnowledgeInvocationChip: View {
 
 // MARK: - Section header
 
-/// Uppercased, wide-tracked section label — the convention `LaunchpadDesign`
-/// established for group headings.
+/// Uppercased, wide-tracked section label — the app's convention for group
+/// headings.
 struct KnowledgeSectionHeader: View {
     let title: String
     var count: Int?
