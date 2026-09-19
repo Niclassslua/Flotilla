@@ -8,6 +8,75 @@ struct CompanionAudioLevelSample: Identifiable, Equatable, Sendable {
     let level: Double
 }
 
+/// Levels for every waveform slot one capture buffer touched. The last
+/// sample is the slot still being recorded; it is republished (only ever
+/// growing) until the slot completes.
+struct CompanionAudioLevelUpdate: Sendable {
+    let samples: [CompanionAudioLevelSample]
+    /// Recorded audio duration, in seconds, at the end of the buffer.
+    let audioTime: TimeInterval
+}
+
+/// Turns 16 kHz mono samples into one level per fixed-length waveform slot.
+///
+/// Each slot shows the loudest 20 ms window it contains, on a fixed dBFS
+/// scale. There is deliberately no smoothing or automatic gain: a bar is a
+/// snapshot of that moment, so one loud sound can never flatten the bars
+/// that follow it.
+struct CompanionAudioLevelMeter {
+    static let sampleRate = 16_000.0
+    static let slotDuration = 0.2
+    static let floorDecibels = -50.0
+    static let ceilingDecibels = -10.0
+
+    private let slotLength = Int(sampleRate * slotDuration)
+    private let windowLength = Int(sampleRate * 0.02)
+    private var sampleIndex = 0
+    private var windowSumOfSquares = 0.0
+    private var windowCount = 0
+    private var slotPeak = 0.0
+
+    static func level(rms: Double) -> Double {
+        guard rms > 0 else { return 0 }
+        let decibels = 20 * log10(rms)
+        return min(1, max(0, (decibels - floorDecibels) / (ceilingDecibels - floorDecibels)))
+    }
+
+    mutating func process(_ samples: UnsafeBufferPointer<Float>) -> CompanionAudioLevelUpdate {
+        var completed: [CompanionAudioLevelSample] = []
+        for sample in samples {
+            let value = Double(sample)
+            windowSumOfSquares += value * value
+            windowCount += 1
+            sampleIndex += 1
+            if windowCount == windowLength { closeWindow() }
+            if sampleIndex % slotLength == 0 {
+                completed.append(CompanionAudioLevelSample(
+                    id: UInt64(sampleIndex / slotLength - 1), level: slotPeak
+                ))
+                slotPeak = 0
+            }
+        }
+        // Include the partial window so the live slot reacts within one buffer.
+        var livePeak = slotPeak
+        if windowCount > 0 {
+            livePeak = max(livePeak, Self.level(rms: (windowSumOfSquares / Double(windowCount)).squareRoot()))
+        }
+        if sampleIndex % slotLength != 0 {
+            completed.append(CompanionAudioLevelSample(id: UInt64(sampleIndex / slotLength), level: livePeak))
+        }
+        return CompanionAudioLevelUpdate(samples: completed,
+                                         audioTime: Double(sampleIndex) / Self.sampleRate)
+    }
+
+    private mutating func closeWindow() {
+        let rms = (windowSumOfSquares / Double(windowCount)).squareRoot()
+        slotPeak = max(slotPeak, Self.level(rms: rms))
+        windowSumOfSquares = 0
+        windowCount = 0
+    }
+}
+
 private final class CompanionAudioCapture: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000,
@@ -18,10 +87,12 @@ private final class CompanionAudioCapture: @unchecked Sendable {
     private let continuation: AsyncStream<Data>.Continuation
     let chunks: AsyncStream<Data>
     private let onOverflow: @Sendable () -> Void
-    private let onLevel: @Sendable (Double) -> Void
+    private let onLevel: @Sendable (CompanionAudioLevelUpdate) -> Void
+    /// Only touched from the input tap, which AVAudioEngine calls serially.
+    private var meter = CompanionAudioLevelMeter()
 
     init(onOverflow: @escaping @Sendable () -> Void,
-         onLevel: @escaping @Sendable (Double) -> Void) {
+         onLevel: @escaping @Sendable (CompanionAudioLevelUpdate) -> Void) {
         self.onOverflow = onOverflow
         self.onLevel = onLevel
         let pair = AsyncStream.makeStream(of: Data.self, bufferingPolicy: .bufferingOldest(20))
@@ -77,17 +148,7 @@ private final class CompanionAudioCapture: @unchecked Sendable {
         guard error == nil, status != .error, let floats = output.floatChannelData?[0] else { return }
         let frameCount = Int(output.frameLength)
         if frameCount > 0 {
-            var sumOfSquares = 0.0
-            for index in 0..<frameCount {
-                let sample = Double(floats[index])
-                sumOfSquares += sample * sample
-            }
-            let rms = (sumOfSquares / Double(frameCount)).squareRoot()
-            // Phone microphone input is normalized, but typical speech RMS
-            // levels are much lower than 1. Remove a small noise floor and
-            // apply enough gain for quiet speakers to see the meter move.
-            let voiceEnergy = max(0, rms - 0.004)
-            onLevel(min(1, voiceEnergy * 22))
+            onLevel(meter.process(UnsafeBufferPointer(start: floats, count: frameCount)))
         }
         var chunksToYield: [Data] = []
         lock.lock()
@@ -121,17 +182,12 @@ final class CompanionSpeechController {
 
     private(set) var phase: Phase = .idle
     private(set) var isAvailable: Bool = false
-    private(set) var audioLevel: Double = 0
     private(set) var audioLevels: [CompanionAudioLevelSample] = []
     private(set) var audioStartTime: TimeInterval?
     private var requestID: UUID?
     private var capture: CompanionAudioCapture?
     private var pump: Task<Void, Never>?
     private var generation: UInt64 = 0
-    private var smoothedAudioLevel = 0.0
-    private var adaptivePeak = 0.18
-    private var pendingAudioTick: UInt64?
-    private var pendingAudioPeak = 0.0
 
     func checkAvailability(store: CompanionStore, sessionID: UUID) async {
         guard let macID = store.data.macID(for: sessionID) else {
@@ -180,13 +236,12 @@ final class CompanionSpeechController {
                     Task { @MainActor in self?.fail("Audio could not keep up with the connection.",
                                                     store: store, macID: macID) }
                 },
-                onLevel: { [weak self] level in
-                    Task { @MainActor in self?.recordAudioLevel(level) }
+                onLevel: { [weak self] update in
+                    Task { @MainActor in self?.recordAudioLevels(update) }
                 }
             )
             self.capture = capture
             try capture.start()
-            audioStartTime = Date().timeIntervalSinceReferenceDate
             phase = .recording
             pump = Task { [weak self] in
                 var sequence = 0
@@ -226,13 +281,7 @@ final class CompanionSpeechController {
         phase = .processing
         capture?.stop()
         capture = nil
-        audioLevel = 0
-        smoothedAudioLevel = 0
-        adaptivePeak = 0.18
-        audioStartTime = nil
-        audioLevels.removeAll(keepingCapacity: true)
-        pendingAudioTick = nil
-        pendingAudioPeak = 0
+        resetAudioLevels()
         await pump?.value
         pump = nil
         guard phase == .processing else { return nil }
@@ -254,13 +303,7 @@ final class CompanionSpeechController {
         generation &+= 1
         capture?.stop()
         capture = nil
-        audioLevel = 0
-        smoothedAudioLevel = 0
-        adaptivePeak = 0.18
-        audioStartTime = nil
-        audioLevels.removeAll(keepingCapacity: true)
-        pendingAudioTick = nil
-        pendingAudioPeak = 0
+        resetAudioLevels()
         pump?.cancel()
         pump = nil
         if let id = requestID, let macID = store.data.macID(for: sessionID) {
@@ -274,42 +317,31 @@ final class CompanionSpeechController {
         if case .failed = phase { phase = .idle }
     }
 
-    private func recordAudioLevel(_ level: Double) {
+    private func recordAudioLevels(_ update: CompanionAudioLevelUpdate) {
         guard phase == .recording else { return }
-        let smoothing: Double = level > smoothedAudioLevel ? 0.18 : 0.1
-        smoothedAudioLevel += (level - smoothedAudioLevel) * smoothing
-        // Follow the recent speech envelope so quieter microphones still use
-        // the available height. The asymmetric release prevents the scale
-        // from jumping whenever a single louder sample arrives.
-        if smoothedAudioLevel > adaptivePeak {
-            adaptivePeak += (smoothedAudioLevel - adaptivePeak) * 0.12
-        } else {
-            adaptivePeak *= 0.995
+        if audioStartTime == nil {
+            // Anchor the scrolling clock to the first delivered audio rather
+            // than engine start, so the live slot sits at the leading edge
+            // instead of trailing it by the input latency.
+            audioStartTime = Date().timeIntervalSinceReferenceDate - update.audioTime
         }
-        let normalizedLevel = smoothedAudioLevel / max(adaptivePeak, 0.06)
-        let displayLevel = min(0.96, normalizedLevel * 0.68 + 0.025)
-        audioLevel = displayLevel
-        guard let audioStartTime else { return }
-        let elapsed = Date().timeIntervalSinceReferenceDate - audioStartTime
-        let tick = UInt64(max(0, elapsed / 0.2).rounded(.down))
-        if let pendingAudioTick {
-            if tick == pendingAudioTick {
-                pendingAudioPeak = max(pendingAudioPeak, displayLevel)
-                return
-            }
-            if tick > pendingAudioTick, pendingAudioPeak > 0.09 {
-                // Publish a complete speech bar once. Quiet slots stay gray;
-                // their heights never change while moving through the reveal.
-                audioLevels.append(CompanionAudioLevelSample(
-                    id: pendingAudioTick, level: pendingAudioPeak
-                ))
+        for sample in update.samples {
+            if let last = audioLevels.last, last.id == sample.id {
+                audioLevels[audioLevels.count - 1] = CompanionAudioLevelSample(
+                    id: sample.id, level: max(last.level, sample.level)
+                )
+            } else if audioLevels.last.map({ sample.id > $0.id }) ?? true {
+                audioLevels.append(sample)
             }
         }
-        pendingAudioTick = tick
-        pendingAudioPeak = displayLevel
-        if audioLevels.count > 96 {
-            audioLevels.removeFirst(audioLevels.count - 96)
+        if audioLevels.count > 48 {
+            audioLevels.removeFirst(audioLevels.count - 48)
         }
+    }
+
+    private func resetAudioLevels() {
+        audioStartTime = nil
+        audioLevels.removeAll(keepingCapacity: true)
     }
 
     private func fail(_ message: String, store: CompanionStore, macID: MacHost.ID) {
@@ -318,13 +350,7 @@ final class CompanionSpeechController {
         generation &+= 1
         capture?.stop()
         capture = nil
-        audioLevel = 0
-        smoothedAudioLevel = 0
-        adaptivePeak = 0.18
-        audioStartTime = nil
-        audioLevels.removeAll(keepingCapacity: true)
-        pendingAudioTick = nil
-        pendingAudioPeak = 0
+        resetAudioLevels()
         pump?.cancel()
         pump = nil
         requestID = nil

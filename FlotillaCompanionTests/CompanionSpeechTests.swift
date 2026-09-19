@@ -94,4 +94,48 @@ final class CompanionSpeechTests: XCTestCase {
         XCTAssertTrue(store.isSpeechAvailable(for: sessionID))
         XCTAssertTrue(store.isAnyMacSpeechAvailable)
     }
+
+    // MARK: - Audio level meter
+
+    private func meterLevels(_ chunks: [[Float]]) -> [CompanionAudioLevelUpdate] {
+        var meter = CompanionAudioLevelMeter()
+        return chunks.map { chunk in chunk.withUnsafeBufferPointer { meter.process($0) } }
+    }
+
+    private func tone(amplitude: Float, seconds: Double) -> [Float] {
+        let count = Int(CompanionAudioLevelMeter.sampleRate * seconds)
+        return (0..<count).map { amplitude * sin(Float($0) * 0.3) }
+    }
+
+    func testLoudSoundDoesNotFlattenFollowingSpeech() {
+        let speech = tone(amplitude: 0.05, seconds: 0.2)
+        let before = meterLevels([speech])[0].samples.last!.level
+        let updates = meterLevels([speech, tone(amplitude: 0.9, seconds: 0.2), speech])
+        let after = updates[2].samples.last!.level
+
+        XCTAssertEqual(after, before, accuracy: 0.001,
+                       "Each slot is a snapshot: a loud slot must not rescale later ones")
+        XCTAssertGreaterThan(updates[1].samples.last!.level, after)
+    }
+
+    func testSilenceDropsImmediatelyAfterLoudSound() {
+        let updates = meterLevels([tone(amplitude: 0.9, seconds: 0.2),
+                                   [Float](repeating: 0, count: 3_200)])
+        XCTAssertEqual(updates[1].samples.last!.level, 0)
+    }
+
+    func testSlotsAreContiguousAcrossBufferBoundaries() {
+        // 1_000-sample buffers straddle the 3_200-sample slot boundaries.
+        let updates = meterLevels(Array(repeating: tone(amplitude: 0.1, seconds: 0.0625), count: 10))
+        let ids = updates.flatMap { $0.samples.map(\.id) }
+        XCTAssertEqual(Array(Set(ids)).sorted(), [0, 1, 2, 3])
+        XCTAssertEqual(updates.last!.audioTime, 0.625, accuracy: 0.0001)
+    }
+
+    func testLevelUsesDecibelScale() {
+        XCTAssertEqual(CompanionAudioLevelMeter.level(rms: 0), 0)
+        XCTAssertEqual(CompanionAudioLevelMeter.level(rms: pow(10, -50.0 / 20)), 0, accuracy: 0.001)
+        XCTAssertEqual(CompanionAudioLevelMeter.level(rms: pow(10, -30.0 / 20)), 0.5, accuracy: 0.001)
+        XCTAssertEqual(CompanionAudioLevelMeter.level(rms: 1), 1)
+    }
 }
