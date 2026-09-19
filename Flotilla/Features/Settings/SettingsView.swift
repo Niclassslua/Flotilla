@@ -46,7 +46,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: .gray
         case .sessions: .indigo
         case .terminal: .cyan
-        case .git: FlotillaColors.accent
+        case .git: .orange
         case .notifications: .red
         case .companion: .green
         case .agents: .purple
@@ -55,7 +55,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
 
     var searchText: String {
         switch self {
-        case .general: "worktrees workspace grid density directory appearance light dark theme"
+        case .general: "worktrees workspace grid density directory appearance light dark theme accent color custom"
         case .sessions: "session defaults coding agent prompt worktree"
         case .terminal: "terminal font size scroll option meta editor monaco curly braces"
         case .git: "git branch worktree delete lifecycle"
@@ -250,6 +250,15 @@ private struct GeneralSettingsPane: View {
                 .accessibilityIdentifier("Settings.AppearancePicker")
             } header: {
                 SettingsSectionHeader("Appearance", systemImage: "circle.lefthalf.filled")
+            }
+
+            Section {
+                AccentColorPicker(
+                    accentColor: $viewModel.settings.accentColor,
+                    customStorageKey: "settings.appearance.custom-accent"
+                )
+            } header: {
+                SettingsSectionHeader("Accent Color", systemImage: "paintpalette")
             }
 
             Section {

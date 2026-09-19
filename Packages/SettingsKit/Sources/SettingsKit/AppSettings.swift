@@ -563,6 +563,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var openCodeSubscription: OpenCodeSubscription
     public var worktreeBaseDirectory: String
     public var appearance: AppearanceMode
+    public var accentColor: String
     public var workspace: WorkspacePreferences
     public var sessionDefaults: SessionDefaults
     public var terminal: TerminalPreferences
@@ -608,6 +609,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
         appearance: AppearanceMode = .system,
+        accentColor: String = "orange",
         workspace: WorkspacePreferences = WorkspacePreferences(),
         sessionDefaults: SessionDefaults = SessionDefaults(),
         terminal: TerminalPreferences = TerminalPreferences(),
@@ -618,6 +620,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.openCodeSubscription = openCodeSubscription
         self.worktreeBaseDirectory = worktreeBaseDirectory
         self.appearance = appearance
+        self.accentColor = accentColor
         self.workspace = workspace
         self.sessionDefaults = sessionDefaults
         self.terminal = terminal
@@ -631,6 +634,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
         appearance: AppearanceMode = .system,
+        accentColor: String = "orange",
         workspace: WorkspacePreferences = WorkspacePreferences(),
         sessionDefaults: SessionDefaults = SessionDefaults(),
         terminal: TerminalPreferences = TerminalPreferences(),
@@ -653,6 +657,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.openCodeSubscription = openCodeSubscription
         self.worktreeBaseDirectory = worktreeBaseDirectory
         self.appearance = appearance
+        self.accentColor = accentColor
         self.workspace = workspace
         self.sessionDefaults = sessionDefaults
         self.terminal = terminal
@@ -667,6 +672,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case openCodeSubscription
         case worktreeBaseDirectory
         case appearance
+        case accentColor
         case workspace
         case sessionDefaults
         case terminal
@@ -698,6 +704,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription = try container.decodeIfPresent(OpenCodeSubscription.self, forKey: .openCodeSubscription) ?? .none
         worktreeBaseDirectory = try container.decodeIfPresent(String.self, forKey: .worktreeBaseDirectory) ?? ""
         appearance = try container.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
+        accentColor = try container.decodeIfPresent(String.self, forKey: .accentColor) ?? "orange"
         workspace = try container.decodeIfPresent(WorkspacePreferences.self, forKey: .workspace) ?? WorkspacePreferences()
         sessionDefaults = try container.decodeIfPresent(SessionDefaults.self, forKey: .sessionDefaults) ?? SessionDefaults()
         terminal = try container.decodeIfPresent(TerminalPreferences.self, forKey: .terminal) ?? TerminalPreferences()
@@ -736,6 +743,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try container.encode(openCodeSubscription, forKey: .openCodeSubscription)
         try container.encode(worktreeBaseDirectory, forKey: .worktreeBaseDirectory)
         try container.encode(appearance, forKey: .appearance)
+        try container.encode(accentColor, forKey: .accentColor)
         try container.encode(workspace, forKey: .workspace)
         try container.encode(sessionDefaults, forKey: .sessionDefaults)
         try container.encode(terminal, forKey: .terminal)
