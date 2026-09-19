@@ -213,10 +213,16 @@ Decisions made without asking, recorded so they can be revisited.
    `Application Support/Flotilla/Companion/` (Ephemeral: `Flotilla Ephemeral`).
    Not the Keychain on the Mac: debug builds are ad-hoc signed, so a Keychain
    ACL would prompt for access after every rebuild.
-6. **No push notifications, CloudKit or Live Activity in this build.** They
-   need a paid Apple Developer team, APNs/CloudKit entitlements, and a signed
-   build this environment cannot produce. The fleet summary copy is ready for
-   the Live Activity. The phone updates live while the app is open.
+6. **No push notifications or CloudKit in this build.** They need a paid
+   Apple Developer team, APNs/CloudKit entitlements, and a signed build this
+   environment cannot produce. The phone updates live while the app is open.
+   The fleet Live Activity ("Fleet Radar", `FleetActivityController`) is
+   local-only for the same reason: one activity follows the last Mac whose
+   fleet was opened, runs while any session there is working or needs you,
+   and lingers 15 minutes once none are. Going to the background hands it a
+   stale date matching the disconnect grace, so the widget dims and stops its
+   clocks instead of showing a fleet it can no longer see. Swiping it away
+   keeps it gone until the set of busy/blocked sessions changes.
 7. **Bounded transcripts.** Transcripts are capped to the latest 400 events per
    session. Version 2 sends revisioned fleet and transcript deltas after full
    snapshots; on-demand diffs still use whole responses. Oversized content

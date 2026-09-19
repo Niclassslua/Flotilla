@@ -46,6 +46,9 @@ protocol CompanionDataSource: AnyObject, Observable {
     func focus(on sessionID: CompanionSession.ID?)
     /// App foreground / background.
     func setActive(_ isActive: Bool)
+    /// Whether `setActive(false)` drops the link, so what's on screen stops
+    /// being current. The fleet Live Activity goes stale when it does.
+    var disconnectsWhenInactive: Bool { get }
 
     /// First answer wins: returns `.alreadyAnswered` when the Mac got there first.
     func answer(

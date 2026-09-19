@@ -153,14 +153,14 @@ targets:
         product: Textual
       - target: FlotillaCompanionWidget
 
-  # Dynamic Island / Lock Screen presentation for a session's live status.
-  # See FlotillaCompanion/LiveActivity/SessionActivityAttributes.swift.
+  # Dynamic Island / Lock Screen presentation of a Mac's fleet (Fleet Radar).
+  # See FlotillaCompanion/LiveActivity/FleetActivityAttributes.swift.
   FlotillaCompanionWidget:
     type: app-extension
     platform: iOS
     sources:
       - path: FlotillaCompanionWidget
-      - path: FlotillaCompanion/LiveActivity/SessionActivityAttributes.swift
+      - path: FlotillaCompanion/LiveActivity/FleetActivityAttributes.swift
     info:
       path: FlotillaCompanionWidget/Info.plist
       properties:
