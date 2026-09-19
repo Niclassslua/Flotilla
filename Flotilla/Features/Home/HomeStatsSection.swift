@@ -28,12 +28,12 @@ struct HomeStatsSection: View {
                         RhythmChart(linesByDay: activity.linesByDay)
                     }
                 } trailing: {
-                    HomeStatCard(title: "Agent share", subtitle: "Who wrote the commits, last 30 days") {
+                    HomeStatCard(title: "Agent share", subtitle: "Which agents wrote your commits, last 30 days") {
                         AgentShareView(contributions: activity.contributions)
                     }
                 }
-                HomeStatCard(title: "Codebase growth", subtitle: "Net lines per project, last twelve weeks") {
-                    GrowthGrid(netLinesByWeek: activity.netLinesByWeek, projects: projects)
+                HomeStatCard(title: "Codebase growth", subtitle: "Net lines added, last twelve weeks") {
+                    GrowthChart(netLinesByWeek: activity.netLinesByWeek, projects: projects)
                 }
             } else {
                 HomeStatCard(title: "Contributions", subtitle: "Reading history…") {
@@ -323,7 +323,12 @@ private struct RhythmChart: View {
                         }
                 }
             }
-            .chartXSelection(value: $selectedDay)
+            // The selection is wherever the pointer sits inside a day; the data
+            // is keyed by that day's start, so snap before looking it up.
+            .chartXSelection(value: Binding(
+                get: { selectedDay },
+                set: { selectedDay = $0.map { calendar.startOfDay(for: $0) } }
+            ))
             .chartXAxis {
                 AxisMarks(values: .stride(by: .weekOfYear)) { _ in
                     AxisValueLabel(format: .dateTime.month(.abbreviated).day(), centered: false)
@@ -360,116 +365,25 @@ private struct RhythmChart: View {
     }
 }
 
-// MARK: - Agent Share
-
-/// One segmented bar plus a labelled legend: identity never rides on colour
-/// alone, and each agent wears its own brand colour.
-private struct AgentShareView: View {
-    let contributions: [HomeContributor: Int]
-
-    private struct Slice: Identifiable {
-        let contributor: HomeContributor
-        let count: Int
-        var id: String { name }
-
-        var name: String {
-            switch contributor {
-            case .agent(let agent): agent.displayName
-            case .you: "You"
-            }
-        }
-
-        var color: Color {
-            switch contributor {
-            // Antigravity's anchor azure sits right next to Codex's indigo;
-            // its green brand stop keeps the two apart.
-            case .agent(.antigravity): AgentBrand.antigravityGradientColors[1]
-            case .agent(let agent): AgentBrand.accentColor(for: agent)
-            case .you: FlotillaColors.textTertiary
-            }
-        }
-    }
-
-    /// Agents in `AgentKind` order (fixed, never by rank), you last.
-    private var slices: [Slice] {
-        let agents = AgentKind.allCases.compactMap { agent -> Slice? in
-            let count = contributions[.agent(agent), default: 0]
-            return count > 0 ? Slice(contributor: .agent(agent), count: count) : nil
-        }
-        let you = contributions[.you, default: 0]
-        return agents + (you > 0 ? [Slice(contributor: .you, count: you)] : [])
-    }
-
-    private var total: Int { slices.map(\.count).reduce(0, +) }
-
-    private var agentPercent: Int {
-        guard total > 0 else { return 0 }
-        let agentCount = total - contributions[.you, default: 0]
-        return Int((Double(agentCount) / Double(total) * 100).rounded())
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.large) {
-            HStack(spacing: FlotillaSpacing.xLarge) {
-                HeadlineFigure(value: "\(agentPercent)%", label: "by agents", tint: FlotillaColors.accent)
-                HeadlineFigure(value: total.formatted(), label: "commits")
-                Spacer(minLength: 0)
-            }
-
-            if total == 0 {
-                Text("No commits in the last 30 days.")
-                    .font(FlotillaTypography.callout)
-                    .foregroundStyle(FlotillaColors.textTertiary)
-            } else {
-                GeometryReader { proxy in
-                    let gaps = CGFloat(max(slices.count - 1, 0)) * 2
-                    HStack(spacing: 2) {
-                        ForEach(slices) { slice in
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(slice.color)
-                                .frame(width: max((proxy.size.width - gaps) * CGFloat(slice.count) / CGFloat(total), 4))
-                                .help("\(slice.name): \(slice.count) commits")
-                        }
-                    }
-                }
-                .frame(height: 14)
-
-                VStack(spacing: FlotillaSpacing.small) {
-                    ForEach(slices) { slice in
-                        HStack(spacing: FlotillaSpacing.small) {
-                            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                .fill(slice.color)
-                                .frame(width: 10, height: 10)
-                            Text(slice.name)
-                                .font(FlotillaTypography.callout)
-                                .foregroundStyle(FlotillaColors.textPrimary)
-                            Spacer(minLength: FlotillaSpacing.small)
-                            Text("\(slice.count)")
-                                .font(FlotillaTypography.callout.monospacedDigit())
-                                .foregroundStyle(FlotillaColors.textSecondary)
-                            Text("\(Int((Double(slice.count) / Double(total) * 100).rounded()))%")
-                                .font(FlotillaTypography.callout.monospacedDigit())
-                                .foregroundStyle(FlotillaColors.textTertiary)
-                                .frame(width: 40, alignment: .trailing)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Codebase Growth
 
-/// One small chart per project, each on its own scale — a single shared
-/// axis would flatten every project into the busiest one. The line wears the
-/// project's mark colour, so it matches its card above.
-private struct GrowthGrid: View {
+/// Cumulative net lines over twelve weeks. "All projects" draws the combined
+/// total with each project as a faint line behind it; picking a project
+/// shows that one alone, on its own scale.
+private struct GrowthChart: View {
     let netLinesByWeek: [UUID: [Date: Int]]
     let projects: [Project]
 
-    private static let maxProjects = 8
+    /// `nil` is "All projects".
+    @State private var selectedProjectID: UUID?
+    @State private var hoveredWeek: Date?
+
+    private struct Point: Identifiable {
+        let series: String
+        let week: Date
+        let total: Int
+        var id: String { "\(series)-\(week.timeIntervalSinceReferenceDate)" }
+    }
 
     private var weeks: [Date] {
         let thisWeek = HomeActivity.startOfWeek(.now)
@@ -478,102 +392,163 @@ private struct GrowthGrid: View {
         }
     }
 
-    /// Busiest first by total churn, so the projects that moved lead.
-    private var entries: [(project: Project, cumulative: [(week: Date, total: Int)])] {
+    /// Projects that committed in the window, busiest first.
+    private var activeProjects: [Project] {
         projects
-            .compactMap { project -> (Project, [Date: Int], Int)? in
-                guard let weekly = netLinesByWeek[project.id] else { return nil }
-                return (project, weekly, weekly.values.map(abs).reduce(0, +))
-            }
-            .sorted { $0.2 > $1.2 }
-            .prefix(Self.maxProjects)
-            .map { project, weekly, _ in
-                var running = 0
-                return (project, weeks.map { week in
-                    running += weekly[week, default: 0]
-                    return (week, running)
-                })
-            }
+            .filter { netLinesByWeek[$0.id] != nil }
+            .sorted { churn($0) > churn($1) }
+    }
+
+    private func churn(_ project: Project) -> Int {
+        netLinesByWeek[project.id]?.values.map(abs).reduce(0, +) ?? 0
+    }
+
+    private func cumulative(_ weekly: [Date: Int], series: String) -> [Point] {
+        var running = 0
+        return weeks.map { week in
+            running += weekly[week, default: 0]
+            return Point(series: series, week: week, total: running)
+        }
+    }
+
+    private var selectedProject: Project? {
+        selectedProjectID.flatMap { id in projects.first { $0.id == id } }
+    }
+
+    private var focus: (points: [Point], tint: Color) {
+        if let project = selectedProject {
+            return (cumulative(netLinesByWeek[project.id] ?? [:], series: project.name), ProjectMark.tint(for: project))
+        }
+        let combined = netLinesByWeek.values.reduce(into: [Date: Int]()) { $0.merge($1, uniquingKeysWith: +) }
+        return (cumulative(combined, series: "All projects"), FlotillaColors.accent)
+    }
+
+    private var background: [Point] {
+        guard selectedProject == nil else { return [] }
+        return activeProjects.flatMap { cumulative(netLinesByWeek[$0.id] ?? [:], series: $0.name) }
     }
 
     var body: some View {
-        let entries = entries
-        if entries.isEmpty {
+        if activeProjects.isEmpty {
             Text("No commits in the last twelve weeks.")
                 .font(FlotillaTypography.callout)
                 .foregroundStyle(FlotillaColors.textTertiary)
         } else {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 220), spacing: FlotillaSpacing.medium)],
-                spacing: FlotillaSpacing.medium
-            ) {
-                ForEach(entries, id: \.project.id) { entry in
-                    GrowthCell(project: entry.project, cumulative: entry.cumulative)
+            let focus = focus
+            VStack(alignment: .leading, spacing: FlotillaSpacing.large) {
+                scopePicker
+                headline(focus.points)
+                chart(focus: focus.points, tint: focus.tint)
+            }
+        }
+    }
+
+    // MARK: Picker
+
+    private var scopePicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                scopeChip(id: nil, title: "All projects", mark: nil)
+                ForEach(activeProjects) { project in
+                    scopeChip(id: project.id, title: project.name, mark: project)
                 }
             }
         }
     }
-}
 
-private struct GrowthCell: View {
-    let project: Project
-    let cumulative: [(week: Date, total: Int)]
-
-    @State private var selectedWeek: Date?
-
-    private var tint: Color { ProjectMark.tint(for: project) }
-    private var net: Int { cumulative.last?.total ?? 0 }
-
-    private var shown: (label: String, value: Int) {
-        if let selectedWeek,
-           let point = cumulative.last(where: { $0.week <= selectedWeek }) {
-            return ("by \(point.week.formatted(.dateTime.month(.abbreviated).day()))", point.total)
+    private func scopeChip(id: UUID?, title: String, mark: Project?) -> some View {
+        let isSelected = selectedProjectID == id
+        return Button {
+            withAnimation(.snappy) { selectedProjectID = id }
+        } label: {
+            HStack(spacing: 6) {
+                if let mark {
+                    ProjectMark(title: mark.name, tint: ProjectMark.tint(for: mark), size: 16)
+                }
+                Text(title)
+                    .font(FlotillaTypography.caption.weight(.medium))
+            }
+            .foregroundStyle(isSelected ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
+            .padding(.horizontal, FlotillaSpacing.small + 2)
+            .frame(height: 26)
+            .background(
+                FlotillaColors.textPrimary.opacity(isSelected ? 0.14 : 0.05),
+                in: Capsule()
+            )
+            .overlay {
+                Capsule().strokeBorder(FlotillaColors.textPrimary.opacity(isSelected ? 0.18 : 0), lineWidth: 1)
+            }
+            .contentShape(Capsule())
         }
-        return ("net lines", net)
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
-            HStack(spacing: 6) {
-                ProjectMark(title: project.name, tint: tint, size: 16)
-                Text(project.name)
-                    .font(FlotillaTypography.callout.weight(.medium))
-                    .foregroundStyle(FlotillaColors.textPrimary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
+    // MARK: Headline
+
+    private func headline(_ points: [Point]) -> some View {
+        let shown = hoveredWeek.flatMap { week in points.last { $0.week <= week } } ?? points.last
+        return HStack(alignment: .firstTextBaseline, spacing: FlotillaSpacing.small) {
+            Text(shown?.total ?? 0, format: .number.notation(.compactName).sign(strategy: .always(includingZero: false)))
+                .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(FlotillaColors.textPrimary)
+                .contentTransition(.numericText())
+            Text(hoveredWeek == nil
+                 ? "net lines in twelve weeks"
+                 : "net lines by \(shown?.week.formatted(.dateTime.month(.abbreviated).day()) ?? "")")
+                .font(FlotillaTypography.caption)
+                .foregroundStyle(FlotillaColors.textTertiary)
+        }
+    }
+
+    // MARK: Chart
+
+    private func chart(focus: [Point], tint: Color) -> some View {
+        Chart {
+            ForEach(background) { point in
+                LineMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Net lines", point.total), series: .value("Project", point.series))
+                    .foregroundStyle(FlotillaColors.textPrimary.opacity(0.18))
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: 1.2))
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(shown.value, format: .number.notation(.compactName).sign(strategy: .always(includingZero: false)))
-                    .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(FlotillaColors.textPrimary)
-                    .contentTransition(.numericText())
-                Text(shown.label)
-                    .font(FlotillaTypography.caption2)
+            ForEach(focus) { point in
+                AreaMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Net lines", point.total), series: .value("Project", "focus"))
+                    .foregroundStyle(LinearGradient(colors: [tint.opacity(0.3), tint.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.monotone)
+                LineMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Net lines", point.total), series: .value("Project", "focus"))
+                    .foregroundStyle(tint)
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            }
+            RuleMark(y: .value("Zero", 0))
+                .foregroundStyle(FlotillaColors.separatorStrong)
+            if let hoveredWeek, let point = focus.last(where: { $0.week <= hoveredWeek }) {
+                RuleMark(x: .value("Week", point.week, unit: .weekOfYear))
+                    .foregroundStyle(FlotillaColors.textPrimary.opacity(0.15))
+                PointMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Net lines", point.total))
+                    .foregroundStyle(tint)
+                    .symbolSize(60)
+            }
+        }
+        .chartXSelection(value: $hoveredWeek)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { _ in
+                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
                     .foregroundStyle(FlotillaColors.textTertiary)
             }
-            Chart {
-                ForEach(cumulative, id: \.week) { point in
-                    AreaMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Net lines", point.total))
-                        .foregroundStyle(LinearGradient(colors: [tint.opacity(0.28), tint.opacity(0.02)], startPoint: .top, endPoint: .bottom))
-                        .interpolationMethod(.monotone)
-                    LineMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Net lines", point.total))
-                        .foregroundStyle(tint)
-                        .interpolationMethod(.monotone)
-                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                }
-                if let selectedWeek {
-                    RuleMark(x: .value("Week", selectedWeek, unit: .weekOfYear))
-                        .foregroundStyle(FlotillaColors.textPrimary.opacity(0.2))
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                AxisGridLine().foregroundStyle(FlotillaColors.textPrimary.opacity(0.05))
+                AxisValueLabel {
+                    if let lines = value.as(Int.self) {
+                        Text(lines, format: .number.notation(.compactName))
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    }
                 }
             }
-            .chartXSelection(value: $selectedWeek)
-            .chartXAxis(.hidden)
-            .chartYAxis(.hidden)
-            .frame(height: 46)
         }
-        .padding(FlotillaSpacing.medium)
-        .background(FlotillaColors.textPrimary.opacity(0.04), in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(project.name): \(net) net lines over twelve weeks")
+        .frame(height: 200)
+        .animation(.snappy, value: selectedProjectID)
     }
 }
