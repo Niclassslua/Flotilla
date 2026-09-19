@@ -100,12 +100,13 @@ public struct TerminalScreenHeuristic: Sendable {
         self.promptHeuristic = promptHeuristic
     }
 
-    /// Classifies the screen. Always returns a concrete status — a screen is
-    /// a complete description of the session's state, so there is no "no
-    /// opinion" case the way there was for a single chunk of output. (A
-    /// missing status, `nil`, only ever comes from a session that has drawn
-    /// nothing yet, which is decided before the screen is ever read.)
-    public func observation(forScreen screen: String) -> SessionStatusObservation {
+    /// Classifies the screen. Returns an observation when the screen exhibits
+    /// a recognized status indicator (a working interrupt/cancel marker, an
+    /// interactive permission/question prompt, a dead pane, or a composer prompt
+    /// with non-empty transcript history). Returns `nil` when no marker matches —
+    /// an unremarkable screen, startup banner, or intermediate redraw carries no
+    /// status signal and must not decay to Ready for Review.
+    public func observation(forScreen screen: String) -> SessionStatusObservation? {
         let tail = Self.tail(of: screen)
         let lowered = tail.lowercased()
 
@@ -154,10 +155,9 @@ public struct TerminalScreenHeuristic: Sendable {
                 cause: "screen: SessionStatusHeuristic prompt match"
             )
         }
-        // A dead pane, a bare composer with transcript, and an unremarkable
-        // screen all mean the same thing now: the turn is over and the work
-        // is there to look at. Only an authoritative non-zero process exit
-        // produces `crashed`, and that never comes from here. The branches
+        // A dead pane and a composer with transcript both mean the turn is over
+        // and the work is there to look at. Only an authoritative non-zero process
+        // exit produces `crashed`, and that never comes from here. The branches
         // are kept distinct because their ordering relative to the working
         // marker still matters — a stale "esc to interrupt" left on a dead
         // pane must not read as `working`.
@@ -173,16 +173,13 @@ public struct TerminalScreenHeuristic: Sendable {
                 cause: "screen: working marker \(Self.quoted(marker))"
             )
         }
-        if Self.hasComposerWithTranscript(tail) {
+        if Self.hasComposerWithTranscript(interactiveTail) {
             return SessionStatusObservation(
                 .readyForReview,
                 cause: "screen: composer prompt above a non-empty transcript"
             )
         }
-        return SessionStatusObservation(
-            .readyForReview,
-            cause: "screen: no marker matched — default"
-        )
+        return nil
     }
 
     private static func quoted(_ marker: String) -> String {
@@ -191,8 +188,8 @@ public struct TerminalScreenHeuristic: Sendable {
 
     /// Compatibility convenience for callers interested only in the broad
     /// state. New observation pipelines should retain `waitingReason`.
-    public func status(forScreen screen: String) -> SessionStatus {
-        observation(forScreen: screen).status
+    public func status(forScreen screen: String) -> SessionStatus? {
+        observation(forScreen: screen)?.status
     }
 
     /// The bottom `inspectedTailLines` non-empty lines, which is where the

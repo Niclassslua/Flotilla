@@ -138,7 +138,7 @@ created with, before its process has been observed doing anything.
 | **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — |
 | **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — |
 | **Antigravity** | `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval` | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation) | — |
-| **Terminal-screen fallback** (every provider) | an interrupt/cancel hint — `esc to interrupt`, `esc to cancel`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; shows a numbered choice list with a selection caret; matches Antigravity's extended permission-picker signature; or the prompt heuristic reads the prompt as waiting | anything else: a composer prompt with transcript above it, a dead-pane marker (`agent exited`, `pane is dead`, `process finished`), or an otherwise unremarkable screen | — |
+| **Terminal-screen fallback** (every provider) | an interrupt/cancel hint — `esc to interrupt`, `esc to cancel`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; shows a numbered choice list with a selection caret; matches Antigravity's extended permission-picker signature; or the prompt heuristic reads the prompt as waiting | a composer prompt with transcript above it, or a dead-pane marker (`agent exited`, `pane is dead`, `process finished`). Unremarkable screens yield no observation | — |
 | **Process exit** | — | — | exit status code 0 (also fires `onSessionFinished`) | any non-zero exit code, or a launch/relaunch failure |
 
 `SessionStatusMachine` shapes which of these are reachable when:
@@ -251,7 +251,7 @@ provider hook event by name, the exact screen marker `TerminalScreenHeuristic`
 matched, a process exit and its code, a user dragging a card on the board, and
 the launch/restart/restore paths. So "why is this Ready for Review?" is
 answered by one line — `hook: Stop`, `screen: composer prompt above a
-non-empty transcript`, `screen: no marker matched — default`, or
+non-empty transcript`, `screen: finished marker "agent exited"`, or
 `process exit code 0`.
 
 Session IDs are abbreviated to their first eight characters; grep for that
