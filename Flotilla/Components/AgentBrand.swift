@@ -20,14 +20,13 @@ enum AgentBrand {
     ]
 
     /// A single representative color per agent — usable as a gradient stop,
-    /// a wash, or anywhere a flat `Color` is required. For Antigravity this
-    /// is the anchor color its full gradient starts and ends on.
+    /// a wash, or anywhere a flat `Color` is required.
     static func accentColor(for kind: AgentKind) -> Color {
         switch kind {
-        case .claudeCode: Color(red: 0.96, green: 0.36, blue: 0.16)
-        case .codexCLI: Color(red: 0x40 / 255, green: 0x43 / 255, blue: 0xF5 / 255) // #4043F5
+        case .claudeCode: Color(red: 0xC6 / 255, green: 0x6F / 255, blue: 0x51 / 255) // #C66F51
+        case .codexCLI: Color(red: 0x6D / 255, green: 0x8D / 255, blue: 0xF0 / 255) // #6D8DF0
         case .openCode: .white // #FFFFFF
-        case .antigravity: antigravityGradientColors[0]
+        case .antigravity: Color(red: 0x79 / 255, green: 0xB3 / 255, blue: 0x6C / 255) // #79B36C
         }
     }
 
