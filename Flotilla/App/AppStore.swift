@@ -7,6 +7,7 @@ import TerminalKit
 import AgentKit
 import SettingsKit
 import HooksKit
+import PersistenceKit
 
 @Observable
 @MainActor
@@ -39,6 +40,10 @@ final class AppStore {
     let gitService: GitServiceProtocol
     let ghService: GhServiceProtocol?
     let diffStatStore: DiffStatStore
+    /// Home's permission-ask log. In-memory and thrown away if construction
+    /// somehow fails — the widget going blank is a much smaller problem than
+    /// a launch-blocking crash over an optional log.
+    let permissionLogStore: PermissionLogStore
     /// Records and resolves which agent session made each commit.
     let commitAttribution: CommitAttributionService
     private let processManager: SessionProcessManager
@@ -77,7 +82,8 @@ final class AppStore {
         nameGenerator: (any SessionNameGenerating)? = nil,
         metadataMonitor: SessionMetadataMonitor = SessionMetadataMonitor(),
         handoffService: HandoffService? = nil,
-        supportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory()
+        supportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
+        permissionLogStore: PermissionLogStore? = nil
     ) {
         self.metadataMonitor = metadataMonitor
         self.handoffService = handoffService ?? HandoffService(processManager: processManager)
@@ -86,6 +92,7 @@ final class AppStore {
         self.gitService = gitService
         self.ghService = ghService
         self.diffStatStore = DiffStatStore(gitService: gitService)
+        self.permissionLogStore = permissionLogStore ?? Self.makePermissionLogStore(supportDirectory: supportDirectory)
         self.processManager = processManager
         self.worktreeBaseDirectoryProvider = worktreeBaseDirectoryProvider
         self.settingsProvider = settingsProvider
@@ -107,6 +114,20 @@ final class AppStore {
         }
         if reload() { restoreSessions() }
         loadKanbanBoards()
+    }
+
+    /// Disk-backed under the app's support directory in normal use; an
+    /// in-memory fallback if that somehow can't be created, matching how
+    /// `AppEnvironment` degrades the session repository itself.
+    private static func makePermissionLogStore(supportDirectory: URL) -> PermissionLogStore {
+        let path = supportDirectory.appendingPathComponent("permissions.sqlite")
+        if let store = try? PermissionLogStore(path: path) {
+            try? store.pruneExpired()
+            return store
+        }
+        return (try? PermissionLogStore()) ?? {
+            preconditionFailure("PermissionLogStore: in-memory construction cannot fail")
+        }()
     }
 
     /// The literal home directory (`FileManager.default.homeDirectoryForCurrentUser`)

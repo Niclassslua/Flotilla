@@ -268,6 +268,11 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 try db.execute(sql: "DROP TABLE backup_\(table)")
             }
         }
+        migrator.registerMigration("v15_sessionStatusChangedAt") { db in
+            try db.alter(table: "session") { t in
+                t.add(column: "statusChangedAt", .datetime)
+            }
+        }
         return migrator
     }
 

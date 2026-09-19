@@ -70,6 +70,9 @@ struct PreviewGitService: GitServiceProtocol {
     func diffStat(at repoPath: URL) async throws -> GitDiffStat {
         GitDiffStat(additions: 128, deletions: 34)
     }
+    func fileChurn(at repoPath: URL, since: Date) async throws -> [String: Int] {
+        ["AppStore.swift": 23, "ActivityChartWidgets.swift": 17, "webhooks.ts": 11]
+    }
     func listWorktrees(at repoPath: URL) async throws -> [GitWorktree] { [] }
     func createWorktree(basePath: URL, branch: String, destination: URL) async throws -> GitWorktree {
         GitWorktree(branch: branch, path: destination, isMainWorktree: false)

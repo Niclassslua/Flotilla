@@ -151,6 +151,12 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
         return remoteURLToReturn
     }
 
+    public var fileChurnToReturn: [String: Int] = [:]
+    public func fileChurn(at repoPath: URL, since: Date) async throws -> [String: Int] {
+        if let errorToThrow { throw errorToThrow }
+        return fileChurnToReturn
+    }
+
     public func currentHooksPath(at repoPath: URL) async throws -> String {
         if let errorToThrow { throw errorToThrow }
         return hooksPathToReturn

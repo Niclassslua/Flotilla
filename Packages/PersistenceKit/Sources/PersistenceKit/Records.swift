@@ -91,6 +91,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var terminalScrollback: Data
     var createdAt: Date
     var lastActiveAt: Date
+    var statusChangedAt: Date?
 
     init(session: Session) {
         id = session.id.uuidString
@@ -120,6 +121,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         terminalScrollback = session.terminalScrollback
         createdAt = session.createdAt
         lastActiveAt = session.lastActiveAt
+        statusChangedAt = session.statusChangedAt
     }
 
     func toDomain() throws -> Session {
@@ -226,6 +228,7 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             worktree: worktree,
             status: sessionStatus,
             waitingReason: sessionWaitingReason,
+            statusChangedAt: statusChangedAt,
             kanbanColumnID: kanbanColumnUUID,
             workflowStage: workflowStageValue,
             startingMode: sessionMode,

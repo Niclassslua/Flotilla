@@ -56,6 +56,7 @@ public struct SessionStatusMachine: Sendable {
         if newStatus != .waitingForInput {
             updated.waitingReason = nil
         }
+        updated.statusChangedAt = now
         updated.lastActiveAt = now
         return updated
     }

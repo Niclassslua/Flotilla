@@ -238,6 +238,12 @@ public protocol GitServiceProtocol: Sendable {
     /// `GitService.webURL(forRemote:commitSHA:)` to build per-commit links.
     func remoteURL(at repoPath: URL) async throws -> String?
 
+    /// Files touched since `since`, with a total edit count (additions +
+    /// deletions summed across every non-merge commit that changed them) —
+    /// Home's Hot files widget. Renames count as one path per side, the same
+    /// tradeoff `--numstat` itself makes.
+    func fileChurn(at repoPath: URL, since: Date) async throws -> [String: Int]
+
     /// `git rev-parse --git-path hooks` — the hooks directory git will
     /// actually consult, which is *not* `.git/hooks` when `core.hooksPath`
     /// is set at any scope.
@@ -872,6 +878,28 @@ public struct GitService: GitServiceProtocol {
         guard result.exitCode == 0 else { return nil }
         let trimmed = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    public func fileChurn(at repoPath: URL, since: Date) async throws -> [String: Int] {
+        let iso = ISO8601DateFormatter().string(from: since)
+        let result = try await run(
+            ["log", "--since=\(iso)", "--no-merges", "--numstat", "--format=%x00"],
+            at: repoPath
+        )
+        var churn: [String: Int] = [:]
+        for rawLine in result.stdout.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard rawLine != "\u{0}" else { continue }
+            let fields = rawLine.split(separator: "\t")
+            guard fields.count >= 3,
+                  let added = Int(fields[0]),
+                  let deleted = Int(fields[1]) else { continue }
+            // A rename is rendered as `old => new`; numstat's own path field
+            // isn't split into two, so it's counted once under that fused
+            // label rather than attributed to either side.
+            let path = String(fields[2])
+            churn[path, default: 0] += added + deleted
+        }
+        return churn
     }
 
     public func logGraph(at repoPath: URL, maxCount: Int = 500) async throws -> [GitCommit] {

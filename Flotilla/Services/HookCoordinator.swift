@@ -175,6 +175,11 @@ final class HookCoordinator {
                             )
                         }
                     }
+                    group.addTask {
+                        for await event in hookReceiver.permissionRequestStream {
+                            await self?.recordPermissionRequest(event, sessionID: sessionID)
+                        }
+                    }
                 }
             }
         }
@@ -225,5 +230,19 @@ final class HookCoordinator {
             lastNotifiedSessionTitle = session.title
             await dispatcher.notifyWaitingForInput(sessionTitle: session.title, sessionID: sessionID)
         }
+    }
+
+    /// Logs one permission ask for Home's Top permissions widget. Never
+    /// throws into the caller — a write failure here must not disrupt
+    /// status tracking, which shares this same event stream's task group.
+    private func recordPermissionRequest(_ event: HookPermissionRequestEvent, sessionID: UUID) async {
+        let pattern = PermissionPattern.normalize(event: event)
+        try? store.permissionLogStore.record(
+            sessionID: sessionID.uuidString,
+            agent: event.agent.rawValue,
+            tool: event.toolName,
+            pattern: pattern,
+            at: event.timestamp
+        )
     }
 }

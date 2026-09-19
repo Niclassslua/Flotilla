@@ -227,6 +227,20 @@ public enum AXID: String, Sendable {
     case homeRecentProjects = "Home.RecentProjects"
     case homeGreeting = "Home.Greeting"
     case homeStats = "Home.Stats"
+    // MARK: - Home Widget Grid
+    case homeWidgetGrid = "Home.Widgets.Grid"
+    case homeWidgetEditButton = "Home.Widgets.EditButton"
+    case homeWidgetDoneButton = "Home.Widgets.DoneButton"
+    case homeWidgetAddButton = "Home.Widgets.AddButton"
+    case homeWidgetGallery = "Home.Widgets.Gallery"
+    case homeWidgetGalleryAddButton = "Home.Widgets.Gallery.Add-"
+    case homeWidgetResetButton = "Home.Widgets.ResetButton"
+    case homeWidgetSettingsPopover = "Home.Widgets.SettingsPopover"
+    /// Suffixed with the widget kind's raw value, e.g. `Home.Widget-streak`.
+    case homeWidget = "Home.Widget-"
+    case homeWidgetRemoveBadge = "Home.Widget.Remove-"
+    case homeWidgetInfoBadge = "Home.Widget.Info-"
+    case homeWidgetResizeHandle = "Home.Widget.Resize-"
     case projectCompactCardEllipsis = "ProjectCompactCard.Ellipsis-"
 
     // MARK: - Session Row (Legacy - preserved for test compatibility)

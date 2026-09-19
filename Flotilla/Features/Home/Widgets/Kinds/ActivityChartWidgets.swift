@@ -4,98 +4,9 @@ import SessionKit
 import GitKit
 import DesignSystem
 
-/// The foot of Home: your work over time, across every project. This is the
-/// one thing no other screen shows — the sidebar is *now*, a project
-/// workspace is *one repository*.
-struct HomeStatsSection: View {
-    /// `nil` while history is still being read.
-    let activity: HomeActivity?
-    let projects: [Project]
-
-    @State private var width: CGFloat = 1_000
-    private var isWide: Bool { width >= 820 }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
-            HomeSectionTitle("Your activity")
-
-            if let activity {
-                HomeStatCard(title: "Contributions", subtitle: "Commits per day, last twelve months") {
-                    ContributionHeatmap(commitsByDay: activity.commitsByDay)
-                }
-                pair {
-                    HomeStatCard(title: "Weekly rhythm", subtitle: "Lines added and removed, last four weeks") {
-                        RhythmChart(linesByDay: activity.linesByDay)
-                    }
-                } trailing: {
-                    HomeStatCard(title: "Agent share", subtitle: "Which agents wrote your commits, last 30 days") {
-                        AgentShareView(contributions: activity.contributions)
-                    }
-                }
-                HomeStatCard(title: "Codebase growth", subtitle: "Net lines added, last twelve weeks") {
-                    GrowthChart(netLinesByWeek: activity.netLinesByWeek, projects: projects)
-                }
-            } else {
-                HomeStatCard(title: "Contributions", subtitle: "Reading history…") {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity, minHeight: 120)
-                }
-            }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .accessibilityIdentifier(AXID.homeStats.rawValue)
-    }
-
-    @ViewBuilder
-    private func pair<Leading: View, Trailing: View>(
-        @ViewBuilder _ leading: () -> Leading,
-        @ViewBuilder trailing: () -> Trailing
-    ) -> some View {
-        if isWide {
-            HStack(alignment: .top, spacing: FlotillaSpacing.medium) {
-                leading().frame(maxWidth: .infinity)
-                trailing().frame(maxWidth: .infinity)
-            }
-            .fixedSize(horizontal: false, vertical: true)
-        } else {
-            leading()
-            trailing()
-        }
-    }
-}
-
-// MARK: - Card
-
-struct HomeStatCard<Content: View>: View {
-    let title: String
-    let subtitle: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.large) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(FlotillaColors.textPrimary)
-                Text(subtitle)
-                    .font(FlotillaTypography.caption)
-                    .foregroundStyle(FlotillaColors.textTertiary)
-            }
-            content
-        }
-        .padding(FlotillaSpacing.large + 2)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous)
-                .strokeBorder(FlotillaColors.textPrimary.opacity(0.08), lineWidth: FlotillaBorderWidth.thin)
-        }
-    }
-}
-
 /// A big number with a small caption, for the headline figures inside cards.
-private struct HeadlineFigure: View {
+/// Moved here from the old `HomeStatsSection` — shared by every chart widget.
+struct HomeWidgetHeadlineFigure: View {
     let value: String
     let label: String
     var tint: Color = FlotillaColors.textPrimary
@@ -113,14 +24,15 @@ private struct HeadlineFigure: View {
     }
 }
 
-// MARK: - Contribution Heatmap
+// MARK: - Contributions
 
 /// Weeks as columns, weekdays as rows, one accent hue from faint to full.
-/// Levels are quartiles of your own busy days, so a quiet month still reads.
-/// Cells keep a comfortable fixed size and the grid shows as many recent
-/// weeks as fit, up to a year.
-private struct ContributionHeatmap: View {
+/// Shows as many recent weeks as its width allows — the same behavior at
+/// every size, medium just gets less width than wide.
+struct ContributionHeatmap: View {
     let commitsByDay: [Date: Int]
+    let currentStreak: Int
+    let longestStreak: Int
 
     @State private var width: CGFloat = 0
     @State private var hoveredDay: Date?
@@ -150,29 +62,6 @@ private struct ContributionHeatmap: View {
         commitsByDay.filter { $0.key >= windowStart }.values.reduce(0, +)
     }
 
-    /// Consecutive days with commits, ending today — or yesterday, so a
-    /// streak isn't "broken" before you've had a chance to commit today.
-    private var currentStreak: Int {
-        var day = commitsByDay[today, default: 0] > 0 ? today : calendar.date(byAdding: .day, value: -1, to: today)!
-        var streak = 0
-        while commitsByDay[day, default: 0] > 0 {
-            streak += 1
-            day = calendar.date(byAdding: .day, value: -1, to: day)!
-        }
-        return streak
-    }
-
-    private var longestStreak: Int {
-        var longest = 0, run = 0
-        var day = windowStart
-        while day <= today {
-            run = commitsByDay[day, default: 0] > 0 ? run + 1 : 0
-            longest = max(longest, run)
-            day = calendar.date(byAdding: .day, value: 1, to: day)!
-        }
-        return longest
-    }
-
     private var thresholds: [Int] {
         let busy = commitsByDay.values.filter { $0 > 0 }.sorted()
         guard !busy.isEmpty else { return [1, 2, 3] }
@@ -182,13 +71,13 @@ private struct ContributionHeatmap: View {
     var body: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
             HStack(alignment: .bottom, spacing: FlotillaSpacing.xLarge) {
-                HeadlineFigure(value: total.formatted(), label: "commits")
-                HeadlineFigure(
+                HomeWidgetHeadlineFigure(value: total.formatted(), label: "commits")
+                HomeWidgetHeadlineFigure(
                     value: "\(currentStreak)d",
                     label: "current streak",
                     tint: currentStreak > 0 ? FlotillaColors.accent : FlotillaColors.textPrimary
                 )
-                HeadlineFigure(value: "\(longestStreak)d", label: "longest streak")
+                HomeWidgetHeadlineFigure(value: "\(longestStreak)d", label: "longest streak")
                 Spacer(minLength: 0)
                 legend
             }
@@ -228,7 +117,6 @@ private struct ContributionHeatmap: View {
             ForEach(0..<weeks, id: \.self) { week in
                 let weekStart = calendar.date(byAdding: .weekOfYear, value: week, to: start)!
                 let previous = calendar.date(byAdding: .weekOfYear, value: -1, to: weekStart)!
-                // Skip a label squeezed against the grid's first column.
                 if week > 1, calendar.component(.month, from: weekStart) != calendar.component(.month, from: previous) {
                     Text(weekStart, format: .dateTime.month(.abbreviated))
                         .font(FlotillaTypography.caption2)
@@ -246,8 +134,7 @@ private struct ContributionHeatmap: View {
         let count = commitsByDay[day, default: 0]
         let isFuture = day > today
         if isFuture {
-            Color.clear
-                .frame(width: size, height: size)
+            Color.clear.frame(width: size, height: size)
         } else {
             let isHovered = hoveredDay == day
             let cornerRadius = min(3, size / 4)
@@ -256,14 +143,12 @@ private struct ContributionHeatmap: View {
             ZStack {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(fill(for: count, thresholds: thresholds, isHovered: isHovered))
-
                 if isHovered {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .strokeBorder(
                             count == 0 ? FlotillaColors.textPrimary.opacity(0.28) : Color.white.opacity(0.45),
                             lineWidth: 1
                         )
-
                     Text(count >= 1000 ? "\(count / 1000)k" : "\(count)")
                         .font(.system(size: max(8, size * 0.58), weight: .bold, design: .rounded).monospacedDigit())
                         .foregroundStyle(count == 0 ? FlotillaColors.textPrimary : FlotillaColors.accentContent)
@@ -313,32 +198,51 @@ private struct ContributionHeatmap: View {
     }
 }
 
+/// The grid widget entry point: reads its activity slice, computes the
+/// streaks and hands the pure heatmap its data.
+struct ContributionsWidgetContent: View {
+    let activity: HomeActivity?
+
+    var body: some View {
+        if let activity {
+            ContributionHeatmap(
+                commitsByDay: activity.commitsByDay,
+                currentStreak: activity.currentStreak(),
+                longestStreak: activity.longestStreak()
+            )
+        } else {
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 60)
+        }
+    }
+}
+
 // MARK: - Weekly Rhythm
 
 /// Additions above the baseline, deletions mirrored below — one axis, one
 /// unit, so the two never need separate scales.
-private struct RhythmChart: View {
+struct RhythmChartContent: View {
     let linesByDay: [Date: GitDiffStat]
+    var windowDays: Int = HomeActivity.rhythmDays
 
     @State private var selectedDay: Date?
     private let calendar = Calendar.current
 
     private var days: [Date] {
         let today = calendar.startOfDay(for: .now)
-        return (0..<HomeActivity.rhythmDays).reversed().compactMap {
+        return (0..<windowDays).reversed().compactMap {
             calendar.date(byAdding: .day, value: -$0, to: today)
         }
     }
 
     private var totals: GitDiffStat {
-        linesByDay.values.reduce(.zero, +)
+        days.reduce(GitDiffStat.zero) { $0 + linesByDay[$1, default: .zero] }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
             HStack(spacing: FlotillaSpacing.xLarge) {
-                HeadlineFigure(value: "+\(totals.additions.formatted(.number.notation(.compactName)))", label: "added", tint: FlotillaColors.diffAdded)
-                HeadlineFigure(value: "−\(totals.deletions.formatted(.number.notation(.compactName)))", label: "removed", tint: FlotillaColors.diffRemoved)
+                HomeWidgetHeadlineFigure(value: "+\(totals.additions.formatted(.number.notation(.compactName)))", label: "added", tint: FlotillaColors.diffAdded)
+                HomeWidgetHeadlineFigure(value: "−\(totals.deletions.formatted(.number.notation(.compactName)))", label: "removed", tint: FlotillaColors.diffRemoved)
                 Spacer(minLength: 0)
             }
 
@@ -364,8 +268,6 @@ private struct RhythmChart: View {
                         }
                 }
             }
-            // The selection is wherever the pointer sits inside a day; the data
-            // is keyed by that day's start, so snap before looking it up.
             .chartXSelection(value: Binding(
                 get: { selectedDay },
                 set: { selectedDay = $0.map { calendar.startOfDay(for: $0) } }
@@ -387,7 +289,7 @@ private struct RhythmChart: View {
                     }
                 }
             }
-            .frame(height: 170)
+            .frame(minHeight: 120)
         }
     }
 
@@ -408,14 +310,15 @@ private struct RhythmChart: View {
 
 // MARK: - Codebase Growth
 
-/// Cumulative net lines over twelve weeks. "All projects" draws the combined
-/// total with each project as a faint line behind it; picking a project
-/// shows that one alone, on its own scale.
-private struct GrowthChart: View {
+/// Cumulative net lines over the widget's window. "All projects" draws the
+/// combined total with each project as a faint line behind it; picking a
+/// project inline shows that one alone, on its own scale — a transient
+/// view, not saved: it resets to "All projects" whenever Home is left.
+struct GrowthChartContent: View {
     let netLinesByWeek: [UUID: [Date: Int]]
     let projects: [Project]
+    var windowWeeks: Int = HomeActivity.growthWeeks
 
-    /// `nil` is "All projects".
     @State private var selectedProjectID: UUID?
     @State private var hoveredWeek: Date?
 
@@ -428,12 +331,11 @@ private struct GrowthChart: View {
 
     private var weeks: [Date] {
         let thisWeek = HomeActivity.startOfWeek(.now)
-        return (0..<HomeActivity.growthWeeks).reversed().compactMap {
+        return (0..<windowWeeks).reversed().compactMap {
             Calendar.current.date(byAdding: .weekOfYear, value: -$0, to: thisWeek)
         }
     }
 
-    /// Projects that committed in the window, busiest first.
     private var activeProjects: [Project] {
         projects
             .filter { netLinesByWeek[$0.id] != nil }
@@ -471,20 +373,17 @@ private struct GrowthChart: View {
 
     var body: some View {
         if activeProjects.isEmpty {
-            Text("No commits in the last twelve weeks.")
-                .font(FlotillaTypography.callout)
-                .foregroundStyle(FlotillaColors.textTertiary)
+            HomeWidgetAllClearState(message: "No commits in this window.")
         } else {
             let focus = focus
-            VStack(alignment: .leading, spacing: FlotillaSpacing.large) {
+            VStack(alignment: .leading, spacing: FlotillaSpacing.small + 2) {
                 scopePicker
                 headline(focus.points)
                 chart(focus: focus.points, tint: focus.tint)
             }
+            .onDisappear { selectedProjectID = nil }
         }
     }
-
-    // MARK: Picker
 
     private var scopePicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -506,43 +405,33 @@ private struct GrowthChart: View {
                 if let mark {
                     ProjectMark(title: mark.name, tint: ProjectMark.tint(for: mark), size: 16)
                 }
-                Text(title)
-                    .font(FlotillaTypography.caption.weight(.medium))
+                Text(title).font(FlotillaTypography.caption.weight(.medium))
             }
             .foregroundStyle(isSelected ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
             .padding(.horizontal, FlotillaSpacing.small + 2)
-            .frame(height: 26)
-            .background(
-                FlotillaColors.textPrimary.opacity(isSelected ? 0.14 : 0.05),
-                in: Capsule()
-            )
-            .overlay {
-                Capsule().strokeBorder(FlotillaColors.textPrimary.opacity(isSelected ? 0.18 : 0), lineWidth: 1)
-            }
+            .frame(height: 24)
+            .background(FlotillaColors.textPrimary.opacity(isSelected ? 0.14 : 0.05), in: Capsule())
+            .overlay { Capsule().strokeBorder(FlotillaColors.textPrimary.opacity(isSelected ? 0.18 : 0), lineWidth: 1) }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    // MARK: Headline
-
     private func headline(_ points: [Point]) -> some View {
         let shown = hoveredWeek.flatMap { week in points.last { $0.week <= week } } ?? points.last
         return HStack(alignment: .firstTextBaseline, spacing: FlotillaSpacing.small) {
             Text(shown?.total ?? 0, format: .number.notation(.compactName).sign(strategy: .always(includingZero: false)))
-                .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
                 .foregroundStyle(FlotillaColors.textPrimary)
                 .contentTransition(.numericText())
             Text(hoveredWeek == nil
-                 ? "net lines in twelve weeks"
+                 ? "net lines in the window"
                  : "net lines by \(shown?.week.formatted(.dateTime.month(.abbreviated).day()) ?? "")")
                 .font(FlotillaTypography.caption)
                 .foregroundStyle(FlotillaColors.textTertiary)
         }
     }
-
-    // MARK: Chart
 
     private func chart(focus: [Point], tint: Color) -> some View {
         Chart {
@@ -561,8 +450,7 @@ private struct GrowthChart: View {
                     .interpolationMethod(.monotone)
                     .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
             }
-            RuleMark(y: .value("Zero", 0))
-                .foregroundStyle(FlotillaColors.separatorStrong)
+            RuleMark(y: .value("Zero", 0)).foregroundStyle(FlotillaColors.separatorStrong)
             if let hoveredWeek, let point = focus.last(where: { $0.week <= hoveredWeek }) {
                 RuleMark(x: .value("Week", point.week, unit: .weekOfYear))
                     .foregroundStyle(FlotillaColors.textPrimary.opacity(0.15))
@@ -573,7 +461,7 @@ private struct GrowthChart: View {
         }
         .chartXSelection(value: $hoveredWeek)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { _ in
+            AxisMarks(values: .stride(by: .weekOfYear, count: max(1, windowWeeks / 6))) { _ in
                 AxisValueLabel(format: .dateTime.month(.abbreviated).day())
                     .foregroundStyle(FlotillaColors.textTertiary)
             }
@@ -589,7 +477,7 @@ private struct GrowthChart: View {
                 }
             }
         }
-        .frame(height: 200)
+        .frame(minHeight: 130)
         .animation(.snappy, value: selectedProjectID)
     }
 }
