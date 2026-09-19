@@ -74,4 +74,32 @@ final class FleetActivitySnapshotTests: XCTestCase {
         XCTAssertFalse(snapshot([session("working", .working)], mac: offline).state.isLive)
         XCTAssertTrue(snapshot([session("working", .working)]).state.isLive)
     }
+
+    func testPagesSessionsByPageSize() {
+        let sessions = (0..<7).map { session("s\($0)", .working, minutesAgo: Double($0)) }
+        var state = snapshot(sessions).state
+        XCTAssertEqual(state.pageCount, 3) // 7 sessions, pageSize 3 → 3 pages (3/3/1)
+        XCTAssertEqual(state.visibleSessions.map(\.title), ["s0", "s1", "s2"])
+
+        state.pageIndex = 1
+        XCTAssertEqual(state.visibleSessions.map(\.title), ["s3", "s4", "s5"])
+
+        state.pageIndex = 2
+        XCTAssertEqual(state.visibleSessions.map(\.title), ["s6"])
+    }
+
+    func testPageIndexWrapsAroundPageCount() {
+        let sessions = (0..<4).map { session("s\($0)", .working, minutesAgo: Double($0)) }
+        var state = snapshot(sessions).state
+        XCTAssertEqual(state.pageCount, 2)
+
+        state.pageIndex = 2 // one full lap past the last page
+        XCTAssertEqual(state.visibleSessions.map(\.title), ["s0", "s1", "s2"])
+    }
+
+    func testSinglePageNeverEmpty() {
+        let state = snapshot([session("only", .working)]).state
+        XCTAssertEqual(state.pageCount, 1)
+        XCTAssertEqual(state.visibleSessions.map(\.title), ["only"])
+    }
 }

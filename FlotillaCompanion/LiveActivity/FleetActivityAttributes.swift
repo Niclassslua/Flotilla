@@ -21,16 +21,31 @@ public struct FleetActivityAttributes: ActivityAttributes, Sendable {
         /// the widget says when the snapshot was taken.
         public var isLive: Bool
         public var updatedAt: Date
+        /// Which page of `pageSize` sessions the Lock Screen shows. Only the
+        /// widget's own page button changes this; every app-driven update
+        /// resets it to 0, since a refreshed session list under an old page
+        /// index would be confusing.
+        public var pageIndex: Int
 
-        public init(sessions: [Session], activeCount: Int, isLive: Bool, updatedAt: Date) {
+        public init(sessions: [Session], activeCount: Int, isLive: Bool, updatedAt: Date, pageIndex: Int = 0) {
             self.sessions = sessions
             self.activeCount = activeCount
             self.isLive = isLive
             self.updatedAt = updatedAt
+            self.pageIndex = pageIndex
         }
 
         public var needsYouCount: Int { sessions.filter(\.status.needsYou).count }
         public var workingCount: Int { sessions.filter { $0.status == .working }.count }
+
+        public var pageCount: Int {
+            let pageSize = FleetActivityAttributes.pageSize
+            return max(1, (sessions.count + pageSize - 1) / pageSize)
+        }
+        public var visibleSessions: [Session] {
+            let start = (pageIndex % pageCount) * FleetActivityAttributes.pageSize
+            return Array(sessions.dropFirst(start).prefix(FleetActivityAttributes.pageSize))
+        }
     }
 
     public struct Session: Codable, Hashable, Sendable, Identifiable {
@@ -66,6 +81,9 @@ public struct FleetActivityAttributes: ActivityAttributes, Sendable {
     }
 
     public static let maxSessions = 8
+    /// Sessions shown per Lock Screen page. Kept separate from `maxSessions`
+    /// (the payload cap) since this is a layout concern.
+    public static let pageSize = 3
 
     public var macID: String
     public var macName: String
