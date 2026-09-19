@@ -98,6 +98,28 @@ final class WorkspaceNavigatorHistoryTests: XCTestCase {
         }
         XCTAssertLessThanOrEqual(navigator.backStack.count, 50)
     }
+
+    func testShowHomeDashboardBringsUserToOverviewFromAnyScope() {
+        let navigator = makeNavigator()
+        let session = UUID()
+        let project = UUID()
+
+        navigator.selection = .session(session)
+        navigator.showHomeDashboard()
+        XCTAssertEqual(navigator.selection, .overview)
+
+        navigator.selection = .project(project)
+        navigator.showHomeDashboard()
+        XCTAssertEqual(navigator.selection, .overview)
+
+        navigator.selection = .allSessions
+        navigator.showHomeDashboard()
+        XCTAssertEqual(navigator.selection, .overview)
+
+        navigator.selection = .smartList(.working)
+        navigator.showHomeDashboard()
+        XCTAssertEqual(navigator.selection, .overview)
+    }
 }
 
 /// One scope drives every presentation, so switching Grid/Board/Focus changes
@@ -159,3 +181,4 @@ final class SessionScopeTests: XCTestCase {
         XCTAssertTrue(navigator.sessionScope.isEverything)
     }
 }
+
