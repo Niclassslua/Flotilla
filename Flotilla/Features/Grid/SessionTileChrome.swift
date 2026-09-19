@@ -158,7 +158,6 @@ struct SessionTileSurface: ViewModifier {
             }
             .draggable(session.id.uuidString) {
                 TileDragPreview(session: session)
-                    .frame(width: 120, height: 44)
             }
             // Pairs with `draggable` above. Without this the drag could start
             // but never land, which is how the previous grid shipped.
@@ -192,22 +191,28 @@ extension View {
     }
 }
 
-private struct TileDragPreview: View {
+struct TileDragPreview: View {
     let session: Session
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             StatusBadge(session.status, waitingReason: session.waitingReason, variant: .compact)
             Text(session.title)
                 .font(.caption.weight(.medium))
+                .foregroundStyle(FlotillaColors.textPrimary)
                 .lineLimit(1)
-            Spacer(minLength: 0)
+                .fixedSize(horizontal: true, vertical: false)
             ProviderLogo(agent: session.agent)
                 .frame(width: 12, height: 12)
         }
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(FlotillaColors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                .strokeBorder(FlotillaColors.separator.opacity(0.8), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
     }
 }
