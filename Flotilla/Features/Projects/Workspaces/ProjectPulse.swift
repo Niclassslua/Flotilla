@@ -22,21 +22,28 @@ struct ProjectPulse: Equatable, Sendable {
     static let empty = ProjectPulse()
 
     static func load(root: URL, git: any GitServiceProtocol) async -> ProjectPulse {
+        async let branchTask = try? git.currentBranch(at: root)
+        async let statusTask = try? git.status(at: root)
+        async let statTask = try? git.diffStat(at: root)
+        async let unpushedTask = try? git.unpushedSHAs(at: root, ref: nil)
+        async let worktreesTask = try? git.listWorktrees(at: root)
+        async let commitsTask = try? git.log(at: root, ref: nil, skip: 0, maxCount: 60)
+
         var pulse = ProjectPulse()
-        pulse.branch = try? await git.currentBranch(at: root)
-        if let status = try? await git.status(at: root) {
+        pulse.branch = await branchTask
+        if let status = await statusTask {
             pulse.changedFileCount = status.entries.count
         }
-        if let stat = try? await git.diffStat(at: root) {
+        if let stat = await statTask {
             pulse.diffStat = stat
         }
-        if let unpushed = try? await git.unpushedSHAs(at: root, ref: nil) {
+        if let unpushed = await unpushedTask {
             pulse.unpushedCount = unpushed.count
         }
-        if let worktrees = try? await git.listWorktrees(at: root) {
+        if let worktrees = await worktreesTask {
             pulse.worktreeCount = worktrees.count
         }
-        if let commits = try? await git.log(at: root, ref: nil, skip: 0, maxCount: 60) {
+        if let commits = await commitsTask {
             pulse.recentCommits = commits
         }
         return pulse

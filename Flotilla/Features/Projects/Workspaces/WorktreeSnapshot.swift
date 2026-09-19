@@ -13,14 +13,18 @@ struct WorktreeSnapshot: Equatable, Sendable {
     var isClean: Bool { changedFileCount == 0 }
 
     static func load(path: URL, git: any GitServiceProtocol) async -> WorktreeSnapshot {
+        async let statusTask = try? git.status(at: path)
+        async let statTask = try? git.diffStat(at: path)
+        async let unpushedTask = try? git.unpushedSHAs(at: path, ref: nil)
+
         var snapshot = WorktreeSnapshot()
-        if let status = try? await git.status(at: path) {
+        if let status = await statusTask {
             snapshot.changedFileCount = status.entries.count
         }
-        if let stat = try? await git.diffStat(at: path) {
+        if let stat = await statTask {
             snapshot.diffStat = stat
         }
-        if let unpushed = try? await git.unpushedSHAs(at: path, ref: nil) {
+        if let unpushed = await unpushedTask {
             snapshot.unpushedCount = unpushed.count
         }
         return snapshot
@@ -35,21 +39,40 @@ struct WorktreeSnapshot: Equatable, Sendable {
         maxConcurrent: Int = 4
     ) async -> [URL: WorktreeSnapshot] {
         var result: [URL: WorktreeSnapshot] = [:]
-        var remaining = paths.makeIterator()
-
-        await withTaskGroup(of: (URL, WorktreeSnapshot).self) { group in
-            var inFlight = 0
-            while inFlight < maxConcurrent, let path = remaining.next() {
-                group.addTask { (path, await load(path: path, git: git)) }
-                inFlight += 1
-            }
-            while let (path, snapshot) = await group.next() {
-                result[path.standardizedFileURL] = snapshot
-                if let path = remaining.next() {
-                    group.addTask { (path, await load(path: path, git: git)) }
-                }
-            }
+        for await (path, snapshot) in streamSnapshots(paths: paths, git: git, maxConcurrent: maxConcurrent) {
+            result[path.standardizedFileURL] = snapshot
         }
         return result
+    }
+
+    /// Streams snapshots as each worktree completes, preserving bounded concurrency.
+    static func streamSnapshots(
+        paths: [URL],
+        git: any GitServiceProtocol,
+        maxConcurrent: Int = 4
+    ) -> AsyncStream<(URL, WorktreeSnapshot)> {
+        AsyncStream { continuation in
+            let task = Task {
+                var remaining = paths.makeIterator()
+                await withTaskGroup(of: (URL, WorktreeSnapshot).self) { group in
+                    var inFlight = 0
+                    while inFlight < maxConcurrent, let path = remaining.next() {
+                        group.addTask { (path, await load(path: path, git: git)) }
+                        inFlight += 1
+                    }
+                    while let (path, snapshot) = await group.next() {
+                        if Task.isCancelled { break }
+                        continuation.yield((path, snapshot))
+                        if let path = remaining.next() {
+                            group.addTask { (path, await load(path: path, git: git)) }
+                        }
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
     }
 }
