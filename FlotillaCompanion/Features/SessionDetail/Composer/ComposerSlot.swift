@@ -339,7 +339,9 @@ private struct AudioWaveformHistory: View {
     let levels: [CompanionAudioLevelSample]
     let startTime: TimeInterval?
     private let barCount = 32
-    private let sampleInterval = 0.2
+    private let sampleInterval = CompanionAudioLevelMeter.slotDuration
+    /// Slots below roughly -46 dBFS read as silence and stay a gray dot.
+    private let silenceLevel = 0.1
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
@@ -351,42 +353,51 @@ private struct AudioWaveformHistory: View {
                 let elapsed = max(0, (now - (startTime ?? now)) / sampleInterval)
                 let currentTick = Int(elapsed.rounded(.down))
                 let progress = CGFloat(elapsed - Double(currentTick))
-                let samples = Dictionary(uniqueKeysWithValues: levels.map { ($0.id, $0.level) })
+                // Samples are contiguous by slot, so a slot's index is its
+                // offset from the oldest retained sample.
+                let firstTick = levels.first.map { Int($0.id) } ?? 0
 
-                // Each slot is drawn once: gray before audio arrives, or a
-                // single speech bar afterward. Every slot uses the same
-                // recording clock, including when callbacks are delayed.
                 for offset in -1...barCount {
                     let tick = currentTick - offset
                     let x = size.width - (CGFloat(offset) + 0.5 + progress) * slotWidth
                     guard x + barWidth / 2 > 0, x - barWidth / 2 < size.width else { continue }
-                    let level = tick >= 0 ? samples[UInt64(tick)] : nil
-                    let barHeight = level.map { max(6, CGFloat($0) * (size.height - 4)) }
-                        ?? baselineHeight
+                    let index = tick - firstTick
+                    let level = levels.indices.contains(index) ? levels[index].level : 0
+                    let isSpeech = level >= silenceLevel
+                    let barHeight = isSpeech
+                        ? baselineHeight + CGFloat(level) * (size.height - 4 - baselineHeight)
+                        : baselineHeight
                     let rect = CGRect(x: x - barWidth / 2,
                                       y: (size.height - barHeight) / 2,
                                       width: barWidth,
                                       height: barHeight)
                     context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
-                                 with: .color(.white.opacity(level == nil ? 0.28 : 0.86)))
+                                 with: .color(.white.opacity(isSpeech ? 0.86 : 0.28)))
                 }
             }
         }
         .padding(.horizontal, 14)
+        // New audio enters on the trailing edge; fade the oldest bars out
+        // on the leading edge instead of hiding the live one.
         .mask {
             LinearGradient(
                 stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black, location: 0.75),
-                    .init(color: .clear, location: 1)
+                    .init(color: .clear, location: 0),
+                    .init(color: .black, location: 0.25),
+                    .init(color: .black, location: 1)
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
             )
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Microphone level history")
-        .accessibilityValue(levels.isEmpty ? "Listening" : "Receiving audio")
+        .accessibilityLabel("Microphone level")
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var accessibilityValue: String {
+        guard let latest = levels.last else { return "Listening" }
+        return latest.level >= silenceLevel ? "Hearing speech" : "Quiet"
     }
 }
 
