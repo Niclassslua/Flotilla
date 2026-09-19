@@ -340,7 +340,7 @@ private struct AudioWaveformHistory: View {
     let startTime: TimeInterval?
     private let barCount = 32
     private let sampleInterval = CompanionAudioLevelMeter.slotDuration
-    /// Slots below roughly -46 dBFS read as silence and stay a gray dot.
+    /// Slots below roughly -46 dBFS read as silence and stay at baseline height.
     private let silenceLevel = 0.1
 
     var body: some View {
@@ -361,9 +361,10 @@ private struct AudioWaveformHistory: View {
                     let tick = currentTick - offset
                     let x = size.width - (CGFloat(offset) + 0.5 + progress) * slotWidth
                     guard x + barWidth / 2 > 0, x - barWidth / 2 < size.width else { continue }
+                    let isRecorded = startTime != nil && tick >= 0 && tick <= currentTick
                     let index = tick - firstTick
-                    let level = levels.indices.contains(index) ? levels[index].level : 0
-                    let isSpeech = level >= silenceLevel
+                    let level = isRecorded && levels.indices.contains(index) ? levels[index].level : 0
+                    let isSpeech = isRecorded && level >= silenceLevel
                     let barHeight = isSpeech
                         ? baselineHeight + CGFloat(level) * (size.height - 4 - baselineHeight)
                         : baselineHeight
@@ -372,7 +373,7 @@ private struct AudioWaveformHistory: View {
                                       width: barWidth,
                                       height: barHeight)
                     context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
-                                 with: .color(.white.opacity(isSpeech ? 0.86 : 0.28)))
+                                 with: .color(.white.opacity(isRecorded ? 0.86 : 0.28)))
                 }
             }
         }
