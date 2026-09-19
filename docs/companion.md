@@ -316,3 +316,24 @@ Decisions made without asking, recorded so they can be revisited.
 22. **Sample data stays.** The prototype's mock is the demo: the
     `FlotillaCompanion Demo` scheme, `make run-companion-demo`, or `-demo`.
     `-scenario <name>` implies it.
+
+## Known issues
+
+1. **Fix for later — Live Activities stop updating a few seconds after the
+   companion app backgrounds.** `RootView` (`CompanionApp.swift`) tears down
+   the Mac connection `disconnectGrace` (2.5s) after entering `.background`,
+   and `FleetActivityController` hands the Fleet Radar activity a matching
+   stale date at the same moment, so it visibly dims instead of showing data
+   it can no longer refresh. This is intentional given decision #6 above —
+   there is no APNs/ActivityKit-push entitlement in this build (needs a paid
+   Apple Developer Program account), and a raw background socket can't be
+   held open past the OS's suspension window regardless. Two follow-ups worth
+   revisiting once there's appetite/budget for it:
+   - Extend `disconnectGrace` to use `beginBackgroundTask` and consume the
+     OS's actual background-execution budget (commonly ~30s) instead of the
+     current fixed 2.5s, so ordinary short backgrounding doesn't go stale
+     immediately.
+   - Add real ActivityKit push-to-update support (push entitlement + APNs
+     client, with the Mac pushing state changes) — the properly supported way
+     to keep a Live Activity live while the app is suspended, but it's a real
+     feature build, not a small patch.
