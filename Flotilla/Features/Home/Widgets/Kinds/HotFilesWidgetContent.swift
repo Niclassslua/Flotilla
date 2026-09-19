@@ -12,6 +12,7 @@ struct HotFilesWidgetContent: View {
         let edits: Int
     }
 
+    let size: HomeWidgetSize
     /// Path → edit count, as `HomeInsights.fileChurn` returns it.
     let churn: [String: Int]
     var isLoading = false
@@ -24,12 +25,12 @@ struct HotFilesWidgetContent: View {
 
     var body: some View {
         if isLoading && churn.isEmpty {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 60)
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if files.isEmpty {
             HomeWidgetAllClearState(message: "No changes in this window.")
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(files.prefix(5)) { file in row(file) }
+                ForEach(files.prefix(size == .large ? 13 : 5)) { file in row(file) }
             }
         }
     }

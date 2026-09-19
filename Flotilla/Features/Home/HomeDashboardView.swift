@@ -18,6 +18,25 @@ struct HomeDashboardView: View {
     let insights: HomeInsights
 
     @State private var presentedSheet: ProjectSheetType?
+    @State private var widgetEditor: HomeWidgetEditor
+
+    init(
+        store: AppStore,
+        openProject: @escaping (UUID) -> Void,
+        openSession: @escaping (UUID) -> Void,
+        settingsViewModel: SettingsViewModel,
+        insights: HomeInsights
+    ) {
+        self.store = store
+        self.openProject = openProject
+        self.openSession = openSession
+        self.settingsViewModel = settingsViewModel
+        self.insights = insights
+        _widgetEditor = State(initialValue: HomeWidgetEditor(settings: .init(
+            get: { settingsViewModel.settings.workspace.homeWidgets },
+            set: { settingsViewModel.settings.workspace.homeWidgets = $0 }
+        )))
+    }
 
     /// Most recently worked-on first: the project you touched last is the one
     /// you most likely want next.
@@ -36,7 +55,7 @@ struct HomeDashboardView: View {
                 greeting
                 projectsSection
                 if !store.projects.isEmpty {
-                    HomeWidgetGrid(store: store, settingsViewModel: settingsViewModel, insights: insights, openSession: openSession)
+                    HomeWidgetGrid(store: store, insights: insights, editor: widgetEditor, openSession: openSession)
                 }
             }
             .padding(.horizontal, FlotillaSpacing.xxLarge + FlotillaSpacing.small)

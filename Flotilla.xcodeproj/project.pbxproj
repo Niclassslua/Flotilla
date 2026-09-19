@@ -80,6 +80,7 @@
 		2395149530FF56D440DCE635 /* AppStoreLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 432F0F0C96BAE89BBBB0521B /* AppStoreLifecycleTests.swift */; };
 		23A60A015BACCA3B87D4817D /* HomeWidgetSettingsPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0935A44926EBE1B9757AD7 /* HomeWidgetSettingsPopover.swift */; };
 		23CC5922034DE78EB78C8786 /* html.svg in Resources */ = {isa = PBXBuildFile; fileRef = D53EDE9FEEA048C9D7E4E05C /* html.svg */; };
+		23DBBFF46EE290A2D999F821 /* HomeWidgetsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DB910821E23F60CA8585408 /* HomeWidgetsUITests.swift */; };
 		23E2949459594CA93F188A9C /* ProjectKnowledgeViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06139D34425C214C310367A5 /* ProjectKnowledgeViewModelTests.swift */; };
 		2498F38C3172B63CEE813EB9 /* DiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB87683466AA1F8B0790DD0E /* DiffView.swift */; };
 		268214C6ABDC2D19243BA6CF /* SessionProcessManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6987F75CFE055517D2070B92 /* SessionProcessManagerTests.swift */; };
@@ -308,6 +309,7 @@
 		A08295D577651AE480EED0E4 /* SidebarProjectCollapseStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492EDF0F2835D3BAB2C79D15 /* SidebarProjectCollapseStateTests.swift */; };
 		A0E3F72416EEFECD3A87AEA3 /* SettingsKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317375274369CC35C23D6991 /* SettingsKitTests.swift */; };
 		A1B5BE12148F9FB515155403 /* SessionGitSidebarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96331BA001B5E82B33496459 /* SessionGitSidebarModels.swift */; };
+		A2D274C19D77C98989204C9A /* HomeWidgetGridGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBBF22BAAA880A4B600D72C8 /* HomeWidgetGridGeometryTests.swift */; };
 		A3AB77F0B0190BCCA4CAB705 /* CompanionNotificationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23DCC91DA29932911DF1186F /* CompanionNotificationPreferences.swift */; };
 		A4AD7F5AF66DD1CB2FA966DB /* MockFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = F565288EE31E06A5A2F05503 /* MockFixtures.swift */; };
 		A4FF45CE4C7733A084B52ACE /* RealHandoffPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B15FCD1B68428DB2360D62 /* RealHandoffPipelineTests.swift */; };
@@ -747,6 +749,7 @@
 		7AFB998229D7F921A3F398D0 /* folder-skills.svg */ = {isa = PBXFileReference; path = "folder-skills.svg"; sourceTree = "<group>"; };
 		7BBC083783BD10EC9D3923E7 /* RealPipelineReproTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealPipelineReproTests.swift; sourceTree = "<group>"; };
 		7D1C6AA6CFB7D0EDA39FC2C8 /* javascript.svg */ = {isa = PBXFileReference; path = javascript.svg; sourceTree = "<group>"; };
+		7DB910821E23F60CA8585408 /* HomeWidgetsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeWidgetsUITests.swift; sourceTree = "<group>"; };
 		7DB98E66F256A7E941840F5A /* AntigravityTranscriptCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityTranscriptCodecTests.swift; sourceTree = "<group>"; };
 		7F15D545EF64036535A2F93F /* TerminalKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TerminalKit; path = Packages/TerminalKit; sourceTree = SOURCE_ROOT; };
 		7FC34CF73E7A586705943393 /* FlotillaCompanionWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaCompanionWidgetBundle.swift; sourceTree = "<group>"; };
@@ -900,6 +903,7 @@
 		D9DD107B5B362EE14AC7C49F /* CreateSessionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSessionSheet.swift; sourceTree = "<group>"; };
 		DB73DD8DFEFD13BC2394C2AC /* vite.svg */ = {isa = PBXFileReference; path = vite.svg; sourceTree = "<group>"; };
 		DBB09520705F6CDBFB636A6A /* ProcessCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessCommandRunnerTests.swift; sourceTree = "<group>"; };
+		DBBF22BAAA880A4B600D72C8 /* HomeWidgetGridGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeWidgetGridGeometryTests.swift; sourceTree = "<group>"; };
 		DD8BF9AAED147CBFE03FF2B0 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		DEFE44DA481970CBCB874EFE /* HomeComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeComponents.swift; sourceTree = "<group>"; };
 		DF52E23E5825D2C1CF1796F3 /* ReviewFileTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewFileTree.swift; sourceTree = "<group>"; };
@@ -1064,6 +1068,7 @@
 				2CFB40CA8CE1DD12C190C2FA /* FlotillaUITests.swift */,
 				B7993ACB5B4FCFA5586BC7AD /* GitSidebarUITests.swift */,
 				EB25ABE36F82A35C66B86520 /* GridViewUITests.swift */,
+				7DB910821E23F60CA8585408 /* HomeWidgetsUITests.swift */,
 				749D2FC6B87D43FD5AA8B80C /* HooksUITests.swift */,
 				18295747B6538E5931B709FE /* KanbanUITests.swift */,
 				EE89D74F35F795F9E1002456 /* OverlayDismissalUITests.swift */,
@@ -1757,6 +1762,7 @@
 				874C07585626CF8D03699AB0 /* GitKitTests.swift */,
 				B8034B27D7FF60ED84FD5A58 /* GitLogTests.swift */,
 				4E01AB73E2CA8A2FB78D074C /* HandoffServiceTests.swift */,
+				DBBF22BAAA880A4B600D72C8 /* HomeWidgetGridGeometryTests.swift */,
 				CA36079165B942DA4E0A4A5A /* HomeWidgetLayoutPersistenceTests.swift */,
 				47993A3AE0F69C2D40DBD13A /* HomeWidgetPackerTests.swift */,
 				D81A7626DA67303D0C7CD01F /* HooksKitTests.swift */,
@@ -2304,6 +2310,7 @@
 				2C15A78E3C6B06BEBAC35D2E /* GitKitTests.swift in Sources */,
 				EAEB8C12F2DB24CAE6443071 /* GitLogTests.swift in Sources */,
 				6832C0F4581D6BC63DA7B0AB /* HandoffServiceTests.swift in Sources */,
+				A2D274C19D77C98989204C9A /* HomeWidgetGridGeometryTests.swift in Sources */,
 				595B20B135CE2AE62F65C106 /* HomeWidgetLayoutPersistenceTests.swift in Sources */,
 				F3A29DE1EC617BC2013F5817 /* HomeWidgetPackerTests.swift in Sources */,
 				4691198A8C6D5C9AA79A10D2 /* HooksKitTests.swift in Sources */,
@@ -2607,6 +2614,7 @@
 				116BF380DC13FE82F215868A /* FlotillaUITests.swift in Sources */,
 				20DF16336CD35E2C123AD0CF /* GitSidebarUITests.swift in Sources */,
 				08E5F188AD8414E021FF65DD /* GridViewUITests.swift in Sources */,
+				23DBBFF46EE290A2D999F821 /* HomeWidgetsUITests.swift in Sources */,
 				573296CCC427A2BC1E51BC33 /* HooksUITests.swift in Sources */,
 				10D65E7D1ABDBA7423577988 /* KanbanUITests.swift in Sources */,
 				600E6983114516A27AE5210F /* OverlayDismissalUITests.swift in Sources */,

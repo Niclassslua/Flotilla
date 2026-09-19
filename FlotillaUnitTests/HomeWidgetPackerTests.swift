@@ -47,7 +47,7 @@ final class HomeWidgetPackerTests: XCTestCase {
     }
 
     func testWideAtEveryColumnCountSpansTheFullRow() {
-        for columns in HomeWidgetGridLayout.minColumns...HomeWidgetGridLayout.maxColumns {
+        for columns in HomeWidgetGridGeometry.minColumns...HomeWidgetGridGeometry.maxColumns {
             let items = [Item(id: "wide", columnSpan: columns, rowSpan: 1)]
             let rects = HomeWidgetPacker.pack(items, columns: columns)
             XCTAssertEqual(rects["wide"]?.columnSpan, columns, "columns=\(columns)")
@@ -56,7 +56,7 @@ final class HomeWidgetPackerTests: XCTestCase {
 
     /// A widget wider than the available columns is clamped rather than
     /// overflowing — e.g. a `large` (2-wide) widget on a 2-column grid still
-    /// fits after `HomeWidgetGridLayout` resolves `wide`, but nothing should
+    /// fits after `HomeWidgetGridGeometry` resolves `wide`, but nothing should
     /// ever be asked to place wider than the grid itself.
     func testColumnSpanWiderThanGridIsClamped() {
         let items = [Item(id: "big", columnSpan: 5, rowSpan: 1)]
