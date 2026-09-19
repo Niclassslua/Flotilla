@@ -26,8 +26,7 @@ struct FleetActivitySnapshot: Equatable {
         let ranked = sessions
             .compactMap(Self.activitySession)
             .sorted { lhs, rhs in
-                let (l, r) = (Self.rank(lhs.status), Self.rank(rhs.status))
-                return l != r ? l < r : lhs.since > rhs.since
+                lhs.since != rhs.since ? lhs.since > rhs.since : lhs.title < rhs.title
             }
         macID = mac.id
         macName = mac.name
@@ -39,15 +38,6 @@ struct FleetActivitySnapshot: Equatable {
         )
         self.goesStale = goesStale
         isActive = ranked.contains { $0.status != .ready }
-    }
-
-    private static func rank(_ status: FleetActivityAttributes.Status) -> Int {
-        switch status {
-        case .waiting: 0
-        case .crashed: 1
-        case .working: 2
-        case .ready: 3
-        }
     }
 
     /// `nil` for sessions the activity leaves out: unstarted ones, and

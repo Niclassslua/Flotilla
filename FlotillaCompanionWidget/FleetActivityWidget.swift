@@ -11,7 +11,7 @@ import WidgetKit
 struct FleetActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FleetActivityAttributes.self) { context in
-            FleetLockScreenView(activityID: context.activityID, attributes: context.attributes, state: context.state, isLive: context.isLive)
+            FleetLockScreenView(attributes: context.attributes, state: context.state, isLive: context.isLive)
                 .environment(\.colorScheme, .dark)
                 .activityBackgroundTint(.black.opacity(0.55))
                 .activitySystemActionForegroundColor(.white)
@@ -65,13 +65,16 @@ struct FleetActivityWidget: Widget {
 // MARK: - Lock Screen
 
 private struct FleetLockScreenView: View {
-    let activityID: String
     let attributes: FleetActivityAttributes
     let state: FleetActivityAttributes.ContentState
     let isLive: Bool
 
+    private var remainingCount: Int {
+        max(0, state.activeCount - state.visibleSessions.count)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline) {
                 FlotillaWordmark(pointSize: 15)
                 Spacer(minLength: 8)
@@ -84,38 +87,42 @@ private struct FleetLockScreenView: View {
                     FleetRow(session: session, isLive: isLive)
                 }
             }
-            if state.pageCount > 1 {
-                FleetPageControl(activityID: activityID, state: state)
+            if remainingCount > 0 {
+                FleetMoreSessionsRow(macID: attributes.macID, remainingCount: remainingCount)
             }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 }
 
-/// Shown only when there's a second page to flip to. The button advances
-/// `pageIndex` via `NextFleetPageIntent`, which runs in the widget extension
-/// and updates the activity directly — no app launch needed.
-private struct FleetPageControl: View {
-    let activityID: String
-    let state: FleetActivityAttributes.ContentState
+/// Shown when there are more active sessions than fit on the Lock Screen.
+/// Tapping the button or row opens the fleet overview in the companion app.
+private struct FleetMoreSessionsRow: View {
+    let macID: String
+    let remainingCount: Int
 
     var body: some View {
-        HStack {
-            Text("Page \(state.pageIndex % state.pageCount + 1) of \(state.pageCount)")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
-            Spacer()
-            Button(intent: NextFleetPageIntent(activityID: activityID)) {
-                Label("More", systemImage: "chevron.right")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(6)
-                    .background(.white.opacity(0.14), in: Circle())
+        Link(destination: FleetActivityLink.fleet(macID)) {
+            HStack(spacing: 6) {
+                Text(remainingCount == 1 ? "+1 more session running" : "+\(remainingCount) more sessions running")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                HStack(spacing: 4) {
+                    Text("All Sessions")
+                        .font(.system(size: 11, weight: .semibold))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3.5)
+                .background(.white.opacity(0.14), in: Capsule())
             }
-            .buttonStyle(.plain)
+            .contentShape(Rectangle())
         }
     }
 }

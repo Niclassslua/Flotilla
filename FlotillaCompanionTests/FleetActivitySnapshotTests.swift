@@ -27,15 +27,15 @@ final class FleetActivitySnapshotTests: XCTestCase {
         FleetActivitySnapshot(mac: mac ?? self.mac, sessions: sessions, goesStale: false)
     }
 
-    func testMostUrgentFirstThenMostRecent() {
+    func testMostRecentFirst() {
         let snapshot = snapshot([
-            session("ready", .readyForReview),
+            session("ready", .readyForReview, minutesAgo: 10),
             session("working old", .working, minutesAgo: 30),
-            session("crashed", .crashed),
+            session("crashed", .crashed, minutesAgo: 20),
             session("working new", .working, minutesAgo: 2),
             session("waiting", .waitingForInput, minutesAgo: 50),
         ])
-        XCTAssertEqual(snapshot.state.sessions.map(\.title), ["waiting", "crashed", "working new", "working old", "ready"])
+        XCTAssertEqual(snapshot.state.sessions.map(\.title), ["working new", "ready", "crashed", "working old", "waiting"])
     }
 
     func testLeavesOutUnstartedAndAcknowledgedReviews() {
@@ -75,31 +75,18 @@ final class FleetActivitySnapshotTests: XCTestCase {
         XCTAssertTrue(snapshot([session("working", .working)]).state.isLive)
     }
 
-    func testPagesSessionsByPageSize() {
+    func testVisibleSessionsCapsAtMaxVisible() {
         let sessions = (0..<7).map { session("s\($0)", .working, minutesAgo: Double($0)) }
-        var state = snapshot(sessions).state
-        XCTAssertEqual(state.pageCount, 3) // 7 sessions, pageSize 3 → 3 pages (3/3/1)
+        let state = snapshot(sessions).state
         XCTAssertEqual(state.visibleSessions.map(\.title), ["s0", "s1", "s2"])
-
-        state.pageIndex = 1
-        XCTAssertEqual(state.visibleSessions.map(\.title), ["s3", "s4", "s5"])
-
-        state.pageIndex = 2
-        XCTAssertEqual(state.visibleSessions.map(\.title), ["s6"])
+        XCTAssertEqual(state.visibleSessions.count, FleetActivityAttributes.maxVisibleSessions)
+        XCTAssertEqual(state.sessions.count, 7)
+        XCTAssertEqual(state.activeCount, 7)
     }
 
-    func testPageIndexWrapsAroundPageCount() {
-        let sessions = (0..<4).map { session("s\($0)", .working, minutesAgo: Double($0)) }
-        var state = snapshot(sessions).state
-        XCTAssertEqual(state.pageCount, 2)
-
-        state.pageIndex = 2 // one full lap past the last page
-        XCTAssertEqual(state.visibleSessions.map(\.title), ["s0", "s1", "s2"])
-    }
-
-    func testSinglePageNeverEmpty() {
+    func testVisibleSessionsWithFewerThanMax() {
         let state = snapshot([session("only", .working)]).state
-        XCTAssertEqual(state.pageCount, 1)
         XCTAssertEqual(state.visibleSessions.map(\.title), ["only"])
+        XCTAssertEqual(state.visibleSessions.count, 1)
     }
 }
