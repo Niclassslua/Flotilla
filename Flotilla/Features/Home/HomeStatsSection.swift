@@ -123,6 +123,7 @@ private struct ContributionHeatmap: View {
     let commitsByDay: [Date: Int]
 
     @State private var width: CGFloat = 0
+    @State private var hoveredDay: Date?
     private let calendar = Calendar.current
     private let gap: CGFloat = 3
     private let maxCell: CGFloat = 22
@@ -244,16 +245,56 @@ private struct ContributionHeatmap: View {
     private func cellView(day: Date, size: CGFloat, thresholds: [Int]) -> some View {
         let count = commitsByDay[day, default: 0]
         let isFuture = day > today
-        RoundedRectangle(cornerRadius: min(3, size / 4), style: .continuous)
-            .fill(isFuture ? Color.clear : fill(for: count, thresholds: thresholds))
+        if isFuture {
+            Color.clear
+                .frame(width: size, height: size)
+        } else {
+            let isHovered = hoveredDay == day
+            let cornerRadius = min(3, size / 4)
+            let scale: CGFloat = isHovered ? max(1.3, 18.0 / size) : 1.0
+
+            ZStack {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(fill(for: count, thresholds: thresholds, isHovered: isHovered))
+
+                if isHovered {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            count == 0 ? FlotillaColors.textPrimary.opacity(0.28) : Color.white.opacity(0.45),
+                            lineWidth: 1
+                        )
+
+                    Text(count >= 1000 ? "\(count / 1000)k" : "\(count)")
+                        .font(.system(size: max(8, size * 0.58), weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(count == 0 ? FlotillaColors.textPrimary : FlotillaColors.accentContent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .padding(.horizontal, 1)
+                }
+            }
             .frame(width: size, height: size)
-            .help(isFuture ? "" : "\(count) commit\(count == 1 ? "" : "s") · \(day.formatted(.dateTime.weekday(.wide).month().day()))")
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                hoveredDay = hovering ? day : (hoveredDay == day ? nil : hoveredDay)
+            }
+            .scaleEffect(scale)
+            .zIndex(isHovered ? 10 : 0)
+            .shadow(color: .black.opacity(isHovered ? 0.35 : 0), radius: 2, y: 1)
+            .animation(.snappy(duration: 0.15), value: isHovered)
+            .help("\(count) commit\(count == 1 ? "" : "s") · \(day.formatted(.dateTime.weekday(.wide).month().day()))")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(count) commit\(count == 1 ? "" : "s"), \(day.formatted(.dateTime.weekday(.wide).month().day()))")
+        }
     }
 
-    private func fill(for count: Int, thresholds: [Int]) -> Color {
-        guard count > 0 else { return FlotillaColors.textPrimary.opacity(0.07) }
+    private func fill(for count: Int, thresholds: [Int], isHovered: Bool = false) -> Color {
+        guard count > 0 else {
+            return FlotillaColors.textPrimary.opacity(isHovered ? 0.18 : 0.07)
+        }
         let level = thresholds.filter { count > $0 }.count
-        return FlotillaColors.accent.opacity([0.3, 0.5, 0.72, 1.0][level])
+        let opacities = [0.3, 0.5, 0.72, 1.0]
+        let baseOpacity = opacities[min(level, opacities.count - 1)]
+        return FlotillaColors.accent.opacity(isHovered ? min(1.0, baseOpacity + 0.15) : baseOpacity)
     }
 
     private var legend: some View {
