@@ -122,12 +122,35 @@ enum SessionStatusTrace {
         )
     }
 
-    /// Every observation that reached `HookCoordinator`, before arbitration.
-    /// The most granular level: this is what to turn to when a status looks
-    /// right in the log but wrong on screen.
-    static func observed(sessionID: UUID, source: String, observation: String) {
+    /// Every observation that reached `HookCoordinator`, including the arbiter
+    /// verdict. This is the single line to read when a status looks right in
+    /// the log but wrong on screen: it shows the session, what was observed,
+    /// what the session was already doing, and whether the arbiter let it
+    /// through.
+    static func observed(
+        sessionID: UUID,
+        title: String,
+        agent: String,
+        currentStatus: String,
+        source: String,
+        observation: String,
+        accepted: Bool,
+        rejectionReason: String?
+    ) {
+        let verdict: String
+        if accepted {
+            verdict = "accepted"
+        } else {
+            verdict = "suppressed — \(rejectionReason ?? "arbiter declined it")"
+        }
         logger.debug(
-            "\(shortID(sessionID), privacy: .public) observed \(source, privacy: .public) \(observation, privacy: .public)"
+            """
+            \(shortID(sessionID), privacy: .public) \(title, privacy: .public) \
+            [\(agent, privacy: .public)] \
+            observed \(source, privacy: .public) \(observation, privacy: .public) \
+            (was \(currentStatus, privacy: .public)) \
+            → \(verdict, privacy: .public)
+            """
         )
     }
 
@@ -138,7 +161,7 @@ enum SessionStatusTrace {
         String(id.uuidString.prefix(8))
     }
 
-    private static func describe(_ status: SessionStatus?, _ reason: SessionWaitingReason?) -> String {
+    static func describe(_ status: SessionStatus?, _ reason: SessionWaitingReason?) -> String {
         guard let status else { return "none" }
         guard let reason else { return status.rawValue }
         return "\(status.rawValue)/\(reason.rawValue)"

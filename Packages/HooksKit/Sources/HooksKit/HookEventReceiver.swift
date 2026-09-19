@@ -96,6 +96,12 @@ public final class HookEventReceiver: @unchecked Sendable {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
+        let summary = payloadSummary(from: object, agent: agent)
+        /// Appends the payload summary (when present) to a base cause string.
+        let cause: (String) -> String = { base in
+            summary.map { "\(base) | \($0)" } ?? base
+        }
+
         switch agent {
         case .claudeCode:
             guard let eventName = object["hook_event_name"] as? String else { return nil }
@@ -105,41 +111,41 @@ public final class HookEventReceiver: @unchecked Sendable {
                 case "idle_prompt":
                     // Claude emits this after a completed turn. It means the
                     // composer is free, not that Claude is blocked mid-turn.
-                    return SessionStatusObservation(.readyForReview, cause: "hook: Notification/idle_prompt")
+                    return SessionStatusObservation(.readyForReview, cause: cause("hook: Notification/idle_prompt"))
                 case "permission_prompt":
                     let message = (object["message"] as? String)?.lowercased() ?? ""
                     let reason: SessionWaitingReason = message.contains("plan") ? .planApproval : .permission
                     return SessionStatusObservation(
                         .waitingForInput,
                         waitingReason: reason,
-                        cause: "hook: Notification/permission_prompt"
+                        cause: cause("hook: Notification/permission_prompt")
                     )
                 case "elicitation_dialog":
                     return SessionStatusObservation(
                         .waitingForInput,
                         waitingReason: .question,
-                        cause: "hook: Notification/elicitation_dialog"
+                        cause: cause("hook: Notification/elicitation_dialog")
                     )
                 default:
                     return nil
                 }
             case "PreToolUse":
                 let tool = object["tool_name"] as? String
-                return Self.claudeInteractiveObservation(toolName: tool, event: "PreToolUse")
-                    ?? SessionStatusObservation(.working, cause: "hook: PreToolUse \(Self.toolLabel(tool))")
+                return Self.claudeInteractiveObservation(toolName: tool, event: "PreToolUse", cause: cause)
+                    ?? SessionStatusObservation(.working, cause: cause("hook: PreToolUse \(Self.toolLabel(tool))"))
             case "PermissionRequest":
                 let tool = object["tool_name"] as? String
-                return Self.claudeInteractiveObservation(toolName: tool, event: "PermissionRequest")
+                return Self.claudeInteractiveObservation(toolName: tool, event: "PermissionRequest", cause: cause)
                     ?? SessionStatusObservation(
                         .waitingForInput,
                         waitingReason: .permission,
-                        cause: "hook: PermissionRequest \(Self.toolLabel(tool))"
+                        cause: cause("hook: PermissionRequest \(Self.toolLabel(tool))")
                     )
-            case "Stop": return SessionStatusObservation(.readyForReview, cause: "hook: Stop")
+            case "Stop": return SessionStatusObservation(.readyForReview, cause: cause("hook: Stop"))
             case "PostToolUse":
                 return SessionStatusObservation(
                     .working,
-                    cause: "hook: PostToolUse \(Self.toolLabel(object["tool_name"] as? String))"
+                    cause: cause("hook: PostToolUse \(Self.toolLabel(object["tool_name"] as? String))")
                 )
             default: return nil
             }
@@ -153,24 +159,24 @@ public final class HookEventReceiver: @unchecked Sendable {
                     ? SessionStatusObservation(
                         .waitingForInput,
                         waitingReason: .question,
-                        cause: "hook: PreToolUse ask_question"
+                        cause: cause("hook: PreToolUse ask_question")
                       )
-                    : SessionStatusObservation(.working, cause: "hook: PreToolUse \(Self.toolLabel(toolName))")
+                    : SessionStatusObservation(.working, cause: cause("hook: PreToolUse \(Self.toolLabel(toolName))"))
             case "PostToolUse":
                 if Self.antigravityRequestsPlanFeedback(payload) {
                     return SessionStatusObservation(
                         .waitingForInput,
                         waitingReason: .planApproval,
-                        cause: "hook: PostToolUse write_to_file with RequestFeedback"
+                        cause: cause("hook: PostToolUse write_to_file with RequestFeedback")
                     )
                 }
                 return SessionStatusObservation(
                     .working,
-                    cause: "hook: PostToolUse \(Self.toolLabel((payload["toolCall"] as? [String: Any])?["name"] as? String))"
+                    cause: cause("hook: PostToolUse \(Self.toolLabel((payload["toolCall"] as? [String: Any])?["name"] as? String))")
                 )
             case "Stop":
                 return (payload["fullyIdle"] as? Bool) == true
-                    ? SessionStatusObservation(.readyForReview, cause: "hook: Stop fullyIdle=true")
+                    ? SessionStatusObservation(.readyForReview, cause: cause("hook: Stop fullyIdle=true"))
                     : nil
             default:
                 return nil
@@ -188,14 +194,14 @@ public final class HookEventReceiver: @unchecked Sendable {
                     return SessionStatusObservation(
                         .waitingForInput,
                         waitingReason: .question,
-                        cause: "hook: PreToolUse \(Self.toolLabel(toolName))"
+                        cause: cause("hook: PreToolUse \(Self.toolLabel(toolName))")
                     )
                 }
-                return SessionStatusObservation(.working, cause: "hook: PreToolUse \(Self.toolLabel(toolName))")
+                return SessionStatusObservation(.working, cause: cause("hook: PreToolUse \(Self.toolLabel(toolName))"))
             case "PostToolUse":
                 return SessionStatusObservation(
                     .working,
-                    cause: "hook: PostToolUse \(Self.toolLabel(object["tool_name"] as? String))"
+                    cause: cause("hook: PostToolUse \(Self.toolLabel(object["tool_name"] as? String))")
                 )
             case "Stop":
                 // Codex renders a finalized Plan-mode response specially and
@@ -204,15 +210,15 @@ public final class HookEventReceiver: @unchecked Sendable {
                     return SessionStatusObservation(
                         .waitingForInput,
                         waitingReason: .planApproval,
-                        cause: "hook: Stop with last_assistant_message=null (plan mode)"
+                        cause: cause("hook: Stop with last_assistant_message=null (plan mode)")
                     )
                 }
-                return SessionStatusObservation(.readyForReview, cause: "hook: Stop")
+                return SessionStatusObservation(.readyForReview, cause: cause("hook: Stop"))
             case "PermissionRequest":
                 return SessionStatusObservation(
                     .waitingForInput,
                     waitingReason: .permission,
-                    cause: "hook: PermissionRequest"
+                    cause: cause("hook: PermissionRequest")
                 )
             default: return nil
             }
@@ -247,20 +253,21 @@ public final class HookEventReceiver: @unchecked Sendable {
 
     private static func claudeInteractiveObservation(
         toolName: String?,
-        event: String
+        event: String,
+        cause: (String) -> String
     ) -> SessionStatusObservation? {
         switch toolName?.lowercased() {
         case "exitplanmode":
             return SessionStatusObservation(
                 .waitingForInput,
                 waitingReason: .planApproval,
-                cause: "hook: \(event) ExitPlanMode"
+                cause: cause("hook: \(event) ExitPlanMode")
             )
         case "askuserquestion":
             return SessionStatusObservation(
                 .waitingForInput,
                 waitingReason: .question,
-                cause: "hook: \(event) AskUserQuestion"
+                cause: cause("hook: \(event) AskUserQuestion")
             )
         default:
             return nil
@@ -272,6 +279,133 @@ public final class HookEventReceiver: @unchecked Sendable {
     /// worth more than one that silently drops the field.
     private static func toolLabel(_ toolName: String?) -> String {
         toolName.map { "tool=\($0)" } ?? "tool=unknown"
+    }
+
+    // MARK: - Payload summary extraction
+
+    /// A compact, bounded representation of the most diagnostic fields from
+    /// the raw hook JSON — the content that explains *why* the event fired,
+    /// not just its type. Appended to the `cause` so a single log line
+    /// carries enough to diagnose without tailing the raw JSONL file.
+    ///
+    /// Each provider sends a different payload shape, so extraction is
+    /// per-agent. The result is capped at `maxLength` characters to keep
+    /// log lines readable; long strings are truncated with `…`.
+    static func payloadSummary(
+        from object: [String: Any],
+        agent: AgentKind,
+        maxLength: Int = 200
+    ) -> String? {
+        let raw: String?
+        switch agent {
+        case .claudeCode:
+            raw = claudePayloadSummary(from: object)
+        case .antigravity:
+            raw = antigravityPayloadSummary(from: object)
+        case .codexCLI:
+            raw = codexPayloadSummary(from: object)
+        case .openCode:
+            // OpenCode's events are flat {event: name} with no payload.
+            raw = nil
+        }
+        guard let raw, !raw.isEmpty else { return nil }
+        return raw.count <= maxLength ? raw : String(raw.prefix(maxLength)) + "…"
+    }
+
+    // MARK: Claude Code
+
+    /// Extracts the diagnostic fields from Claude Code's hook JSON.
+    ///
+    /// Claude sends a flat top-level object:
+    /// ```json
+    /// {
+    ///   "hook_event_name": "PreToolUse",
+    ///   "tool_name": "AskUserQuestion",
+    ///   "tool_input": { "question": "Which approach…", … },
+    ///   "session_id": "…",
+    ///   "cwd": "…"
+    /// }
+    /// ```
+    ///
+    /// For `Notification` events: `notification_type` + `message`.
+    /// For tool events: `tool_input` (the actual arguments).
+    private static func claudePayloadSummary(from object: [String: Any]) -> String? {
+        // Notification events carry `message` at the top level.
+        if let notificationType = object["notification_type"] as? String {
+            let message = object["message"] as? String
+            return message.map { "\(notificationType): \($0)" } ?? notificationType
+        }
+
+        // Tool events: extract from tool_input.
+        guard let toolInput = object["tool_input"] as? [String: Any],
+              !toolInput.isEmpty else { return nil }
+        return compactJSON(toolInput)
+    }
+
+    // MARK: Antigravity
+
+    /// Extracts the diagnostic fields from Antigravity's hook JSON.
+    ///
+    /// Antigravity sends:
+    /// ```json
+    /// {"event":"PreToolUse","payload":{"toolCall":{"name":"ask_question","args":{…}}}}
+    /// ```
+    private static func antigravityPayloadSummary(from object: [String: Any]) -> String? {
+        guard let payload = object["payload"] as? [String: Any] else { return nil }
+
+        // Stop events: report fullyIdle.
+        if let fullyIdle = payload["fullyIdle"] as? Bool {
+            return "fullyIdle=\(fullyIdle)"
+        }
+
+        // Tool events: extract args from toolCall.
+        guard let toolCall = payload["toolCall"] as? [String: Any] else { return nil }
+        let toolName = toolCall["name"] as? String
+        if let args = toolCall["args"] as? [String: Any], !args.isEmpty {
+            let argsText = compactJSON(args)
+            return toolName.map { "\($0)(\(argsText))" } ?? argsText
+        }
+        return toolName
+    }
+
+    // MARK: Codex CLI
+
+    /// Extracts the diagnostic fields from Codex CLI's hook JSON.
+    ///
+    /// Codex sends a flat top-level object with `hook_event_name`,
+    /// `tool_name`, and `tool_input`.
+    private static func codexPayloadSummary(from object: [String: Any]) -> String? {
+        if let toolInput = object["tool_input"] as? [String: Any], !toolInput.isEmpty {
+            return compactJSON(toolInput)
+        }
+        // Stop events may carry last_assistant_message.
+        if let message = object["last_assistant_message"] as? String, !message.isEmpty {
+            return "last_message: \(message)"
+        }
+        return nil
+    }
+
+    // MARK: Formatting
+
+    /// Formats a dictionary as a compact, single-line string for log output.
+    /// Prefers a readable `key=value, …` form over raw JSON.
+    private static func compactJSON(_ dict: [String: Any]) -> String {
+        dict.sorted(by: { $0.key < $1.key })
+            .map { key, value in
+                let v: String
+                switch value {
+                case let s as String: v = s
+                case let n as NSNumber where CFBooleanGetTypeID() == CFGetTypeID(n):
+                    v = n.boolValue ? "true" : "false"
+                case let n as NSNumber: v = n.stringValue
+                case is NSNull: v = "null"
+                case let arr as [Any]: v = "[\(arr.count) items]"
+                case let d as [String: Any]: v = "{\(d.count) keys}"
+                default: v = String(describing: value)
+                }
+                return "\(key)=\(v)"
+            }
+            .joined(separator: ", ")
     }
 
     private static func antigravityRequestsPlanFeedback(_ payload: [String: Any]) -> Bool {

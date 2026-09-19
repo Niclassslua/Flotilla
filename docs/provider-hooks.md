@@ -227,14 +227,23 @@ log stream --style compact \
 Add `--level debug` for the full picture, or read the recent past with
 `log show --last 30m` and the same predicate.
 
-Four line shapes, in increasing granularity:
+Three line shapes, in increasing granularity:
 
 | Level | Line | Means |
 |-------|------|-------|
 | `notice` | `1f3c9a20 Fix parser working → readyForReview — hook: Stop` | the change landed, and what caused it |
 | `info` | `1f3c9a20 Fix parser stayed crashed, asked for readyForReview — SessionStatusMachine refused the transition (screen: …)` | something asked for a status and did not get it |
-| `debug` | `1f3c9a20 suppressed screen readyForReview — screen readyForReview outranked by pending hook waitingForInput/permission` | the arbiter dropped an observation before `AppStore` saw it |
-| `debug` | `1f3c9a20 observed hook readyForReview ← hook: Stop` | every raw observation, before arbitration |
+| `debug` | `1f3c9a20 Fix parser [Claude Code] observed hook waitingForInput/question ← hook: PreToolUse AskUserQuestion \| question=Which approach? (was working) → accepted` | every observation, with session context, payload content, and arbiter verdict |
+
+The `debug` line is self-contained: session title, agent kind, observation
+source and status, the payload summary (after `|`), the session's current
+status (after `was`), and the arbiter verdict (`accepted` or
+`suppressed — <reason>`). A suppressed observation looks the same except for
+the verdict:
+
+```
+1f3c9a20 Fix parser [Claude Code] observed screen readyForReview ← screen: prompt heuristic (was waitingForInput/question) → suppressed — screen readyForReview outranked by pending hook waitingForInput/question
+```
 
 The text after `—` on an applied line is the origin (`SessionStatusOrigin`),
 which distinguishes the mechanisms that are indistinguishable in the UI: a

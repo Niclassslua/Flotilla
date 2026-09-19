@@ -189,21 +189,27 @@ final class HookCoordinator {
         var arbiter = arbiters[sessionID] ?? SessionStatusObservationArbiter()
         let accepted = arbiter.accept(observation, from: source)
         let sourceLabel = source == .hook ? "hook" : "screen"
+        let session = store.sessions.first(where: { $0.id == sessionID })
+        let sessionTitle = session?.title ?? "untitled"
+        let agentLabel = session?.agent.displayName ?? "unknown"
+        let currentStatus = SessionStatusTrace.describe(
+            session?.status, session?.waitingReason
+        )
+        let rejectionReason = accepted == nil
+            ? (arbiter.lastRejectionCause ?? "arbiter declined it")
+            : nil
         SessionStatusTrace.observed(
             sessionID: sessionID,
+            title: sessionTitle,
+            agent: agentLabel,
+            currentStatus: currentStatus,
             source: sourceLabel,
-            observation: observation.debugDescription
+            observation: observation.debugDescription,
+            accepted: accepted != nil,
+            rejectionReason: rejectionReason
         )
         arbiters[sessionID] = arbiter
-        guard let accepted else {
-            SessionStatusTrace.suppressed(
-                sessionID: sessionID,
-                source: sourceLabel,
-                observation: observation.debugDescription,
-                reason: arbiter.lastRejectionCause ?? "arbiter declined it"
-            )
-            return
-        }
+        guard let accepted else { return }
 
         let shouldNotify = gate.shouldNotify(for: accepted.status)
         store.applyObservedStatus(
