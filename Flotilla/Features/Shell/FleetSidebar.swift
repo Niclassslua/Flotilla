@@ -93,6 +93,8 @@ struct SessionsSidebar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
+                .focusEffectDisabled()
                 .help("Create new session (⌘N)")
                 .accessibilityLabel("New Session")
                 .accessibilityIdentifier("NewSessionButton")
