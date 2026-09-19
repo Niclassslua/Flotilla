@@ -74,10 +74,11 @@ public final class SessionScreenMonitor: @unchecked Sendable {
                     if screen != previousScreen {
                         previousScreen = screen
                         interval = pollInterval
-                        let observation = heuristic.observation(forScreen: screen)
-                        if observation != previousObservation {
-                            previousObservation = observation
-                            continuation.yield(observation)
+                        if let observation = heuristic.observation(forScreen: screen) {
+                            if observation != previousObservation {
+                                previousObservation = observation
+                                continuation.yield(observation)
+                            }
                         }
                     } else {
                         interval = min(interval * 2, maximumPollInterval)

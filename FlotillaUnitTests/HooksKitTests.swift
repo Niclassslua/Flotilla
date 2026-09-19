@@ -255,6 +255,26 @@ final class TerminalScreenHeuristicTests: XCTestCase {
             "Transcript mentioning 'waiting for input' at a composer prompt must be ready for review, not waiting"
         )
     }
+
+    func testUnremarkableScreenWithoutMarkersReturnsNil() {
+        let screen = """
+        Claude Code v1.0.0
+        Connected to workspace
+        Building dependencies...
+        """
+        XCTAssertNil(heuristic.observation(forScreen: screen))
+        XCTAssertNil(heuristic.status(forScreen: screen))
+    }
+
+    func testComposerPromptWithoutTranscriptReturnsNil() {
+        let screen = """
+        ╭──────────────────────────────────────────╮
+        │ >                                        │
+        ╰──────────────────────────────────────────╯
+        """
+        XCTAssertNil(heuristic.observation(forScreen: screen))
+        XCTAssertNil(heuristic.status(forScreen: screen))
+    }
 }
 
 final class SessionScreenMonitorTests: XCTestCase {
@@ -300,7 +320,8 @@ final class SessionScreenMonitorTests: XCTestCase {
     /// the same thing produces exactly one status, no matter how many times
     /// it is redrawn or re-read.
     func testUnchangingScreenReportsStatusOnlyOnce() async {
-        let reader = ScriptedScreenReader(["> ready", "> ready", "> ready", "> ready"])
+        let readyScreen = "● Done.\n> ready"
+        let reader = ScriptedScreenReader([readyScreen, readyScreen, readyScreen, readyScreen])
         let monitor = SessionScreenMonitor(
             sessionID: UUID(),
             reader: reader,
@@ -310,6 +331,20 @@ final class SessionScreenMonitorTests: XCTestCase {
         XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)])
         let readCount = await reader.readCount
         XCTAssertGreaterThan(readCount, 1, "the monitor should have polled repeatedly")
+    }
+
+    func testUnremarkableScreenReportsNothing() async {
+        let reader = ScriptedScreenReader([
+            "Claude Code v1.0.0\nInitializing...",
+            "Claude Code v1.0.0\nReading repository...",
+        ])
+        let monitor = SessionScreenMonitor(
+            sessionID: UUID(),
+            reader: reader,
+            pollInterval: .milliseconds(30)
+        )
+        let observed = await collect(from: monitor)
+        XCTAssertTrue(observed.isEmpty, "screens without markers must not produce status updates")
     }
 
     /// An animating spinner changes the screen on every frame but never
