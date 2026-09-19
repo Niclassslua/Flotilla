@@ -74,20 +74,22 @@ struct AgentShareWidgetContent: View {
         } else {
             switch size {
             case .small:
-                ring(diameter: 108)
+                ring
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .large:
                 VStack(spacing: FlotillaSpacing.medium) {
-                    HStack(alignment: .center, spacing: FlotillaSpacing.xxLarge) {
-                        ring(diameter: 140)
+                    HStack(alignment: .center, spacing: FlotillaSpacing.xLarge) {
+                        // Capped so the legend keeps room for full agent names.
+                        ring.frame(maxWidth: 150)
                         legend
                     }
+                    .frame(maxHeight: .infinity)
                     Divider().opacity(0.5)
                     linesTable
                 }
             default:
-                HStack(alignment: .center, spacing: FlotillaSpacing.xxLarge) {
-                    ring(diameter: 140)
+                HStack(alignment: .center, spacing: FlotillaSpacing.xLarge) {
+                    ring
                     legend
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -95,7 +97,8 @@ struct AgentShareWidgetContent: View {
         }
     }
 
-    private func ring(diameter: CGFloat) -> some View {
+    /// Square, as large as the height the card leaves it.
+    private var ring: some View {
         Chart(slices) { slice in
             SectorMark(angle: .value("Commits", slice.count), innerRadius: .ratio(0.75), angularInset: 1.5)
                 .cornerRadius(4)
@@ -106,9 +109,9 @@ struct AgentShareWidgetContent: View {
         .chartBackground { _ in
             if let featured {
                 VStack(spacing: 3) {
-                    ProviderLogo(agent: featured.agent).frame(width: 22, height: 22)
+                    ProviderLogo(agent: featured.agent).frame(width: 16, height: 16)
                     Text("\(percent(featured))%")
-                        .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
+                        .font(.system(size: 18, weight: .bold, design: .rounded).monospacedDigit())
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .contentTransition(.numericText())
                     Text(featured.agent.displayName)
@@ -119,16 +122,17 @@ struct AgentShareWidgetContent: View {
                 .animation(.snappy, value: featured.id)
             }
         }
-        .frame(width: diameter, height: diameter)
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxHeight: .infinity)
     }
 
     private var legend: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.medium - 2) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(slices) { slice in
                 HStack(spacing: FlotillaSpacing.small) {
-                    ProviderLogo(agent: slice.agent).frame(width: 18, height: 18)
+                    ProviderLogo(agent: slice.agent).frame(width: 15, height: 15)
                     Text(slice.agent.displayName)
-                        .font(FlotillaTypography.callout)
+                        .font(FlotillaTypography.caption)
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .lineLimit(1)
                     Spacer(minLength: FlotillaSpacing.small)
@@ -136,7 +140,7 @@ struct AgentShareWidgetContent: View {
                         .font(FlotillaTypography.caption.monospacedDigit())
                         .foregroundStyle(FlotillaColors.textTertiary)
                     Text("\(percent(slice))%")
-                        .font(FlotillaTypography.callout.weight(.semibold).monospacedDigit())
+                        .font(FlotillaTypography.caption.weight(.semibold).monospacedDigit())
                         .foregroundStyle(FlotillaColors.textPrimary)
                         .frame(width: 38, alignment: .trailing)
                     Circle().fill(slice.color).frame(width: 7, height: 7)
@@ -146,7 +150,9 @@ struct AgentShareWidgetContent: View {
             }
             Divider().opacity(0.6)
             Text("\(agentTotal) of \(allCommits) commits by agents · \(agentPercent)%")
-                .font(FlotillaTypography.caption.monospacedDigit())
+                .font(FlotillaTypography.caption2.monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .foregroundStyle(FlotillaColors.textTertiary)
         }
     }

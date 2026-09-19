@@ -95,15 +95,19 @@ struct NeedsYouWidgetContent: View {
 // MARK: - Review Queue
 
 struct ReviewQueueWidgetContent: View {
+    let size: HomeWidgetSize
     let items: [HomeReviewItem]
     let openSession: (UUID) -> Void
+
+    /// Rows that fit: two in a medium card, five with a footer in a large one.
+    private var visibleRows: Int { size == .large ? 5 : 2 }
 
     var body: some View {
         if items.isEmpty {
             HomeWidgetAllClearState(message: "Nothing to review")
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(items.prefix(5).enumerated()), id: \.element.id) { index, item in
+                ForEach(Array(items.prefix(visibleRows).enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
                         Divider().overlay(FlotillaColors.separator).padding(.leading, 30)
                     }
@@ -112,7 +116,7 @@ struct ReviewQueueWidgetContent: View {
                         .padding(.vertical, 7)
                 }
                 Spacer(minLength: 0)
-                if let oldest = items.first {
+                if size == .large, let oldest = items.first {
                     HStack {
                         Text("Oldest finished \(HomeTimestamp.compact(oldest.session.statusChangedAt ?? oldest.session.lastActiveAt)) ago")
                             .font(FlotillaTypography.caption2)
@@ -174,21 +178,29 @@ struct LooseEndsWidgetContent: View {
         let state: HomeRepoState
     }
 
+    let size: HomeWidgetSize
     let rows: [ProjectRow]
 
     var body: some View {
         let dirty = rows.filter { !$0.state.isSettled }
         if dirty.isEmpty {
             HomeWidgetAllClearState(message: "Nothing loose")
+        } else if size == .small {
+            // Totals only, stacked: a small card has no room for per-project rows.
+            VStack(alignment: .leading, spacing: 2) {
+                figure(rows.map(\.state.changedFileCount).reduce(0, +), "uncommitted", FlotillaColors.statusWaitingForInput)
+                figure(rows.map(\.state.unpushedCount).reduce(0, +), "unpushed", FlotillaColors.accent)
+                figure(rows.map(\.state.worktreeCount).reduce(0, +), "worktrees", FlotillaColors.textSecondary)
+            }
         } else {
-            VStack(alignment: .leading, spacing: FlotillaSpacing.small + 2) {
+            VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
                 HStack(spacing: FlotillaSpacing.large) {
                     figure(rows.map(\.state.changedFileCount).reduce(0, +), "uncommitted", FlotillaColors.statusWaitingForInput)
                     figure(rows.map(\.state.unpushedCount).reduce(0, +), "unpushed", FlotillaColors.accent)
                     figure(rows.map(\.state.worktreeCount).reduce(0, +), "worktrees", FlotillaColors.textSecondary)
                 }
                 VStack(spacing: 4) {
-                    ForEach(dirty.prefix(4)) { row in
+                    ForEach(dirty.prefix(3)) { row in
                         HStack(spacing: 6) {
                             Image(systemName: "folder.fill").font(.system(size: 9)).foregroundStyle(FlotillaColors.textTertiary)
                             Text(row.name).font(.system(size: 11, weight: .medium)).foregroundStyle(FlotillaColors.textSecondary)
@@ -206,7 +218,7 @@ struct LooseEndsWidgetContent: View {
     private func figure(_ value: Int, _ label: String, _ tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("\(value)")
-                .font(.system(size: 24, weight: .bold, design: .rounded).monospacedDigit())
+                .font(.system(size: size == .small ? 18 : 22, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(tint)
             Text(label).font(FlotillaTypography.caption2).foregroundStyle(FlotillaColors.textTertiary)
         }

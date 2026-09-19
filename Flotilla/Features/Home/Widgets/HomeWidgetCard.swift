@@ -2,10 +2,8 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 
-/// Whether the glass background renders normally or as an opaque fallback —
-/// carried over from the prototypes, where `ImageRenderer` can't sample the
-/// glass. Kept because the same limitation applies to any future offscreen
-/// rendering (screenshots, previews for the gallery).
+/// Glass in the app; an opaque surface when rendered offscreen, where
+/// `ImageRenderer` can't sample what's behind the glass.
 private struct HomeWidgetOpaqueSurfaceKey: EnvironmentKey {
     static let defaultValue = false
 }
@@ -17,14 +15,11 @@ extension EnvironmentValues {
     }
 }
 
-/// A resolved subtitle fragment for a non-default setting, e.g. "flotilla"
-/// or "30d" — `HomeWidgetCard` joins whichever of these are non-nil with " · ".
+/// A resolved subtitle for non-default settings, e.g. "flotilla · 30d".
 struct HomeWidgetConfigSummary {
     var projectName: String?
     var timeWindowLabel: String?
     var agentLabel: String?
-
-    var isEmpty: Bool { projectName == nil && timeWindowLabel == nil && agentLabel == nil }
 
     var text: String? {
         let parts = [projectName, timeWindowLabel, agentLabel].compactMap { $0 }
@@ -32,60 +27,54 @@ struct HomeWidgetConfigSummary {
     }
 }
 
-/// The chrome every widget renders inside: glass card, title, optional
-/// count/subtitle, and — in edit mode — the remove badge, info badge and
-/// resize handle. Content-agnostic; `HomeWidgetView` supplies what goes
-/// inside.
+enum HomeWidgetCardMetrics {
+    static let padding: CGFloat = FlotillaSpacing.large - 2
+    static let radius: CGFloat = FlotillaRadius.modal + 4
+    static var shape: RoundedRectangle { RoundedRectangle(cornerRadius: radius, style: .continuous) }
+}
+
+/// The chrome every widget renders inside: glass card and title row. It
+/// fills exactly the frame the grid gives it and clips anything beyond, so
+/// a widget can never grow its row. Edit controls live in `HomeWidgetView`,
+/// which owns the gestures they drive.
 struct HomeWidgetCard<Content: View>: View {
     let kind: HomeWidgetKind
-    let size: HomeWidgetSize
     var count: Int?
-    var configSummary: HomeWidgetConfigSummary = HomeWidgetConfigSummary()
-    var showsHeader = true
+    var configSummary = HomeWidgetConfigSummary()
+    var isEditing = false
     @ViewBuilder let content: Content
 
-    var isEditing = false
-    var onRemove: (() -> Void)?
-    var onShowSettings: (() -> Void)?
-    var onBeginResize: ((CGSize) -> Void)?
-    var onCommitResize: (() -> Void)?
-
     @Environment(\.homeWidgetOpaqueSurface) private var opaque
-    @State private var isHovering = false
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: FlotillaRadius.modal + 4, style: .continuous)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.small + 2) {
-            if showsHeader {
-                header
-            }
+            header
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .allowsHitTesting(!isEditing)
         }
-        .padding(FlotillaSpacing.large - 2)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(HomeWidgetCardMetrics.padding)
+        // `minWidth/minHeight: 0` make the frame take the proposed size
+        // outright instead of growing to fit oversized content.
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .background {
             if opaque {
-                shape.fill(FlotillaColors.surfaceElevated.opacity(0.92))
+                HomeWidgetCardMetrics.shape.fill(FlotillaColors.surfaceElevated.opacity(0.92))
             } else {
-                Color.clear.glassEffect(.regular, in: shape)
+                Color.clear.glassEffect(.regular, in: HomeWidgetCardMetrics.shape)
             }
         }
         .overlay {
-            shape.strokeBorder(
-                isEditing ? FlotillaColors.textPrimary.opacity(0.16) : FlotillaColors.textPrimary.opacity(0.08),
-                style: isEditing ? StrokeStyle(lineWidth: 1.5, dash: [5, 4]) : StrokeStyle(lineWidth: FlotillaBorderWidth.thin)
+            HomeWidgetCardMetrics.shape.strokeBorder(
+                FlotillaColors.textPrimary.opacity(isEditing ? 0.16 : 0.08),
+                lineWidth: FlotillaBorderWidth.thin
             )
         }
-        .clipShape(shape)
-        .overlay(alignment: .topLeading) { if isEditing { removeBadge } }
-        .overlay(alignment: .topTrailing) { if isEditing, onShowSettings != nil { infoBadge } }
-        .overlay(alignment: .bottomTrailing) { if isEditing, onBeginResize != nil { resizeHandle } }
-        .onHover { isHovering = $0 }
+        .clipShape(HomeWidgetCardMetrics.shape)
+        // The glass background is `Color.clear` to hit testing; without this
+        // a click between the content's own controls lands on nothing, so
+        // neither dragging nor the context menu would ever start.
+        .contentShape(HomeWidgetCardMetrics.shape)
         .accessibilityIdentifier(AXID.homeWidget.rawValue + kind.rawValue)
     }
 
@@ -98,6 +87,7 @@ struct HomeWidgetCard<Content: View>: View {
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(FlotillaColors.textPrimary)
                 .lineLimit(1)
+                .layoutPriority(1)
             if let count, count > 0 {
                 Text("\(count)")
                     .font(.system(size: 12, weight: .medium, design: .rounded).monospacedDigit())
@@ -111,54 +101,7 @@ struct HomeWidgetCard<Content: View>: View {
             }
             Spacer(minLength: 0)
         }
-    }
-
-    // MARK: Edit badges
-
-    private var removeBadge: some View {
-        Button(role: .destructive) { onRemove?() } label: {
-            Image(systemName: "minus")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 18, height: 18)
-                .background(FlotillaColors.statusCrashed, in: Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .offset(x: -6, y: -6)
-        .shadow(radius: 2, y: 1)
-        .accessibilityLabel("Remove \(kind.title) widget")
-        .accessibilityIdentifier(AXID.homeWidgetRemoveBadge.rawValue + kind.rawValue)
-    }
-
-    private var infoBadge: some View {
-        Button { onShowSettings?() } label: {
-            Image(systemName: "info.circle.fill")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(FlotillaColors.textSecondary, FlotillaColors.surfaceElevated)
-        }
-        .buttonStyle(.plain)
-        .offset(x: 6, y: -6)
-        .accessibilityLabel("Edit \(kind.title) widget settings")
-        .accessibilityIdentifier(AXID.homeWidgetInfoBadge.rawValue + kind.rawValue)
-    }
-
-    private var resizeHandle: some View {
-        Image(systemName: "arrow.down.right.and.arrow.up.left")
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(FlotillaColors.textSecondary)
-            .frame(width: 18, height: 18)
-            .background(FlotillaColors.surfaceElevated, in: Circle())
-            .overlay(Circle().strokeBorder(FlotillaColors.textPrimary.opacity(0.15), lineWidth: 1))
-            .offset(x: 6, y: 6)
-            .opacity(isHovering ? 1 : 0)
-            .gesture(
-                DragGesture(minimumDistance: 2, coordinateSpace: .global)
-                    .onChanged { onBeginResize?($0.translation) }
-                    .onEnded { _ in onCommitResize?() }
-            )
-            .accessibilityLabel("Resize \(kind.title) widget")
-            .accessibilityIdentifier(AXID.homeWidgetResizeHandle.rawValue + kind.rawValue)
+        .frame(height: 16)
     }
 }
 
@@ -185,9 +128,8 @@ struct HomeWidgetProjectRemovedState: View {
     }
 }
 
-/// Shown when a widget's data is present but empty, e.g. nothing waiting or
-/// nothing uncommitted — stays in place rather than collapsing, so the grid
-/// never reflows out from under you.
+/// Shown when a widget's data is present but empty — the widget stays in
+/// place rather than collapsing, so the grid never reflows under you.
 struct HomeWidgetAllClearState: View {
     var message = "All clear"
 

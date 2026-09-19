@@ -12,24 +12,21 @@ struct StreakWidgetContent: View {
             let current = activity.currentStreak()
             let best = activity.longestStreak()
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(LinearGradient(colors: [.yellow, FlotillaColors.accent], startPoint: .top, endPoint: .bottom))
-                    Spacer()
-                    Text("best \(best)d")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                }
                 Spacer(minLength: 0)
                 Text("\(current)")
-                    .font(.system(size: 46, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(FlotillaColors.textPrimary)
-                    .padding(.bottom, -4)
-                Text("day streak")
-                    .font(FlotillaTypography.caption)
-                    .foregroundStyle(FlotillaColors.textSecondary)
-                Spacer(minLength: 0)
+                    .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(current > 0 ? FlotillaColors.textPrimary : FlotillaColors.textTertiary)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("day streak")
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                    Spacer(minLength: 4)
+                    Text("best \(best)d")
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
+                .font(FlotillaTypography.caption)
+                Spacer(minLength: 6)
                 week(activity: activity)
             }
         } else {
@@ -112,9 +109,9 @@ struct TodayWidgetContent: View {
         let peak = max(hourly.max() ?? 1, 1)
         return HStack(alignment: .bottom, spacing: 2) {
             ForEach(0..<24, id: \.self) { hour in
-                Capsule()
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(hourly[hour] == 0 ? FlotillaColors.textPrimary.opacity(0.08) : FlotillaColors.accent)
-                    .frame(height: max(3, 22 * CGFloat(hourly[hour]) / CGFloat(peak)))
+                    .frame(width: 4, height: max(2, 22 * CGFloat(hourly[hour]) / CGFloat(peak)))
                     .frame(maxWidth: .infinity)
             }
         }
@@ -125,6 +122,7 @@ struct TodayWidgetContent: View {
 // MARK: - Busiest Hours
 
 struct BusiestHoursWidgetContent: View {
+    let size: HomeWidgetSize
     /// `[weekday (Mon-first)][hour]`.
     let grid: [[Int]]
 
@@ -146,43 +144,57 @@ struct BusiestHoursWidgetContent: View {
     }
 
     private let days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    private let labelWidth: CGFloat = 12
+    private let axisHeight: CGFloat = 10
 
     var body: some View {
         if total == 0 {
             HomeWidgetAllClearState(message: "No commits in this window.")
         } else {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
+                    Text("\(eveningShare)% after 8 pm")
+                        .foregroundStyle(FlotillaColors.textTertiary)
                     Spacer()
-                    Text("Peak: \(days[busiest.day]) \(busiest.hour):00")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    Text("Peak \(days[busiest.day]) \(busiest.hour):00")
+                        .fontWeight(.semibold)
                         .foregroundStyle(FlotillaColors.accent)
                 }
-                VStack(spacing: 2) {
-                    ForEach(0..<7, id: \.self) { day in
-                        HStack(spacing: 2) {
-                            Text(days[day].prefix(1))
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundStyle(FlotillaColors.textTertiary)
-                                .frame(width: 10, alignment: .leading)
-                            ForEach(0..<24, id: \.self) { hour in dot(grid[day][hour]) }
+                .font(FlotillaTypography.caption2)
+                GeometryReader { proxy in
+                    // One pitch for both axes, the smaller of what 24 columns
+                    // and 7 rows allow, so the dots stay round and fit.
+                    let pitch = min(
+                        (proxy.size.width - labelWidth) / 24,
+                        (proxy.size.height - axisHeight) / 7
+                    )
+                    let gridWidth = labelWidth + pitch * 24
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(0..<7, id: \.self) { day in
+                            HStack(spacing: 0) {
+                                Text(days[day].prefix(1))
+                                    .font(.system(size: 8, weight: .medium))
+                                    .foregroundStyle(FlotillaColors.textTertiary)
+                                    .frame(width: labelWidth, alignment: .leading)
+                                ForEach(0..<24, id: \.self) { hour in
+                                    dot(grid[day][hour]).frame(width: pitch, height: pitch)
+                                }
+                            }
+                        }
+                        HStack(spacing: 0) {
+                            Color.clear.frame(width: labelWidth, height: axisHeight)
+                            ForEach(0..<24, id: \.self) { hour in
+                                Text(hour % 6 == 0 ? "\(hour)" : "")
+                                    .font(.system(size: 7, weight: .medium))
+                                    .foregroundStyle(FlotillaColors.textTertiary)
+                                    .fixedSize()
+                                    .frame(width: pitch, height: axisHeight, alignment: .leading)
+                            }
                         }
                     }
-                    HStack(spacing: 2) {
-                        Color.clear.frame(width: 10, height: 1)
-                        ForEach(0..<24, id: \.self) { hour in
-                            Text(hour % 6 == 0 ? "\(hour)" : "")
-                                .font(.system(size: 7, weight: .medium))
-                                .foregroundStyle(FlotillaColors.textTertiary)
-                                .fixedSize()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
+                    .frame(width: gridWidth)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: size == .wide ? .top : .topLeading)
                 }
-                Spacer(minLength: 0)
-                Text("\(eveningShare)% of commits land after 8 pm")
-                    .font(FlotillaTypography.caption2)
-                    .foregroundStyle(FlotillaColors.textTertiary)
             }
         }
     }
@@ -191,8 +203,6 @@ struct BusiestHoursWidgetContent: View {
         let level = Double(count) / Double(max(peak, 1))
         return Circle()
             .fill(count == 0 ? FlotillaColors.textPrimary.opacity(0.06) : FlotillaColors.accent.opacity(0.25 + 0.75 * level))
-            .scaleEffect(count == 0 ? 0.45 : 0.5 + 0.5 * level)
-            .frame(maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fit)
+            .scaleEffect(count == 0 ? 0.4 : 0.45 + 0.4 * level)
     }
 }

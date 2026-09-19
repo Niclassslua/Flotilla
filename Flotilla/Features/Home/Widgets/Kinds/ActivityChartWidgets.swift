@@ -14,7 +14,7 @@ struct HomeWidgetHeadlineFigure: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(value)
-                .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.system(size: 18, weight: .semibold, design: .rounded).monospacedDigit())
                 .foregroundStyle(tint)
             Text(label)
                 .font(FlotillaTypography.caption2)
@@ -27,39 +27,43 @@ struct HomeWidgetHeadlineFigure: View {
 // MARK: - Contributions
 
 /// Weeks as columns, weekdays as rows, one accent hue from faint to full.
-/// Shows as many recent weeks as its width allows — the same behavior at
-/// every size, medium just gets less width than wide.
+/// Cells are sized from both dimensions of the space the widget gives it —
+/// never taller than seven rows fit, never wider than the weeks allow — so
+/// the heatmap can't push its card out of its grid row.
 struct ContributionHeatmap: View {
     let commitsByDay: [Date: Int]
     let currentStreak: Int
     let longestStreak: Int
 
-    @State private var width: CGFloat = 0
     @State private var hoveredDay: Date?
     private let calendar = Calendar.current
     private let gap: CGFloat = 3
-    private let maxCell: CGFloat = 22
-    private let minCell: CGFloat = 9
+    private let maxCell: CGFloat = 20
+    private let minCell: CGFloat = 6
+    private let summaryHeight: CGFloat = 14
+    private let monthHeight: CGFloat = 12
 
     private var today: Date { calendar.startOfDay(for: .now) }
-
-    private var layout: (weeks: Int, cell: CGFloat) {
-        let maxWeeks = HomeActivity.heatmapWeeks
-        guard width > 0 else { return (maxWeeks, minCell) }
-        let fitted = (width - CGFloat(maxWeeks - 1) * gap) / CGFloat(maxWeeks)
-        if fitted >= minCell { return (maxWeeks, min(fitted, maxCell)) }
-        return (max(Int((width + gap) / (minCell + gap)), 1), minCell)
-    }
 
     private func firstDay(weeks: Int) -> Date {
         let thisWeek = HomeActivity.startOfWeek(today, calendar)
         return calendar.date(byAdding: .weekOfYear, value: -(weeks - 1), to: thisWeek) ?? thisWeek
     }
 
-    private var windowStart: Date { firstDay(weeks: HomeActivity.heatmapWeeks) }
+    /// Weeks shown and cell size for a content area of `size`.
+    private func layout(for size: CGSize) -> (weeks: Int, cell: CGFloat) {
+        let gridHeight = size.height - summaryHeight - monthHeight - 10
+        let heightCell = (gridHeight - 6 * gap) / 7
+        let maxWeeks = HomeActivity.heatmapWeeks
+        let widthCell = (size.width - CGFloat(maxWeeks - 1) * gap) / CGFloat(maxWeeks)
+        let cell = min(max(min(heightCell, maxCell), minCell), max(widthCell, minCell))
+        let weeks = min(maxWeeks, max(1, Int((size.width + gap) / (cell + gap))))
+        return (weeks, cell)
+    }
 
-    private var total: Int {
-        commitsByDay.filter { $0.key >= windowStart }.values.reduce(0, +)
+    private func total(weeks: Int) -> Int {
+        let start = firstDay(weeks: weeks)
+        return commitsByDay.filter { $0.key >= start }.values.reduce(0, +)
     }
 
     private var thresholds: [Int] {
@@ -69,32 +73,36 @@ struct ContributionHeatmap: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
-            HStack(alignment: .bottom, spacing: FlotillaSpacing.xLarge) {
-                HomeWidgetHeadlineFigure(value: total.formatted(), label: "commits")
-                HomeWidgetHeadlineFigure(
-                    value: "\(currentStreak)d",
-                    label: "current streak",
-                    tint: currentStreak > 0 ? FlotillaColors.accent : FlotillaColors.textPrimary
-                )
-                HomeWidgetHeadlineFigure(value: "\(longestStreak)d", label: "longest streak")
-                Spacer(minLength: 0)
-                legend
+        GeometryReader { proxy in
+            let (weeks, cell) = layout(for: proxy.size)
+            let gridWidth = CGFloat(weeks) * cell + CGFloat(weeks - 1) * gap
+            VStack(alignment: .leading, spacing: 6) {
+                summary(weeks: weeks)
+                    .frame(width: max(gridWidth, min(proxy.size.width, 320)), alignment: .leading)
+                grid(weeks: weeks, cell: cell)
             }
-            // A GeometryReader always takes the offered width, so the grid
-            // can never widen the card it's measuring; the height follows
-            // from the cell size that width allows.
-            GeometryReader { proxy in
-                grid
-                    .onAppear { width = proxy.size.width }
-                    .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
-            }
-            .frame(height: 18 + 7 * layout.cell + 6 * gap)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
     }
 
-    private var grid: some View {
-        let (weeks, cell) = layout
+    private func summary(weeks: Int) -> some View {
+        HStack(spacing: FlotillaSpacing.medium) {
+            (Text(total(weeks: weeks).formatted()).foregroundStyle(FlotillaColors.textPrimary).fontWeight(.semibold)
+                + Text(" commits"))
+            if currentStreak > 0 {
+                (Text("\(currentStreak)d").foregroundStyle(FlotillaColors.accent).fontWeight(.semibold)
+                    + Text(" streak"))
+            }
+            Spacer(minLength: 4)
+            legend
+        }
+        .font(FlotillaTypography.caption2)
+        .foregroundStyle(FlotillaColors.textTertiary)
+        .lineLimit(1)
+        .frame(height: summaryHeight)
+    }
+
+    private func grid(weeks: Int, cell: CGFloat) -> some View {
         let start = firstDay(weeks: weeks)
         let levels = thresholds
         return VStack(alignment: .leading, spacing: 4) {
@@ -119,67 +127,44 @@ struct ContributionHeatmap: View {
                 let previous = calendar.date(byAdding: .weekOfYear, value: -1, to: weekStart)!
                 if week > 1, calendar.component(.month, from: weekStart) != calendar.component(.month, from: previous) {
                     Text(weekStart, format: .dateTime.month(.abbreviated))
-                        .font(FlotillaTypography.caption2)
+                        .font(FlotillaTypography.caption3)
                         .foregroundStyle(FlotillaColors.textTertiary)
                         .fixedSize()
                         .offset(x: CGFloat(week) * (cell + gap))
                 }
             }
         }
-        .frame(height: 14, alignment: .topLeading)
+        .frame(height: monthHeight, alignment: .topLeading)
     }
 
     @ViewBuilder
     private func cellView(day: Date, size: CGFloat, thresholds: [Int]) -> some View {
         let count = commitsByDay[day, default: 0]
-        let isFuture = day > today
-        if isFuture {
+        if day > today {
             Color.clear.frame(width: size, height: size)
         } else {
             let isHovered = hoveredDay == day
-            let cornerRadius = min(3, size / 4)
-            let scale: CGFloat = isHovered ? max(1.3, 18.0 / size) : 1.0
-
-            ZStack {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(fill(for: count, thresholds: thresholds, isHovered: isHovered))
-                if isHovered {
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(
-                            count == 0 ? FlotillaColors.textPrimary.opacity(0.28) : Color.white.opacity(0.45),
-                            lineWidth: 1
-                        )
-                    Text(count >= 1000 ? "\(count / 1000)k" : "\(count)")
-                        .font(.system(size: max(8, size * 0.58), weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(count == 0 ? FlotillaColors.textPrimary : FlotillaColors.accentContent)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                        .padding(.horizontal, 1)
+            RoundedRectangle(cornerRadius: min(3, size / 4), style: .continuous)
+                .fill(fill(for: count, thresholds: thresholds, isHovered: isHovered))
+                .frame(width: size, height: size)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    hoveredDay = hovering ? day : (hoveredDay == day ? nil : hoveredDay)
                 }
-            }
-            .frame(width: size, height: size)
-            .contentShape(Rectangle())
-            .onHover { hovering in
-                hoveredDay = hovering ? day : (hoveredDay == day ? nil : hoveredDay)
-            }
-            .scaleEffect(scale)
-            .zIndex(isHovered ? 10 : 0)
-            .shadow(color: .black.opacity(isHovered ? 0.35 : 0), radius: 2, y: 1)
-            .animation(.snappy(duration: 0.15), value: isHovered)
-            .help("\(count) commit\(count == 1 ? "" : "s") · \(day.formatted(.dateTime.weekday(.wide).month().day()))")
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(count) commit\(count == 1 ? "" : "s"), \(day.formatted(.dateTime.weekday(.wide).month().day()))")
+                .help("\(count) commit\(count == 1 ? "" : "s") · \(day.formatted(.dateTime.weekday(.wide).month().day()))")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(count) commit\(count == 1 ? "" : "s"), \(day.formatted(.dateTime.weekday(.wide).month().day()))")
         }
     }
 
-    private func fill(for count: Int, thresholds: [Int], isHovered: Bool = false) -> Color {
+    private func fill(for count: Int, thresholds: [Int], isHovered: Bool) -> Color {
         guard count > 0 else {
             return FlotillaColors.textPrimary.opacity(isHovered ? 0.18 : 0.07)
         }
         let level = thresholds.filter { count > $0 }.count
         let opacities = [0.3, 0.5, 0.72, 1.0]
-        let baseOpacity = opacities[min(level, opacities.count - 1)]
-        return FlotillaColors.accent.opacity(isHovered ? min(1.0, baseOpacity + 0.15) : baseOpacity)
+        let base = opacities[min(level, opacities.count - 1)]
+        return FlotillaColors.accent.opacity(isHovered ? min(1.0, base + 0.15) : base)
     }
 
     private var legend: some View {
@@ -188,18 +173,15 @@ struct ContributionHeatmap: View {
             ForEach([0.07, 0.3, 0.5, 0.72, 1.0], id: \.self) { opacity in
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(opacity < 0.1 ? FlotillaColors.textPrimary.opacity(opacity) : FlotillaColors.accent.opacity(opacity))
-                    .frame(width: 10, height: 10)
+                    .frame(width: 9, height: 9)
             }
             Text("More")
         }
-        .font(FlotillaTypography.caption2)
-        .foregroundStyle(FlotillaColors.textTertiary)
         .accessibilityHidden(true)
     }
 }
 
-/// The grid widget entry point: reads its activity slice, computes the
-/// streaks and hands the pure heatmap its data.
+/// Reads the widget's activity slice and hands the heatmap its data.
 struct ContributionsWidgetContent: View {
     let activity: HomeActivity?
 
@@ -211,7 +193,7 @@ struct ContributionsWidgetContent: View {
                 longestStreak: activity.longestStreak()
             )
         } else {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 60)
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -239,7 +221,7 @@ struct RhythmChartContent: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
             HStack(spacing: FlotillaSpacing.xLarge) {
                 HomeWidgetHeadlineFigure(value: "+\(totals.additions.formatted(.number.notation(.compactName)))", label: "added", tint: FlotillaColors.diffAdded)
                 HomeWidgetHeadlineFigure(value: "−\(totals.deletions.formatted(.number.notation(.compactName)))", label: "removed", tint: FlotillaColors.diffRemoved)
@@ -289,7 +271,7 @@ struct RhythmChartContent: View {
                     }
                 }
             }
-            .frame(minHeight: 120)
+            .frame(maxHeight: .infinity)
         }
     }
 
@@ -376,7 +358,7 @@ struct GrowthChartContent: View {
             HomeWidgetAllClearState(message: "No commits in this window.")
         } else {
             let focus = focus
-            VStack(alignment: .leading, spacing: FlotillaSpacing.small + 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 scopePicker
                 headline(focus.points)
                 chart(focus: focus.points, tint: focus.tint)
@@ -422,7 +404,7 @@ struct GrowthChartContent: View {
         let shown = hoveredWeek.flatMap { week in points.last { $0.week <= week } } ?? points.last
         return HStack(alignment: .firstTextBaseline, spacing: FlotillaSpacing.small) {
             Text(shown?.total ?? 0, format: .number.notation(.compactName).sign(strategy: .always(includingZero: false)))
-                .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit())
                 .foregroundStyle(FlotillaColors.textPrimary)
                 .contentTransition(.numericText())
             Text(hoveredWeek == nil
@@ -461,13 +443,13 @@ struct GrowthChartContent: View {
         }
         .chartXSelection(value: $hoveredWeek)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .weekOfYear, count: max(1, windowWeeks / 6))) { _ in
+            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                 AxisValueLabel(format: .dateTime.month(.abbreviated).day())
                     .foregroundStyle(FlotillaColors.textTertiary)
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
                 AxisGridLine().foregroundStyle(FlotillaColors.textPrimary.opacity(0.05))
                 AxisValueLabel {
                     if let lines = value.as(Int.self) {
@@ -477,7 +459,7 @@ struct GrowthChartContent: View {
                 }
             }
         }
-        .frame(minHeight: 130)
+        .frame(maxHeight: .infinity)
         .animation(.snappy, value: selectedProjectID)
     }
 }
