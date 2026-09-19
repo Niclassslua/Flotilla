@@ -9,6 +9,8 @@ final class ProjectOverviewViewModel {
     private(set) var pulse: ProjectPulse = .empty
     private(set) var worktrees: [GitWorktree] = []
     private(set) var snapshots: [URL: WorktreeSnapshot] = [:]
+    private(set) var isLoadingWorktrees = false
+    private(set) var isSnapshotting = false
     var sessions: [Session] = []
     private let gitService: any GitServiceProtocol
     private var root: URL?
@@ -27,24 +29,88 @@ final class ProjectOverviewViewModel {
             pulse = .empty
             worktrees = []
             snapshots = [:]
+            isLoadingWorktrees = true
+            isSnapshotting = false
             worktreeGeneration = UUID()
         }
         self.root = root
-        let pulse = await ProjectPulse.load(root: root, git: gitService)
+
+        async let pulseTask = ProjectPulse.load(root: root, git: gitService)
+        async let worktreesTask = refreshWorktrees(generation: generation)
+
+        let pulse = await pulseTask
         guard !Task.isCancelled, generation == loadGeneration else { return }
         self.pulse = pulse
-        await refreshWorktrees()
+        await worktreesTask
     }
 
     func refreshWorktrees() async {
+        await refreshWorktrees(generation: loadGeneration)
+    }
+
+    private func refreshWorktrees(generation: UUID) async {
         guard let root else { return }
-        let generation = UUID()
-        worktreeGeneration = generation
+        let currentWorktreeGen = UUID()
+        worktreeGeneration = currentWorktreeGen
+        if worktrees.isEmpty {
+            isLoadingWorktrees = true
+        }
+
         let list = (try? await gitService.listWorktrees(at: root)) ?? []
-        let snapshots = await WorktreeSnapshot.loadAll(paths: list.map(\.path), git: gitService)
-        guard !Task.isCancelled, generation == worktreeGeneration, self.root == root else { return }
-        worktrees = list
-        self.snapshots = snapshots
+        guard !Task.isCancelled, generation == loadGeneration, currentWorktreeGen == worktreeGeneration, self.root == root else { return }
+
+        // Phase 1: Publish worktrees immediately (~30ms)
+        self.worktrees = list
+        self.isLoadingWorktrees = false
+
+        guard !list.isEmpty else {
+            self.isSnapshotting = false
+            return
+        }
+
+        self.isSnapshotting = true
+
+        // Phase 2: Prioritize snapshots.
+        // Active sessions first, then main worktree, then alphabetical order.
+        let activePaths = Set(sessions.compactMap { ($0.worktree?.worktreePath ?? $0.workingDirectory).standardizedFileURL })
+        let priorityPaths = list.sorted { lhs, rhs in
+            if lhs.isMainWorktree != rhs.isMainWorktree { return lhs.isMainWorktree }
+            let ls = activePaths.contains(lhs.path.standardizedFileURL)
+            let rs = activePaths.contains(rhs.path.standardizedFileURL)
+            if ls != rs { return ls }
+            return lhs.branch < rhs.branch
+        }.map(\.path)
+
+        var pendingSnapshots: [URL: WorktreeSnapshot] = [:]
+        var countSinceLastPublish = 0
+        let immediateCount = min(12, priorityPaths.count)
+        var totalStreamed = 0
+
+        for await (path, snapshot) in WorktreeSnapshot.streamSnapshots(paths: priorityPaths, git: gitService) {
+            guard !Task.isCancelled, generation == loadGeneration, currentWorktreeGen == self.worktreeGeneration, self.root == root else { return }
+            pendingSnapshots[path.standardizedFileURL] = snapshot
+            totalStreamed += 1
+            countSinceLastPublish += 1
+
+            let batchThreshold = totalStreamed <= immediateCount ? 2 : 6
+            if countSinceLastPublish >= batchThreshold || totalStreamed == priorityPaths.count {
+                for (url, snap) in pendingSnapshots {
+                    self.snapshots[url] = snap
+                }
+                pendingSnapshots.removeAll(keepingCapacity: true)
+                countSinceLastPublish = 0
+            }
+        }
+
+        if !pendingSnapshots.isEmpty {
+            for (url, snap) in pendingSnapshots {
+                self.snapshots[url] = snap
+            }
+        }
+
+        if generation == loadGeneration, currentWorktreeGen == self.worktreeGeneration {
+            self.isSnapshotting = false
+        }
     }
 
     // MARK: - Data

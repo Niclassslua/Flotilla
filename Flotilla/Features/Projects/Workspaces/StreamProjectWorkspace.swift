@@ -408,9 +408,16 @@ struct StreamProjectWorkspace: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: FlotillaSpacing.small) {
                 sectionLabel("Worktrees")
-                Text("\(all.count)")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(FlotillaColors.textTertiary)
+                if viewModel.isLoadingWorktrees {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.65)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Text("\(all.count)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
                 Spacer()
                 if attached > 0 {
                     countChip("\(attached) active", tint: FlotillaColors.statusWorking)
@@ -419,22 +426,30 @@ struct StreamProjectWorkspace: View {
             .padding(.horizontal, FlotillaSpacing.small)
             .padding(.bottom, 4)
 
-            if all.isEmpty {
+            if viewModel.isLoadingWorktrees {
+                worktreesSkeleton
+                    .transition(.opacity)
+            } else if all.isEmpty {
                 Text("No worktrees")
                     .font(.system(size: 11))
                     .foregroundStyle(FlotillaColors.textTertiary)
                     .padding(.horizontal, FlotillaSpacing.small)
+                    .transition(.opacity)
             } else {
-                ForEach(shown, id: \.path) { worktree in
-                    WorktreeContextRow(
-                        worktree: worktree,
-                        session: sessionFor(worktree),
-                        snapshot: snapshots[worktree.path.standardizedFileURL],
-                        onOpen: { openWorktreeInGit(worktree) },
-                        onOpenSession: { context.openSession($0) },
-                        onRequestDelete: { worktreePendingDeletion = worktree }
-                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(shown, id: \.path) { worktree in
+                        WorktreeContextRow(
+                            worktree: worktree,
+                            session: sessionFor(worktree),
+                            snapshot: snapshots[worktree.path.standardizedFileURL],
+                            onOpen: { openWorktreeInGit(worktree) },
+                            onOpenSession: { context.openSession($0) },
+                            onRequestDelete: { worktreePendingDeletion = worktree }
+                        )
+                    }
                 }
+                .transition(.opacity)
+
                 if all.count > worktreePreview {
                     Button {
                         withAnimation(FlotillaMotion.fast.curve) { showAllWorktrees.toggle() }
@@ -449,8 +464,20 @@ struct StreamProjectWorkspace: View {
                 }
             }
         }
+        .animation(FlotillaMotion.fast.curve, value: viewModel.isLoadingWorktrees)
+        .animation(FlotillaMotion.fast.curve, value: shown.map(\.path))
         .padding(FlotillaSpacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var worktreesSkeleton: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(0..<4, id: \.self) { index in
+                WorktreeRowSkeleton(index: index)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading worktrees")
     }
 
     private func openWorktreeInGit(_ worktree: GitWorktree) {
@@ -874,8 +901,10 @@ private struct WorktreeContextRow: View {
                             .font(.system(size: 10))
                             .foregroundStyle(FlotillaColors.textTertiary)
                             .lineLimit(1)
+                            .transition(.opacity)
                     }
                 }
+                .animation(FlotillaMotion.fast.curve, value: snapshot)
             }
             .padding(.horizontal, FlotillaSpacing.small)
             .padding(.vertical, 6)
@@ -943,10 +972,12 @@ private struct WorktreeContextRow: View {
             }
             .font(.system(size: 10, design: .monospaced))
             .monospacedDigit()
+            .transition(.opacity)
         } else if let snapshot, snapshot.unpushedCount > 0 {
             Text("↑\(snapshot.unpushedCount)")
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(FlotillaColors.statusReady)
+                .transition(.opacity)
         }
     }
 
@@ -959,6 +990,57 @@ private struct WorktreeContextRow: View {
             return "\(snapshot.changedFileCount) uncommitted file\(snapshot.changedFileCount == 1 ? "" : "s")"
         }
         return nil
+    }
+}
+
+// MARK: - Worktree skeleton
+
+private struct WorktreeRowSkeleton: View {
+    let index: Int
+    @State private var isPulsing = false
+
+    private var lineWidth: CGFloat {
+        switch index % 4 {
+        case 0: return 120
+        case 1: return 85
+        case 2: return 145
+        default: return 100
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: FlotillaSpacing.small) {
+            Circle()
+                .fill(FlotillaColors.separatorStrong.opacity(0.6))
+                .frame(width: 6, height: 6)
+                .frame(width: 12)
+
+            VStack(alignment: .leading, spacing: 4) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(FlotillaColors.surfaceElevated)
+                    .frame(width: lineWidth, height: 10)
+
+                if index == 0 {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(FlotillaColors.surfaceElevated.opacity(0.6))
+                        .frame(width: 65, height: 8)
+                }
+            }
+
+            Spacer()
+
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(FlotillaColors.surfaceElevated.opacity(0.5))
+                .frame(width: 32, height: 10)
+        }
+        .padding(.horizontal, FlotillaSpacing.small)
+        .padding(.vertical, 6)
+        .opacity(isPulsing ? 0.35 : 0.8)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                isPulsing = true
+            }
+        }
     }
 }
 

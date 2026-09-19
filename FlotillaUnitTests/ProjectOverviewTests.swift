@@ -1,5 +1,6 @@
 import XCTest
 import SessionKit
+import GitKit
 @testable import Flotilla
 
 final class ProjectOverviewTests: XCTestCase {
@@ -122,6 +123,45 @@ final class ProjectOverviewTests: XCTestCase {
 
         XCTAssertEqual(ProjectOverviewViewModel.sessionsUsedThisWeek(in: [oldSession], now: now, calendar: calendar), 0)
         XCTAssertEqual(ProjectOverviewViewModel.sessionsUsedThisWeek(in: [], now: now, calendar: calendar), 0)
+    }
+
+    @MainActor
+    func testWorktreesArePopulatedAndLoadingStateResolves() async {
+        let mockGit = MockGitService()
+        let root = URL(fileURLWithPath: "/tmp/project")
+        let wt1 = GitWorktree(branch: "main", path: root, isMainWorktree: true)
+        let wt2 = GitWorktree(branch: "feature-1", path: root.appendingPathComponent("wt-1"), isMainWorktree: false)
+        let wt3 = GitWorktree(branch: "feature-2", path: root.appendingPathComponent("wt-2"), isMainWorktree: false)
+        mockGit.worktreesToReturn = [wt1, wt2, wt3]
+
+        let viewModel = ProjectOverviewViewModel(gitService: mockGit)
+        await viewModel.load(root: root)
+
+        XCTAssertFalse(viewModel.isLoadingWorktrees, "Loading worktrees flag should resolve to false")
+        XCTAssertEqual(viewModel.worktrees.count, 3)
+        XCTAssertEqual(viewModel.worktrees.map(\.branch), ["main", "feature-1", "feature-2"])
+        XCTAssertEqual(viewModel.snapshots.count, 3)
+    }
+
+    func testWorktreeSnapshotStreamingYieldsAllPaths() async {
+        let mockGit = MockGitService()
+        let paths = [
+            URL(fileURLWithPath: "/tmp/p1"),
+            URL(fileURLWithPath: "/tmp/p2"),
+            URL(fileURLWithPath: "/tmp/p3")
+        ]
+        mockGit.diffStatToReturn = GitDiffStat(additions: 5, deletions: 2)
+
+        var streamed: [URL: WorktreeSnapshot] = [:]
+        for await (path, snapshot) in WorktreeSnapshot.streamSnapshots(paths: paths, git: mockGit) {
+            streamed[path.standardizedFileURL] = snapshot
+        }
+
+        XCTAssertEqual(streamed.count, 3)
+        for path in paths {
+            XCTAssertEqual(streamed[path.standardizedFileURL]?.diffStat.additions, 5)
+            XCTAssertEqual(streamed[path.standardizedFileURL]?.diffStat.deletions, 2)
+        }
     }
 
 }
