@@ -116,6 +116,7 @@ struct ModelPickerView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(isDefault ? FlotillaColors.textSecondary : FlotillaColors.textPrimary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
 
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8, weight: .semibold))
