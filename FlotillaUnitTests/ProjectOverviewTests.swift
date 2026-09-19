@@ -57,4 +57,72 @@ final class ProjectOverviewTests: XCTestCase {
         XCTAssertEqual(navigator.projectGitSubTab(for: projectID), .commits)
     }
 
+    @MainActor
+    func testSessionsUsedThisWeekCountsOnlySessionsActiveOrCreatedWithinSevenDays() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let projectID = UUID()
+
+        // Active 2 days ago, created 10 days ago -> used this week
+        let activeRecently = Session(
+            id: UUID(),
+            title: "Active Recently",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: projectID,
+            workingDirectory: URL(fileURLWithPath: "/tmp/s1"),
+            createdAt: now.addingTimeInterval(-10 * 86400),
+            lastActiveAt: now.addingTimeInterval(-2 * 86400)
+        )
+
+        // Created 3 days ago, active 3 days ago -> used this week
+        let createdRecently = Session(
+            id: UUID(),
+            title: "Created Recently",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: projectID,
+            workingDirectory: URL(fileURLWithPath: "/tmp/s2"),
+            createdAt: now.addingTimeInterval(-3 * 86400),
+            lastActiveAt: now.addingTimeInterval(-3 * 86400)
+        )
+
+        // Created 20 days ago, last active 8 days ago -> NOT used this week
+        let staleSession = Session(
+            id: UUID(),
+            title: "Stale Session",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: projectID,
+            workingDirectory: URL(fileURLWithPath: "/tmp/s3"),
+            createdAt: now.addingTimeInterval(-20 * 86400),
+            lastActiveAt: now.addingTimeInterval(-8 * 86400)
+        )
+
+        let sessions = [activeRecently, createdRecently, staleSession]
+
+        let count = ProjectOverviewViewModel.sessionsUsedThisWeek(in: sessions, now: now, calendar: calendar)
+        XCTAssertEqual(count, 2, "Should count only the 2 sessions active or created in the past 7 days, not the total 3 sessions")
+    }
+
+    @MainActor
+    func testSessionsUsedThisWeekWithNoMatchingSessionsReturnsZero() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let oldSession = Session(
+            id: UUID(),
+            title: "Old Session",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: UUID(),
+            workingDirectory: URL(fileURLWithPath: "/tmp/s-old"),
+            createdAt: now.addingTimeInterval(-30 * 86400),
+            lastActiveAt: now.addingTimeInterval(-14 * 86400)
+        )
+
+        XCTAssertEqual(ProjectOverviewViewModel.sessionsUsedThisWeek(in: [oldSession], now: now, calendar: calendar), 0)
+        XCTAssertEqual(ProjectOverviewViewModel.sessionsUsedThisWeek(in: [], now: now, calendar: calendar), 0)
+    }
+
 }
+

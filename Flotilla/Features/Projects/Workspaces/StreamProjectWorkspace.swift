@@ -42,7 +42,9 @@ struct StreamProjectWorkspace: View {
 
     private var project: Project { context.project }
     private var selectedTab: ProjectDetailView.ProjectTab { navigator.projectTab(for: project.id) }
-    private var stats: HomeFleetStats { HomeFleetStats(sessions: context.sessions) }
+    private var sessionsThisWeek: Int {
+        ProjectOverviewViewModel.sessionsUsedThisWeek(in: context.sessions)
+    }
     private var spineX: CGFloat { gutterWidth + columnGap + laneWidth / 2 }
     private var contentLeading: CGFloat { gutterWidth + columnGap + laneWidth + columnGap }
 
@@ -493,7 +495,7 @@ struct StreamProjectWorkspace: View {
 
             weekRow("Commits", "\(focused?.count ?? commitsThisWeek)")
             if focused == nil {
-                weekRow("Sessions", "\(stats.total)")
+                weekRow("Sessions", "\(sessionsThisWeek)")
             }
             if !stat.isEmpty {
                 churnRow(stat)

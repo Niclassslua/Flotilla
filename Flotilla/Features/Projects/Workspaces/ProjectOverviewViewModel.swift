@@ -49,6 +49,18 @@ final class ProjectOverviewViewModel {
 
     // MARK: - Data
 
+    /// Number of sessions that were active or created within the past week (last 7 days).
+    static func sessionsUsedThisWeek(in sessions: [Session], now: Date = Date(), calendar: Calendar = .current) -> Int {
+        let cutoff = calendar.date(byAdding: .day, value: -7, to: now) ?? .distantPast
+        return sessions.filter {
+            $0.lastActiveAt >= cutoff || $0.createdAt >= cutoff
+        }.count
+    }
+
+    var sessionsThisWeek: Int {
+        Self.sessionsUsedThisWeek(in: sessions)
+    }
+
     private var attentionSessions: [Session] {
         sessions
             .filter { $0.status == .waitingForInput }
