@@ -226,6 +226,35 @@ final class TerminalScreenHeuristicTests: XCTestCase {
             SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
         )
     }
+
+    func testTextMentioningWaitingForInputWhileWorkingRemainsWorking() {
+        let screen = """
+        ● The toggle is labeled "Agent is waiting for input".
+        ⣯  Generating...
+        ──────────────────────────────────────────────────────────────
+        esc to cancel                              Gemini 3.8 Flash · medium
+        """
+        XCTAssertEqual(
+            heuristic.status(forScreen: screen),
+            .working,
+            "Prose mentioning 'waiting for input' during generation must not override the working status"
+        )
+    }
+
+    func testTextMentioningWaitingForInputWithComposerMeansReadyForReview() {
+        let screen = """
+        ● The toggle you added is "Agent is waiting for input".
+        ╭──────────────────────────────────────────╮
+        │ > Try "fix the status indicator"         │
+        ╰──────────────────────────────────────────╯
+          ? for shortcuts
+        """
+        XCTAssertEqual(
+            heuristic.status(forScreen: screen),
+            .readyForReview,
+            "Transcript mentioning 'waiting for input' at a composer prompt must be ready for review, not waiting"
+        )
+    }
 }
 
 final class SessionScreenMonitorTests: XCTestCase {

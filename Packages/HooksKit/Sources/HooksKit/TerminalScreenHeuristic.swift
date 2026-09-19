@@ -50,7 +50,6 @@ public struct TerminalScreenHeuristic: Sendable {
         "permission required",
         "permission requested",
         "requires permission",
-        "waiting for input",
         "press enter to continue",
         "(y/n)",
         "[y/n]",
