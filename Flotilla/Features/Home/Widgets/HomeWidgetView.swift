@@ -261,7 +261,7 @@ struct HomeWidgetView: View {
                         permissions = insights.topPermissions(store: store, projectID: scope.id, windowDays: windowDays, agent: configuredAgent)
                     }
             case .contributions:
-                ContributionsWidgetContent(activity: insights.activity(for: scope.id))
+                ContributionsWidgetContent(size: size, activity: insights.activity(for: scope.id))
             case .weeklyRhythm:
                 RhythmChartContent(linesByDay: insights.activity(for: scope.id)?.linesByDay ?? [:], windowDays: windowDays)
             case .agentShare:

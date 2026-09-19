@@ -193,7 +193,7 @@ struct BusiestHoursWidgetContent: View {
                         }
                     }
                     .frame(width: gridWidth)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: size == .wide ? .top : .topLeading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
         }

@@ -60,11 +60,13 @@ struct HotFilesWidgetContent: View {
                         .truncationMode(.head)
                 }
             }
-            Spacer(minLength: 2)
+            Spacer(minLength: 6)
             Text("\(file.edits)")
                 .font(.system(size: 12, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(heat > 0.66 ? FlotillaColors.accent : FlotillaColors.textSecondary)
-                .frame(width: 24, alignment: .trailing)
+                .frame(minWidth: 28, alignment: .trailing)
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(2)
         }
     }
 }

@@ -38,6 +38,10 @@ struct HomeWidgetGridGeometry: Equatable {
         size == .wide ? columns : min(size.columnSpan, columns)
     }
 
+    func rowSpan(for size: HomeWidgetSize, kind: HomeWidgetKind? = nil) -> Int {
+        kind?.rowSpan(for: size) ?? size.rowSpan
+    }
+
     func frame(for rect: HomeWidgetRect) -> CGRect {
         CGRect(
             x: originX + CGFloat(rect.column) * (cell + Self.gap),
@@ -49,8 +53,13 @@ struct HomeWidgetGridGeometry: Equatable {
 
     /// Frames for `items` in order, keyed by id.
     func frames<ID: Hashable>(for items: [(id: ID, size: HomeWidgetSize)]) -> [ID: CGRect] {
+        frames(for: items.map { ($0.id, $0.size, nil) })
+    }
+
+    /// Frames for `items` in order with kind-specific row span support, keyed by id.
+    func frames<ID: Hashable>(for items: [(id: ID, size: HomeWidgetSize, kind: HomeWidgetKind?)]) -> [ID: CGRect] {
         let packed = HomeWidgetPacker.pack(
-            items.map { HomeWidgetPacker.Item(id: $0.id, columnSpan: columnSpan(for: $0.size), rowSpan: $0.size.rowSpan) },
+            items.map { HomeWidgetPacker.Item(id: $0.id, columnSpan: columnSpan(for: $0.size), rowSpan: rowSpan(for: $0.size, kind: $0.kind)) },
             columns: columns
         )
         return packed.mapValues(frame(for:))
@@ -62,17 +71,17 @@ struct HomeWidgetGridGeometry: Equatable {
 
     /// The supported size whose footprint is closest to `target` (a width and
     /// height in points) — what the corner handle snaps to while dragging.
-    func nearestSize(to target: CGSize, among supported: [HomeWidgetSize]) -> HomeWidgetSize? {
+    func nearestSize(to target: CGSize, among supported: [HomeWidgetSize], kind: HomeWidgetKind? = nil) -> HomeWidgetSize? {
         let pitch = cell + Self.gap
         let wantColumns = (target.width + Self.gap) / pitch
         let wantRows = (target.height + Self.gap) / pitch
         return supported.min { lhs, rhs in
-            distance(lhs, wantColumns, wantRows) < distance(rhs, wantColumns, wantRows)
+            distance(lhs, wantColumns, wantRows, kind: kind) < distance(rhs, wantColumns, wantRows, kind: kind)
         }
     }
 
-    private func distance(_ size: HomeWidgetSize, _ columns: CGFloat, _ rows: CGFloat) -> CGFloat {
-        abs(CGFloat(columnSpan(for: size)) - columns) + abs(CGFloat(size.rowSpan) - rows)
+    private func distance(_ size: HomeWidgetSize, _ columns: CGFloat, _ rows: CGFloat, kind: HomeWidgetKind? = nil) -> CGFloat {
+        abs(CGFloat(columnSpan(for: size)) - columns) + abs(CGFloat(rowSpan(for: size, kind: kind)) - rows)
     }
 }
 

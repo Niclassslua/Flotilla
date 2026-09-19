@@ -36,7 +36,7 @@ struct HomeWidgetGrid: View {
     private var geometry: HomeWidgetGridGeometry { HomeWidgetGridGeometry(width: width) }
 
     private var frames: [UUID: CGRect] {
-        geometry.frames(for: editor.entries.map { ($0.id, editor.liveSize(of: $0)) })
+        geometry.frames(for: editor.entries.map { ($0.id, editor.liveSize(of: $0), $0.resolvedKind) })
     }
 
     /// The union of every placed widget's data needs — what `HomeInsights`
@@ -214,7 +214,7 @@ struct HomeWidgetGrid: View {
         }
         guard let start = editor.resize?.startSize else { return }
         let target = CGSize(width: start.width + translation.width, height: start.height + translation.height)
-        if let snapped = geometry.nearestSize(to: target, among: kind.supportedSizes), snapped != editor.resize?.proposedSize {
+        if let snapped = geometry.nearestSize(to: target, among: kind.supportedSizes, kind: kind), snapped != editor.resize?.proposedSize {
             withAnimation(Self.reflow) { editor.resize?.proposedSize = snapped }
         }
     }

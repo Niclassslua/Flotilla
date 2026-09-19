@@ -48,6 +48,32 @@ final class HomeWidgetGridGeometryTests: XCTestCase {
         }
     }
 
+    func testContributionsOnWideSpansOneRow() {
+        let geometry = HomeWidgetGridGeometry(width: 1_000)
+        let id = UUID()
+        let frames = geometry.frames(for: [(id, HomeWidgetSize.wide, HomeWidgetKind.contributions)])
+        let frame = try! XCTUnwrap(frames[id])
+        XCTAssertEqual(frame.height, geometry.cell, accuracy: 0.001)
+    }
+
+    func testBusiestHoursDoesNotSupportWide() {
+        XCTAssertFalse(HomeWidgetKind.busiestHours.supportedSizes.contains(.wide))
+        XCTAssertEqual(HomeWidgetKind.busiestHours.supportedSizes, [.medium])
+    }
+
+    func testWeeklyRhythmDoesNotSupportWide() {
+        XCTAssertFalse(HomeWidgetKind.weeklyRhythm.supportedSizes.contains(.wide))
+        XCTAssertEqual(HomeWidgetKind.weeklyRhythm.supportedSizes, [.medium])
+    }
+
+    func testSupportedSizesAreOrderedInNaturalAscendingOrder() {
+        let naturalOrder = HomeWidgetSize.allCases
+        for kind in HomeWidgetKind.allCases {
+            let indices = kind.supportedSizes.compactMap { naturalOrder.firstIndex(of: $0) }
+            XCTAssertEqual(indices, indices.sorted(), "\(kind.rawValue) supportedSizes must be in natural ascending order")
+        }
+    }
+
     // MARK: - Resize snapping
 
     func testDraggingAMediumHandleDownSnapsToLarge() {

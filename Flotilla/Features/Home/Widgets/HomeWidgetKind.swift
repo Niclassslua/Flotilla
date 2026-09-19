@@ -90,26 +90,37 @@ enum HomeWidgetKind: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    /// Sizes the widget has a real layout for, first is the default.
+    /// Sizes the widget has a real layout for, in ascending order.
     var supportedSizes: [HomeWidgetSize] {
         switch self {
-        case .needsYou: [.medium, .small, .large]
-        case .reviewQueue: [.large, .medium]
-        case .looseEnds: [.medium, .small]
-        case .agentScreenshots: [.large, .medium, .wide]
+        case .needsYou: [.small, .medium, .large]
+        case .reviewQueue: [.medium, .large]
+        case .looseEnds: [.small, .medium]
+        case .agentScreenshots: [.medium, .large, .wide]
         case .streak: [.small]
         case .today: [.small, .medium]
-        case .busiestHours: [.medium, .wide]
+        case .busiestHours: [.medium]
         case .hotFiles: [.medium, .large]
-        case .topPermissions: [.medium, .small]
-        case .contributions: [.wide, .medium]
-        case .weeklyRhythm: [.medium, .wide]
-        case .agentShare: [.medium, .small, .large]
-        case .codebaseGrowth: [.wide, .medium]
+        case .topPermissions: [.small, .medium]
+        case .contributions: [.medium, .wide]
+        case .weeklyRhythm: [.medium]
+        case .agentShare: [.small, .medium, .large]
+        case .codebaseGrowth: [.medium, .wide]
         }
     }
 
-    var defaultSize: HomeWidgetSize { supportedSizes[0] }
+    var defaultSize: HomeWidgetSize {
+        switch self {
+        case .reviewQueue, .agentScreenshots: .large
+        case .contributions, .codebaseGrowth: .wide
+        case .streak: .small
+        default: .medium
+        }
+    }
+
+    func rowSpan(for size: HomeWidgetSize) -> Int {
+        size.rowSpan
+    }
 
     /// Time-window choices in days, first is the default; `nil` if the
     /// widget has no window setting.

@@ -163,7 +163,10 @@ struct HomeWidgetGallerySheet: View {
         case .small: return CGSize(width: cell, height: cell)
         case .medium: return CGSize(width: cell * 2 + gap, height: cell)
         case .large: return CGSize(width: cell * 2 + gap, height: cell * 2 + gap)
-        case .wide: return CGSize(width: cell * 4 + gap * 3, height: cell)
+        case .wide:
+            let rows = selection.rowSpan(for: size)
+            let height = rows > 1 ? cell * CGFloat(rows) + gap * CGFloat(rows - 1) : cell
+            return CGSize(width: cell * 4 + gap * 3, height: height)
         }
     }
 }

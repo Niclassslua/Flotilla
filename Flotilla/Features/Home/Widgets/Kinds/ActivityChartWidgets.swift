@@ -27,10 +27,12 @@ struct HomeWidgetHeadlineFigure: View {
 // MARK: - Contributions
 
 /// Weeks as columns, weekdays as rows, one accent hue from faint to full.
+/// Weeks as columns, weekdays as rows, one accent hue from faint to full.
 /// Cells are sized from both dimensions of the space the widget gives it —
 /// never taller than seven rows fit, never wider than the weeks allow — so
 /// the heatmap can't push its card out of its grid row.
 struct ContributionHeatmap: View {
+    var size: HomeWidgetSize = .wide
     let commitsByDay: [Date: Int]
     let currentStreak: Int
     let longestStreak: Int
@@ -38,10 +40,12 @@ struct ContributionHeatmap: View {
     @State private var hoveredDay: Date?
     private let calendar = Calendar.current
     private let gap: CGFloat = 3
-    private let maxCell: CGFloat = 20
-    private let minCell: CGFloat = 6
+    private let maxCell: CGFloat = 22
+    private let minCell: CGFloat = 8
     private let summaryHeight: CGFloat = 14
     private let monthHeight: CGFloat = 12
+
+    private let statsWidth: CGFloat = 138
 
     private var today: Date { calendar.startOfDay(for: .now) }
 
@@ -51,14 +55,25 @@ struct ContributionHeatmap: View {
     }
 
     /// Weeks shown and cell size for a content area of `size`.
-    private func layout(for size: CGSize) -> (weeks: Int, cell: CGFloat) {
-        let gridHeight = size.height - summaryHeight - monthHeight - 10
-        let heightCell = (gridHeight - 6 * gap) / 7
+    private func layout(for proxySize: CGSize) -> (weeks: Int, cell: CGFloat) {
         let maxWeeks = HomeActivity.heatmapWeeks
-        let widthCell = (size.width - CGFloat(maxWeeks - 1) * gap) / CGFloat(maxWeeks)
-        let cell = min(max(min(heightCell, maxCell), minCell), max(widthCell, minCell))
-        let weeks = min(maxWeeks, max(1, Int((size.width + gap) / (cell + gap))))
-        return (weeks, cell)
+        if size == .wide {
+            let separatorSpace: CGFloat = FlotillaSpacing.medium * 2 + 1
+            let availableW = max(proxySize.width - statsWidth - separatorSpace, 1)
+            let gridHeight = max(proxySize.height - monthHeight - 4, 1)
+            let heightCell = (gridHeight - 6 * gap) / 7
+            let widthCell = (availableW - CGFloat(maxWeeks - 1) * gap) / CGFloat(maxWeeks)
+            let cell = min(maxCell, max(minCell, min(heightCell, widthCell)))
+            let weeks = min(maxWeeks, max(1, Int((availableW + gap) / (cell + gap))))
+            return (weeks, cell)
+        } else {
+            let gridHeight = max(proxySize.height - summaryHeight - monthHeight - 10, 1)
+            let heightCell = (gridHeight - 6 * gap) / 7
+            let widthCell = (proxySize.width - CGFloat(maxWeeks - 1) * gap) / CGFloat(maxWeeks)
+            let cell = min(maxCell, max(minCell, min(heightCell, widthCell)))
+            let weeks = min(maxWeeks, max(1, Int((proxySize.width + gap) / (cell + gap))))
+            return (weeks, cell)
+        }
     }
 
     private func total(weeks: Int) -> Int {
@@ -75,17 +90,51 @@ struct ContributionHeatmap: View {
     var body: some View {
         GeometryReader { proxy in
             let (weeks, cell) = layout(for: proxy.size)
-            let gridWidth = CGFloat(weeks) * cell + CGFloat(weeks - 1) * gap
-            VStack(alignment: .leading, spacing: 6) {
-                summary(weeks: weeks)
-                    .frame(width: max(gridWidth, min(proxy.size.width, 320)), alignment: .leading)
-                grid(weeks: weeks, cell: cell)
+            if size == .wide {
+                HStack(alignment: .top, spacing: 0) {
+                    sideSummary(weeks: weeks)
+                        .frame(width: statsWidth, alignment: .leading)
+
+                    Rectangle()
+                        .fill(FlotillaColors.separator)
+                        .frame(width: 1)
+                        .padding(.vertical, 2)
+                        .padding(.horizontal, FlotillaSpacing.medium)
+
+                    grid(weeks: weeks, cell: cell)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    compactSummary(weeks: weeks)
+                        .frame(width: max(CGFloat(weeks) * cell + CGFloat(weeks - 1) * gap, min(proxy.size.width, 320)), alignment: .leading)
+                    grid(weeks: weeks, cell: cell)
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
     }
 
-    private func summary(weeks: Int) -> some View {
+    private func sideSummary(weeks: Int) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HomeWidgetHeadlineFigure(value: total(weeks: weeks).formatted(), label: "commits")
+            HStack(spacing: FlotillaSpacing.medium) {
+                HomeWidgetHeadlineFigure(
+                    value: "\(currentStreak)d",
+                    label: "streak",
+                    tint: currentStreak > 0 ? FlotillaColors.accent : FlotillaColors.textPrimary
+                )
+                HomeWidgetHeadlineFigure(value: "\(longestStreak)d", label: "longest")
+            }
+            Spacer(minLength: 2)
+            legend
+                .font(FlotillaTypography.caption2)
+                .foregroundStyle(FlotillaColors.textTertiary)
+        }
+    }
+
+    private func compactSummary(weeks: Int) -> some View {
         HStack(spacing: FlotillaSpacing.medium) {
             (Text(total(weeks: weeks).formatted()).foregroundStyle(FlotillaColors.textPrimary).fontWeight(.semibold)
                 + Text(" commits"))
@@ -183,11 +232,13 @@ struct ContributionHeatmap: View {
 
 /// Reads the widget's activity slice and hands the heatmap its data.
 struct ContributionsWidgetContent: View {
+    var size: HomeWidgetSize = .wide
     let activity: HomeActivity?
 
     var body: some View {
         if let activity {
             ContributionHeatmap(
+                size: size,
                 commitsByDay: activity.commitsByDay,
                 currentStreak: activity.currentStreak(),
                 longestStreak: activity.longestStreak()
@@ -220,6 +271,13 @@ struct RhythmChartContent: View {
         days.reduce(GitDiffStat.zero) { $0 + linesByDay[$1, default: .zero] }
     }
 
+    private var chartDomain: ClosedRange<Date> {
+        let start = days.first ?? calendar.startOfDay(for: .now)
+        let lastDay = days.last ?? start
+        let end = calendar.date(byAdding: .day, value: 1, to: lastDay) ?? lastDay
+        return start...end
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
             HStack(spacing: FlotillaSpacing.xLarge) {
@@ -228,50 +286,79 @@ struct RhythmChartContent: View {
                 Spacer(minLength: 0)
             }
 
-            Chart {
-                ForEach(days, id: \.self) { day in
-                    let stat = linesByDay[day, default: .zero]
-                    BarMark(x: .value("Day", day, unit: .day), y: .value("Lines", stat.additions))
-                        .foregroundStyle(FlotillaColors.diffAdded.gradient)
-                        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 3, topTrailingRadius: 3))
-                    BarMark(x: .value("Day", day, unit: .day), y: .value("Lines", -stat.deletions))
-                        .foregroundStyle(FlotillaColors.diffRemoved.gradient)
-                        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 3, bottomTrailingRadius: 3))
-                }
-                RuleMark(y: .value("Baseline", 0))
-                    .foregroundStyle(FlotillaColors.separatorStrong)
-                    .lineStyle(StrokeStyle(lineWidth: 1))
-                if let selectedDay {
-                    let stat = linesByDay[selectedDay, default: .zero]
-                    RuleMark(x: .value("Day", selectedDay, unit: .day))
-                        .foregroundStyle(FlotillaColors.textPrimary.opacity(0.15))
-                        .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                            tooltip(day: selectedDay, stat: stat)
+            GeometryReader { proxy in
+                let slotWidth = max((proxy.size.width - 40) / CGFloat(days.count), 1)
+                let barWidth = min(max(slotWidth * 0.55, 3), 16)
+                let cornerRadius = min(3, barWidth / 2)
+
+                Chart {
+                    ForEach(days, id: \.self) { day in
+                        let stat = linesByDay[day, default: .zero]
+                        if stat.additions > 0 {
+                            BarMark(
+                                x: .value("Day", day, unit: .day),
+                                y: .value("Lines", stat.additions),
+                                width: .fixed(barWidth)
+                            )
+                            .foregroundStyle(FlotillaColors.diffAdded.gradient)
+                            .clipShape(UnevenRoundedRectangle(topLeadingRadius: cornerRadius, topTrailingRadius: cornerRadius))
                         }
+                        if stat.deletions > 0 {
+                            BarMark(
+                                x: .value("Day", day, unit: .day),
+                                y: .value("Lines", -stat.deletions),
+                                width: .fixed(barWidth)
+                            )
+                            .foregroundStyle(FlotillaColors.diffRemoved.gradient)
+                            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: cornerRadius, bottomTrailingRadius: cornerRadius))
+                        }
+                    }
+                    RuleMark(y: .value("Baseline", 0))
+                        .foregroundStyle(FlotillaColors.separatorStrong)
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                    if let selectedDay {
+                        let stat = linesByDay[selectedDay, default: .zero]
+                        RuleMark(x: .value("Day", selectedDay, unit: .day))
+                            .foregroundStyle(FlotillaColors.textPrimary.opacity(0.15))
+                            .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                tooltip(day: selectedDay, stat: stat)
+                            }
+                    }
                 }
-            }
-            .chartXSelection(value: Binding(
-                get: { selectedDay },
-                set: { selectedDay = $0.map { calendar.startOfDay(for: $0) } }
-            ))
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .weekOfYear)) { _ in
-                    AxisValueLabel(format: .dateTime.month(.abbreviated).day(), centered: false)
-                        .foregroundStyle(FlotillaColors.textTertiary)
+                .chartXSelection(value: Binding(
+                    get: { selectedDay },
+                    set: { selectedDay = $0.map { calendar.startOfDay(for: $0) } }
+                ))
+                .chartXScale(domain: chartDomain)
+                .chartXAxis {
+                    AxisMarks(values: strideValues) { _ in
+                        AxisValueLabel(format: .dateTime.month(.abbreviated).day(), centered: true)
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    }
                 }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                    AxisGridLine().foregroundStyle(FlotillaColors.textPrimary.opacity(0.05))
-                    AxisValueLabel {
-                        if let lines = value.as(Int.self) {
-                            Text(abs(lines), format: .number.notation(.compactName))
-                                .foregroundStyle(FlotillaColors.textTertiary)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                        AxisGridLine().foregroundStyle(FlotillaColors.textPrimary.opacity(0.05))
+                        AxisValueLabel {
+                            if let lines = value.as(Int.self) {
+                                Text(abs(lines), format: .number.notation(.compactName))
+                                    .foregroundStyle(FlotillaColors.textTertiary)
+                            }
                         }
                     }
                 }
             }
             .frame(maxHeight: .infinity)
+        }
+    }
+
+    private var strideValues: AxisMarkValues {
+        if windowDays <= 14 {
+            return .stride(by: .day, count: 2)
+        } else if windowDays <= 28 {
+            return .stride(by: .weekOfYear, count: 1)
+        } else {
+            return .stride(by: .weekOfYear, count: 2)
         }
     }
 
@@ -359,7 +446,9 @@ struct GrowthChartContent: View {
         } else {
             let focus = focus
             VStack(alignment: .leading, spacing: 6) {
-                scopePicker
+                if selectedProjectID == nil {
+                    scopePicker
+                }
                 headline(focus.points)
                 chart(focus: focus.points, tint: focus.tint)
             }
@@ -412,6 +501,28 @@ struct GrowthChartContent: View {
                  : "net lines by \(shown?.week.formatted(.dateTime.month(.abbreviated).day()) ?? "")")
                 .font(FlotillaTypography.caption)
                 .foregroundStyle(FlotillaColors.textTertiary)
+            if let project = selectedProject {
+                Spacer()
+                Button {
+                    withAnimation(.snappy) { selectedProjectID = nil }
+                } label: {
+                    HStack(spacing: 5) {
+                        ProjectMark(title: project.name, tint: ProjectMark.tint(for: project), size: 14)
+                        Text(project.name)
+                            .font(FlotillaTypography.caption.weight(.medium))
+                            .foregroundStyle(FlotillaColors.textPrimary)
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
+                    .background(FlotillaColors.textPrimary.opacity(0.08), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Show all projects")
+                .accessibilityLabel("Clear filter, show all projects")
+            }
         }
     }
 
