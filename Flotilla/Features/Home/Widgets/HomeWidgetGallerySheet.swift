@@ -162,7 +162,12 @@ struct HomeWidgetGallerySheet: View {
         switch size {
         case .small: return CGSize(width: cell, height: cell)
         case .medium: return CGSize(width: cell * 2 + gap, height: cell)
-        case .large: return CGSize(width: cell * 2 + gap, height: cell * 2 + gap)
+        case .large:
+            let cols = selection.columnSpan(for: size)
+            let rows = selection.rowSpan(for: size)
+            let width = cell * CGFloat(cols) + gap * CGFloat(cols - 1)
+            let height = cell * CGFloat(rows) + gap * CGFloat(rows - 1)
+            return CGSize(width: width, height: height)
         case .wide:
             let rows = selection.rowSpan(for: size)
             let height = rows > 1 ? cell * CGFloat(rows) + gap * CGFloat(rows - 1) : cell

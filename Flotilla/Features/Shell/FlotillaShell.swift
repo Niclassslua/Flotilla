@@ -433,11 +433,11 @@ struct FlotillaShell: View {
     }
 
     private func restoreWorkspaceSelection() async {
-        if store.selectedSessionID == nil,
-           let persisted = settingsViewModel.settings.workspace.selectedSessionID.flatMap(UUID.init(uuidString:)),
-           store.sessions.contains(where: { $0.id == persisted }) {
-            store.selectedSessionID = persisted
-        }
+        // Ensure the app always starts on the Home page.
+        navigator.selection = .overview
+        navigator.sidebarSelection = [.overview]
+        store.selectedSessionID = nil
+        settingsViewModel.settings.workspace.selectedSessionID = nil
         // The group is what the grid and board are filtered to, so restoring
         // it is what makes the bar's chip agree with the tiles on relaunch.
         // `SessionGroup.init(rawValue:)` falls back to `.all` for a project
@@ -534,7 +534,6 @@ private struct ShellLifecycleModifier: ViewModifier {
                 navigator.pruneSessionGroup(against: Set(ids))
             }
             .onChange(of: store.selectedSessionID) { _, sessionID in
-                settingsViewModel.settings.workspace.selectedSessionID = sessionID?.uuidString
                 navigator.selectedSessionID = sessionID
             }
             .onChange(of: navigator.selectedSessionID) { _, sessionID in

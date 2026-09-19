@@ -66,6 +66,18 @@ final class HomeWidgetGridGeometryTests: XCTestCase {
         XCTAssertEqual(HomeWidgetKind.weeklyRhythm.supportedSizes, [.medium])
     }
 
+    func testCodebaseGrowthLargeIsFourWideAndOneHigh() {
+        XCTAssertTrue(HomeWidgetKind.codebaseGrowth.supportedSizes.contains(.large))
+        let geometry = HomeWidgetGridGeometry(width: 1_200)
+        XCTAssertGreaterThanOrEqual(geometry.columns, 4)
+        let id = UUID()
+        let frames = geometry.frames(for: [(id, HomeWidgetSize.large, HomeWidgetKind.codebaseGrowth)])
+        let frame = try! XCTUnwrap(frames[id])
+        XCTAssertEqual(frame.height, geometry.cell, accuracy: 0.001)
+        let expectedWidth = geometry.cell * 4 + HomeWidgetGridGeometry.gap * 3
+        XCTAssertEqual(frame.width, expectedWidth, accuracy: 0.001)
+    }
+
     func testSupportedSizesAreOrderedInNaturalAscendingOrder() {
         let naturalOrder = HomeWidgetSize.allCases
         for kind in HomeWidgetKind.allCases {

@@ -34,8 +34,10 @@ struct HomeWidgetGridGeometry: Equatable {
 
     /// Column span for a size at this column count — `wide` fills the row,
     /// everything else is clamped so a 2-wide widget still fits 2 columns.
-    func columnSpan(for size: HomeWidgetSize) -> Int {
-        size == .wide ? columns : min(size.columnSpan, columns)
+    func columnSpan(for size: HomeWidgetSize, kind: HomeWidgetKind? = nil) -> Int {
+        if size == .wide { return columns }
+        let want = kind?.columnSpan(for: size) ?? size.columnSpan
+        return min(want, columns)
     }
 
     func rowSpan(for size: HomeWidgetSize, kind: HomeWidgetKind? = nil) -> Int {
@@ -59,7 +61,7 @@ struct HomeWidgetGridGeometry: Equatable {
     /// Frames for `items` in order with kind-specific row span support, keyed by id.
     func frames<ID: Hashable>(for items: [(id: ID, size: HomeWidgetSize, kind: HomeWidgetKind?)]) -> [ID: CGRect] {
         let packed = HomeWidgetPacker.pack(
-            items.map { HomeWidgetPacker.Item(id: $0.id, columnSpan: columnSpan(for: $0.size), rowSpan: rowSpan(for: $0.size, kind: $0.kind)) },
+            items.map { HomeWidgetPacker.Item(id: $0.id, columnSpan: columnSpan(for: $0.size, kind: $0.kind), rowSpan: rowSpan(for: $0.size, kind: $0.kind)) },
             columns: columns
         )
         return packed.mapValues(frame(for:))
@@ -81,7 +83,7 @@ struct HomeWidgetGridGeometry: Equatable {
     }
 
     private func distance(_ size: HomeWidgetSize, _ columns: CGFloat, _ rows: CGFloat, kind: HomeWidgetKind? = nil) -> CGFloat {
-        abs(CGFloat(columnSpan(for: size)) - columns) + abs(CGFloat(rowSpan(for: size, kind: kind)) - rows)
+        abs(CGFloat(columnSpan(for: size, kind: kind)) - columns) + abs(CGFloat(rowSpan(for: size, kind: kind)) - rows)
     }
 }
 

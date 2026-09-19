@@ -105,7 +105,7 @@ enum HomeWidgetKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .contributions: [.medium, .wide]
         case .weeklyRhythm: [.medium]
         case .agentShare: [.small, .medium, .large]
-        case .codebaseGrowth: [.medium, .wide]
+        case .codebaseGrowth: [.medium, .large, .wide]
         }
     }
 
@@ -118,8 +118,14 @@ enum HomeWidgetKind: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    func columnSpan(for size: HomeWidgetSize) -> Int {
+        if self == .codebaseGrowth && size == .large { return 4 }
+        return size.columnSpan
+    }
+
     func rowSpan(for size: HomeWidgetSize) -> Int {
-        size.rowSpan
+        if self == .codebaseGrowth && size == .large { return 1 }
+        return size.rowSpan
     }
 
     /// Time-window choices in days, first is the default; `nil` if the
