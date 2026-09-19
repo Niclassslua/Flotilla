@@ -294,6 +294,7 @@
 		A08295D577651AE480EED0E4 /* SidebarProjectCollapseStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492EDF0F2835D3BAB2C79D15 /* SidebarProjectCollapseStateTests.swift */; };
 		A0E3F72416EEFECD3A87AEA3 /* SettingsKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317375274369CC35C23D6991 /* SettingsKitTests.swift */; };
 		A1B5BE12148F9FB515155403 /* SessionGitSidebarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96331BA001B5E82B33496459 /* SessionGitSidebarModels.swift */; };
+		A3AB77F0B0190BCCA4CAB705 /* CompanionNotificationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23DCC91DA29932911DF1186F /* CompanionNotificationPreferences.swift */; };
 		A4AD7F5AF66DD1CB2FA966DB /* MockFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = F565288EE31E06A5A2F05503 /* MockFixtures.swift */; };
 		A4FF45CE4C7733A084B52ACE /* RealHandoffPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B15FCD1B68428DB2360D62 /* RealHandoffPipelineTests.swift */; };
 		A516C8FD359357AC0719D595 /* SessionKit in Frameworks */ = {isa = PBXBuildFile; productRef = E938FF2AA0D8F19E8F9553BB /* SessionKit */; };
@@ -561,6 +562,7 @@
 		22BC89FA739AB982526D7A98 /* SyntaxHighlightedTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlightedTextEditor.swift; sourceTree = "<group>"; };
 		230BF08BDD20144090ACF146 /* CompanionSnapshotBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSnapshotBuilder.swift; sourceTree = "<group>"; };
 		232A92E1871AA7FEED4E7EA4 /* CompanionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionStore.swift; sourceTree = "<group>"; };
+		23DCC91DA29932911DF1186F /* CompanionNotificationPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionNotificationPreferences.swift; sourceTree = "<group>"; };
 		2425B3D625B8F9BEDDFD2B91 /* TerminalControllerReflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerReflowTests.swift; sourceTree = "<group>"; };
 		243EC5070686C015EEEABAC8 /* folder.svg */ = {isa = PBXFileReference; path = folder.svg; sourceTree = "<group>"; };
 		255B1095A992C7BD25FDFB3C /* FleetActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FleetActivityWidget.swift; sourceTree = "<group>"; };
@@ -1437,6 +1439,7 @@
 			children = (
 				D5DBE2B7B53A7EB40BB2E13E /* CompanionApp.swift */,
 				5BABD8D796C420F3C0FD4E13 /* CompanionAttentionNotifications.swift */,
+				23DCC91DA29932911DF1186F /* CompanionNotificationPreferences.swift */,
 				232A92E1871AA7FEED4E7EA4 /* CompanionStore.swift */,
 			);
 			path = App;
@@ -2282,6 +2285,7 @@
 				CD5B1B37DF615471EFA5F901 /* CompanionApp.swift in Sources */,
 				353AA6ABD4C216FC6777FBAE /* CompanionAttentionNotifications.swift in Sources */,
 				28B5463D594F0FBA801B589C /* CompanionDataSource.swift in Sources */,
+				A3AB77F0B0190BCCA4CAB705 /* CompanionNotificationPreferences.swift in Sources */,
 				B00C79D88B5E6AF59A4C419B /* CompanionPersistence.swift in Sources */,
 				2D919B02125CF5F5B95F0BA3 /* CompanionSettingsView.swift in Sources */,
 				79606B677281BBDA3BA0A990 /* CompanionSpeechController.swift in Sources */,
