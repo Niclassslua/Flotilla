@@ -11,7 +11,7 @@ public struct SessionStatusHeuristic: Sendable {
     private static let waitingPatterns = [
         "permission required", "permission requested", "requires permission",
         "allow this", "approve?", "(y/n)", "[y/n]", "yes/no",
-        "waiting for input", "do you want to", "continue?"
+        "do you want to", "continue?"
     ]
 
     /// Returns the detected status for this chunk of output, or `nil` if
