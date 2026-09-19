@@ -141,6 +141,7 @@ struct EffortLevelPicker: View {
                 Text(selectedLabel)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(effort.tint)
+                    .lineLimit(1)
 
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8, weight: .semibold))
