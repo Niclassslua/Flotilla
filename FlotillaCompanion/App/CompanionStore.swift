@@ -33,8 +33,19 @@ final class CompanionStore {
 
     @ObservationIgnored private let defaults: UserDefaults
 
+    /// Which attention categories raise a local notification on this
+    /// iPhone. Persisted separately from everything else here because it's
+    /// read from a background delegate callback, not just views.
+    var notificationPreferences: CompanionNotificationPreferences {
+        didSet {
+            guard let data = try? JSONEncoder().encode(notificationPreferences) else { return }
+            defaults.set(data, forKey: Key.notificationPreferences)
+        }
+    }
+
     private enum Key {
         static let lastMac = "companion.lastMacID"
+        static let notificationPreferences = "companion.notificationPreferences"
         static func choice(_ project: UUID?) -> String { "companion.choice.\(project?.uuidString ?? "general")" }
         static func promptDraft(_ macID: MacHost.ID, _ sessionID: CompanionSession.ID) -> String {
             "companion.draft.prompt.\(macID).\(sessionID.uuidString)"
@@ -50,6 +61,12 @@ final class CompanionStore {
     init(data: any CompanionDataSource, defaults: UserDefaults = .standard) {
         self.data = data
         self.defaults = defaults
+        if let stored = defaults.data(forKey: Key.notificationPreferences),
+           let decoded = try? JSONDecoder().decode(CompanionNotificationPreferences.self, from: stored) {
+            notificationPreferences = decoded
+        } else {
+            notificationPreferences = CompanionNotificationPreferences()
+        }
     }
 
     /// Launch lands on the last Mac viewed, with the Macs screen one Back away.
@@ -146,7 +163,13 @@ final class CompanionStore {
         return data.macs.contains { data.isSpeechAvailable(on: $0.id) }
     }
 
+    /// Whether the companion app is currently foregrounded, driven by
+    /// `RootView`'s scenePhase observer. Used to suppress local attention
+    /// notifications while the user is already looking at the app.
+    private(set) var isForeground = true
+
     func setActive(_ isActive: Bool) {
+        isForeground = isActive
         data.setActive(isActive)
     }
 

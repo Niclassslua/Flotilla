@@ -42,6 +42,10 @@ final class CompanionAttentionNotifications: NSObject, UNUserNotificationCenterD
     }
 
     private func post(_ event: SessionAttentionEvent, macID: String) {
+        guard let store else { return }
+        // Never interrupt someone already looking at the app, and respect
+        // the per-category toggles in iPhone Settings ▸ Notifications.
+        guard !store.isForeground, store.notificationPreferences.isEnabled(for: event.status) else { return }
         let content = UNMutableNotificationContent()
         content.title = event.title
         content.body = event.summary

@@ -10,6 +10,7 @@ struct CompanionSettingsView: View {
     @State private var isConfirmingClearAll = false
 
     var body: some View {
+        @Bindable var store = store
         NavigationStack {
             Form {
                 Section {
@@ -22,6 +23,19 @@ struct CompanionSettingsView: View {
                     Text("Appearance")
                 } footer: {
                     Text("These settings apply to this iPhone only. Flotilla's own settings stay on your Mac.")
+                }
+
+                Section {
+                    Toggle("Agent is waiting for input", isOn: $store.notificationPreferences.waitingForInputEnabled)
+                        .listRowBackground(FlotillaColors.surface)
+                    Toggle("Ready for review", isOn: $store.notificationPreferences.readyForReviewEnabled)
+                        .listRowBackground(FlotillaColors.surface)
+                    Toggle("Session crashed", isOn: $store.notificationPreferences.crashedEnabled)
+                        .listRowBackground(FlotillaColors.surface)
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    Text("Choose which attention events raise a notification on this iPhone. You're never notified while the app is open.")
                 }
 
                 if store.supportsPairing {
