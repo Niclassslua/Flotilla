@@ -52,13 +52,20 @@ struct WorkspaceToolbar: ToolbarContent {
         // render without a capsule — see
         // https://developer.apple.com/documentation/swiftui/customizabletoolbarcontent/sharedbackgroundvisibility(_:)
         ToolbarItem(placement: .navigation) {
-            HStack(spacing: 10) {
-                Image(systemName: "sailboat.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(FlotillaColors.accent)
-                    .accessibilityHidden(true)
-                FlotillaWordmark(pointSize: 17)
+            Button {
+                navigator.showHomeDashboard()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "sailboat.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(FlotillaColors.accent)
+                        .accessibilityHidden(true)
+                    FlotillaWordmark(pointSize: 17)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help("Home")
             .accessibilityIdentifier(AXID.topBarLogo.rawValue)
         }
         .sharedBackgroundVisibility(.hidden)
