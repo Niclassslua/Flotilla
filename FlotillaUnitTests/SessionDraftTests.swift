@@ -109,4 +109,16 @@ final class SessionDraftTests: XCTestCase {
         XCTAssertNotNil(id)
         XCTAssertFalse(draft.isCreating)
     }
+
+    func testLaunchWithoutOpeningLeavesSelectionAlone() async throws {
+        let store = try makeStore()
+        let draft = makeDraft(store: store, requiresGoal: false)
+        draft.goal = "Background session"
+
+        let id = await draft.launch(opensSession: false)
+
+        XCTAssertNotNil(id)
+        XCTAssertEqual(store.sessions.count, 1)
+        XCTAssertNil(store.selectedSessionID, "Launching with opensSession: false must not change the current selection")
+    }
 }

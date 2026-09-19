@@ -124,4 +124,19 @@ final class CreateSessionUITests: XCTestCase {
         XCTAssertTrue(fastWait(element(app, .createSessionCreateButton), timeout: 3))
         XCTAssertTrue(element(app, .createSessionCreateButton).isEnabled)
     }
+
+    func testLaunchAndStayLeavesComposerOpen() {
+        let app = launchedApp()
+        openLauncher(app)
+
+        typeGoal(app, "Background worker")
+        XCTAssertTrue(tap(app, .createSessionBackgroundButton))
+
+        // The session row appears in the navigator
+        XCTAssertTrue(fastWait(element(app, AXID.sessionRow("Background worker")), timeout: 5))
+
+        // The Session Composer remains open and visible
+        XCTAssertTrue(element(app, .createSessionGoalField).exists)
+        XCTAssertTrue(element(app, .createSessionBackgroundButton).exists)
+    }
 }

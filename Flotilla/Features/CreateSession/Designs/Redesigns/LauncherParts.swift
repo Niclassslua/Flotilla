@@ -105,6 +105,10 @@ struct LauncherGoalField: View {
         switch press.key {
         case .return:
             if press.modifiers.contains(.option) { return .ignored }
+            if press.modifiers.contains([.command, .shift]) {
+                if draft.canLaunch { actions.launch(false) }
+                return .handled
+            }
             if draft.canLaunch { actions.launch(true) }
             return .handled
         case .escape:
