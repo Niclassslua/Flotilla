@@ -11,7 +11,7 @@ import WidgetKit
 struct FleetActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FleetActivityAttributes.self) { context in
-            FleetLockScreenView(attributes: context.attributes, state: context.state, isLive: context.isLive)
+            FleetLockScreenView(activityID: context.activityID, attributes: context.attributes, state: context.state, isLive: context.isLive)
                 .environment(\.colorScheme, .dark)
                 .activityBackgroundTint(.black.opacity(0.55))
                 .activitySystemActionForegroundColor(.white)
@@ -65,11 +65,10 @@ struct FleetActivityWidget: Widget {
 // MARK: - Lock Screen
 
 private struct FleetLockScreenView: View {
+    let activityID: String
     let attributes: FleetActivityAttributes
     let state: FleetActivityAttributes.ContentState
     let isLive: Bool
-
-    private static let visibleRows = 3
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -80,15 +79,44 @@ private struct FleetLockScreenView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.5))
             }
-            ForEach(state.sessions.prefix(Self.visibleRows)) { session in
+            ForEach(state.visibleSessions) { session in
                 Link(destination: FleetActivityLink.session(session.id)) {
                     FleetRow(session: session, isLive: isLive)
                 }
+            }
+            if state.pageCount > 1 {
+                FleetPageControl(activityID: activityID, state: state)
             }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
+    }
+}
+
+/// Shown only when there's a second page to flip to. The button advances
+/// `pageIndex` via `NextFleetPageIntent`, which runs in the widget extension
+/// and updates the activity directly — no app launch needed.
+private struct FleetPageControl: View {
+    let activityID: String
+    let state: FleetActivityAttributes.ContentState
+
+    var body: some View {
+        HStack {
+            Text("Page \(state.pageIndex % state.pageCount + 1) of \(state.pageCount)")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+            Spacer()
+            Button(intent: NextFleetPageIntent(activityID: activityID)) {
+                Label("More", systemImage: "chevron.right")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(.white.opacity(0.14), in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
 

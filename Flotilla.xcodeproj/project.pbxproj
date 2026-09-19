@@ -48,6 +48,7 @@
 		14B5F80C3114B99FA1860023 /* SessionReviewViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA58B78299AE64F6052CFB3 /* SessionReviewViewModelTests.swift */; };
 		158BCD6C862F3D846B298674 /* tune.svg in Resources */ = {isa = PBXBuildFile; fileRef = 9157CC2DB6B0B8B42FDD71A5 /* tune.svg */; };
 		17378437B683F8C2F35545A1 /* MacsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C2BFD9B4F918438C55514D /* MacsView.swift */; };
+		1849BB5BB7591F5324DDD0F9 /* NextFleetPageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FDA5265F01F309C245F1423 /* NextFleetPageIntent.swift */; };
 		18EFE6396FB741793FDA895A /* ViewBridgeCrashGuard.m in Sources */ = {isa = PBXBuildFile; fileRef = 404850BCFCB183E77711ED5F /* ViewBridgeCrashGuard.m */; };
 		195CD176EEA524BA2246BA0C /* RealPipelineReproTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BBC083783BD10EC9D3923E7 /* RealPipelineReproTests.swift */; };
 		1A2469DCF5080C17697C2E55 /* TranscriptCodecRegistry+Flotilla.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28FCDAAC18A71DF640AA50EC /* TranscriptCodecRegistry+Flotilla.swift */; };
@@ -616,6 +617,7 @@
 		3E5808CB3A9D390526202628 /* Scenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scenario.swift; sourceTree = "<group>"; };
 		3E782E7FF5EA05CA2F213E13 /* MonacoHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonacoHostView.swift; sourceTree = "<group>"; };
 		3F7E6D3E8923F89B47F5C5A4 /* SessionGitSidebarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGitSidebarViewModel.swift; sourceTree = "<group>"; };
+		3FDA5265F01F309C245F1423 /* NextFleetPageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NextFleetPageIntent.swift; sourceTree = "<group>"; };
 		404850BCFCB183E77711ED5F /* ViewBridgeCrashGuard.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewBridgeCrashGuard.m; sourceTree = "<group>"; };
 		4100F4A408931C22C24A3C2D /* WorkspaceFileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFileService.swift; sourceTree = "<group>"; };
 		426159ED897D3ACC72D28DB4 /* RemoteCompanionDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteCompanionDataSource.swift; sourceTree = "<group>"; };
@@ -1053,6 +1055,7 @@
 				255B1095A992C7BD25FDFB3C /* FleetActivityWidget.swift */,
 				7FC34CF73E7A586705943393 /* FlotillaCompanionWidgetBundle.swift */,
 				004F1749B76C76137B74B899 /* Info.plist */,
+				3FDA5265F01F309C245F1423 /* NextFleetPageIntent.swift */,
 			);
 			path = FlotillaCompanionWidget;
 			sourceTree = "<group>";
@@ -2194,6 +2197,7 @@
 				8836437B094A0852864BA09F /* FleetActivityAttributes.swift in Sources */,
 				522DE2E134C1048D5FDFE8CF /* FleetActivityWidget.swift in Sources */,
 				47F86F981EBAD509414F4A19 /* FlotillaCompanionWidgetBundle.swift in Sources */,
+				1849BB5BB7591F5324DDD0F9 /* NextFleetPageIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
