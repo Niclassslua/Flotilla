@@ -271,7 +271,7 @@ final class SettingsKitTests: XCTestCase {
 
     func testAccentColorDefaultsAndRoundTrips() throws {
         let defaults = AppSettings()
-        XCTAssertEqual(defaults.accentColor, "orange")
+        XCTAssertEqual(defaults.accentColor, "original")
 
         var settings = AppSettings()
         settings.accentColor = "purple"
@@ -283,6 +283,6 @@ final class SettingsKitTests: XCTestCase {
     func testSettingsWrittenBeforeAccentColorStillDecode() throws {
         let oldJSON = Data(#"{"worktreeBaseDirectory":"/tmp/worktrees","appearance":"dark"}"#.utf8)
         let decoded = try JSONDecoder().decode(AppSettings.self, from: oldJSON)
-        XCTAssertEqual(decoded.accentColor, "orange", "missing accentColor should fall back to default orange")
+        XCTAssertEqual(decoded.accentColor, "original", "missing accentColor should fall back to default original")
     }
 }

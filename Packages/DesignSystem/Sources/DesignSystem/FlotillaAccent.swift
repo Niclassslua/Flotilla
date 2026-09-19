@@ -8,7 +8,8 @@ import os
 import Observation
 
 public enum FlotillaAccent: Sendable {
-    public static let defaultID = "orange"
+    public static let originalID = "original"
+    public static let defaultID = "original"
     public static let customStorageKey = "settings.appearance.custom-accent"
     public static let companionStorageKey = "companion.accent-color"
     /// Whether the companion follows the paired Mac's accent (default on).
@@ -44,7 +45,7 @@ public enum FlotillaAccent: Sendable {
         center: .center
     )
 
-    private static let defaultOrangeColor: Color = {
+    public static let originalColor: Color = {
         #if os(macOS)
         Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -59,6 +60,18 @@ public enum FlotillaAccent: Sendable {
         })
         #endif
     }()
+
+    public static func originalPlatformColor(isDark: Bool = true) -> PlatformColor {
+        #if os(macOS)
+        return isDark
+            ? PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1)
+            : PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
+        #else
+        return isDark
+            ? PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1)
+            : PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
+        #endif
+    }
 
     private struct AccentState: Sendable {
         var id: String
@@ -111,6 +124,8 @@ public enum FlotillaAccent: Sendable {
             return hex
         }
         switch value {
+        case "original", "default":
+            return originalPlatformColor(isDark: isDark)
         case "blue":
             return .systemBlue
         case "purple":
@@ -120,21 +135,17 @@ public enum FlotillaAccent: Sendable {
         case "red":
             return .systemRed
         case "orange":
-            #if os(macOS)
-            return isDark
-                ? PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1)
-                : PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
-            #else
             return .systemOrange
-            #endif
         case "green":
             return .systemGreen
-        default:
+        case "system":
             #if os(macOS)
             return .controlAccentColor
             #else
             return .tintColor
             #endif
+        default:
+            return originalPlatformColor(isDark: isDark)
         }
     }
 
@@ -147,18 +158,21 @@ public enum FlotillaAccent: Sendable {
             #endif
         }
         switch value {
+        case "original", "default": return originalColor
         case "blue": return .blue
         case "purple": return .purple
         case "pink": return .pink
         case "red": return .red
-        case "orange": return defaultOrangeColor
+        case "orange": return .orange
         case "green": return .green
-        default:
+        case "system":
             #if os(macOS)
             return Color(nsColor: .controlAccentColor)
             #else
             return Color.accentColor
             #endif
+        default:
+            return originalColor
         }
     }
 
@@ -280,12 +294,24 @@ public struct AccentColorPicker: View {
 
     private var value: String { accentColor }
     private var isCustom: Bool { value.hasPrefix("#") }
-    private var selectedOption: FlotillaAccent.Option? { FlotillaAccent.options.first { $0.id == value } }
-    private var isSystem: Bool { !isCustom && selectedOption == nil && (value == "system" || value.isEmpty) }
+    private var isOriginal: Bool { value == FlotillaAccent.originalID || value == "default" || (value.isEmpty && FlotillaAccent.defaultID == FlotillaAccent.originalID) }
+    private var isSystem: Bool { !isCustom && !isOriginal && value == "system" }
+    private var selectedOption: FlotillaAccent.Option? {
+        if isCustom || isOriginal || isSystem { return nil }
+        return FlotillaAccent.options.first { $0.id == value }
+    }
+    private var canReset: Bool { !isOriginal }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
+                AccentSwatch(name: "Original", isSelected: isOriginal) {
+                    applyValue(FlotillaAccent.originalID)
+                } swatch: {
+                    Circle().fill(FlotillaAccent.originalColor.gradient)
+                }
+                .accessibilityIdentifier("settings.appearance.accent.original")
+
                 AccentSwatch(name: "System Accent", isSelected: isSystem) {
                     applyValue("system")
                 } swatch: {
@@ -346,9 +372,26 @@ public struct AccentColorPicker: View {
             .accessibilityLabel("Accent Color")
             .accessibilityIdentifier("settings.appearance.accents")
 
-            summary
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                summary
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                if canReset {
+                    Text("•")
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+
+                    Button("Reset to Default") {
+                        applyValue(FlotillaAccent.defaultID)
+                    }
+                    .font(.callout)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(FlotillaColors.accent)
+                    .accessibilityLabel("Reset accent color to default")
+                    .accessibilityIdentifier("settings.appearance.accent.reset")
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         #if os(macOS)
@@ -361,10 +404,11 @@ public struct AccentColorPicker: View {
     }
 
     private var summary: Text {
+        if isOriginal { return Text("Original") }
+        if isSystem { return Text("System Accent") }
         if let selectedOption { return Text(selectedOption.name) }
         if isCustom { return Text("Custom") + Text(verbatim: " (\(value))") }
-        if isSystem { return Text("System Accent") }
-        return Text("Orange")
+        return Text("Original")
     }
 
     private var customSwatchColor: Color? {
