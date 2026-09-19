@@ -223,6 +223,9 @@ struct SessionDetailView: View {
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool = true) {
+        isNearBottom = true
+        hasNewOutputWhileScrolledUp = false
+        newOutputCount = 0
         if reduceMotion || !animated {
             proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
         } else {
@@ -234,8 +237,6 @@ struct SessionDetailView: View {
 
     private func newOutputButton(_ proxy: ScrollViewProxy) -> some View {
         Button {
-            hasNewOutputWhileScrolledUp = false
-            newOutputCount = 0
             scrollToBottom(proxy)
         } label: {
             Group {
