@@ -73,6 +73,65 @@ final class AgentScreenshotMonitorTests: XCTestCase {
         XCTAssertEqual(AgentScreenshotMonitor.agentImages(in: events).map(\.base64), ["sent"])
     }
 
+    func testAgentImagesSkipsImagesReadFromUserProvidedImagePath() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let toolTime = Date(timeIntervalSince1970: 200)
+        let imagePath = "/Users/dev/Downloads/IMG_9556.PNG"
+        let events = [
+            TranscriptEvent(id: "5:0", content: .userMessage(text: "The live activity is at the top: \(imagePath)", timestamp: userTime)),
+            TranscriptEvent(id: "23:0", content: .toolUse(id: "call_read", tool: "Read", input: ["file_path": imagePath], timestamp: toolTime)),
+            TranscriptEvent(id: "24:0", content: .toolResult(toolUseID: "call_read", output: "", isError: false, timestamp: toolTime)),
+            TranscriptEvent(id: "24:1", content: .image(mimeType: "image/png", base64: "user_attached_data", filename: nil, timestamp: toolTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertTrue(found.isEmpty, "An image from a path attached in the user prompt must not be recognized as an agent screenshot")
+    }
+
+    func testAgentImagesSkipsImagesReadFromUserTildePath() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let toolTime = Date(timeIntervalSince1970: 200)
+        let home = NSHomeDirectory()
+        let absolutePath = "\(home)/Downloads/sample.png"
+        let events = [
+            TranscriptEvent(id: "1:0", content: .userMessage(text: "Check ~/Downloads/sample.png please", timestamp: userTime)),
+            TranscriptEvent(id: "2:0", content: .toolUse(id: "call_read", tool: "Read", input: ["file_path": absolutePath], timestamp: toolTime)),
+            TranscriptEvent(id: "3:0", content: .toolResult(toolUseID: "call_read", output: "", isError: false, timestamp: toolTime)),
+            TranscriptEvent(id: "3:1", content: .image(mimeType: "image/png", base64: "data", filename: nil, timestamp: toolTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertTrue(found.isEmpty, "An image from a tilde path attached in the user prompt must not be recognized as an agent screenshot")
+    }
+
+    func testAgentImagesSkipsImagesReadFromFilenameMentionedInUserMessage() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let toolTime = Date(timeIntervalSince1970: 200)
+        let events = [
+            TranscriptEvent(id: "1:0", content: .userMessage(text: "Please use Julius.png as the picture", timestamp: userTime)),
+            TranscriptEvent(id: "2:0", content: .toolUse(id: "call_read", tool: "Read", input: ["file_path": "/var/app/Julius.png"], timestamp: toolTime)),
+            TranscriptEvent(id: "3:0", content: .toolResult(toolUseID: "call_read", output: "", isError: false, timestamp: toolTime)),
+            TranscriptEvent(id: "3:1", content: .image(mimeType: "image/png", base64: "data", filename: nil, timestamp: toolTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertTrue(found.isEmpty, "An image whose filename was referenced in the user prompt must not be recognized as an agent screenshot")
+    }
+
+    func testAgentImagesRetainsScreenshotsCreatedByAgent() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let toolTime = Date(timeIntervalSince1970: 200)
+        let events = [
+            TranscriptEvent(id: "1:0", content: .userMessage(text: "take a screenshot of the app and review it", timestamp: userTime)),
+            TranscriptEvent(id: "2:0", content: .toolUse(id: "call_read", tool: "Read", input: ["file_path": "/tmp/claude-scratch/screen.png"], timestamp: toolTime)),
+            TranscriptEvent(id: "3:0", content: .toolResult(toolUseID: "call_read", output: "", isError: false, timestamp: toolTime)),
+            TranscriptEvent(id: "3:1", content: .image(mimeType: "image/png", base64: "agent_screenshot_data", filename: nil, timestamp: toolTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertEqual(found.map(\.base64), ["agent_screenshot_data"])
+    }
+
     @MainActor
     func testMergingScreenshotsRetainsAnImageTrimmedFromTheTranscriptWindow() {
         let sessionID = UUID()

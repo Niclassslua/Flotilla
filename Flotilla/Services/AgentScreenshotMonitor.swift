@@ -179,6 +179,98 @@ final class AgentScreenshotMonitor {
         return byID.values.sorted { $0.position < $1.position }
     }
 
+    nonisolated private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "heic"
+    ]
+
+    nonisolated private static func isImagePath(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return imageExtensions.contains(ext)
+    }
+
+    /// Checks if a candidate image path or filename was attached or mentioned in any user message.
+    nonisolated static func isImageReferencedByUser(
+        toolPath: String?,
+        filename: String?,
+        in userTexts: [String]
+    ) -> Bool {
+        guard !userTexts.isEmpty else { return false }
+
+        var candidates: [String] = []
+
+        if let rawPath = toolPath {
+            var path = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            path = path.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+            if path.hasPrefix("file://") {
+                path = String(path.dropFirst(7))
+            }
+            if let decoded = path.removingPercentEncoding {
+                path = decoded
+            }
+            if !path.isEmpty {
+                candidates.append(path)
+                let home = NSHomeDirectory()
+                if path.hasPrefix(home) {
+                    candidates.append("~" + path.dropFirst(home.count))
+                }
+                let baseName = (path as NSString).lastPathComponent
+                if isImagePath(baseName) {
+                    candidates.append(baseName)
+                }
+            }
+        }
+
+        if let filename = filename {
+            let clean = filename.trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+            if isImagePath(clean) && !candidates.contains(clean) {
+                candidates.append(clean)
+            }
+        }
+
+        guard !candidates.isEmpty else { return false }
+
+        for userText in userTexts {
+            let unescapedUserText = userText.replacingOccurrences(of: "\\ ", with: " ")
+
+            for candidate in candidates {
+                if candidate.contains("/") || candidate.hasPrefix("~") {
+                    if userText.localizedCaseInsensitiveContains(candidate)
+                        || unescapedUserText.localizedCaseInsensitiveContains(candidate) {
+                        return true
+                    }
+                } else {
+                    if containsFilename(candidate, in: userText)
+                        || containsFilename(candidate, in: unescapedUserText) {
+                        return true
+                    }
+                }
+            }
+        }
+
+        return false
+    }
+
+    nonisolated private static func containsFilename(_ filename: String, in text: String) -> Bool {
+        guard !filename.isEmpty else { return false }
+        var searchRange = text.startIndex..<text.endIndex
+        while let match = text.range(of: filename, options: .caseInsensitive, range: searchRange) {
+            let isPrefixValid = match.lowerBound == text.startIndex || {
+                let prevChar = text[text.index(before: match.lowerBound)]
+                return prevChar.isWhitespace || "\"'`([{</\\:;,=".contains(prevChar)
+            }()
+            let isSuffixValid = match.upperBound == text.endIndex || {
+                let nextChar = text[match.upperBound]
+                return nextChar.isWhitespace || "\"'`)]}>:;,!?".contains(nextChar)
+            }()
+            if isPrefixValid && isSuffixValid {
+                return true
+            }
+            searchRange = match.upperBound..<text.endIndex
+        }
+        return false
+    }
+
     /// Event positions come from the native transcript line and entry numbers,
     /// which remain stable when the companion reader trims its 400-event window.
     nonisolated static func agentImages(in events: [TranscriptEvent], after baseline: EventPosition? = nil) -> [ImageEvent] {
@@ -190,10 +282,81 @@ final class AgentScreenshotMonitor {
             if case .userMessage(_, let timestamp) = event.content, !event.id.contains(":") { return timestamp }
             return nil
         })
+        let userTexts = events.compactMap { event -> String? in
+            guard case let .userMessage(text, _) = event.content else { return nil }
+            return text
+        }
+
+        var toolUseInputs: [String: [String: String]] = [:]
+        for event in events {
+            if case let .toolUse(id, _, input, _) = event.content {
+                toolUseInputs[id] = input
+            }
+        }
+
+        var toolUseIDByRecordLine: [Substring: String] = [:]
+        var toolUseIDByTimestamp: [Date: String] = [:]
+        var toolUseIDForImage: [String: String] = [:]
+
+        var lastToolUseID: String?
+        var lastToolResultTimestamp: Date?
+
+        for event in events {
+            switch event.content {
+            case let .toolResult(toolUseID, _, _, timestamp):
+                lastToolUseID = toolUseID
+                lastToolResultTimestamp = timestamp
+                if event.id.contains(":") {
+                    let line = event.id.split(separator: ":", maxSplits: 1)[0]
+                    toolUseIDByRecordLine[line] = toolUseID
+                }
+                toolUseIDByTimestamp[timestamp] = toolUseID
+
+            case let .image(_, _, _, timestamp):
+                if event.id.contains(":") {
+                    let line = event.id.split(separator: ":", maxSplits: 1)[0]
+                    if let useID = toolUseIDByRecordLine[line] {
+                        toolUseIDForImage[event.id] = useID
+                    }
+                }
+                if toolUseIDForImage[event.id] == nil {
+                    if let lastToolResultTimestamp, lastToolResultTimestamp == timestamp, let lastToolUseID {
+                        toolUseIDForImage[event.id] = lastToolUseID
+                    } else if let useID = toolUseIDByTimestamp[timestamp] {
+                        toolUseIDForImage[event.id] = useID
+                    }
+                }
+
+            default:
+                break
+            }
+        }
+
         return events.enumerated().compactMap { offset, event in
             guard case .image(_, let base64, let filename, let timestamp) = event.content,
                   !userRecordIDs.contains(event.id.split(separator: ":", maxSplits: 1)[0]),
                   !userTimestamps.contains(timestamp) else { return nil }
+
+            if let toolUseID = toolUseIDForImage[event.id],
+               let input = toolUseInputs[toolUseID] {
+                let candidatePaths = [
+                    input["file_path"],
+                    input["path"],
+                    input["filePath"],
+                    input["url"]
+                ].compactMap { $0 } + input.values.filter { isImagePath($0) }
+
+                let isUserProvided = candidatePaths.contains { path in
+                    isImageReferencedByUser(toolPath: path, filename: filename, in: userTexts)
+                } || isImageReferencedByUser(toolPath: nil, filename: filename, in: userTexts)
+
+                if isUserProvided {
+                    return nil
+                }
+            } else if filename != nil && isImageReferencedByUser(toolPath: nil, filename: filename, in: userTexts) {
+                return nil
+            }
+
             let parts = event.id.split(separator: ":", maxSplits: 1)
             let position = EventPosition(line: Int(parts[0]) ?? offset,
                                          entry: parts.count > 1 ? (Int(parts[1]) ?? 0) : 0)
