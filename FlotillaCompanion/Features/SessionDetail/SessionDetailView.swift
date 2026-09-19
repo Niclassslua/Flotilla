@@ -1,4 +1,3 @@
-@preconcurrency import ActivityKit
 import SwiftUI
 import SessionKit
 import DesignSystem
@@ -27,7 +26,6 @@ struct SessionDetailView: View {
     @State private var searchQuery = ""
     @State private var currentMatchIndex = 0
     @State private var scrollProxy: ScrollViewProxy?
-    @State private var liveActivity: Activity<SessionActivityAttributes>?
     @State private var visibleItemCount: Int = 40
 
     var body: some View {
@@ -192,10 +190,6 @@ struct SessionDetailView: View {
         }
         .sessionDeleteDialog(session: $pendingDelete, matching: session)
         .modifier(NeedsAttentionHaptic(status: session.status))
-        .task(id: activityContentState(for: session)) {
-            await syncLiveActivity(session: session)
-        }
-        .onDisappear { endLiveActivity() }
     }
 
     private static let bottomAnchorID = "bottom"
@@ -390,44 +384,6 @@ struct SessionDetailView: View {
     private func headerDiffStat(_ session: CompanionSession) -> DiffStat? {
         guard let diff = store.diff(for: sessionID, commitHash: nil).value, !diff.isEmpty else { return session.diffStat }
         return diff.stat
-    }
-
-    private func activityContentState(for session: CompanionSession) -> SessionActivityAttributes.ContentState {
-        let kind: SessionActivityAttributes.StatusKind = switch session.status {
-        case .working: .working
-        case .waitingForInput: .waitingForInput
-        case .readyForReview: .readyForReview
-        case .crashed: .crashed
-        case nil: .working
-        }
-        return SessionActivityAttributes.ContentState(
-            statusLabel: StatusPresentation.label(for: session.status, waitingReason: session.waitingReason),
-            statusKind: kind,
-            startedAt: session.updatedAt
-        )
-    }
-
-    /// Starts the activity on first appearance, updates
-    /// it on every status change thereafter. Local-only — no push token is
-    /// requested, so this only reflects reality while the app is open (see
-    /// docs/companion.md decision #6).
-    @MainActor
-    private func syncLiveActivity(session: CompanionSession) async {
-        let state = activityContentState(for: session)
-        if let liveActivity {
-            await liveActivity.update(ActivityContent(state: state, staleDate: nil))
-            return
-        }
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-        let attributes = SessionActivityAttributes(title: session.title, agentDisplayName: session.agent.displayName)
-        liveActivity = try? Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: nil))
-    }
-
-    @MainActor
-    private func endLiveActivity() {
-        guard let liveActivity else { return }
-        self.liveActivity = nil
-        Task { @MainActor in await liveActivity.end(nil, dismissalPolicy: .immediate) }
     }
 
     /// A soft gradient behind the header, following `StatusPresentation.color`

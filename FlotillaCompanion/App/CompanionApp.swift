@@ -100,12 +100,19 @@ struct RootView: View {
     @Environment(CompanionStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     @State private var disconnectTask: Task<Void, Never>?
+    @State private var fleetActivity = FleetActivityController()
 
     /// Interactive app-switch gestures (home-indicator drag, Control Center,
     /// app-switcher peek) round-trip through `.background` in well under a
     /// second. Only tear down the Mac connection once we've stayed away long
     /// enough that this is a real backgrounding, not a passing gesture.
     private static let disconnectGrace: Duration = .seconds(2.5)
+
+    private var fleetActivitySnapshot: FleetActivitySnapshot? {
+        guard let macID = store.lastMacID, let mac = store.mac(macID) else { return nil }
+        return FleetActivitySnapshot(mac: mac, sessions: store.sessions(on: macID),
+                                     goesStale: scenePhase == .background && store.disconnectsWhenInactive)
+    }
 
     var body: some View {
         @Bindable var store = store
@@ -154,11 +161,15 @@ struct RootView: View {
                let id = UUID(uuidString: url.lastPathComponent),
                let macID = store.mac(forSession: id)?.id {
                 store.path = [.fleet(macID), .session(id)]
+            } else if url.host == "fleet" {
+                let macID = String(url.path.dropFirst())
+                if store.mac(macID) != nil { store.path = [.fleet(macID)] }
             } else if store.supportsPairing {
                 store.incomingPairingLink = url.absoluteString
             }
         }
         .task { CompanionAttentionNotifications.shared.configure(store: store) }
+        .task(id: fleetActivitySnapshot) { await fleetActivity.sync(fleetActivitySnapshot) }
         .sheet(isPresented: Binding(
             get: { store.incomingPairingLink != nil },
             set: { if !$0 { store.incomingPairingLink = nil } }

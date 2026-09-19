@@ -108,6 +108,7 @@ final class MockCompanionDataSource: CompanionDataSource {
     func loadFile(at path: String, in sessionID: CompanionSession.ID) async {}
     func focus(on sessionID: CompanionSession.ID?) {}
     func setActive(_ isActive: Bool) {}
+    var disconnectsWhenInactive: Bool { false }
 
     func clearCachedTranscripts(on macID: MacHost.ID) {
         for session in sessionsByMac[macID] ?? [] { transcripts.removeValue(forKey: session.id) }

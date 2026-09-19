@@ -184,6 +184,8 @@ final class RemoteCompanionDataSource: CompanionDataSource {
         }
     }
 
+    var disconnectsWhenInactive: Bool { true }
+
     func setActive(_ active: Bool) {
         isActive = active
         if active, !connections.isEmpty {

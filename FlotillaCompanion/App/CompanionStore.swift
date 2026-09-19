@@ -31,6 +31,10 @@ final class CompanionStore {
     /// for the pairing sheet to pick it up.
     var incomingPairingLink: String?
 
+    /// The last Mac whose fleet was opened. Launch returns to it, and the
+    /// fleet Live Activity follows it.
+    private(set) var lastMacID: MacHost.ID?
+
     @ObservationIgnored private let defaults: UserDefaults
 
     /// Which attention categories raise a local notification on this
@@ -67,16 +71,18 @@ final class CompanionStore {
         } else {
             notificationPreferences = CompanionNotificationPreferences()
         }
+        lastMacID = defaults.string(forKey: Key.lastMac)
     }
 
     /// Launch lands on the last Mac viewed, with the Macs screen one Back away.
     func restoreLastMac() {
-        guard let id = defaults.string(forKey: Key.lastMac), mac(id) != nil else { return }
+        guard let id = lastMacID, mac(id) != nil else { return }
         path = [.fleet(id)]
     }
 
     private func rememberLastMac() {
-        if case .fleet(let id)? = path.first {
+        if case .fleet(let id)? = path.first, id != lastMacID {
+            lastMacID = id
             defaults.set(id, forKey: Key.lastMac)
         }
         let focused = path.reversed().lazy.compactMap { route -> CompanionSession.ID? in
@@ -172,6 +178,8 @@ final class CompanionStore {
         isForeground = isActive
         data.setActive(isActive)
     }
+
+    var disconnectsWhenInactive: Bool { data.disconnectsWhenInactive }
 
     // MARK: - Intents
 
