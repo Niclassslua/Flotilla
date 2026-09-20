@@ -349,8 +349,11 @@ struct SessionCard<Terminal: View>: View {
         ZStack(alignment: .bottomTrailing) {
             ProviderLogo(agent: session.agent)
                 .frame(width: 22, height: 22)
+            // Straddling the logo's bottom-right corner. The beacon used to
+            // carry a 16pt frame around its 8pt dot, which pulled the dot
+            // that far back inside the logo instead of onto its corner.
             statusBeacon
-                .offset(x: 4, y: 4)
+                .offset(x: 3, y: 3)
         }
         .frame(width: 22, height: 22)
         .accessibilityHidden(true)
@@ -366,7 +369,6 @@ struct SessionCard<Terminal: View>: View {
             .fill(statusColor)
             .frame(width: 8, height: 8)
             .overlay(Circle().strokeBorder(FlotillaColors.sidebar, lineWidth: 1.5))
-            .frame(width: 16, height: 16)
     }
 
     private var statusColor: Color {
