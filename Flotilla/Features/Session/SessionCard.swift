@@ -87,6 +87,10 @@ struct SessionCard<Terminal: View>: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(session.title)
                         .font(.callout.weight(.medium))
+                        // Explicit, not inherited: inside a `.sidebar` `List`
+                        // the ambient style renders the title dimmer than the
+                        // status word under it, which inverts the row.
+                        .foregroundStyle(FlotillaColors.textPrimary)
                         .lineLimit(1)
                     Spacer(minLength: 4)
                     Text(compactTimestamp(for: session.lastActiveAt))

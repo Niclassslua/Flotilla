@@ -24,10 +24,11 @@ The outermost layout. Everything else lives inside one of these three regions.
 | Say | What it is | Code |
 | --- | --- | --- |
 | **Shell** | The whole window's root view: `NavigationSplitView` + overlays + sheets. | `FlotillaShell` — `Features/Shell/FlotillaShell.swift` |
-| **Navigator** *(region)* | The split view's sidebar column, present in every scope: search on top, then the fleet smart lists, then each project as a selectable row with its sessions beneath it, then unassigned sessions, over a pinned **New Session** button. | `SessionsSidebar` — `Features/Shell/FleetSidebar.swift` |
-| **Navigator list** | The `List` inside the navigator that holds all three tiers. | `FleetSessionList` — same file |
-| **Navigator row** | A destination line in the navigator that is not a session: Home, a smart list, All Sessions, or a project. | `NavigatorRow` — same file |
-| **Smart list** | One of the standing fleet questions: **Needs You · Working · Ready**. | `FleetSmartList` — `Features/Shell/FleetSmartList.swift` |
+| **Navigator** *(region)* | The split view's sidebar column, present in every scope: search on top, then **Home**, then each project as a selectable header with its sessions beneath it, then unassigned sessions, over a pinned **New Session** button. | `SessionsSidebar` — `Features/Shell/FleetSidebar.swift` |
+| **Navigator list** | The `List` inside the navigator that holds Home, the projects and their sessions, and General. | `FleetSessionList` — same file |
+| **Navigator row** | A standing destination line in the navigator. Home is the only one. | `NavigatorRow` — same file |
+| **Project header** | A project's line in the navigator, and the header for its sessions: collapse chevron, 28pt project mark, name, home-relative path, and a hairline in the project's accent. Selecting it opens the project workspace. | `ProjectHeaderRow` — same file |
+| **Smart list** | One of the standing fleet questions: **Needs You · Working · Ready**. Reached from the **Workspace** menu; it left the navigator, where its count only restated what every session row already shows. | `FleetSmartList` — `Features/Shell/FleetSmartList.swift` |
 | **Session sidebar row** | One session line in the session list (status dot, title, meta, swipe-to-delete, context menu). | `SessionSidebarRow`, `SwipeToDeleteSession` — same file |
 | **Detail column** *(region)* | The large right-hand area. Switches content by sidebar selection: Home dashboard, session terminal, project workspace, or a fleet presentation. | `DetailColumn` — `Features/Shell/DetailColumn.swift` |
 | **Global bar** | The window toolbar, and the only bar present in every scope: wordmark, back/forward, Grid, Board, command palette, settings. Everything scope-specific moved to a bar that shares that scope's lifetime. | `WorkspaceToolbar` — `Features/Shell/WorkspaceToolbar.swift` |

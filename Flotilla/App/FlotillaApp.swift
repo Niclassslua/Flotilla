@@ -19,8 +19,6 @@ struct FlotillaApp: App {
     @State private var navigator: WorkspaceNavigator
     @State private var notificationDelegate: FlotillaNotificationDelegate
     @State private var companionHost: CompanionHost
-    /// Exploration scaffolding: which of the four navigator layouts is drawn.
-    @State private var sidebarDesign = SidebarDesignStore()
     @Environment(\.openWindow) private var openWindow
 
     /// Held so the review scene — which is not a descendant of the shell and
@@ -166,13 +164,6 @@ struct FlotillaApp: App {
         // No-op unless FLOTILLA_PERF=1 — see PerfLog.
         MainThreadStallMonitor.shared.start()
 
-#if DEBUG || FLOTILLA_EPHEMERAL
-        // No-op unless FLOTILLA_SIDEBAR_SHOT is set. Armed here rather than
-        // from the scene's `onAppear` so it does not depend on the view tree
-        // ever reaching a state that calls it.
-        SidebarShotCapture.runIfRequested()
-#endif
-
         if environment.isUITesting,
            let sessionTitle = ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_WAITING_SESSION"] {
             appStore.simulateWaitingPromptForUITesting(sessionTitle: sessionTitle)
@@ -213,7 +204,6 @@ struct FlotillaApp: App {
             )
             .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
             .environment(\.editorFontSize, settingsViewModel.settings.terminal.editorFontSize)
-            .environment(\.sidebarDesign, sidebarDesign.design)
             .onChange(of: settingsViewModel.settings.notifications.delivery) { _, delivery in
                 foregroundNotificationGate.withLock { $0 = (delivery == .always) }
             }
@@ -250,25 +240,6 @@ struct FlotillaApp: App {
                 ForEach(FleetSmartList.allCases) { list in
                     Button(list.title) {
                         navigator.selection = .smartList(list)
-                    }
-                }
-                Divider()
-                Menu("Navigator Layout") {
-                    ForEach(SidebarDesign.allCases) { design in
-                        Button {
-                            sidebarDesign.design = design
-                        } label: {
-                            HStack {
-                                Text(design.title)
-                                if sidebarDesign.design == design {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                        .keyboardShortcut(
-                            KeyEquivalent(Character("\(design.rawValue)")),
-                            modifiers: [.control, .option]
-                        )
                     }
                 }
                 Divider()
