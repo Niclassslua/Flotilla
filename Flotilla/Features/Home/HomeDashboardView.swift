@@ -150,7 +150,8 @@ struct HomeDashboardView: View {
                             },
                             onSelect: { openProject(project.id) },
                             onRemove: { store.removeProject(id: project.id) },
-                            onUpdateIcon: { store.updateProjectIcon(id: project.id, icon: $0) }
+                            onUpdateIdentity: { store.updateProjectIdentity(id: project.id, icon: $0, accentColor: $1) },
+                            onUpdateAccentColor: { store.updateProjectAccentColor(id: project.id, accentColor: $0) }
                         )
                     }
                 }

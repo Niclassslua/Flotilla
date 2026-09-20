@@ -90,8 +90,8 @@ struct StreamProjectWorkspace: View {
         .sheet(isPresented: $isShowingIconPicker) {
             ProjectIconPickerSheet(
                 project: project,
-                onSave: { newIcon in
-                    context.store.updateProjectIcon(id: project.id, icon: newIcon)
+                onSave: { newIcon, newAccent in
+                    context.store.updateProjectIdentity(id: project.id, icon: newIcon, accentColor: newAccent)
                 },
                 onDismiss: {
                     isShowingIconPicker = false
@@ -103,7 +103,7 @@ struct StreamProjectWorkspace: View {
     // MARK: - Masthead
 
     private var masthead: some View {
-        VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
+        VStack(spacing: FlotillaSpacing.large) {
             HStack(alignment: .center, spacing: FlotillaSpacing.medium) {
                 Button {
                     isShowingIconPicker = true
@@ -122,10 +122,28 @@ struct StreamProjectWorkspace: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .help("Change project icon")
+                .help("Change project icon & color")
                 .contextMenu {
-                    Button("Change Icon…") {
+                    Button("Change Icon & Color…") {
                         isShowingIconPicker = true
+                    }
+                    Menu("Accent Color") {
+                        Button("Auto / Default") {
+                            context.store.updateProjectAccentColor(id: project.id, accentColor: nil)
+                        }
+                        Divider()
+                        ForEach(ProjectIconPickerSheet.presetAccentColors) { preset in
+                            Button {
+                                context.store.updateProjectAccentColor(id: project.id, accentColor: preset.hex)
+                            } label: {
+                                HStack {
+                                    Text(preset.name)
+                                    if isCurrentAccent(preset.hex) {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
                     }
                     if project.icon != nil {
                         Button("Remove Icon") {
@@ -165,8 +183,15 @@ struct StreamProjectWorkspace: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .background(FlotillaColors.surface)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(FlotillaColors.separatorStrong).frame(height: 1)
+            Divider().background(FlotillaColors.separator)
         }
+    }
+
+    private func isCurrentAccent(_ hex: String) -> Bool {
+        guard let current = project.accentColor else { return false }
+        let c1 = current.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        let c2 = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        return c1 == c2
     }
 
     private var instrumentRow: some View {

@@ -106,7 +106,11 @@ struct ProjectMark: View {
     ]
 
     static func tint(for project: Project) -> Color {
-        tint(forKey: project.name)
+        if let custom = project.accentColor, !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let normalized = custom.hasPrefix("#") ? custom : "#\(custom)"
+            return FlotillaAccent.makeColor(for: normalized)
+        }
+        return tint(forKey: project.name)
     }
 
     /// Any stable string works as the key — a project name, a commit author's

@@ -21,6 +21,8 @@ struct HomeProjectCard: View {
     let onSelect: () -> Void
     let onRemove: () -> Void
     var onUpdateIcon: ((ProjectIcon?) -> Void)? = nil
+    var onUpdateIdentity: ((ProjectIcon?, String?) -> Void)? = nil
+    var onUpdateAccentColor: ((String?) -> Void)? = nil
 
     @State private var isHovered = false
     @State private var isConfirmingRemoval = false
@@ -64,8 +66,12 @@ struct HomeProjectCard: View {
         .sheet(isPresented: $isShowingIconPicker) {
             ProjectIconPickerSheet(
                 project: project,
-                onSave: { newIcon in
-                    onUpdateIcon?(newIcon)
+                onSave: { newIcon, newAccent in
+                    if let onUpdateIdentity {
+                        onUpdateIdentity(newIcon, newAccent)
+                    } else {
+                        onUpdateIcon?(newIcon)
+                    }
                 },
                 onDismiss: {
                     isShowingIconPicker = false
@@ -82,7 +88,7 @@ struct HomeProjectCard: View {
     private var header: some View {
         HStack(alignment: .center, spacing: FlotillaSpacing.medium) {
             Button {
-                if onUpdateIcon != nil {
+                if onUpdateIdentity != nil || onUpdateIcon != nil {
                     isShowingIconPicker = true
                 } else {
                     onSelect()
@@ -90,7 +96,7 @@ struct HomeProjectCard: View {
             } label: {
                 ZStack(alignment: .bottomTrailing) {
                     ProjectMark(project: project, size: 38)
-                    if onUpdateIcon != nil {
+                    if onUpdateIdentity != nil || onUpdateIcon != nil {
                         Circle()
                             .fill(FlotillaColors.surface)
                             .frame(width: 14, height: 14)
@@ -105,7 +111,7 @@ struct HomeProjectCard: View {
                 }
             }
             .buttonStyle(.plain)
-            .help(onUpdateIcon != nil ? "Change project icon" : "")
+            .help(onUpdateIdentity != nil || onUpdateIcon != nil ? "Change project icon & color" : "")
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(project.name)
@@ -279,13 +285,43 @@ struct HomeProjectCard: View {
     private var menuItems: some View {
         Button("Open Project") { onSelect() }
         Divider()
-        if onUpdateIcon != nil {
-            Button("Change Icon…") {
+        if onUpdateIdentity != nil || onUpdateIcon != nil {
+            Button("Change Icon & Color…") {
                 isShowingIconPicker = true
+            }
+            Menu("Accent Color") {
+                Button("Auto / Default") {
+                    if let onUpdateAccentColor {
+                        onUpdateAccentColor(nil)
+                    } else if let onUpdateIdentity {
+                        onUpdateIdentity(project.icon, nil)
+                    }
+                }
+                Divider()
+                ForEach(ProjectIconPickerSheet.presetAccentColors) { preset in
+                    Button {
+                        if let onUpdateAccentColor {
+                            onUpdateAccentColor(preset.hex)
+                        } else if let onUpdateIdentity {
+                            onUpdateIdentity(project.icon, preset.hex)
+                        }
+                    } label: {
+                        HStack {
+                            Text(preset.name)
+                            if isCurrentAccent(preset.hex) {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
             }
             if project.icon != nil {
                 Button("Remove Icon") {
-                    onUpdateIcon?(nil)
+                    if let onUpdateIdentity {
+                        onUpdateIdentity(nil, project.accentColor)
+                    } else {
+                        onUpdateIcon?(nil)
+                    }
                 }
             }
             Divider()
@@ -351,5 +387,12 @@ struct HomeProjectCard: View {
 
     private func revealInFinder() {
         NSWorkspace.shared.activateFileViewerSelecting([project.rootPath])
+    }
+
+    private func isCurrentAccent(_ hex: String) -> Bool {
+        guard let current = project.accentColor else { return false }
+        let c1 = current.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        let c2 = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        return c1 == c2
     }
 }

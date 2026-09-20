@@ -9,13 +9,40 @@ import DesignSystem
 /// - Custom Image tab with drag-and-drop, multi-format file browser (.icns, .icon, .ico, svg, pdf, png, etc.),
 ///   clipboard paste, and the interactive native cropper.
 public struct ProjectIconPickerSheet: View {
+    public struct PresetColor: Identifiable, Sendable {
+        public let id: String
+        public let name: String
+        public let hex: String
+        public let color: Color
+
+        public init(name: String, hex: String, color: Color) {
+            self.id = hex
+            self.name = name
+            self.hex = hex
+            self.color = color
+        }
+    }
+
+    public static let presetAccentColors: [PresetColor] = [
+        PresetColor(name: "Amber", hex: "#F59E0B", color: Color(red: 0.96, green: 0.62, blue: 0.04)),
+        PresetColor(name: "Emerald", hex: "#10B981", color: Color(red: 0.06, green: 0.73, blue: 0.51)),
+        PresetColor(name: "Cyan", hex: "#06B6D4", color: Color(red: 0.02, green: 0.71, blue: 0.83)),
+        PresetColor(name: "Indigo", hex: "#6366F1", color: Color(red: 0.39, green: 0.40, blue: 0.95)),
+        PresetColor(name: "Purple", hex: "#A855F7", color: Color(red: 0.66, green: 0.33, blue: 0.97)),
+        PresetColor(name: "Rose", hex: "#F43F5E", color: Color(red: 0.96, green: 0.25, blue: 0.37)),
+        PresetColor(name: "Orange", hex: "#FB923C", color: Color(red: 0.98, green: 0.57, blue: 0.24)),
+        PresetColor(name: "Teal", hex: "#14B8A6", color: Color(red: 0.08, green: 0.72, blue: 0.65)),
+        PresetColor(name: "Blue", hex: "#3B82F6", color: Color(red: 0.23, green: 0.51, blue: 0.96)),
+    ]
+
     let project: Project
-    let onSave: (ProjectIcon?) -> Void
+    let onSave: (ProjectIcon?, String?) -> Void
     let onDismiss: () -> Void
 
     @State private var selectedTab: PickerTab = .symbols
     @State private var selectedSymbol: String?
     @State private var selectedEmoji: String?
+    @State private var selectedAccentHex: String?
     @State private var stagedImage: NSImage?
     @State private var searchQuery: String = ""
     @State private var isDropTargeted = false
@@ -38,12 +65,13 @@ public struct ProjectIconPickerSheet: View {
 
     public init(
         project: Project,
-        onSave: @escaping (ProjectIcon?) -> Void,
+        onSave: @escaping (ProjectIcon?, String?) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.project = project
         self.onSave = onSave
         self.onDismiss = onDismiss
+        _selectedAccentHex = State(initialValue: project.accentColor)
 
         if let existing = project.icon {
             switch existing {
@@ -59,6 +87,18 @@ public struct ProjectIconPickerSheet: View {
         }
     }
 
+    public init(
+        project: Project,
+        onSave: @escaping (ProjectIcon?) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.init(
+            project: project,
+            onSave: { icon, _ in onSave(icon) },
+            onDismiss: onDismiss
+        )
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             // Masthead & Tab Picker
@@ -66,6 +106,13 @@ public struct ProjectIconPickerSheet: View {
 
             Divider()
                 .background(FlotillaColors.separator)
+
+            if stagedImage == nil {
+                accentColorBar
+
+                Divider()
+                    .background(FlotillaColors.separator)
+            }
 
             // Content Area
             Group {
@@ -75,7 +122,7 @@ public struct ProjectIconPickerSheet: View {
                         onChooseAnotherFile: { stagedImage = nil },
                         onCancel: onDismiss,
                         onApply: { pngData in
-                            onSave(.custom(data: pngData))
+                            onSave(.custom(data: pngData), selectedAccentHex)
                             onDismiss()
                         }
                     )
@@ -98,7 +145,7 @@ public struct ProjectIconPickerSheet: View {
                 footer
             }
         }
-        .frame(width: 560, height: stagedImage != nil ? 540 : 490)
+        .frame(width: 560, height: stagedImage != nil ? 550 : 525)
         .background(FlotillaColors.canvas)
         .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous))
     }
@@ -137,6 +184,94 @@ public struct ProjectIconPickerSheet: View {
         .padding(.vertical, FlotillaSpacing.medium + 2)
     }
 
+    private var effectiveTint: Color {
+        if let hex = selectedAccentHex, !hex.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let normalized = hex.hasPrefix("#") ? hex : "#\(hex)"
+            return FlotillaAccent.makeColor(for: normalized)
+        }
+        return ProjectMark.tint(forKey: project.name)
+    }
+
+    private var accentColorBar: some View {
+        HStack(spacing: FlotillaSpacing.medium) {
+            Text("Accent")
+                .font(FlotillaTypography.caption.weight(.medium))
+                .foregroundStyle(FlotillaColors.textSecondary)
+
+            // Auto (resets to deterministic hash)
+            Button {
+                selectedAccentHex = nil
+            } label: {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(ProjectMark.tint(forKey: project.name))
+                        .frame(width: 12, height: 12)
+                    Text("Auto")
+                        .font(FlotillaTypography.caption.weight(selectedAccentHex == nil ? .semibold : .regular))
+                        .foregroundStyle(selectedAccentHex == nil ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(selectedAccentHex == nil ? FlotillaColors.surfaceElevated : FlotillaColors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(selectedAccentHex == nil ? FlotillaColors.accent : FlotillaColors.separator, lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Derive color automatically from project name")
+
+            // Presets
+            ForEach(Self.presetAccentColors) { preset in
+                Button {
+                    selectedAccentHex = preset.hex
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(preset.color)
+                            .frame(width: 18, height: 18)
+                        if isPresetSelected(preset.hex) {
+                            Circle()
+                                .strokeBorder(Color.white, lineWidth: 2)
+                                .frame(width: 18, height: 18)
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .help(preset.name)
+            }
+
+            // Custom ColorPicker
+            ColorPicker("", selection: Binding(
+                get: { effectiveTint },
+                set: { newColor in
+                    if let hex = FlotillaAccent.storageValue(for: newColor) {
+                        selectedAccentHex = hex
+                    }
+                }
+            ), supportsOpacity: false)
+            .labelsHidden()
+            .frame(width: 22, height: 18)
+            .help("Pick custom accent color…")
+
+            Spacer()
+        }
+        .padding(.horizontal, FlotillaSpacing.large)
+        .padding(.vertical, 6)
+        .background(FlotillaColors.surface.opacity(0.6))
+    }
+
+    private func isPresetSelected(_ hex: String) -> Bool {
+        guard let selected = selectedAccentHex else { return false }
+        let cleanSelected = selected.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        let cleanHex = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        return cleanSelected == cleanHex
+    }
+
     @ViewBuilder
     private var currentMarkPreview: some View {
         if let staged = stagedImage {
@@ -150,11 +285,11 @@ public struct ProjectIconPickerSheet: View {
                         .strokeBorder(FlotillaColors.separatorStrong, lineWidth: 0.5)
                 }
         } else if let symbol = selectedSymbol, selectedTab == .symbols {
-            ProjectMark(title: project.name, tint: ProjectMark.tint(for: project), icon: .symbol(name: symbol), size: 38)
+            ProjectMark(title: project.name, tint: effectiveTint, icon: .symbol(name: symbol), size: 38)
         } else if let emoji = selectedEmoji, selectedTab == .emojis {
-            ProjectMark(title: project.name, tint: ProjectMark.tint(for: project), icon: .emoji(emoji), size: 38)
+            ProjectMark(title: project.name, tint: effectiveTint, icon: .emoji(emoji), size: 38)
         } else {
-            ProjectMark(title: project.name, tint: ProjectMark.tint(for: project), icon: project.icon, size: 38)
+            ProjectMark(title: project.name, tint: effectiveTint, icon: project.icon, size: 38)
         }
     }
 
@@ -172,15 +307,15 @@ public struct ProjectIconPickerSheet: View {
                         } label: {
                             ZStack {
                                 RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                                    .fill(selectedSymbol == symbol ? FlotillaColors.accent.opacity(0.2) : FlotillaColors.surface)
+                                    .fill(selectedSymbol == symbol ? effectiveTint.opacity(0.2) : FlotillaColors.surface)
                                     .overlay {
                                         RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                                            .strokeBorder(selectedSymbol == symbol ? FlotillaColors.accent : FlotillaColors.separator, lineWidth: 1)
+                                            .strokeBorder(selectedSymbol == symbol ? effectiveTint : FlotillaColors.separator, lineWidth: 1)
                                     }
 
                                 Image(systemName: symbol)
                                     .font(.system(size: 17, weight: .medium))
-                                    .foregroundStyle(selectedSymbol == symbol ? FlotillaColors.accent : FlotillaColors.textPrimary)
+                                    .foregroundStyle(selectedSymbol == symbol ? effectiveTint : FlotillaColors.textPrimary)
                             }
                             .frame(height: 44)
                         }
@@ -303,12 +438,22 @@ public struct ProjectIconPickerSheet: View {
         HStack {
             if project.icon != nil {
                 Button("Remove Icon") {
-                    onSave(nil)
+                    onSave(nil, selectedAccentHex)
                     onDismiss()
                 }
                 .buttonStyle(.plain)
                 .font(FlotillaTypography.caption.weight(.medium))
                 .foregroundStyle(FlotillaColors.statusCrashed)
+            }
+
+            if selectedAccentHex != nil {
+                Button("Reset Accent") {
+                    selectedAccentHex = nil
+                }
+                .buttonStyle(.plain)
+                .font(FlotillaTypography.caption.weight(.medium))
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .padding(.leading, FlotillaSpacing.small)
             }
 
             Spacer()
@@ -422,18 +567,20 @@ public struct ProjectIconPickerSheet: View {
     }
 
     private func saveCurrentSelection() {
+        var finalIcon: ProjectIcon? = project.icon
         switch selectedTab {
         case .symbols:
             if let selectedSymbol {
-                onSave(.symbol(name: selectedSymbol))
+                finalIcon = .symbol(name: selectedSymbol)
             }
         case .emojis:
             if let selectedEmoji {
-                onSave(.emoji(selectedEmoji))
+                finalIcon = .emoji(selectedEmoji)
             }
         case .customImage:
             break
         }
+        onSave(finalIcon, selectedAccentHex)
         onDismiss()
     }
 
@@ -441,37 +588,37 @@ public struct ProjectIconPickerSheet: View {
 
     private var filteredSymbols: [String] {
         if searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-            return curatedSymbols
+            return Self.curatedSymbols
         }
         let q = searchQuery.lowercased()
-        return curatedSymbols.filter { $0.lowercased().contains(q) }
+        return Self.curatedSymbols.filter { $0.lowercased().contains(q) }
     }
 
     private var filteredEmojis: [String] {
         if searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-            return curatedEmojis
+            return Self.curatedEmojis
         }
         let q = searchQuery.lowercased()
-        return curatedEmojis.filter { $0.contains(q) }
+        return Self.curatedEmojis.filter { $0.contains(q) }
     }
 
-    private let curatedSymbols: [String] = [
+    public static let curatedSymbols: [String] = [
         "terminal", "terminal.fill", "chevron.left.forwardslash.chevron.right", "curlybraces",
         "cube.fill", "gearshape.2.fill", "cpu.fill", "memorychip", "network", "server.rack",
         "externaldrive.fill", "folder.fill", "folder.badge.gearshape", "tray.full.fill",
         "archivebox.fill", "doc.text.fill", "hammer.fill", "wrench.and.screwdriver.fill",
         "paintbrush.fill", "sparkles", "bolt.fill", "flame.fill", "gauge.with.needle.fill",
-        "speedometer", "rocket.fill", "shield.fill", "lock.fill", "arrow.triangle.branch",
+        "speedometer", "paperplane.fill", "sailboat.fill", "shield.fill", "lock.fill", "arrow.triangle.branch",
         "arrow.triangle.pull", "arrow.triangle.merge", "arrow.clockwise", "star.fill",
         "bookmark.fill", "tag.fill", "flag.fill", "heart.fill", "bell.fill", "lightbulb.fill",
         "globe", "macbook.and.iphone", "play.fill", "waveform.path.ecg", "brain.head.profile",
         "antenna.radiowaves.left.and.right", "puzzlepiece.fill", "wand.and.stars"
     ]
 
-    private let curatedEmojis: [String] = [
+    public static let curatedEmojis: [String] = [
         "🚀", "⚡", "🔥", "💥", "🌟", "✨", "💡", "🎯", "🧭", "🛸", "🪐", "🌌", "🌍", "🌐",
         "💻", "🖥️", "📱", "⚙️", "🔧", "🔨", "🛠️", "🔬", "🧪", "📡", "🔋", "💾", "🕹️", "🎮",
         "📦", "📁", "📂", "🗂️", "🏷️", "📌", "🔖", "🔑", "🔒", "🛡️", "💎", "👑", "🏆", "🎨",
-        "🤖", "👾", "🦊", "🐙", "🦉", "🦄", "🍀", "☕", "🍕", "⚓", "⛵", "🚢", "🧪", "🪄"
+        "🤖", "👾", "🦊", "🐙", "🦉", "🦄", "🍀", "☕", "🍕", "⚓", "⛵", "🚢", "🚤", "🌊", "🪄", "🔮"
     ]
 }

@@ -280,6 +280,11 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 t.add(column: "iconData", .blob)
             }
         }
+        migrator.registerMigration("v17_addProjectAccentColor") { db in
+            try db.alter(table: "project") { t in
+                t.add(column: "accentColor", .text)
+            }
+        }
         return migrator
     }
 

@@ -198,8 +198,26 @@ struct FleetSessionList: View {
                     )
                     .accessibilityIdentifier(AXID.sidebarProjectRow.rawValue + project.name)
                     .contextMenu {
-                        Button("Change Icon…") {
+                        Button("Change Icon & Color…") {
                             editingIconProject = project
+                        }
+                        Menu("Accent Color") {
+                            Button("Auto / Default") {
+                                store.updateProjectAccentColor(id: project.id, accentColor: nil)
+                            }
+                            Divider()
+                            ForEach(ProjectIconPickerSheet.presetAccentColors) { preset in
+                                Button {
+                                    store.updateProjectAccentColor(id: project.id, accentColor: preset.hex)
+                                } label: {
+                                    HStack {
+                                        Text(preset.name)
+                                        if isCurrentAccent(project: project, hex: preset.hex) {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
                         }
                         if project.icon != nil {
                             Button("Remove Icon") {
@@ -242,14 +260,21 @@ struct FleetSessionList: View {
         .sheet(item: $editingIconProject) { project in
             ProjectIconPickerSheet(
                 project: project,
-                onSave: { newIcon in
-                    store.updateProjectIcon(id: project.id, icon: newIcon)
+                onSave: { newIcon, newAccent in
+                    store.updateProjectIdentity(id: project.id, icon: newIcon, accentColor: newAccent)
                 },
                 onDismiss: {
                     editingIconProject = nil
                 }
             )
         }
+    }
+
+    private func isCurrentAccent(project: Project, hex: String) -> Bool {
+        guard let current = project.accentColor else { return false }
+        let c1 = current.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        let c2 = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        return c1 == c2
     }
 
     private func sessionRow(_ session: Session) -> some View {

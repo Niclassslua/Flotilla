@@ -295,12 +295,14 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
     public var name: String
     public var rootPath: URL
     public var icon: ProjectIcon?
+    public var accentColor: String?
 
-    public init(id: UUID = UUID(), name: String, rootPath: URL, icon: ProjectIcon? = nil) {
+    public init(id: UUID = UUID(), name: String, rootPath: URL, icon: ProjectIcon? = nil, accentColor: String? = nil) {
         self.id = id
         self.name = name
         self.rootPath = rootPath
         self.icon = icon
+        self.accentColor = accentColor
     }
 }
 

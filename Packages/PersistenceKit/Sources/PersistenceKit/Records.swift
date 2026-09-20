@@ -49,11 +49,13 @@ struct ProjectRecord: Codable, FetchableRecord, PersistableRecord {
     var iconType: String?
     var iconValue: String?
     var iconData: Data?
+    var accentColor: String?
 
     init(project: Project) {
         id = project.id.uuidString
         name = project.name
         rootPath = project.rootPath.path
+        accentColor = project.accentColor
         switch project.icon {
         case .symbol(let name):
             iconType = "symbol"
@@ -89,7 +91,7 @@ struct ProjectRecord: Codable, FetchableRecord, PersistableRecord {
         default:
             icon = nil
         }
-        return Project(id: uuid, name: name, rootPath: URL(fileURLWithPath: rootPath), icon: icon)
+        return Project(id: uuid, name: name, rootPath: URL(fileURLWithPath: rootPath), icon: icon, accentColor: accentColor)
     }
 }
 

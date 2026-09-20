@@ -1087,14 +1087,25 @@ final class AppStore {
 
     /// Updates the custom icon, symbol, or emoji for a project and persists the change.
     func updateProjectIcon(id: UUID, icon: ProjectIcon?) {
+        updateProjectIdentity(id: id, icon: icon, accentColor: projects.first(where: { $0.id == id })?.accentColor)
+    }
+
+    /// Updates the custom accent color for a project and persists the change.
+    func updateProjectAccentColor(id: UUID, accentColor: String?) {
+        updateProjectIdentity(id: id, icon: projects.first(where: { $0.id == id })?.icon, accentColor: accentColor)
+    }
+
+    /// Updates both the custom icon and accent color for a project and persists the change.
+    func updateProjectIdentity(id: UUID, icon: ProjectIcon?, accentColor: String?) {
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
         var updated = projects[index]
         updated.icon = icon
+        updated.accentColor = accentColor
         do {
             try repository.save(updated)
             projects[index] = updated
         } catch {
-            lastOperationError = "Failed to update project icon: \(error.localizedDescription)"
+            lastOperationError = "Failed to update project settings: \(error.localizedDescription)"
         }
     }
 
