@@ -524,6 +524,24 @@ Once both are set, the `archive` job imports the certificate into a temporary
 keychain and runs the real `-exportArchive` step instead of the ad-hoc
 fallback.
 
+`Flotilla.icon` is an Icon Composer bundle using features (`specular-location`,
+`refractivity`) that only Xcode 27 beta's `actool` parses correctly — the
+maintainer's local Xcode. GitHub's hosted `macos-26` runners top out at Xcode
+26.6 stable, whose `actool` crashes compiling it (`Could not open
+"Flotilla.icon"` / `NSPlaceholderArray … nil object`), confirmed deterministic
+across reruns. Both jobs' "Use fallback app icon for CI" step works around
+this before generating the project: it moves `Flotilla.icon` aside (both
+targets that reference it mark that source `optional: true` in `project.yml`,
+so `xcodegen` tolerates its absence) and repoints
+`ASSETCATALOG_COMPILER_APPICON_NAME` at the plain
+`Flotilla/Resources/Assets.xcassets/FlotillaFallback.appiconset` instead — a
+traditional multi-size PNG icon with no Icon Composer features, so it compiles
+on any Xcode version. This only affects the ephemeral CI checkout; local
+builds are untouched. XcodeGen does not support `${VAR:-default}`-style
+templating in `project.yml` (it passes the literal string through unresolved),
+which is why this is a plain `mv`/`sed` step in the workflow rather than an
+env-var-driven source path.
+
 ## Design System
 
 ### Color Palette (`FlotillaPalette`)
