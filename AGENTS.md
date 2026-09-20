@@ -499,6 +499,31 @@ Pipeline at `.github/workflows/build.yml`:
 3. Upload `.app` artifact
 4. On `main` push: Archive with `developer-id` export → Upload zip
 
+Debug signs with the maintainer's own Apple Development team
+(`DEVELOPMENT_TEAM: UWAHVC4JTL` in `project.yml`) so that Screen Recording
+consent survives an ordinary rebuild — that team/certificate doesn't exist on
+a CI runner or another contributor's machine. The `build` job overrides
+signing to ad-hoc via `make build SIGNING_OVERRIDE="..."` (see the Makefile);
+pass the same `SIGNING_OVERRIDE` locally if you hit a "No signing certificate"
+error building Debug on a machine without that team.
+
+Release and Ephemeral configs are ad-hoc already (`project.yml`'s base
+`CODE_SIGN_IDENTITY: "-"`), so `make archive` always succeeds without secrets.
+Producing a genuinely Developer-ID-signed release (`ExportOptions.plist`,
+`method: developer-id`) needs a real certificate, which CI does not have by
+default — the `archive` job falls back to uploading the ad-hoc-signed `.app`
+straight out of the archive in that case. To enable real Developer ID
+exports, add two repository secrets:
+
+| Secret | Value |
+|--------|-------|
+| `DEVELOPER_ID_CERTIFICATE_P12` | Base64 of a "Developer ID Application" `.p12` export (`base64 -i cert.p12 \| pbcopy`) |
+| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | The password used when exporting that `.p12` |
+
+Once both are set, the `archive` job imports the certificate into a temporary
+keychain and runs the real `-exportArchive` step instead of the ad-hoc
+fallback.
+
 ## Design System
 
 ### Color Palette (`FlotillaPalette`)

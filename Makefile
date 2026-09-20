@@ -13,6 +13,11 @@ LPAREN := (
 SIMULATOR ?= $(shell xcrun simctl list devices available | grep -m1 iPhone | sed -E 's/^ +//; s/ [$(LPAREN)].*//')
 # Boots the demo straight into a scripted state, e.g. `make run-companion-demo SCENARIO=stackedPermissions`.
 SCENARIO ?=
+# Debug signs with the developer's own team (see project.yml, "Screen Recording
+# consent") so a clone or CI runner without that team/certificate needs to
+# override signing on the command line, e.g.:
+#   make build SIGNING_OVERRIDE="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="
+SIGNING_OVERRIDE ?=
 
 xcodegen:
 	xcodegen generate
@@ -24,6 +29,7 @@ build: xcodegen
 		-configuration Debug \
 		-destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) \
+		$(SIGNING_OVERRIDE) \
 		build
 
 build-release: xcodegen
@@ -62,6 +68,7 @@ test: xcodegen
 		-derivedDataPath $(DERIVED_DATA) \
 		-parallel-testing-enabled YES \
 		-maximum-parallel-testing-workers 4 \
+		$(SIGNING_OVERRIDE) \
 		test -only-testing:FlotillaUnitTests
 
 test-ui: xcodegen
@@ -72,6 +79,7 @@ test-ui: xcodegen
 		-destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) \
 		-parallel-testing-enabled NO \
+		$(SIGNING_OVERRIDE) \
 		test -only-testing:FlotillaUITests
 
 archive: xcodegen

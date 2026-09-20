@@ -11,6 +11,13 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
 
+    # Debug signs with the maintainer's personal Apple Development team
+    # (project.yml, "Screen Recording consent"), which doesn't exist on a CI
+    # runner. Override to ad-hoc, unsigned-but-runnable, for every Debug build
+    # here — see Makefile's SIGNING_OVERRIDE.
+    env:
+      SIGNING_OVERRIDE: CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,13 +29,13 @@ jobs:
         run: xcodegen generate
 
       - name: Build (Debug)
-        run: make build
+        run: make build SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
 
       - name: Run unit tests
-        run: make test
+        run: make test SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
 
       - name: Run UI tests
-        run: make test-ui
+        run: make test-ui SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
 
       - name: Build (Release)
         run: make build-release
@@ -69,12 +76,43 @@ jobs:
       - name: Archive
         run: make archive
 
+      # `make archive` itself is ad-hoc (project.yml's Release config has no
+      # team), so the archive always succeeds. Exporting it with a real
+      # Developer ID identity additionally needs a certificate — only attempt
+      # that when one has been configured as a secret; otherwise ship the
+      # already ad-hoc-signed .app straight out of the archive so this job
+      # still produces something installable.
+      - name: Import Developer ID certificate
+        if: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo -n "$P12_BASE64" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+
       - name: Export (Developer ID)
+        if: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
         run: |
           xcodebuild -exportArchive \
             -archivePath build/Flotilla.xcarchive \
             -exportPath build/Export \
             -exportOptionsPlist ExportOptions.plist
+
+      - name: Package ad-hoc build (no Developer ID certificate configured)
+        if: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 == '' }}
+        run: |
+          mkdir -p build/Export
+          ditto build/Flotilla.xcarchive/Products/Applications/Flotilla.app build/Export/Flotilla.app
+          echo "::notice::No DEVELOPER_ID_CERTIFICATE_P12 secret configured — uploaded the ad-hoc-signed build instead of a Developer ID export. See AGENTS.md's CI/CD section to add real Developer ID signing."
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
