@@ -81,7 +81,9 @@ struct SessionCard<Terminal: View>: View {
         // Deletion lives on the row's `.swipeActions` (see the call site in
         // `SessionSidebarRow`) and the context menu, exactly like Mail and
         // Reminders — the row itself carries no inline delete control.
-        HStack(alignment: .top, spacing: 10) {
+        // Centred, not top-aligned: the logo reads as belonging to the pair
+        // of lines beside it rather than to the title alone.
+        HStack(alignment: .center, spacing: 10) {
             providerTile
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -99,7 +101,6 @@ struct SessionCard<Terminal: View>: View {
                 }
                 metadataLine
             }
-            .padding(.top, 1)
         }
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -338,29 +339,28 @@ struct SessionCard<Terminal: View>: View {
 
     // MARK: - Shared Components
 
+    /// The agent's logo, with the status dot at its corner.
+    ///
+    /// The logo used to sit on a 28pt filled and stroked tile. That put a
+    /// second rounded rectangle inside the row's own rounded background on
+    /// every line of the navigator, and the logo is a distinct enough mark to
+    /// carry itself.
     private var providerTile: some View {
         ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(FlotillaColors.surface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(FlotillaColors.separator.opacity(0.6), lineWidth: 0.5)
-                }
-                .overlay {
-                    ProviderLogo(agent: session.agent)
-                        .padding(5)
-                }
+            ProviderLogo(agent: session.agent)
+                .frame(width: 22, height: 22)
             statusBeacon
                 .offset(x: 4, y: 4)
         }
-        .frame(width: 28, height: 28)
+        .frame(width: 22, height: 22)
         .accessibilityHidden(true)
     }
 
     /// One filled dot. It used to sit on a same-sized stroked circle, and the
     /// knockout border below insets the fill just enough to leave that stroke
     /// showing around it — so a single status read as two concentric rings.
-    /// The knockout stays: it separates the dot from the provider tile behind.
+    /// The knockout stays: with the tile gone it is what separates the dot
+    /// from the logo it overlaps and from the row behind.
     private var statusBeacon: some View {
         Circle()
             .fill(statusColor)
