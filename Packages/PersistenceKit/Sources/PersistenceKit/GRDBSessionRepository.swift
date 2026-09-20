@@ -273,6 +273,13 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 t.add(column: "statusChangedAt", .datetime)
             }
         }
+        migrator.registerMigration("v16_addProjectIcon") { db in
+            try db.alter(table: "project") { t in
+                t.add(column: "iconType", .text)
+                t.add(column: "iconValue", .text)
+                t.add(column: "iconData", .blob)
+            }
+        }
         return migrator
     }
 

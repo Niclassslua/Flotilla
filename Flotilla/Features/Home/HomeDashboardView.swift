@@ -149,7 +149,8 @@ struct HomeDashboardView: View {
                                 settingsViewModel.settings.git.projectCommitAttribution[project.id.uuidString] = mode
                             },
                             onSelect: { openProject(project.id) },
-                            onRemove: { store.removeProject(id: project.id) }
+                            onRemove: { store.removeProject(id: project.id) },
+                            onUpdateIcon: { store.updateProjectIcon(id: project.id, icon: $0) }
                         )
                     }
                 }

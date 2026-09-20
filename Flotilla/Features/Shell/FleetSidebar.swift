@@ -136,6 +136,7 @@ struct FleetSessionList: View {
     /// does: a click opens a session in every presentation.
     var gridMembership: GridMembership? = nil
     @Binding var collapsedProjects: Set<UUID>
+    @State private var editingIconProject: Project? = nil
 
     private var filtered: SidebarFilterResult { store.sidebarFilter(matching: searchText) }
 
@@ -190,12 +191,26 @@ struct FleetSessionList: View {
                     NavigatorRow(
                         item: .project(project.id),
                         title: project.name,
-                        systemImage: "folder.fill",
+                        project: project,
                         count: projectSessions.count,
                         isCollapsed: isCollapsed,
                         onToggleCollapse: { toggleCollapsed(project.id) }
                     )
                     .accessibilityIdentifier(AXID.sidebarProjectRow.rawValue + project.name)
+                    .contextMenu {
+                        Button("Change Icon…") {
+                            editingIconProject = project
+                        }
+                        if project.icon != nil {
+                            Button("Remove Icon") {
+                                store.updateProjectIcon(id: project.id, icon: nil)
+                            }
+                        }
+                        Divider()
+                        Button("Reveal in Finder") {
+                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.rootPath.path)
+                        }
+                    }
 
                     if !isCollapsed {
                         ForEach(projectSessions) { session in
@@ -223,6 +238,17 @@ struct FleetSessionList: View {
         .onDeleteCommand {
             guard selection.count == 1, case .session(let id)? = selection.first else { return }
             onRequestDelete(id)
+        }
+        .sheet(item: $editingIconProject) { project in
+            ProjectIconPickerSheet(
+                project: project,
+                onSave: { newIcon in
+                    store.updateProjectIcon(id: project.id, icon: newIcon)
+                },
+                onDismiss: {
+                    editingIconProject = nil
+                }
+            )
         }
     }
 
@@ -266,7 +292,8 @@ enum SidebarProjectCollapseState {
 private struct NavigatorRow: View {
     let item: SidebarItem
     let title: String
-    var systemImage: String
+    var systemImage: String = "folder.fill"
+    var project: Project? = nil
     var count: Int? = nil
     /// Draws the count in a status colour when the row is about something
     /// actionable, so "Needs You 2" reads as urgent without a second control.
@@ -291,10 +318,14 @@ private struct NavigatorRow: View {
                 .accessibilityIdentifier(AXID.sidebarProjectCollapseToggle(title))
             }
 
-            Image(systemName: systemImage)
-                .font(.system(size: 11))
-                .frame(width: 16)
-                .foregroundStyle(tint ?? FlotillaColors.textSecondary)
+            if let project {
+                ProjectMark(project: project, size: 16)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11))
+                    .frame(width: 16)
+                    .foregroundStyle(tint ?? FlotillaColors.textSecondary)
+            }
 
             Text(title)
                 .font(FlotillaTypography.caption.weight(.medium))

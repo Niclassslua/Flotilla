@@ -1085,6 +1085,19 @@ final class AppStore {
         }
     }
 
+    /// Updates the custom icon, symbol, or emoji for a project and persists the change.
+    func updateProjectIcon(id: UUID, icon: ProjectIcon?) {
+        guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
+        var updated = projects[index]
+        updated.icon = icon
+        do {
+            try repository.save(updated)
+            projects[index] = updated
+        } catch {
+            lastOperationError = "Failed to update project icon: \(error.localizedDescription)"
+        }
+    }
+
     private static func trimmedPath(_ url: URL) -> String {
         var path = url.path
         while path.count > 1, path.hasSuffix("/") {

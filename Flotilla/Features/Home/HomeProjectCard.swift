@@ -20,9 +20,11 @@ struct HomeProjectCard: View {
     let onSetCommitAttribution: (CommitAttributionMode?) -> Void
     let onSelect: () -> Void
     let onRemove: () -> Void
+    var onUpdateIcon: ((ProjectIcon?) -> Void)? = nil
 
     @State private var isHovered = false
     @State private var isConfirmingRemoval = false
+    @State private var isShowingIconPicker = false
 
     private var tint: Color { ProjectMark.tint(for: project) }
 
@@ -59,6 +61,17 @@ struct HomeProjectCard: View {
         } message: {
             Text("This only removes it from Flotilla's library — the folder, its Git history, and any worktrees are untouched. Its sessions stay in Flotilla as standalone sessions.")
         }
+        .sheet(isPresented: $isShowingIconPicker) {
+            ProjectIconPickerSheet(
+                project: project,
+                onSave: { newIcon in
+                    onUpdateIcon?(newIcon)
+                },
+                onDismiss: {
+                    isShowingIconPicker = false
+                }
+            )
+        }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("ProjectRow-\(project.name)")
@@ -68,7 +81,31 @@ struct HomeProjectCard: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: FlotillaSpacing.medium) {
-            ProjectMark(title: project.name, tint: tint, size: 38)
+            Button {
+                if onUpdateIcon != nil {
+                    isShowingIconPicker = true
+                } else {
+                    onSelect()
+                }
+            } label: {
+                ZStack(alignment: .bottomTrailing) {
+                    ProjectMark(project: project, size: 38)
+                    if onUpdateIcon != nil {
+                        Circle()
+                            .fill(FlotillaColors.surface)
+                            .frame(width: 14, height: 14)
+                            .overlay {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(FlotillaColors.textSecondary)
+                            }
+                            .offset(x: 3, y: 3)
+                            .opacity(isHovered ? 1.0 : 0.0)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .help(onUpdateIcon != nil ? "Change project icon" : "")
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(project.name)
@@ -242,6 +279,17 @@ struct HomeProjectCard: View {
     private var menuItems: some View {
         Button("Open Project") { onSelect() }
         Divider()
+        if onUpdateIcon != nil {
+            Button("Change Icon…") {
+                isShowingIconPicker = true
+            }
+            if project.icon != nil {
+                Button("Remove Icon") {
+                    onUpdateIcon?(nil)
+                }
+            }
+            Divider()
+        }
         Button("Open in Terminal") { openTerminal() }
         Button("Open in VS Code") { openInVSCode() }
         Button("Open in Cursor") { openInCursor() }

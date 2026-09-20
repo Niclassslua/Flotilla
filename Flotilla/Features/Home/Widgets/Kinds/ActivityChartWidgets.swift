@@ -474,7 +474,7 @@ struct GrowthChartContent: View {
         } label: {
             HStack(spacing: 6) {
                 if let mark {
-                    ProjectMark(title: mark.name, tint: ProjectMark.tint(for: mark), size: 16)
+                    ProjectMark(project: mark, size: 16)
                 }
                 Text(title).font(FlotillaTypography.caption.weight(.medium))
             }
@@ -507,7 +507,7 @@ struct GrowthChartContent: View {
                     withAnimation(.snappy) { selectedProjectID = nil }
                 } label: {
                     HStack(spacing: 5) {
-                        ProjectMark(title: project.name, tint: ProjectMark.tint(for: project), size: 14)
+                        ProjectMark(project: project, size: 14)
                         Text(project.name)
                             .font(FlotillaTypography.caption.weight(.medium))
                             .foregroundStyle(FlotillaColors.textPrimary)

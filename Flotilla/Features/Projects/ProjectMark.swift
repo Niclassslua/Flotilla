@@ -9,32 +9,88 @@ import DesignSystem
 struct ProjectMark: View {
     let title: String
     let tint: Color
+    var icon: ProjectIcon? = nil
     var systemImage: String? = nil
     /// Defaults to the sidebar size; commit history uses a larger mark in the
     /// detail pane, where the author is the subject rather than a list hint.
     var size: CGFloat = 17
 
+    init(project: Project, size: CGFloat = 17) {
+        self.title = project.name
+        self.tint = Self.tint(for: project)
+        self.icon = project.icon
+        self.systemImage = nil
+        self.size = size
+    }
+
+    init(title: String, tint: Color, icon: ProjectIcon? = nil, systemImage: String? = nil, size: CGFloat = 17) {
+        self.title = title
+        self.tint = tint
+        self.icon = icon
+        self.systemImage = systemImage
+        self.size = size
+    }
+
     private var cornerRadius: CGFloat { size * 5 / 17 }
     private var glyphSize: CGFloat { size * 9 / 17 }
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(tint.opacity(0.16))
-                .overlay {
+        Group {
+            if let icon, case .custom(let data) = icon, let nsImage = NSImage(data: data) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(FlotillaColors.separatorStrong.opacity(0.5), lineWidth: 0.5)
+                    }
+            } else if let icon, case .symbol(let name) = icon {
+                ZStack {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(tint.opacity(0.38), lineWidth: 0.5)
+                        .fill(tint.opacity(0.16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .strokeBorder(tint.opacity(0.38), lineWidth: 0.5)
+                        }
+                    Image(systemName: name)
+                        .font(.system(size: glyphSize, weight: .bold))
                 }
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: glyphSize, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: size, height: size)
+            } else if let icon, case .emoji(let emoji) = icon {
+                ZStack {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(tint.opacity(0.16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .strokeBorder(tint.opacity(0.38), lineWidth: 0.5)
+                        }
+                    Text(emoji)
+                        .font(.system(size: glyphSize * 1.15))
+                }
+                .frame(width: size, height: size)
             } else {
-                Text(title.prefix(1).uppercased())
-                    .font(.system(size: glyphSize, weight: .bold, design: .rounded))
+                ZStack {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(tint.opacity(0.16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .strokeBorder(tint.opacity(0.38), lineWidth: 0.5)
+                        }
+                    if let systemImage {
+                        Image(systemName: systemImage)
+                            .font(.system(size: glyphSize, weight: .bold))
+                    } else {
+                        Text(title.prefix(1).uppercased())
+                            .font(.system(size: glyphSize, weight: .bold, design: .rounded))
+                    }
+                }
+                .foregroundStyle(tint)
+                .frame(width: size, height: size)
             }
         }
-        .foregroundStyle(tint)
-        .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 

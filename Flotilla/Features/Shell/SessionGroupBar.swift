@@ -62,6 +62,7 @@ struct SessionGroupBar: View {
                     group: .project(project.id),
                     title: project.name,
                     count: count,
+                    icon: project.icon,
                     tint: ProjectMark.tint(for: project)
                 )
             )
@@ -101,7 +102,7 @@ struct SessionGroupBar: View {
         } label: {
             HStack(spacing: 6) {
                 if chip.group != .all {
-                    ProjectMark(title: chip.title, tint: chip.tint, systemImage: chip.systemImage, size: 15)
+                    ProjectMark(title: chip.title, tint: chip.tint, icon: chip.icon, systemImage: chip.systemImage, size: 15)
                 }
                 Text(chip.title)
                     .font(FlotillaTypography.callout.weight(isActive ? .semibold : .regular))
@@ -172,6 +173,7 @@ struct SessionGroupChip: Identifiable {
     let group: SessionGroup
     let title: String
     let count: Int
+    var icon: ProjectIcon? = nil
     var systemImage: String?
     let tint: Color
 

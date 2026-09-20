@@ -30,6 +30,7 @@ struct StreamProjectWorkspace: View {
     @State private var showAllWorktrees = false
     @State private var worktreePendingDeletion: GitWorktree?
     @State private var selectedWeekDay: Int?
+    @State private var isShowingIconPicker = false
 
     // Timeline geometry. The spine sits between the time gutter and the node
     // lane; everything downstream is measured from these constants.
@@ -40,7 +41,9 @@ struct StreamProjectWorkspace: View {
     private let contextWidth: CGFloat = 344
     private let worktreePreview = 12
 
-    private var project: Project { context.project }
+    private var project: Project {
+        context.store.projects.first(where: { $0.id == context.project.id }) ?? context.project
+    }
     private var selectedTab: ProjectDetailView.ProjectTab { navigator.projectTab(for: project.id) }
     private var sessionsThisWeek: Int {
         ProjectOverviewViewModel.sessionsUsedThisWeek(in: context.sessions)
@@ -84,6 +87,17 @@ struct StreamProjectWorkspace: View {
         .task(id: project.id) {
             await viewModel.load(root: project.rootPath)
         }
+        .sheet(isPresented: $isShowingIconPicker) {
+            ProjectIconPickerSheet(
+                project: project,
+                onSave: { newIcon in
+                    context.store.updateProjectIcon(id: project.id, icon: newIcon)
+                },
+                onDismiss: {
+                    isShowingIconPicker = false
+                }
+            )
+        }
     }
 
     // MARK: - Masthead
@@ -91,7 +105,38 @@ struct StreamProjectWorkspace: View {
     private var masthead: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
             HStack(alignment: .center, spacing: FlotillaSpacing.medium) {
-                ProjectMark(title: project.name, tint: ProjectMark.tint(for: project), size: 34)
+                Button {
+                    isShowingIconPicker = true
+                } label: {
+                    ZStack(alignment: .bottomTrailing) {
+                        ProjectMark(project: project, size: 34)
+                        Circle()
+                            .fill(FlotillaColors.surface)
+                            .frame(width: 14, height: 14)
+                            .overlay {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(FlotillaColors.textSecondary)
+                            }
+                            .offset(x: 3, y: 3)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Change project icon")
+                .contextMenu {
+                    Button("Change Icon…") {
+                        isShowingIconPicker = true
+                    }
+                    if project.icon != nil {
+                        Button("Remove Icon") {
+                            context.store.updateProjectIcon(id: project.id, icon: nil)
+                        }
+                    }
+                    Divider()
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.rootPath.path)
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(project.name)

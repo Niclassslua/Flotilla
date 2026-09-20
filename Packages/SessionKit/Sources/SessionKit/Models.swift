@@ -284,15 +284,23 @@ public struct WorktreeInfo: Codable, Hashable, Sendable {
     }
 }
 
+public enum ProjectIcon: Codable, Hashable, Sendable {
+    case symbol(name: String)
+    case emoji(String)
+    case custom(data: Data)
+}
+
 public struct Project: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
     public var name: String
     public var rootPath: URL
+    public var icon: ProjectIcon?
 
-    public init(id: UUID = UUID(), name: String, rootPath: URL) {
+    public init(id: UUID = UUID(), name: String, rootPath: URL, icon: ProjectIcon? = nil) {
         self.id = id
         self.name = name
         self.rootPath = rootPath
+        self.icon = icon
     }
 }
 

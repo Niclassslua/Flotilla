@@ -46,18 +46,50 @@ struct ProjectRecord: Codable, FetchableRecord, PersistableRecord {
     var id: String
     var name: String
     var rootPath: String
+    var iconType: String?
+    var iconValue: String?
+    var iconData: Data?
 
     init(project: Project) {
         id = project.id.uuidString
         name = project.name
         rootPath = project.rootPath.path
+        switch project.icon {
+        case .symbol(let name):
+            iconType = "symbol"
+            iconValue = name
+            iconData = nil
+        case .emoji(let character):
+            iconType = "emoji"
+            iconValue = character
+            iconData = nil
+        case .custom(let data):
+            iconType = "custom"
+            iconValue = nil
+            iconData = data
+        case nil:
+            iconType = nil
+            iconValue = nil
+            iconData = nil
+        }
     }
 
     func toDomain() throws -> Project {
         guard let uuid = UUID(uuidString: id) else {
             throw RecordDecodingError.invalidProjectID(id)
         }
-        return Project(id: uuid, name: name, rootPath: URL(fileURLWithPath: rootPath))
+        let icon: ProjectIcon?
+        switch iconType {
+        case "symbol":
+            icon = iconValue.map { .symbol(name: $0) }
+        case "emoji":
+            icon = iconValue.map { .emoji($0) }
+        case "custom":
+            icon = iconData.map { .custom(data: $0) }
+        default:
+            icon = nil
+        }
+        return Project(id: uuid, name: name, rootPath: URL(fileURLWithPath: rootPath), icon: icon)
     }
 }
 
