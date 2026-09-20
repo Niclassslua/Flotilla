@@ -49,7 +49,15 @@ final class AppEnvironment {
         gitService = GitService(gitExecutable: PATHExecutableLocator().locate("git"))
         ghService = PATHExecutableLocator().locate("gh").map { GhService(ghExecutable: $0) }
 
-        if isBoardDemo {
+        if Self.isSidebarShot {
+            // The navigator design sweep: an in-memory fleet with real
+            // project identities, and no git checkouts for
+            // `restoreSessions()` to launch agents against.
+            let repository = Self.makeInMemoryRepositoryOrCrash()
+            SidebarShotFixtures.seed(into: repository)
+            sessionRepository = repository
+            startupWarning = nil
+        } else if isBoardDemo {
             // In-memory on purpose: the demo fleet must never reach the
             // user's `flotilla.sqlite`.
             let repository = Self.makeInMemoryRepositoryOrCrash()
@@ -86,6 +94,17 @@ final class AppEnvironment {
                 startupWarning = "Persistent session storage is unavailable (\(error.localizedDescription)). This launch is using temporary in-memory storage."
             }
         }
+    }
+
+    /// `FLOTILLA_SIDEBAR_SHOT=<path>`: see `SidebarShotCapture`. Declared
+    /// here as well so the repository choice does not have to reach into a
+    /// conditionally-compiled type.
+    private static var isSidebarShot: Bool {
+#if DEBUG || FLOTILLA_EPHEMERAL
+        ProcessInfo.processInfo.environment["FLOTILLA_SIDEBAR_SHOT"] != nil
+#else
+        false
+#endif
     }
 
     private static func resetUITestWorktreeDirectories() {

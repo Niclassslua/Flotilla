@@ -28,15 +28,6 @@ final class SessionReviewUITests: XCTestCase {
 
     /// Opens the review window for the seeded Ready-for-Review session.
     private func openReview(_ app: XCUIApplication) -> XCUIElement {
-        let sessions = app.radioButtons["Sessions"].firstMatch
-        if sessions.waitForExistence(timeout: 2) {
-            sessions.click()
-        } else {
-            let allSessions = element(app, .sidebarAllSessions)
-            XCTAssertTrue(fastWait(allSessions, timeout: 5))
-            allSessions.click()
-        }
-
         let row = element(app, AXID.sessionRow(Self.sessionTitle))
         XCTAssertTrue(fastWait(row, timeout: 5), "seeded review session should be listed")
         row.click()

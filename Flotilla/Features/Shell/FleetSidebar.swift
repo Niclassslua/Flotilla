@@ -146,32 +146,15 @@ struct FleetSessionList: View {
 
     var body: some View {
         List(selection: $selection) {
-            // Search narrows sessions and projects; the smart lists are
-            // standing questions about the whole fleet, so they would be
-            // answering the wrong question inside a filtered list.
+            // Home is the only standing destination left up here. The three
+            // smart lists and All Sessions used to sit beside it, five rows
+            // deep, restating counts every session row already carries — and
+            // all four are still one keystroke away in the Go menu (⌘1, ⌘2,
+            // and a button apiece).
             if !isSearching {
                 Section {
                     NavigatorRow(item: .overview, title: "Home", systemImage: "house")
                         .accessibilityIdentifier(AXID.sidebarOverview.rawValue)
-
-                    ForEach(FleetSmartList.allCases) { list in
-                        NavigatorRow(
-                            item: .smartList(list),
-                            title: list.title,
-                            systemImage: list.systemImage,
-                            count: list.filter(store.sessions).count,
-                            tint: list == .needsYou ? FlotillaColors.statusWaitingForInput : nil
-                        )
-                        .accessibilityIdentifier("Sidebar.SmartList-\(list.rawValue)")
-                    }
-
-                    NavigatorRow(
-                        item: .allSessions,
-                        title: "All Sessions",
-                        systemImage: "square.stack.3d.up",
-                        count: store.sessions.count
-                    )
-                    .accessibilityIdentifier(AXID.sidebarAllSessions.rawValue)
                 }
             }
 
@@ -188,14 +171,16 @@ struct FleetSessionList: View {
                 // Its own chevron button toggles collapse without touching
                 // the row's selection tag.
                 Section {
-                    NavigatorRow(
-                        item: .project(project.id),
-                        title: project.name,
+                    SidebarProjectHeader(
                         project: project,
-                        count: projectSessions.count,
+                        sessions: projectSessions,
                         isCollapsed: isCollapsed,
                         onToggleCollapse: { toggleCollapsed(project.id) }
                     )
+                    .contentShape(Rectangle())
+                    .tag(SidebarItem.project(project.id))
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(FlotillaColors.sidebar)
                     .accessibilityIdentifier(AXID.sidebarProjectRow.rawValue + project.name)
                     .contextMenu {
                         Button("Change Icon & Color…") {
@@ -231,8 +216,12 @@ struct FleetSessionList: View {
                     }
 
                     if !isCollapsed {
-                        ForEach(projectSessions) { session in
-                            sessionRow(session)
+                        ForEach(Array(projectSessions.enumerated()), id: \.element.id) { index, session in
+                            sessionRow(
+                                session,
+                                projectTint: ProjectMark.tint(for: project),
+                                position: position(index, of: projectSessions.count)
+                            )
                         }
                     }
                 }
@@ -240,8 +229,12 @@ struct FleetSessionList: View {
 
             if !filtered.generalSessions.isEmpty {
                 Section("General") {
-                    ForEach(filtered.generalSessions) { session in
-                        sessionRow(session)
+                    ForEach(Array(filtered.generalSessions.enumerated()), id: \.element.id) { index, session in
+                        sessionRow(
+                            session,
+                            projectTint: nil,
+                            position: position(index, of: filtered.generalSessions.count)
+                        )
                     }
                 }
             }
@@ -277,15 +270,30 @@ struct FleetSessionList: View {
         return c1 == c2
     }
 
-    private func sessionRow(_ session: Session) -> some View {
+    private func sessionRow(
+        _ session: Session,
+        projectTint: Color?,
+        position: SidebarRowPosition
+    ) -> some View {
         SessionSidebarRow(
             session: session,
             isSelected: selection.contains(.session(session.id)),
             store: store,
             onOpenSession: onOpenSession,
             onRequestDelete: onRequestDelete,
-            gridMembership: gridMembership
+            gridMembership: gridMembership,
+            projectTint: projectTint,
+            position: position
         )
+    }
+
+    private func position(_ index: Int, of count: Int) -> SidebarRowPosition {
+        switch (index, count) {
+        case (_, 1): return .only
+        case (0, _): return .first
+        case (count - 1, _): return .last
+        default: return .middle
+        }
     }
 
     private func toggleCollapsed(_ id: UUID) {
@@ -311,61 +319,30 @@ enum SidebarProjectCollapseState {
 
 // MARK: - Navigator row
 
-/// A destination row: icon, label, optional count. Used for Home, the smart
-/// lists, All Sessions, and projects — everything in the navigator that is not
-/// a session.
+/// A standing destination row: icon, label. Home is the only one left — the
+/// smart lists and All Sessions moved out of the navigator entirely, and a
+/// project draws its own header (`SidebarProjectHeader`) rather than borrowing
+/// this one, which is what kept its title at 12pt under 13pt session titles.
 private struct NavigatorRow: View {
     let item: SidebarItem
     let title: String
     var systemImage: String = "folder.fill"
-    var project: Project? = nil
-    var count: Int? = nil
-    /// Draws the count in a status colour when the row is about something
-    /// actionable, so "Needs You 2" reads as urgent without a second control.
-    var tint: Color? = nil
-    /// Set together to show a collapse chevron ahead of the icon. It's a
-    /// `Button`, so it consumes its own click instead of selecting the row.
-    var isCollapsed: Bool? = nil
-    var onToggleCollapse: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 6) {
-            if let isCollapsed, let onToggleCollapse {
-                Button(action: onToggleCollapse) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
-                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-                        .frame(width: 10)
-                        .foregroundStyle(FlotillaColors.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
-                .accessibilityIdentifier(AXID.sidebarProjectCollapseToggle(title))
-            }
-
-            if let project {
-                ProjectMark(project: project, size: 16)
-            } else {
-                Image(systemName: systemImage)
-                    .font(.system(size: 11))
-                    .frame(width: 16)
-                    .foregroundStyle(tint ?? FlotillaColors.textSecondary)
-            }
+            Image(systemName: systemImage)
+                .font(.system(size: 12))
+                .frame(width: 18)
+                .foregroundStyle(FlotillaColors.textSecondary)
 
             Text(title)
-                .font(FlotillaTypography.caption.weight(.medium))
+                .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
 
             Spacer(minLength: 4)
-
-            if let count, count > 0 {
-                Text("\(count)")
-                    .font(FlotillaTypography.caption3.monospacedDigit())
-                    .foregroundStyle(tint ?? FlotillaColors.textTertiary)
-            }
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .tag(item)
     }
@@ -445,6 +422,10 @@ struct SessionSidebarRow: View {
     let onOpenSession: (UUID) -> Void
     let onRequestDelete: (UUID) -> Void
     var gridMembership: GridMembership? = nil
+    /// The owning project's accent, and where this row sits in that project's
+    /// block. Only the designs that draw group-level chrome read them.
+    var projectTint: Color? = nil
+    var position: SidebarRowPosition = .only
 
     @State private var isHovering = false
 
@@ -489,30 +470,20 @@ struct SessionSidebarRow: View {
     }
 
     var body: some View {
-        SessionCard(
+        // What the row *says* varies by design; everything below this line —
+        // selection tag, swipe delete, context menu, identifiers — does not,
+        // because the UI suite and `List`'s native multi-select depend on it.
+        SidebarSessionContent(
             session: session,
-            variant: .row,
             diffStatStore: store.diffStatStore,
-            activityStore: nil,
-            onTap: { onOpenSession(session.id) },
-            onDelete: { onRequestDelete(session.id) },
-            onRestart: { store.restartSession(sessionID: session.id) },
-            onRevealInFinder: { },
-            onCopyPath: { },
-            onCopyBranch: { },
-            terminal: { EmptyView() }
+            projectTint: projectTint
         )
-        // Inner padding: breathing room *inside* the border.
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(FlotillaColors.sidebar)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(rowFill)
-                }
-        }
+        .modifier(SidebarRowChrome(
+            session: session,
+            fill: rowFill,
+            projectTint: projectTint,
+            position: position
+        ))
         // Membership is drawn on the row's own chrome rather than added to its
         // contents: a border, with a checkmark straddling the corner. Nothing
         // is inserted into the row's layout, so the dense list keeps its
@@ -538,10 +509,6 @@ struct SessionSidebarRow: View {
                     .accessibilityHidden(true)
             }
         }
-        // The gap between rows. Applied after the background and overlays —
-        // before them it just grows the bordered box instead of separating one
-        // box from the next.
-        .padding(.vertical, 4)
         .accessibilityLabel(isGridMember ? "\(session.title), in grid" : session.title)
         // The worktree path, which is otherwise only in the delete sheet and
         // behind right-click → Copy Path. Costs no screen space, so it does

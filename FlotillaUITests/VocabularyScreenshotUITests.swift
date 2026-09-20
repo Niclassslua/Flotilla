@@ -285,7 +285,10 @@ final class VocabularyScreenshotUITests: XCTestCase {
             settle(0.5)
             return
         }
-        click(app, .sidebarAllSessions)
+        // All Sessions left the navigator with the smart lists; the Go menu's
+        // ⌘2 is the destination's entry point now.
+        app.typeKey("2", modifierFlags: .command)
+        settle(0.5)
     }
 
     /// Grid and Board are their own always-present buttons in the global bar

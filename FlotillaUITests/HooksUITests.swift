@@ -17,12 +17,9 @@ final class HooksUITests: XCTestCase {
         app.launchEnvironment["UI_TESTING_SIMULATE_WAITING_SESSION"] = "General chat"
         app.launch()
 
-        // All Sessions is a navigator row now, not a toolbar segment — the
-        // scope picker went with the facet split.
-        let allSessions = element(app, .sidebarAllSessions)
-        XCTAssertTrue(allSessions.waitForExistence(timeout: 4))
-        allSessions.click()
-
+        // Every session is listed in the navigator under its project (or
+        // under General), so there is nothing to navigate to first — the
+        // All Sessions row left the sidebar with the smart lists.
         let sessionRow = element(app, AXID.sessionRow("General chat"))
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 8))
 

@@ -16,15 +16,6 @@ final class GitSidebarUITests: XCTestCase {
         app.launchEnvironment["UI_TESTING"] = "1"
         app.launch()
 
-        let sessions = app.radioButtons["Sessions"].firstMatch
-        if sessions.waitForExistence(timeout: 2) {
-            sessions.click()
-        } else {
-            let allSessions = element(app, .sidebarAllSessions)
-            XCTAssertTrue(allSessions.waitForExistence(timeout: 3))
-            allSessions.click()
-        }
-
         let session = element(app, AXID.sessionRow("Refactor sidebar"))
         XCTAssertTrue(session.waitForExistence(timeout: 5))
         session.click()
