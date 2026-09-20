@@ -63,6 +63,11 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
 
+    # The `secrets` context isn't allowed in a step's `if:` condition, so
+    # resolve it into a plain env var here that the steps below can branch on.
+    env:
+      HAS_DEVELOPER_ID_CERT: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,7 +88,7 @@ jobs:
       # already ad-hoc-signed .app straight out of the archive so this job
       # still produces something installable.
       - name: Import Developer ID certificate
-        if: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
+        if: env.HAS_DEVELOPER_ID_CERT == 'true'
         env:
           P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
           P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
@@ -97,10 +102,11 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+          EXISTING_KEYCHAINS=$(security list-keychains -d user | sed 's/"//g')
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
 
       - name: Export (Developer ID)
-        if: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
+        if: env.HAS_DEVELOPER_ID_CERT == 'true'
         run: |
           xcodebuild -exportArchive \
             -archivePath build/Flotilla.xcarchive \
@@ -108,7 +114,7 @@ jobs:
             -exportOptionsPlist ExportOptions.plist
 
       - name: Package ad-hoc build (no Developer ID certificate configured)
-        if: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 == '' }}
+        if: env.HAS_DEVELOPER_ID_CERT != 'true'
         run: |
           mkdir -p build/Export
           ditto build/Flotilla.xcarchive/Products/Applications/Flotilla.app build/Export/Flotilla.app
