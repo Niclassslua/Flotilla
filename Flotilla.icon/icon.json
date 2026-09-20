@@ -1,6 +1,7 @@
 {
   "features" : [
-    "refractivity"
+    "refractivity",
+    "specular-location"
   ],
   "fill" : "system-light",
   "groups" : [
@@ -23,12 +24,13 @@
               "value" : {
                 "linear-gradient" : [
                   "display-p3:0.89020,0.40000,0.23137,1.00000",
-                  "srgb:1.00000,0.55294,0.15686,1.00000"
+                  "display-p3:1.00000,0.55294,0.15686,1.00000"
                 ]
               }
             }
           ],
-          "image-name" : "sailboat.fill.svg",
+          "hidden" : false,
+          "image-name" : "sailboat.fill.png",
           "name" : "sailboat.fill",
           "position" : {
             "scale" : 0.75,
@@ -49,7 +51,7 @@
         "kind" : "neutral",
         "opacity" : 0.6
       },
-      "specular" : true,
+      "specular" : "inside",
       "translucency" : {
         "enabled" : true,
         "value" : 0.2

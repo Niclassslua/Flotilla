@@ -25,7 +25,7 @@ public enum ProjectIconCropRenderer {
         }
 
         let baseScale = max(viewportSize / image.size.width, viewportSize / image.size.height)
-        let totalScale = baseScale * max(zoom, 1.0)
+        let totalScale = baseScale * max(zoom, 0.1)
         let drawnWidth = image.size.width * totalScale
         let drawnHeight = image.size.height * totalScale
 

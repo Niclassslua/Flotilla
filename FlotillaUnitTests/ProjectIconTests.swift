@@ -160,7 +160,32 @@ final class ProjectIconTests: XCTestCase {
         if FileManager.default.fileExists(atPath: flotillaIconURL.path) {
             let loadedIcon = ProjectIconImageLoader.load(from: flotillaIconURL)
             XCTAssertNotNil(loadedIcon, "ProjectIconImageLoader must load .icon bundles")
+            if let loadedIcon {
+                XCTAssertGreaterThanOrEqual(loadedIcon.size.width, 512)
+                XCTAssertGreaterThanOrEqual(loadedIcon.size.height, 512)
+            }
         }
+    }
+
+    func testProjectIconCropRendererWithZoomBelowOne() throws {
+        let sourceImage = makeTestImage(size: NSSize(width: 400, height: 400), color: .systemBlue)
+        let renderedData = ProjectIconCropRenderer.render(
+            image: sourceImage,
+            viewportSize: 280,
+            zoom: 0.5,
+            offset: .zero,
+            outputDimension: 512
+        )
+
+        XCTAssertNotNil(renderedData, "Crop renderer must produce PNG data when zoomed out")
+        guard let data = renderedData, let decoded = NSImage(data: data) else { return }
+
+        guard let rep = decoded.representations.first else {
+            XCTFail("Missing representation")
+            return
+        }
+        XCTAssertEqual(rep.pixelsWide, 512)
+        XCTAssertEqual(rep.pixelsHigh, 512)
     }
 
     @MainActor

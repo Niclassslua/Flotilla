@@ -27,7 +27,7 @@ struct ProjectIconCropperView: View {
     }
 
     private var effectiveZoom: CGFloat {
-        max(1.0, min(4.0, zoom))
+        max(0.4, min(4.0, zoom))
     }
 
     private var totalScale: CGFloat {
@@ -43,11 +43,11 @@ struct ProjectIconCropperView: View {
     }
 
     private var maxDragX: CGFloat {
-        max(30, (drawnWidth - viewportSize) / 2)
+        max(40, abs(drawnWidth - viewportSize) / 2)
     }
 
     private var maxDragY: CGFloat {
-        max(30, (drawnHeight - viewportSize) / 2)
+        max(40, abs(drawnHeight - viewportSize) / 2)
     }
 
     var body: some View {
@@ -93,7 +93,7 @@ struct ProjectIconCropperView: View {
                                 zoom = newZoom
                                 clampOffset()
                             }
-                        ), in: 1.0...4.0)
+                        ), in: 0.4...4.0)
                         .tint(FlotillaColors.accent)
 
                         Image(systemName: "plus.magnifyingglass")
@@ -231,7 +231,7 @@ struct ProjectIconCropperView: View {
                 .gesture(
                     MagnificationGesture()
                         .onChanged { value in
-                            zoom = max(1.0, min(4.0, steadyZoom * value))
+                            zoom = max(0.4, min(4.0, steadyZoom * value))
                             clampOffset()
                         }
                         .onEnded { _ in
