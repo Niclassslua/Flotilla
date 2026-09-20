@@ -57,6 +57,7 @@ struct HomeWidgetView: View {
     @State private var fileChurn: [String: Int] = [:]
     @State private var isLoadingFileChurn = false
     @State private var permissions: [PermissionPatternCount] = []
+    @State private var isLoadingPermissions = true
     @State private var screenshotFeed = HomeScreenshotFeed()
     @Environment(\.undoManager) private var undoManager
 
@@ -231,54 +232,68 @@ struct HomeWidgetView: View {
         case .removed:
             HomeWidgetProjectRemovedState(onPick: { presentsSettings = true })
         default:
-            switch kind {
-            case .needsYou:
-                NeedsYouWidgetContent(size: size, items: filteredWaiting, openSession: openSession)
-            case .reviewQueue:
-                ReviewQueueWidgetContent(size: size, items: filteredReview, openSession: openSession)
-            case .looseEnds:
-                LooseEndsWidgetContent(size: size, rows: looseEndRows)
-            case .streak:
-                StreakWidgetContent(activity: insights.activity(for: scope.id))
-            case .today:
-                TodayWidgetContent(size: size, activity: insights.activity(for: scope.id), sessionsStartedToday: sessionsStartedToday)
-            case .busiestHours:
-                BusiestHoursWidgetContent(
-                    size: size,
-                    grid: insights.activity(for: scope.id)?.commitsByWeekdayHour(windowDays: windowDays)
-                        ?? Array(repeating: Array(repeating: 0, count: 24), count: 7)
-                )
-            case .hotFiles:
-                HotFilesWidgetContent(size: size, churn: fileChurn, isLoading: isLoadingFileChurn)
-                    .task(id: "\(scope.id?.uuidString ?? "all")|\(windowDays)") {
-                        isLoadingFileChurn = true
-                        fileChurn = await insights.fileChurn(store: store, projectID: scope.id, windowDays: windowDays)
-                        isLoadingFileChurn = false
-                    }
-            case .topPermissions:
-                TopPermissionsWidgetContent(size: size, patterns: permissions)
-                    .task(id: "\(scope.id?.uuidString ?? "all")|\(windowDays)|\(configuredAgent?.rawValue ?? "all")") {
-                        permissions = insights.topPermissions(store: store, projectID: scope.id, windowDays: windowDays, agent: configuredAgent)
-                    }
-            case .contributions:
-                ContributionsWidgetContent(size: size, activity: insights.activity(for: scope.id))
-            case .weeklyRhythm:
-                RhythmChartContent(linesByDay: insights.activity(for: scope.id)?.linesByDay ?? [:], windowDays: windowDays)
-            case .agentShare:
-                let activity = insights.activity(for: scope.id)
-                AgentShareWidgetContent(size: size, contributions: activity?.contributions ?? [:], linesByContributor: activity?.linesByContributor ?? [:])
-            case .codebaseGrowth:
-                GrowthChartContent(
-                    netLinesByWeek: insights.activity(for: scope.id)?.netLinesByWeek ?? [:],
-                    projects: store.projects,
-                    windowWeeks: max(1, windowDays / 7)
-                )
-            case .agentScreenshots:
-                AgentScreenshotsWidgetContent(size: size, shots: screenshotFeed.shots, isLoading: screenshotFeed.isLoading)
-                    .task(id: "\(scope.id?.uuidString ?? "all")|\(configuredAgent?.rawValue ?? "all")") {
-                        await screenshotFeed.refresh(store: store, projectID: scope.id, agent: configuredAgent)
-                    }
+            // The batch-loaded kinds skeleton from here; the three that load
+            // per instance keep their own content on screen, because their
+            // `.task` hangs off it and swapping it out would cancel the very
+            // load being waited on.
+            if insights.isLoading(kind: kind) {
+                HomeWidgetSkeleton(kind: kind, size: size)
+            } else {
+                liveContent(for: kind)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func liveContent(for kind: HomeWidgetKind) -> some View {
+        switch kind {
+        case .needsYou:
+            NeedsYouWidgetContent(size: size, items: filteredWaiting, openSession: openSession)
+        case .reviewQueue:
+            ReviewQueueWidgetContent(size: size, items: filteredReview, openSession: openSession)
+        case .looseEnds:
+            LooseEndsWidgetContent(size: size, rows: looseEndRows)
+        case .streak:
+            StreakWidgetContent(activity: insights.activity(for: scope.id))
+        case .today:
+            TodayWidgetContent(size: size, activity: insights.activity(for: scope.id), sessionsStartedToday: sessionsStartedToday)
+        case .busiestHours:
+            BusiestHoursWidgetContent(
+                size: size,
+                grid: insights.activity(for: scope.id)?.commitsByWeekdayHour(windowDays: windowDays)
+                    ?? Array(repeating: Array(repeating: 0, count: 24), count: 7)
+            )
+        case .hotFiles:
+            HotFilesWidgetContent(size: size, churn: fileChurn, isLoading: isLoadingFileChurn)
+                .task(id: "\(scope.id?.uuidString ?? "all")|\(windowDays)") {
+                    isLoadingFileChurn = true
+                    fileChurn = await insights.fileChurn(store: store, projectID: scope.id, windowDays: windowDays)
+                    isLoadingFileChurn = false
+                }
+        case .topPermissions:
+            TopPermissionsWidgetContent(size: size, patterns: permissions, isLoading: isLoadingPermissions)
+                .task(id: "\(scope.id?.uuidString ?? "all")|\(windowDays)|\(configuredAgent?.rawValue ?? "all")") {
+                    permissions = insights.topPermissions(store: store, projectID: scope.id, windowDays: windowDays, agent: configuredAgent)
+                    isLoadingPermissions = false
+                }
+        case .contributions:
+            ContributionsWidgetContent(size: size, activity: insights.activity(for: scope.id))
+        case .weeklyRhythm:
+            RhythmChartContent(linesByDay: insights.activity(for: scope.id)?.linesByDay ?? [:], windowDays: windowDays)
+        case .agentShare:
+            let activity = insights.activity(for: scope.id)
+            AgentShareWidgetContent(size: size, contributions: activity?.contributions ?? [:], linesByContributor: activity?.linesByContributor ?? [:])
+        case .codebaseGrowth:
+            GrowthChartContent(
+                netLinesByWeek: insights.activity(for: scope.id)?.netLinesByWeek ?? [:],
+                projects: store.projects,
+                windowWeeks: max(1, windowDays / 7)
+            )
+        case .agentScreenshots:
+            AgentScreenshotsWidgetContent(size: size, shots: screenshotFeed.shots, isLoading: screenshotFeed.isLoading)
+                .task(id: "\(scope.id?.uuidString ?? "all")|\(configuredAgent?.rawValue ?? "all")") {
+                    await screenshotFeed.refresh(store: store, projectID: scope.id, agent: configuredAgent)
+                }
         }
     }
 

@@ -25,7 +25,7 @@ struct HotFilesWidgetContent: View {
 
     var body: some View {
         if isLoading && churn.isEmpty {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            HomeWidgetSkeleton(kind: .hotFiles, size: size)
         } else if files.isEmpty {
             HomeWidgetAllClearState(message: "No changes in this window.")
         } else {

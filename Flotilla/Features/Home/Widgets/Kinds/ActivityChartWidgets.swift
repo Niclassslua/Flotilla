@@ -244,7 +244,7 @@ struct ContributionsWidgetContent: View {
                 longestStreak: activity.longestStreak()
             )
         } else {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            HomeWidgetSkeleton(kind: .contributions, size: size)
         }
     }
 }

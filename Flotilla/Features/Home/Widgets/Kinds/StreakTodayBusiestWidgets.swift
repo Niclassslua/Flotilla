@@ -30,7 +30,7 @@ struct StreakWidgetContent: View {
                 week(activity: activity)
             }
         } else {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 60)
+            HomeWidgetSkeleton(kind: .streak, size: .small)
         }
     }
 
@@ -66,7 +66,7 @@ struct TodayWidgetContent: View {
 
     var body: some View {
         guard let activity else {
-            return AnyView(ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 60))
+            return AnyView(HomeWidgetSkeleton(kind: .today, size: size))
         }
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)

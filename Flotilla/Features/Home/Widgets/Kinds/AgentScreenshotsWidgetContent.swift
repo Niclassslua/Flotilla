@@ -8,7 +8,7 @@ struct AgentScreenshotsWidgetContent: View {
 
     var body: some View {
         if isLoading && shots.isEmpty {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 60)
+            HomeWidgetSkeleton(kind: .agentScreenshots, size: size)
         } else if shots.isEmpty {
             HomeWidgetAllClearState(message: "No screenshots yet")
         } else {

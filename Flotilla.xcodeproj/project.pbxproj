@@ -392,6 +392,7 @@
 		C9D271C08A0E62FB3DFB2B3A /* SessionLaunchPreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC108CFFA20A3D4EE6A5C1 /* SessionLaunchPreviewTests.swift */; };
 		CA7F54952462520902C35D42 /* SessionGitSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D490CD7D27E8D5FA26A9A2 /* SessionGitSidebar.swift */; };
 		CAD6247D89A5A6290BCDB406 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 796835DB2BE8824C2165999C /* Assets.xcassets */; };
+		CBB977B0F4E548C510465C51 /* HomeWidgetSkeleton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DF2442BFF83AF6CA8EAF75 /* HomeWidgetSkeleton.swift */; };
 		CBDDE8E2BD1EDA4A5925077E /* git.svg in Resources */ = {isa = PBXBuildFile; fileRef = ACF1BC73FD352D9CADCA8CC9 /* git.svg */; };
 		CC07722A4B828F1F4C7907AD /* css.svg in Resources */ = {isa = PBXBuildFile; fileRef = E493E2028BBE35E962D2F085 /* css.svg */; };
 		CCF690FF4035F8CBA5C77280 /* ChildProcessEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */; };
@@ -610,6 +611,7 @@
 		27E9587FC9A7651467ABE1DE /* CreateSessionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSessionUITests.swift; sourceTree = "<group>"; };
 		281236F00DDC230B34EBB94F /* TranscriptSearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSearchBar.swift; sourceTree = "<group>"; };
 		285659C6B370FB4BF3458084 /* ReviewDiffRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffRow.swift; sourceTree = "<group>"; };
+		28DF2442BFF83AF6CA8EAF75 /* HomeWidgetSkeleton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeWidgetSkeleton.swift; sourceTree = "<group>"; };
 		28FCDAAC18A71DF640AA50EC /* TranscriptCodecRegistry+Flotilla.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TranscriptCodecRegistry+Flotilla.swift"; sourceTree = "<group>"; };
 		292E1828057D86EB509D4D57 /* AntigravityWireFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityWireFormatTests.swift; sourceTree = "<group>"; };
 		29B51D875ACAAFFEA32C97D6 /* FlotillaCompanionWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = FlotillaCompanionWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1066,6 +1068,7 @@
 				CB60408F54F8B5D0EE76AA94 /* HomeWidgetKind.swift */,
 				68166A49155B417A14460A0E /* HomeWidgetPacker.swift */,
 				AA0935A44926EBE1B9757AD7 /* HomeWidgetSettingsPopover.swift */,
+				28DF2442BFF83AF6CA8EAF75 /* HomeWidgetSkeleton.swift */,
 				19E94E1AFE7B5D16F77AA292 /* HomeWidgetView.swift */,
 				E391CF71C12670AB78C1EF07 /* Kinds */,
 			);
@@ -2518,6 +2521,7 @@
 				01005978A9A3CFFF5B0ACF52 /* HomeWidgetKind.swift in Sources */,
 				2A85ECD3F2C8BEB9A5CAE34F /* HomeWidgetPacker.swift in Sources */,
 				23A60A015BACCA3B87D4817D /* HomeWidgetSettingsPopover.swift in Sources */,
+				CBB977B0F4E548C510465C51 /* HomeWidgetSkeleton.swift in Sources */,
 				3EE8A566425D10A1CACDBFA9 /* HomeWidgetView.swift in Sources */,
 				66F4FCC2AF971988458C666C /* HookCoordinator.swift in Sources */,
 				7CD718436174782810CF3E9C /* HotFilesWidgetContent.swift in Sources */,

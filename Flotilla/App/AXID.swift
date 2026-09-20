@@ -243,6 +243,7 @@ public enum AXID: String, Sendable {
     case homeWidgetRemoveBadge = "Home.Widget.Remove-"
     case homeWidgetInfoBadge = "Home.Widget.Info-"
     case homeWidgetResizeHandle = "Home.Widget.Resize-"
+    case homeWidgetSkeleton = "Home.Widget.Skeleton-"
     case projectCompactCardEllipsis = "ProjectCompactCard.Ellipsis-"
 
     // MARK: - Session Row (Legacy - preserved for test compatibility)

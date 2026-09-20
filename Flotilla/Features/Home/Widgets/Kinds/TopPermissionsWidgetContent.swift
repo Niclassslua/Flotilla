@@ -13,7 +13,7 @@ struct TopPermissionsWidgetContent: View {
 
     var body: some View {
         if isLoading && patterns.isEmpty {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 60)
+            HomeWidgetSkeleton(kind: .topPermissions, size: size)
         } else if patterns.isEmpty {
             HomeWidgetAllClearState(message: "Nothing asked")
         } else if size == .small {

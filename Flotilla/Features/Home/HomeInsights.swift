@@ -245,6 +245,13 @@ final class HomeInsights {
     private var lastCompleted: Date?
     private var lastProjectIDs: Set<UUID> = []
     private var lastNeeds: Set<HomeDataNeed> = []
+    /// The batch-loaded needs `refresh` is currently filling for the first
+    /// time — what a widget reads to decide between a skeleton and its
+    /// content. A need already holding an answer is never listed, so a
+    /// re-refresh updates the numbers in place instead of blanking the card.
+    private(set) var loadingNeeds: Set<HomeDataNeed> = []
+    /// Distinct from `reviewItems.isEmpty`: an empty queue is a real answer.
+    private var hasLoadedReviewItems = false
 
     /// projectID?|windowDays → (loaded at, result). `nil` project key is
     /// "all projects".
@@ -254,6 +261,19 @@ final class HomeInsights {
     /// projects and needs, reuses what's loaded.
     static let freshness: TimeInterval = 60
     static let fileChurnFreshness: TimeInterval = 120
+
+    /// Whether `need`'s first load is still in flight — `true` only before
+    /// any answer exists, so a widget skeletons on a cold Home and not on
+    /// every subsequent visit.
+    func isLoading(_ need: HomeDataNeed) -> Bool { loadingNeeds.contains(need) }
+
+    /// True while any of the kind's batch-loaded needs is still filling.
+    /// The per-instance needs (`.fileChurn`, `.permissionLog`,
+    /// `.screenshots`) are never listed here — those widgets track their own
+    /// load, since each instance queries on its own settings.
+    func isLoading(kind: HomeWidgetKind) -> Bool {
+        kind.dataNeeds.contains(where: loadingNeeds.contains)
+    }
 
     /// Merged view across every project (or one, when `projectID` is given)
     /// — what a widget without a project filter, or with one set, should
@@ -284,6 +304,8 @@ final class HomeInsights {
         }
         repoStates = repoStates.filter { projectIDs.contains($0.key) }
         activityByProject = activityByProject.filter { projectIDs.contains($0.key) }
+        loadingNeeds = needs.intersection(Self.batchNeeds).filter { !hasAnswer(for: $0) }
+        defer { loadingNeeds = [] }
 
         let git = store.gitService
         if needs.contains(.repoState) {
@@ -291,6 +313,7 @@ final class HomeInsights {
                 guard !Task.isCancelled else { return }
                 repoStates[project.id] = await HomeRepoState.load(root: project.rootPath, git: git)
             }
+            loadingNeeds.remove(.repoState)
         }
 
         if needs.contains(.commitActivity) {
@@ -303,15 +326,30 @@ final class HomeInsights {
                     resolver: store.commitAttribution
                 )
             }
+            loadingNeeds.remove(.commitActivity)
         }
 
         if needs.contains(.reviewQueue) {
             await loadReviewItems(store: store)
+            loadingNeeds.remove(.reviewQueue)
         }
 
         lastCompleted = Date()
         lastProjectIDs = projectIDs
         lastNeeds = needs
+    }
+
+    /// The needs `refresh` fills for every widget at once. The rest are
+    /// per-widget-instance and loaded by the widget itself.
+    private static let batchNeeds: Set<HomeDataNeed> = [.repoState, .commitActivity, .reviewQueue]
+
+    private func hasAnswer(for need: HomeDataNeed) -> Bool {
+        switch need {
+        case .repoState: !repoStates.isEmpty
+        case .commitActivity: !activityByProject.isEmpty
+        case .reviewQueue: hasLoadedReviewItems
+        default: true
+        }
     }
 
     /// Sessions ready for review, each with its branch diff against the
@@ -340,6 +378,7 @@ final class HomeInsights {
         }
         // Oldest wait first in both: the session that's been sitting longest
         // is the one a "review/attend to oldest" action should open.
+        hasLoadedReviewItems = true
         reviewItems = readyItems.sorted { ($0.session.statusChangedAt ?? $0.session.lastActiveAt) < ($1.session.statusChangedAt ?? $1.session.lastActiveAt) }
         waitingItems = waiting.sorted { $0.since < $1.since }
     }
