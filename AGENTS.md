@@ -495,8 +495,8 @@ xcodebuild -project Flotilla.xcodeproj -scheme Flotilla -configuration Debug \
 
 Pipeline at `.github/workflows/build.yml`:
 1. Checkout → use the CI fallback app icon → generate project
-2. Build Debug → run standalone `CompanionKit` and `TerminalKit` SwiftPM tests → build Release and Ephemeral
-3. Upload Debug and Ephemeral `.app` artifacts
+2. Build Debug → run standalone `CompanionKit` and `TerminalKit` SwiftPM tests → build Release
+3. Upload the Debug `.app` artifact
 4. On `main` push: archive and upload a Developer-ID export when signing secrets are configured, otherwise the ad-hoc `.app`
 
 The GitHub-hosted workflow deliberately does **not** run `make test` or
