@@ -148,6 +148,9 @@ public struct ProjectIconPickerSheet: View {
         .frame(width: 560, height: stagedImage != nil ? 550 : 525)
         .background(FlotillaColors.canvas)
         .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous))
+        .onDisappear {
+            AccentColorPanel.shared.detach()
+        }
     }
 
     // MARK: - Header
@@ -245,24 +248,58 @@ public struct ProjectIconPickerSheet: View {
                 .help(preset.name)
             }
 
-            // Custom ColorPicker
-            ColorPicker("", selection: Binding(
-                get: { effectiveTint },
-                set: { newColor in
+            // Custom Color (Circle matching presets)
+            Button {
+                let initial = effectiveTint
+                if !isCustomAccentSelected {
+                    if let hex = FlotillaAccent.storageValue(for: effectiveTint) {
+                        selectedAccentHex = hex
+                    }
+                }
+                AccentColorPanel.shared.present(initial: initial, continuous: true) { newColor in
                     if let hex = FlotillaAccent.storageValue(for: newColor) {
                         selectedAccentHex = hex
                     }
                 }
-            ), supportsOpacity: false)
-            .labelsHidden()
-            .frame(width: 22, height: 18)
-            .help("Pick custom accent color…")
+            } label: {
+                ZStack {
+                    if isCustomAccentSelected {
+                        Circle()
+                            .fill(effectiveTint)
+                            .frame(width: 18, height: 18)
+                        Circle()
+                            .strokeBorder(Color.white, lineWidth: 2)
+                            .frame(width: 18, height: 18)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white)
+                    } else {
+                        Circle()
+                            .fill(FlotillaAccent.spectrum)
+                            .frame(width: 18, height: 18)
+                            .overlay {
+                                Circle()
+                                    .strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5)
+                            }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .help(isCustomAccentSelected ? "Custom color (\(selectedAccentHex ?? "")) — click to edit" : "Pick custom accent color…")
 
             Spacer()
         }
         .padding(.horizontal, FlotillaSpacing.large)
         .padding(.vertical, 6)
         .background(FlotillaColors.surface.opacity(0.6))
+    }
+
+    private var isCustomAccentSelected: Bool {
+        guard let selected = selectedAccentHex else { return false }
+        let cleanSelected = selected.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased()
+        return !Self.presetAccentColors.contains { preset in
+            preset.hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")).uppercased() == cleanSelected
+        }
     }
 
     private func isPresetSelected(_ hex: String) -> Bool {
@@ -449,6 +486,7 @@ public struct ProjectIconPickerSheet: View {
             if selectedAccentHex != nil {
                 Button("Reset Accent") {
                     selectedAccentHex = nil
+                    AccentColorPanel.shared.detach()
                 }
                 .buttonStyle(.plain)
                 .font(FlotillaTypography.caption.weight(.medium))

@@ -446,11 +446,11 @@ public final class AccentColorPanel: NSObject {
 
     private var onChange: ((Color) -> Void)?
 
-    public func present(initial: Color, onChange: @escaping (Color) -> Void) {
+    public func present(initial: Color, continuous: Bool = true, onChange: @escaping (Color) -> Void) {
         self.onChange = onChange
         let panel = NSColorPanel.shared
         panel.showsAlpha = false
-        panel.isContinuous = false
+        panel.isContinuous = continuous
         panel.color = NSColor(initial)
         panel.setTarget(self)
         panel.setAction(#selector(colorDidChange))
