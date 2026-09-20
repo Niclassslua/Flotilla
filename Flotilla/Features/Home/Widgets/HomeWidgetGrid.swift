@@ -43,7 +43,10 @@ struct HomeWidgetGrid: View {
     /// batch-loads, so adding a widget starts loading its data. Repo state
     /// is always included: the project cards above the grid show it.
     private var needs: Set<HomeDataNeed> {
-        Set(editor.entries.compactMap(\.resolvedKind).flatMap(\.dataNeeds)).union([.repoState])
+        var needs = Set(editor.entries.compactMap(\.resolvedKind).flatMap(\.dataNeeds)).union([.repoState])
+        // An empty layout still renders the ghost row, which shows real data.
+        if editor.entries.isEmpty { needs.formUnion(HomeWidgetGridEmptyState.dataNeeds) }
+        return needs
     }
 
     var body: some View {
@@ -107,26 +110,36 @@ struct HomeWidgetGrid: View {
     private var grid: some View {
         let geometry = geometry
         let frames = frames
+        let isEmpty = editor.entries.isEmpty
         let contentHeight = geometry.height(of: frames)
         // An empty row below the widgets while editing: somewhere to drop a
-        // widget at the end, and a visible hint of the grid's cells.
-        let height = editor.isEditing ? contentHeight + (contentHeight > 0 ? HomeWidgetGridGeometry.gap : 0) + geometry.cell : contentHeight
+        // widget at the end, and a visible hint of the grid's cells. With
+        // nothing placed at all, that row is the empty state instead.
+        let height = isEmpty
+            ? geometry.cell
+            : (editor.isEditing ? contentHeight + (contentHeight > 0 ? HomeWidgetGridGeometry.gap : 0) + geometry.cell : contentHeight)
 
         return ZStack(alignment: .topLeading) {
-            if editor.isEditing {
-                cellOutlines(geometry: geometry, height: height)
-            }
-            if let drag = editor.drag, let slot = frames[drag.id] {
-                HomeWidgetCardMetrics.shape
-                    .fill(FlotillaColors.accent.opacity(0.08))
-                    .overlay(HomeWidgetCardMetrics.shape.strokeBorder(FlotillaColors.accent.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
-                    .frame(width: slot.width, height: slot.height)
-                    .offset(x: slot.minX, y: slot.minY)
-                    .animation(Self.reflow, value: slot)
-            }
-            ForEach(editor.entries) { entry in
-                if let frame = frames[entry.id] {
-                    card(entry, frame: frame, geometry: geometry, frames: frames)
+            if isEmpty {
+                HomeWidgetGridEmptyState(store: store, insights: insights, geometry: geometry) {
+                    presentsGallery = true
+                }
+            } else {
+                if editor.isEditing {
+                    cellOutlines(geometry: geometry, height: height)
+                }
+                if let drag = editor.drag, let slot = frames[drag.id] {
+                    HomeWidgetCardMetrics.shape
+                        .fill(FlotillaColors.accent.opacity(0.08))
+                        .overlay(HomeWidgetCardMetrics.shape.strokeBorder(FlotillaColors.accent.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+                        .frame(width: slot.width, height: slot.height)
+                        .offset(x: slot.minX, y: slot.minY)
+                        .animation(Self.reflow, value: slot)
+                }
+                ForEach(editor.entries) { entry in
+                    if let frame = frames[entry.id] {
+                        card(entry, frame: frame, geometry: geometry, frames: frames)
+                    }
                 }
             }
         }

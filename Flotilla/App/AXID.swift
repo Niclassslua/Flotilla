@@ -233,6 +233,8 @@ public enum AXID: String, Sendable {
     case homeWidgetDoneButton = "Home.Widgets.DoneButton"
     case homeWidgetAddButton = "Home.Widgets.AddButton"
     case homeWidgetGallery = "Home.Widgets.Gallery"
+    case homeWidgetEmptyState = "Home.Widgets.EmptyState"
+    case homeWidgetEmptyAddButton = "Home.Widgets.EmptyState.AddButton"
     case homeWidgetGalleryAddButton = "Home.Widgets.Gallery.Add-"
     case homeWidgetResetButton = "Home.Widgets.ResetButton"
     case homeWidgetSettingsPopover = "Home.Widgets.SettingsPopover"
