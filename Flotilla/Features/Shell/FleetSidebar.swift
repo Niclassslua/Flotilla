@@ -591,7 +591,6 @@ struct SessionSidebarRow: View {
         .listRowBackground(FlotillaColors.sidebar)
         .modifier(SwipeToDeleteSession(
             accessibilityID: "SessionRow-\(session.title)-SwipeDelete",
-            onCommit: { Task { await store.deleteSession(sessionID: session.id, deleteWorktree: false) } },
             onConfirm: { onRequestDelete(session.id) }
         ))
         .tag(SidebarItem.session(session.id))
@@ -635,35 +634,15 @@ struct SessionSidebarRow: View {
 }
 
 private struct SwipeToDeleteSession: ViewModifier {
-    private static let parkedThreshold: TimeInterval = 0.3
-
     let accessibilityID: String
-    let onCommit: () -> Void
     let onConfirm: () -> Void
 
-    @State private var openedAt: Date?
-
     func body(content: Content) -> some View {
-        if #available(macOS 27, *) {
-            content.swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                deleteButton {
-                    let parked = openedAt.map { Date().timeIntervalSince($0) >= Self.parkedThreshold } ?? false
-                    if parked { onConfirm() } else { onCommit() }
-                }
-            } onPresentationChanged: { visible in
-                openedAt = visible ? Date() : nil
+        content.swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive, action: onConfirm) {
+                Label("Delete", systemImage: "trash")
             }
-        } else {
-            content.swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                deleteButton(action: onConfirm)
-            }
+            .accessibilityIdentifier(accessibilityID)
         }
-    }
-
-    private func deleteButton(action: @escaping () -> Void) -> some View {
-        Button(role: .destructive, action: action) {
-            Label("Delete", systemImage: "trash")
-        }
-        .accessibilityIdentifier(accessibilityID)
     }
 }
