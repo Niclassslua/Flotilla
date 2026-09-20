@@ -1,4 +1,4 @@
-.PHONY: build build-release build-ephemeral build-companion test test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo run-companion-device xcodegen
+.PHONY: build build-release build-ephemeral build-companion test test-packages test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo run-companion-device xcodegen
 
 SCHEME := Flotilla
 EPHEMERAL_SCHEME := Flotilla Ephemeral
@@ -70,6 +70,12 @@ test: xcodegen
 		-maximum-parallel-testing-workers 4 \
 		$(SIGNING_OVERRIDE) \
 		test -only-testing:FlotillaUnitTests
+
+# The two local packages with standalone SwiftPM test targets. Unlike the app
+# test bundle, these do not require Xcode UI-test infrastructure or an app host.
+test-packages:
+	cd Packages/CompanionKit && swift test
+	cd Packages/TerminalKit && swift test
 
 test-ui: xcodegen
 	xcodebuild \

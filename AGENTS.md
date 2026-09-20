@@ -494,10 +494,21 @@ xcodebuild -project Flotilla.xcodeproj -scheme Flotilla -configuration Debug \
 ### CI/CD (GitHub Actions)
 
 Pipeline at `.github/workflows/build.yml`:
-1. Checkout → Xcode selection → XcodeGen install
-2. Generate project → Build (Debug) → Unit tests → UI tests → Build (Release)
-3. Upload `.app` artifact
-4. On `main` push: Archive with `developer-id` export → Upload zip
+1. Checkout → use the CI fallback app icon → generate project
+2. Build Debug → run standalone `CompanionKit` and `TerminalKit` SwiftPM tests → build Release and Ephemeral
+3. Upload Debug and Ephemeral `.app` artifacts
+4. On `main` push: archive and upload a Developer-ID export when signing secrets are configured, otherwise the ad-hoc `.app`
+
+The GitHub-hosted workflow deliberately does **not** run `make test` or
+`make test-ui`. App unit-test compilation hits a Swift 6 region-based
+isolation-checker compiler error in GitHub's Xcode 26.6 (`Task.detached` in
+`CompanionHostTests`), while the developer's Xcode 27 toolchain compiles it.
+UI tests are intentionally local/Xcode-only: macOS UI automation needs
+Accessibility permission from the process driving the test (see
+"UI Vocabulary Screenshot Pipeline" above), which a hosted runner cannot be
+given. Run `make test` and the targeted `make test-ui` locally before merging
+changes that affect application behavior or UI/accessibility. `make test-packages`
+keeps CI exercising the two local packages that have standalone SwiftPM tests.
 
 Debug signs with the maintainer's own Apple Development team
 (`DEVELOPMENT_TEAM: UWAHVC4JTL` in `project.yml`) so that Screen Recording

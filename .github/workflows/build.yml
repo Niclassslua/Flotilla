@@ -42,11 +42,8 @@ jobs:
       - name: Build (Debug)
         run: make build SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
 
-      - name: Run unit tests
-        run: make test SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
-
-      - name: Run UI tests
-        run: make test-ui SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
+      - name: Run package tests
+        run: make test-packages
 
       - name: Build (Release)
         run: make build-release
@@ -120,8 +117,7 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          EXISTING_KEYCHAINS=$(security list-keychains -d user | sed 's/"//g')
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
 
       - name: Export (Developer ID)
         if: env.HAS_DEVELOPER_ID_CERT == 'true'
