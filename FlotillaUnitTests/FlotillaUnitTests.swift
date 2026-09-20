@@ -316,6 +316,45 @@ final class AgentProviderTests: XCTestCase {
         XCTAssertNil(plan.initialInput)
     }
 
+    func testClaudeLaunchPlanKeepsPlanModeOnFirstLaunchWithAssignedIdentity() {
+        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let id = UUID().uuidString
+        let plan = provider.launchPlan(
+            goal: "Refactor database migrations",
+            model: "sonnet",
+            mode: .plan,
+            resumeIntent: .freshWithAssignedIdentity(id),
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, [
+            "--model", "sonnet",
+            "--permission-mode", "plan",
+            "--session-id", id,
+            "Refactor database migrations"
+        ])
+    }
+
+    /// `--permission-mode` is a startup flag, so passing it alongside `--resume`
+    /// would override the mode the conversation actually ended in and drop the
+    /// session back into planning on every relaunch.
+    func testClaudeLaunchPlanDropsPlanModeWhenResuming() {
+        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let id = UUID().uuidString
+        let plan = provider.launchPlan(
+            goal: "Refactor database migrations",
+            model: "sonnet",
+            mode: .plan,
+            resumeIntent: .resume(id),
+            settings: AppSettings(),
+            baseEnvironment: [:]
+        )
+
+        XCTAssertEqual(plan.arguments, ["--model", "sonnet", "--resume", id])
+        XCTAssertNil(plan.initialInput)
+    }
+
     func testAntigravityLaunchPlanWithPlanModeUsesModeFlag() {
         let provider = AgentProviderRegistry().provider(for: .antigravity)
         let plan = provider.launchPlan(

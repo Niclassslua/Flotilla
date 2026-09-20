@@ -176,7 +176,16 @@ public struct CLIAgentProvider: AgentProviding {
 
         // Planning-mode flags vary by CLI.
         // Codex has no startup flag — planning mode is delivered via initialInput below.
-        if mode == .plan {
+        //
+        // Only a fresh conversation gets them. These are startup flags: passing
+        // `--permission-mode plan` alongside `--resume` overrides whatever mode
+        // the conversation actually ended in, so a session created in plan mode
+        // snapped back into it on every relaunch — the mode is what the session
+        // *starts* in, not a property it keeps. Codex's `/plan` initialInput
+        // below already gates on the same condition.
+        let isResuming: Bool
+        if case .resume = resumeIntent { isResuming = true } else { isResuming = false }
+        if mode == .plan, !isResuming {
             switch kind {
             case .claudeCode:
                 arguments += ["--permission-mode", "plan"]
