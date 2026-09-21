@@ -101,6 +101,9 @@ public enum FlotillaLayoutWidth: Sendable {
     /// content could shrink to, and the content overflowed the split
     /// boundary on both sides instead of clipping to it.
     public static let detailMin: CGFloat = 480
+    /// `windowMin` minus `sidebarIdeal` — what the detail column actually
+    /// gets on a freshly launched, minimum-size window.
+    public static let detailIdeal: CGFloat = 680
     // Guarantees the detail column can always reach `detailMin`, even with
     // the sidebar dragged all the way to `sidebarMax`.
     public static let windowMin: CGFloat = sidebarMax + detailMin

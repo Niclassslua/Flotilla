@@ -205,7 +205,14 @@ struct FlotillaShell: View {
                 onCreateSession: { presentCreateSession() },
                 onCommandPalette: { navigator.presentedSheet = .commandPalette }
             )
-            .frame(minWidth: FlotillaLayoutWidth.detailMin)
+            // A plain `.frame(minWidth:)` here reports a fixed ideal size to
+            // `NavigationSplitView`'s own layout negotiation instead of
+            // letting it keep stretching the column — which left a blank
+            // strip at the window's trailing edge once the sidebar was
+            // dragged wide enough that the leftover space stopped matching
+            // that ideal. `navigationSplitViewColumnWidth` is the column-sizing
+            // API the split view itself balances against.
+            .navigationSplitViewColumnWidth(min: FlotillaLayoutWidth.detailMin, ideal: FlotillaLayoutWidth.detailIdeal)
             // Declared on the detail column rather than on the `ZStack` that
             // wraps the whole split view. From outside the `NavigationSplitView`
             // SwiftUI resolves every `ToolbarSpacer` against the *sidebar*
