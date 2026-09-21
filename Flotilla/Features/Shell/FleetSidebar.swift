@@ -318,6 +318,7 @@ private struct NavigatorRow: View {
 
             Spacer(minLength: 4)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
         .contentShape(Rectangle())
         .tag(item)
@@ -381,6 +382,7 @@ private struct ProjectHeaderRow: View {
 
             Spacer(minLength: 4)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
         // In the project's own accent, so the divider says whose sessions
         // follow rather than just where the group starts.

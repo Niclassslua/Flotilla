@@ -135,7 +135,7 @@ struct HomeDashboardView: View {
                 emptyProjects
             } else {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 340), spacing: FlotillaSpacing.large)],
+                    columns: [GridItem(.adaptive(minimum: 340, maximum: 420), spacing: FlotillaSpacing.large)],
                     spacing: FlotillaSpacing.large
                 ) {
                     ForEach(projects) { project in
