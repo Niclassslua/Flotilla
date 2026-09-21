@@ -170,6 +170,7 @@ enum HomeWidgetKind: String, Codable, CaseIterable, Sendable, Identifiable {
         HomeWidgetEntry(kind: HomeWidgetKind.contributions.rawValue, size: HomeWidgetSize.wide.rawValue),
         HomeWidgetEntry(kind: HomeWidgetKind.weeklyRhythm.rawValue, size: HomeWidgetSize.medium.rawValue),
         HomeWidgetEntry(kind: HomeWidgetKind.agentShare.rawValue, size: HomeWidgetSize.medium.rawValue),
+        HomeWidgetEntry(kind: HomeWidgetKind.busiestHours.rawValue, size: HomeWidgetSize.medium.rawValue),
         HomeWidgetEntry(kind: HomeWidgetKind.codebaseGrowth.rawValue, size: HomeWidgetSize.wide.rawValue),
     ]
 }

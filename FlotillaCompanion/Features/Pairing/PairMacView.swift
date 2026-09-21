@@ -112,7 +112,11 @@ struct PairMacView: View {
                     .accessibilityIdentifier("Pairing.Scan")
 
                     Button {
+                        #if canImport(UIKit)
                         linkText = UIPasteboard.general.hasStrings ? (UIPasteboard.general.string ?? "") : ""
+                        #elseif canImport(AppKit)
+                        linkText = NSPasteboard.general.string(forType: .string) ?? ""
+                        #endif
                         if !linkText.hasPrefix("\(PairingPayload.scheme)://") { linkText = "" }
                         step = .pasting
                     } label: {
@@ -159,7 +163,9 @@ struct PairMacView: View {
                 TextField("flotilla://pair?p=…", text: $linkText, axis: .vertical)
                     .lineLimit(3...8)
                     .font(.footnote.monospaced())
+                    #if os(iOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .autocorrectionDisabled()
                     .accessibilityIdentifier("Pairing.LinkField")
             } footer: {
@@ -343,7 +349,9 @@ struct ConnectionDiagnosisView: View {
                 VStack(spacing: 10) {
                     if diagnosis.localNetworkDenied {
                         Button {
+                            #if canImport(UIKit)
                             if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                            #endif
                         } label: {
                             Label("Open Settings", systemImage: "gear").frame(maxWidth: .infinity)
                         }
@@ -427,6 +435,7 @@ private struct PathReportCard: View {
     }
 }
 
+#if canImport(UIKit)
 /// Camera QR scanner. Falls back to `onUnavailable` without a camera or
 /// permission (the simulator has neither).
 struct QRScannerView: UIViewControllerRepresentable {
@@ -504,3 +513,14 @@ struct QRScannerView: UIViewControllerRepresentable {
         }
     }
 }
+#else
+struct QRScannerView: View {
+    let onCode: (String) -> Void
+    let onUnavailable: () -> Void
+
+    var body: some View {
+        Color.black
+            .onAppear { onUnavailable() }
+    }
+}
+#endif

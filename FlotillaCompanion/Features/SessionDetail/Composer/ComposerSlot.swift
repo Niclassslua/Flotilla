@@ -307,9 +307,11 @@ private struct PromptComposer: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { speech.cancel(store: store, sessionID: session.id) }
         }
+#if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in
             speech.cancel(store: store, sessionID: session.id)
         }
+#endif
         .task(id: session.id) {
             await speech.checkAvailability(store: store, sessionID: session.id)
         }

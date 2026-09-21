@@ -102,6 +102,9 @@ struct FlotillaApp: App {
             appStore.commitAttribution.deleteLocalRecords()
         }
         _store = State(initialValue: appStore)
+        if Self.isBoardDemo {
+            BoardDemoFixtures.seedPermissions(into: appStore.permissionLogStore)
+        }
         _startupCheck = State(initialValue: StartupCheckViewModel(
             settings: settingsViewModel.settings,
             locator: locator

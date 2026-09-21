@@ -45,7 +45,11 @@ struct FleetView: View {
                 }
             }
         }
+#if os(iOS)
         .listStyle(.insetGrouped)
+#else
+        .listStyle(.plain)
+#endif
         .scrollContentBackground(.hidden)
         .background(FlotillaColors.canvas)
         .animation(.snappy, value: sessions.map(\.id))

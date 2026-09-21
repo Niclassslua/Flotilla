@@ -1,5 +1,20 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+typealias PlatformImage = UIImage
+#elseif canImport(AppKit)
+import AppKit
+typealias PlatformImage = NSImage
+#endif
+extension Image {
+    init(platformImage: PlatformImage) {
+        #if canImport(UIKit)
+        self.init(uiImage: platformImage)
+        #elseif canImport(AppKit)
+        self.init(nsImage: platformImage)
+        #endif
+    }
+}
 import ImageIO
 import SessionKit
 import DesignSystem
@@ -139,7 +154,12 @@ private struct CodeBlockView: View {
                     .foregroundStyle(FlotillaColors.textTertiary)
                 Spacer()
                 Button {
+                    #if canImport(UIKit)
                     UIPasteboard.general.string = code
+                    #elseif canImport(AppKit)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(code, forType: .string)
+                    #endif
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                         .font(.caption2.weight(.medium))
@@ -187,11 +207,11 @@ struct ImageRow: View {
     let id: String
     let mimeType: String
     let base64: String
-    @State private var thumbnail: UIImage?
+    @State private var thumbnail: PlatformImage?
     @State private var failed = false
 
-    private static let cache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
+    private static let cache: NSCache<NSString, PlatformImage> = {
+        let cache = NSCache<NSString, PlatformImage>()
         cache.countLimit = 30
         return cache
     }()
@@ -203,7 +223,7 @@ struct ImageRow: View {
     private static let maxThumbnailHeight: CGFloat = 130
 
     private struct Prepared: @unchecked Sendable {
-        let image: UIImage?
+        let image: PlatformImage?
     }
 
     @State private var isFullscreenPresented = false
@@ -214,7 +234,7 @@ struct ImageRow: View {
                 Button {
                     isFullscreenPresented = true
                 } label: {
-                    Image(uiImage: thumbnail)
+                    Image(platformImage: thumbnail)
                         .resizable()
                         .scaledToFit()
                         .frame(maxWidth: Self.maxThumbnailWidth, maxHeight: Self.maxThumbnailHeight)
@@ -257,7 +277,11 @@ struct ImageRow: View {
                     kCGImageSourceCreateThumbnailWithTransform: true,
                     kCGImageSourceShouldCacheImmediately: true
                 ]
+                #if canImport(UIKit)
                 return Prepared(image: CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary).map(UIImage.init(cgImage:)))
+                #elseif canImport(AppKit)
+                return Prepared(image: CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary).map { NSImage(cgImage: $0, size: .zero) })
+                #endif
             }.value
             guard !Task.isCancelled else { return }
             thumbnail = prepared.image
@@ -269,10 +293,18 @@ struct ImageRow: View {
 
 /// Fullscreen zoomable and pannable image viewer with native gesture support.
 struct FullscreenImageViewer: View {
-    let uiImage: UIImage
+    let uiImage: PlatformImage
     let onDismiss: () -> Void
 
     @State private var showsControls = true
+
+    private var shareImage: Image {
+        #if canImport(UIKit)
+        Image(uiImage: uiImage)
+        #elseif canImport(AppKit)
+        Image(nsImage: uiImage)
+        #endif
+    }
 
     var body: some View {
         ZStack {
@@ -302,8 +334,8 @@ struct FullscreenImageViewer: View {
                         Spacer()
 
                         ShareLink(
-                            item: Image(uiImage: uiImage),
-                            preview: SharePreview("Screenshot", image: Image(uiImage: uiImage))
+                            item: shareImage,
+                            preview: SharePreview("Screenshot", image: shareImage)
                         ) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 16, weight: .bold))
@@ -325,6 +357,7 @@ struct FullscreenImageViewer: View {
     }
 }
 
+#if canImport(UIKit)
 private struct ZoomableScrollView: UIViewRepresentable {
     let image: UIImage
     var onSingleTap: (() -> Void)? = nil
@@ -360,7 +393,6 @@ private struct ZoomableScrollView: UIViewRepresentable {
         scrollView.addGestureRecognizer(doubleTap)
 
         let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleSingleTap(_:)))
-        singleTap.numberOfTapsRequired = 1
         singleTap.require(toFail: doubleTap)
         scrollView.addGestureRecognizer(singleTap)
 
@@ -409,6 +441,19 @@ private struct ZoomableScrollView: UIViewRepresentable {
         }
     }
 }
+#else
+private struct ZoomableScrollView: View {
+    let image: PlatformImage
+    var onSingleTap: (() -> Void)? = nil
+
+    var body: some View {
+        Image(nsImage: image)
+            .resizable()
+            .scaledToFit()
+            .onTapGesture { onSingleTap?() }
+    }
+}
+#endif
 
 /// Consecutive tool calls between two messages. A single call renders as its
 /// own row; several collapse into `Ran 7 tools`.

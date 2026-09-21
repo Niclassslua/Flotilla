@@ -104,6 +104,41 @@ targets:
       - package: Textual
         product: Textual
 
+  FlotillaEphemeral:
+    type: application
+    platform: macOS
+    sources:
+      - path: Flotilla
+      - path: FlotillaEphemeral.icon
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.ephemeral
+        PRODUCT_NAME: Flotilla Ephemeral
+        INFOPLIST_KEY_CFBundleDisplayName: Flotilla Ephemeral
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        ENABLE_PREVIEWS: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: FlotillaEphemeral
+      configs:
+        Ephemeral:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) FLOTILLA_EPHEMERAL"
+    dependencies:
+      - package: DesignSystem
+      - package: SessionKit
+      - package: ProcessKit
+      - package: GitKit
+      - package: AgentKit
+      - package: HooksKit
+      - package: TerminalKit
+      - package: PersistenceKit
+      - package: SettingsKit
+      - package: TranscriptKit
+      - package: CompanionKit
+      - package: Textual
+        product: Textual
+
   # iOS companion. Demo mode uses simulated data; normal mode connects to
   # Flotilla on a Mac.
   FlotillaCompanion:
@@ -291,7 +326,7 @@ schemes:
   Flotilla Ephemeral:
     build:
       targets:
-        Flotilla: all
+        FlotillaEphemeral: all
     run:
       config: Ephemeral
     profile:

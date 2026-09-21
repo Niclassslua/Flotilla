@@ -29,12 +29,15 @@ final class VocabularyScreenshotUITests: XCTestCase {
         "11-grid-view",
         "13-presentation-board",
         "15-presentation-focus",
+        "16-session-git-sidebar",
+        "17-session-screenshot-panel",
         "20-new-session-command-bar",
         "21-command-palette",
         "22-delete-session-sheet",
         "24-settings-terminal",
         "25-settings-git",
         "26-settings-agents",
+        "27-settings-companion",
         "30-project-overview",
         "34-diff-panel-populated",
         "36-project-git-commits",
@@ -96,6 +99,12 @@ final class VocabularyScreenshotUITests: XCTestCase {
     // MARK: - Harness
 
     private func launchedApp() -> XCUIApplication {
+        let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.niclassslua.flotilla")
+        for runningApp in runningApps {
+            runningApp.forceTerminate()
+        }
+        settle(0.5)
+
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
         app.launchEnvironment["UI_TESTING"] = "1"
@@ -191,13 +200,9 @@ final class VocabularyScreenshotUITests: XCTestCase {
         _ identifier: String,
         timeout: TimeInterval
     ) -> XCUIElement? {
-        let matches = app.descendants(matching: .any).matching(identifier: identifier)
-        guard fastWait(matches.firstMatch, timeout: timeout) else { return nil }
-        return matches.allElementsBoundByIndex
-            .filter(\.exists)
-            .max {
-                ($0.frame.width * $0.frame.height) < ($1.frame.width * $1.frame.height)
-            }
+        let match = app.descendants(matching: .any)[identifier].firstMatch
+        guard fastWait(match, timeout: timeout) else { return nil }
+        return match
     }
 
     private func largestMatch(
@@ -335,25 +340,50 @@ final class VocabularyScreenshotUITests: XCTestCase {
         XCTAssertTrue(missing.isEmpty, "Missing documentation captures: \(missing.joined(separator: ", "))")
     }
 
-    // MARK: - Shell, Home, and fleet presentations
+    // MARK: - Capture all surfaces in a single pass
 
-    func testCaptureShellAndFleetSurfaces() {
+    func testCaptureAllSurfaces() {
         let app = launchedApp()
         XCTAssertTrue(
             fastWait(element(app, .homeDashboard), timeout: 12),
             "app never reached the home dashboard"
         )
 
+        // 1. Shell and Home dashboard
         shootWindow(app, "01-home-dashboard", "Shell and Home dashboard")
         shootElement(app, id: .homeDashboard, "02-home-dashboard-element", "Home dashboard")
-        shootElement(app, id: .homeStats, "03-home-activity-stats", "Activity stats")
+        shootElement(app, id: .homeWidgetGrid, "04-home-widget-grid", "Widget grid")
         shootElement(app, id: .homeRecentProjects, "05-home-projects-gallery", "Project cards")
 
+        // 2. Sessions & Focus presentation
         goToSessions(app)
+        if element(app, AXID.sessionRow("Fix login bug")).exists == false {
+            _ = click(app, AXID.sidebarProjectCollapseToggle("Flotilla"), timeout: 2)
+        }
         shootWindow(app, "07-sessions-focus", "Sessions facet and Focus presentation")
         shootElement(app, id: .sidebarList, "08-session-list", "Session list")
         shootElement(app, id: AXID.sessionRow("Fix login bug"), "09-session-sidebar-row", "Session row")
 
+        click(app, AXID.sessionRow("Fix login bug"))
+        settle(1.0)
+        shootWindow(app, "15-presentation-focus", "Focused terminal presentation")
+
+        // In-session tools: Git Sidebar and Screenshots Panel
+        if click(app, .sessionBarGitSidebarToggle) {
+            settle(0.8)
+            shootWindow(app, "16-session-git-sidebar", "Session Git sidebar")
+            _ = click(app, .sessionBarGitSidebarToggle)
+            settle(0.5)
+        }
+
+        if click(app, .sessionBarScreenshotsToggle) {
+            settle(0.8)
+            shootWindow(app, "17-session-screenshot-panel", "Agent screenshots panel")
+            _ = click(app, .sessionBarScreenshotsToggle)
+            settle(0.5)
+        }
+
+        // Fleet presentations: Grid and Board
         choosePresentation(app, "Grid")
         fillGrid(app)
         settle(1.0)
@@ -361,45 +391,31 @@ final class VocabularyScreenshotUITests: XCTestCase {
         shootElement(app, id: .gridView, "11-grid-view", "Mission control grid")
 
         choosePresentation(app, "Board")
+        settle(1.0)
         shootWindow(app, "13-presentation-board", "Board presentation")
         shootElement(app, id: .kanbanBoard, "14-kanban-board", "Kanban board")
 
-        goToSessions(app)
-        click(app, AXID.sessionRow("Fix login bug"))
-        shootWindow(app, "15-presentation-focus", "Focused terminal presentation")
-
-        assertCaptured([
-            "01-home-dashboard", "07-sessions-focus", "10-presentation-grid",
-            "11-grid-view", "13-presentation-board", "15-presentation-focus",
-        ])
-    }
-
-    // MARK: - Launchers, sheets, and settings
-
-    func testCaptureLaunchersAndModals() {
-        let app = launchedApp()
-        XCTAssertTrue(fastWait(element(app, .homeDashboard), timeout: 12))
-
+        // 3. Launchers and Modals
         goToSessions(app)
         if click(app, AXID.sessionRow("Fix login bug")) {
             app.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: .command)
-            settle(1.0)
+            settle(0.8)
             shootWindow(app, "22-delete-session-sheet", "Delete session sheet")
             click(app, .deleteSessionCancel)
         }
 
         goToOverview(app)
         app.typeKey("n", modifierFlags: .command)
-        settle(1.0)
+        settle(0.8)
         shootWindow(app, "20-new-session-command-bar", "New Session command bar")
         app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
-        settle(1.0)
+        settle(0.6)
 
         app.typeKey("k", modifierFlags: .command)
-        settle(1.0)
+        settle(0.8)
         shootWindow(app, "21-command-palette", "Command palette")
         app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
-        settle(1.0)
+        settle(0.6)
 
         app.typeKey(",", modifierFlags: .command)
         XCTAssertTrue(fastWait(element(app, .settingsView), timeout: 6))
@@ -414,19 +430,13 @@ final class VocabularyScreenshotUITests: XCTestCase {
         if clickButton(app, title: "Coding Agents", identifier: AXID.settingsSidebarTab("agents")) {
             shootWindow(app, "26-settings-agents", "Settings Coding Agents pane", containing: AXID.settingsView.rawValue)
         }
+        if clickButton(app, title: "iPhone Companion", identifier: AXID.settingsSidebarTab("companion")) {
+            shootWindow(app, "27-settings-companion", "Settings iPhone Companion pane", containing: AXID.settingsView.rawValue)
+        }
+        app.typeKey("w", modifierFlags: .command)
+        settle(0.6)
 
-        assertCaptured([
-            "20-new-session-command-bar", "21-command-palette", "22-delete-session-sheet",
-            "24-settings-terminal", "25-settings-git", "26-settings-agents",
-        ])
-    }
-
-    // MARK: - Project workspace
-
-    func testCaptureProjectWorkspace() {
-        let app = launchedApp()
-        XCTAssertTrue(fastWait(element(app, .homeDashboard), timeout: 12))
-
+        // 4. Project workspace
         goToOverview(app)
         clickButton(app, title: "Flotilla", identifier: AXID.projectRow("Flotilla"))
         settle(1.0)
@@ -464,9 +474,6 @@ final class VocabularyScreenshotUITests: XCTestCase {
             }
         }
 
-        assertCaptured([
-            "30-project-overview", "34-diff-panel-populated", "36-project-git-commits",
-            "37-project-files", "39-project-skills", "41-knowledge-detail",
-        ])
+        assertCaptured(Array(Self.requiredCaptureNames))
     }
 }

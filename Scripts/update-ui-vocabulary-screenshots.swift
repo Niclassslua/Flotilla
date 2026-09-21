@@ -46,11 +46,12 @@ private let figuresEndMarker = "<!-- END GENERATED FIGURES -->"
 /// Prose that introduces a section, printed after its `###` heading.
 private let sectionIntros: [String: String] = [
     "Project workspace": "The Stream workspace: the masthead over the activity feed on the left, the context column on the right.",
+    "Mobile companion (iOS)": "The iPhone companion app (`FlotillaCompanion`) pairs with Flotilla over encrypted local network or Tailscale links, giving full remote control over fleet status, live streaming transcripts, and pending agent interaction gates.",
 ]
 
 /// Prose that closes a section, printed after its last figure.
 private let sectionOutros: [String: String] = [
-    "Shell, Home, and Sessions": "The Home view above contains the **composer**, **summary line**, **attention queue**, **recent sessions**, and **projects gallery** named in sections 1 and 2.",
+    "Shell, Home, and Sessions": "The Home view above shows the **project cards** and **customizable widget grid** named in sections 1 and 2.",
 ]
 
 private enum PublisherError: LocalizedError {
@@ -125,6 +126,18 @@ private let publications: [Publication] = [
         section: "Fleet presentations and session cards",
         caption: "Focus presentation",
         alt: "Focus presentation with one terminal occupying the detail column"
+    ),
+    Publication(
+        "16-session-git-sidebar", "session-git-sidebar.png",
+        section: "Fleet presentations and session cards",
+        caption: "In-session Git sidebar",
+        alt: "In-session Git sidebar docked beside the live terminal surface"
+    ),
+    Publication(
+        "17-session-screenshot-panel", "session-screenshot-panel.png",
+        section: "Fleet presentations and session cards",
+        caption: "Agent screenshots panel",
+        alt: "Agent screenshots feed panel docked beside the live terminal surface"
     ),
     Publication(
         "30-project-overview", "project-overview.png",
@@ -222,6 +235,48 @@ private let publications: [Publication] = [
         section: "Settings",
         caption: "Coding Agents pane",
         alt: "Settings window showing the Coding Agents pane"
+    ),
+    Publication(
+        "27-settings-companion", "settings-companion.png",
+        section: "Settings",
+        caption: "iPhone Companion pane",
+        alt: "Settings window showing the iPhone Companion pane with pairing code and network status"
+    ),
+    Publication(
+        "companion-01-macs", "companion-macs.png",
+        section: "Mobile companion (iOS)",
+        caption: "Companion paired Macs view",
+        alt: "Companion app root view showing list of paired Macs and their status"
+    ),
+    Publication(
+        "companion-02-fleet", "companion-fleet.png",
+        section: "Mobile companion (iOS)",
+        caption: "Companion fleet view",
+        alt: "Companion fleet view showing needs-you attention sessions and project session groups"
+    ),
+    Publication(
+        "companion-03-permission-card", "companion-permission-card.png",
+        section: "Mobile companion (iOS)",
+        caption: "Permission request card in session transcript",
+        alt: "Permission request card prompting the user to allow a command"
+    ),
+    Publication(
+        "companion-04-question-card", "companion-question-card.png",
+        section: "Mobile companion (iOS)",
+        caption: "Multiple-choice question card in transcript",
+        alt: "Interactive multiple-choice question card for answering agent questions"
+    ),
+    Publication(
+        "companion-05-plan-card", "companion-plan-card.png",
+        section: "Mobile companion (iOS)",
+        caption: "Plan approval card in transcript",
+        alt: "Plan approval card showing proposed agent steps and review actions"
+    ),
+    Publication(
+        "companion-06-diff", "companion-diff.png",
+        section: "Mobile companion (iOS)",
+        caption: "Companion diff inspection view",
+        alt: "Companion working changes view with collapsible file diffs and commit header"
     ),
 ]
 

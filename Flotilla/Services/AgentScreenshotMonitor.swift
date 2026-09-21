@@ -72,6 +72,27 @@ final class AgentScreenshotMonitor {
             await reader.watch(newSession)
         }
         guard newSession != nil else { return }
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["UI_TESTING"] == "1", let s = newSession {
+            let img = NSImage(size: NSSize(width: 400, height: 300), flipped: false) { rect in
+                NSColor.windowBackgroundColor.setFill()
+                rect.fill()
+                return true
+            }
+            let shot = AgentScreenshot(
+                id: "ui-test-shot",
+                position: EventPosition(line: 1, entry: 1),
+                sessionID: s.id,
+                agent: s.agent,
+                image: img,
+                data: Data(),
+                filename: "preview.png",
+                timestamp: Date()
+            )
+            screenshots = [shot]
+            return
+        }
+        #endif
         refresh(debounce: .zero)
     }
 

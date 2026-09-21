@@ -101,9 +101,11 @@ private final class CompanionAudioCapture: @unchecked Sendable {
     }
 
     func start() throws {
+#if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .measurement, options: [])
         try session.setActive(true)
+#endif
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         guard let converter = AVAudioConverter(from: inputFormat, to: format) else {
@@ -127,7 +129,9 @@ private final class CompanionAudioCapture: @unchecked Sendable {
             if case .dropped = continuation.yield(remainder) { onOverflow() }
         }
         continuation.finish()
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false)
+        #endif
     }
 
     private func convert(_ input: AVAudioPCMBuffer, using converter: AVAudioConverter,

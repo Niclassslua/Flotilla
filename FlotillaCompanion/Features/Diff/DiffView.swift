@@ -442,7 +442,12 @@ struct FileViewer: View {
                     }
                     .accessibilityIdentifier("FileViewer.WrapToggle")
                     Button("Copy Path", systemImage: "doc.on.doc") {
+                        #if canImport(UIKit)
                         UIPasteboard.general.string = path
+                        #elseif canImport(AppKit)
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(path, forType: .string)
+                        #endif
                     }
                     .accessibilityIdentifier("FileViewer.CopyPath")
                 }

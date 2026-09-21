@@ -64,6 +64,11 @@ Shown when the navigator's **Home** row is selected.
 | **Home dashboard** | The Overview page: a lobby for choosing a project. Greeting, project cards, and activity stats on the warm gradient. Home never creates sessions (⌘N does) and never lists them (the sidebar does). | `HomeDashboardView` — `Features/Home/` |
 | **Project card** | A large glass card per project: branch, uncommitted work, unpushed commits, open worktrees, and a one-line session hint ("1 needs you · 2 working"). Its ⋯ / context menu holds the project actions (open in editor, commit attribution, remove). | `HomeProjectCard` |
 | **Activity stats** | The section at the foot of Home: contribution heatmap, weekly rhythm, agent share, codebase growth — git history across every project. | `HomeStatsSection` |
+| **Home widget grid** | The modular, customizable widget grid on Home displaying active telemetry, trends, and queue stats. | `HomeWidgetGrid` — `Features/Home/Widgets/` |
+| **Home widget card** | The glass panel container for a single widget with drag-reorder handle, options menu, and status headers. | `HomeWidgetCard` |
+| **Widget gallery sheet** | The modal sheet for browsing, previewing, and adding widgets to the Home dashboard. | `HomeWidgetGallerySheet` |
+| **Widget settings popover** | Per-widget configuration menu for selecting time ranges, metrics, and display modes. | `HomeWidgetSettingsPopover` |
+| **Widget grid empty state** | The placeholder state inviting the user to customize their dashboard when all widgets are removed. | `HomeWidgetGridEmptyState` |
 | **Home insights** | The cached, throttled git reads behind the cards and stats. | `HomeInsights` / `HomeRepoState` / `HomeActivity` |
 | **Activity line** | The agent's most recent terminal line, shown on live sessions only. | `HomeActivityLine` |
 | **Section header** (home) | The "Needs You" / "Recent" / "Projects" headers. | `HomeSectionHeader`, `HomeEmptyHint` |
@@ -103,6 +108,8 @@ Three ways to render many sessions; Grid and Board are opened from the global ba
 | **Focus** | Single-session presentation: the session bar over one full-size terminal filling the detail column. | `DetailColumn.focusedSessionContent` |
 | **Terminal host** | The SwiftUI wrapper around the real terminal renderer. | `TerminalHostView` — `Features/Session/` |
 | **Terminal presentation** | `.session` (focus) vs `.grid` (tile) rendering mode of the terminal. | `TerminalPresentation` (TerminalKit) |
+| **Session git sidebar** | The collapsible right-hand drawer showing working-copy file status, inline diffs, stage/discard, and commit actions for the current session. | `SessionGitSidebar` — `Features/Session/` |
+| **Screenshot panel** | The drawer displaying real-time UI previews and visual tool outputs captured by the agent during its task. | `AgentScreenshotPanel` — `Features/Session/` |
 
 ---
 
@@ -150,6 +157,8 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 | **Skills tab** / **Rules tab** | Thin hosts over the shared knowledge catalog. | `ProjectSkillsView`, `ProjectRulesView` |
 | **Project command card** | The dense project card (live branch, diff stats, agent telemetry, Quick Launch / Terminal / Editor / Finder shortcuts). | `ProjectCommandCard` |
 | **Project mark** | The project's generated identity glyph. | `ProjectMark` |
+| **Project icon picker sheet** | The modal sheet for selecting an icon symbol, color, or custom image for a project. | `ProjectIconPickerSheet` — `Features/Projects/` |
+| **Project icon cropper** | The interactive cropping and framing view for adjusting custom image avatars. | `ProjectIconCropperView` — `Features/Projects/` |
 | **Project path sheet** | The add/relocate-a-project dialog. | `ProjectPathSheet` |
 
 ### Commit graph & history
@@ -223,6 +232,7 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 | **Settings sidebar row** | A row in the settings window's own sidebar. | `SettingsSidebarRow` |
 | **Settings section header** | The icon + title header inside a pane (e.g. "Worktrees", "Prompt Delivery"). | `SettingsSectionHeader` |
 | **Tool status row** | The installed/missing line per external CLI. | `ToolStatusRow` |
+| **Companion settings pane** | The iPhone Companion pane in Settings: QR code for pairing, manual pairing payload, LAN / Tailscale listener address, paired devices list, and unpair controls. | `CompanionSettingsPane` — `Features/Settings/` |
 
 ---
 
@@ -259,7 +269,28 @@ Tokens and primitives — `Packages/DesignSystem/`. Refer to these by token name
 
 ---
 
-## 11. Naming an element for a prompt
+## 11. Mobile companion (iOS)
+
+The iPhone companion app (`FlotillaCompanion`) pairs with Flotilla over LAN or Tailscale using an end-to-end encrypted protocol. It acts as a remote control for running agent sessions.
+
+| Say | What it is | Code |
+| --- | --- | --- |
+| **Macs list** | The list of discovered and paired Macs, with reachability badges, pairing action, and manual address input. | `MacsView` — `Features/Macs/` |
+| **Pair Mac sheet** | The camera scanner and manual key entry dialog for pairing an iPhone with a Mac via QR code. | `PairMacView` — `Features/Pairing/` |
+| **Fleet view** | The mobile session fleet list grouped by status (Needs You, Working, Ready, Offline). | `FleetView` — `Features/Fleet/` |
+| **Session detail** | The full session view on iOS: header bar with agent/branch info, transcript scroll, and docked composer. | `SessionDetailView` — `Features/SessionDetail/` |
+| **Permission card** | Interactive card asking the user to allow or deny an agent tool execution (e.g. bash commands, file writes). | `PermissionCard` — `Features/SessionDetail/Cards/` |
+| **Question card** | Multiple-choice or text input prompt card presented when an agent asks a question. | `QuestionCard` — `Features/SessionDetail/Cards/` |
+| **Plan card** | Multi-step interactive plan / todo checklist showing progress and approval buttons. | `PlanCard` — `Features/SessionDetail/Cards/` |
+| **Composer slot** | Docked prompt bar at the bottom of a session detail: text input, speech-to-text dictation, and interrupt/send controls. | `ComposerSlot` — `Features/SessionDetail/Composer/` |
+| **Agent / model / effort controls** | Inline pickers in the session header or sheet for switching active agent provider, model, or reasoning effort. | `AgentModelEffortControls` — `Components/` |
+| **Mobile diff view** | Changed file list and side-by-side or inline syntax diffs on iOS. | `DiffView` — `Features/Diff/` |
+| **Mobile create session sheet** | iOS session creation form for picking project, branch, agent, model, and initial prompt. | `CreateSessionSheet` — `Features/CreateSession/` |
+| **Companion settings** | Companion settings screen showing active device identity, encryption fingerprint, and telemetry preferences. | `CompanionSettingsView` — `Features/Settings/` |
+
+---
+
+## 12. Naming an element for a prompt
 
 If you need to point at something this list doesn't name:
 
@@ -288,7 +319,7 @@ These screenshots are navigation aids for the vocabulary above, not pixel-accura
 
 ![Sessions facet showing the navigation rail, session list, and detail column](images/ui-vocabulary/sessions-facet.png)
 
-The Home view above shows the **project cards** and **activity stats** named in section 2.
+The Home view above shows the **project cards** and **customizable widget grid** named in sections 1 and 2.
 
 ### Fleet presentations and session cards
 
@@ -307,6 +338,14 @@ The Home view above shows the **project cards** and **activity stats** named in 
 **Focus presentation**
 
 ![Focus presentation with one terminal occupying the detail column](images/ui-vocabulary/focus-presentation.png)
+
+**In-session Git sidebar**
+
+![In-session Git sidebar docked beside the live terminal surface](images/ui-vocabulary/session-git-sidebar.png)
+
+**Agent screenshots panel**
+
+![Agent screenshots feed panel docked beside the live terminal surface](images/ui-vocabulary/session-screenshot-panel.png)
 
 ### Project workspace
 
@@ -378,11 +417,43 @@ The Stream workspace: the masthead over the activity feed on the left, the conte
 
 ![Settings window showing the Coding Agents pane](images/ui-vocabulary/settings-coding-agents.png)
 
+**iPhone Companion pane**
+
+![Settings window showing the iPhone Companion pane with pairing code and network status](images/ui-vocabulary/settings-companion.png)
+
+### Mobile companion (iOS)
+
+The iPhone companion app (`FlotillaCompanion`) pairs with Flotilla over encrypted local network or Tailscale links, giving full remote control over fleet status, live streaming transcripts, and pending agent interaction gates.
+
+**Companion paired Macs view**
+
+![Companion app root view showing list of paired Macs and their status](images/ui-vocabulary/companion-macs.png)
+
+**Companion fleet view**
+
+![Companion fleet view showing needs-you attention sessions and project session groups](images/ui-vocabulary/companion-fleet.png)
+
+**Permission request card in session transcript**
+
+![Permission request card prompting the user to allow a command](images/ui-vocabulary/companion-permission-card.png)
+
+**Multiple-choice question card in transcript**
+
+![Interactive multiple-choice question card for answering agent questions](images/ui-vocabulary/companion-question-card.png)
+
+**Plan approval card in transcript**
+
+![Plan approval card showing proposed agent steps and review actions](images/ui-vocabulary/companion-plan-card.png)
+
+**Companion diff inspection view**
+
+![Companion working changes view with collapsible file diffs and commit header](images/ui-vocabulary/companion-diff.png)
+
 <!-- END GENERATED FIGURES -->
 
 ### Refreshing the visual reference
 
-In Xcode, select the **UI Vocabulary Screenshots** scheme and choose **Product → Test**. The scheme runs only `VocabularyScreenshotUITests`; after every complete, successful capture it validates the manifest, crops the documentation variants, retains a high-resolution 2× master, republishes the 21 PNGs in `docs/images/ui-vocabulary/`, and rewrites the figure blocks between the `BEGIN/END GENERATED FIGURES` markers above — one image per line, captions and section headings included. The prose outside those markers is hand-maintained; edit captions, alt text, and section grouping in the `publications` list in `Scripts/update-ui-vocabulary-screenshots.swift`.
+In Xcode, select the **UI Vocabulary Screenshots** scheme and choose **Product → Test**. The scheme runs only `VocabularyScreenshotUITests`; after every complete, successful capture it validates the manifest, crops the documentation variants, retains a high-resolution 2× master, republishes the 30 PNGs in `docs/images/ui-vocabulary/`, and rewrites the figure blocks between the `BEGIN/END GENERATED FIGURES` markers above — one image per line, captions and section headings included. The prose outside those markers is hand-maintained; edit captions, alt text, and section grouping in the `publications` list in `Scripts/update-ui-vocabulary-screenshots.swift`.
 
 Run this workflow from Xcode so the UI-test runner inherits Xcode's Accessibility permission. A failed or partial run leaves the checked-in documentation images and this section unchanged. To retry only the publishing step after a completed run, use:
 

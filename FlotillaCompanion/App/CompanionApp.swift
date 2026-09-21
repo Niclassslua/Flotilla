@@ -2,6 +2,26 @@ import SwiftUI
 import DesignSystem
 import CompanionKit
 
+#if !os(iOS)
+public enum NavigationBarTitleDisplayMode: Sendable { case inline, automatic, large }
+public extension View {
+    func navigationBarTitleDisplayMode(_ mode: NavigationBarTitleDisplayMode) -> some View { self }
+}
+public extension ToolbarItemPlacement {
+    static var topBarTrailing: ToolbarItemPlacement { .automatic }
+    static var topBarLeading: ToolbarItemPlacement { .automatic }
+}
+public extension ToolbarPlacement {
+    static var navigationBar: ToolbarPlacement { .automatic }
+}
+public extension View {
+    func fullScreenCover<Content: View>(isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content) -> some View {
+        sheet(isPresented: isPresented, onDismiss: onDismiss, content: content)
+    }
+}
+#endif
+
+#if os(iOS)
 @main
 struct CompanionApp: App {
     @State private var store: CompanionStore
@@ -27,6 +47,7 @@ struct CompanionApp: App {
         }
     }
 }
+#endif
 
 /// Keeps `FlotillaAccent` on the paired Mac's accent while following it
 /// (the default), otherwise on the one picked in this iPhone's settings.
@@ -125,6 +146,7 @@ struct RootView: View {
     @Environment(CompanionStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     @State private var disconnectTask: Task<Void, Never>?
+#if os(iOS)
     @State private var fleetActivity = FleetActivityController()
 
     /// Interactive app-switch gestures (home-indicator drag, Control Center,
@@ -138,6 +160,9 @@ struct RootView: View {
         return FleetActivitySnapshot(mac: mac, sessions: store.sessions(on: macID),
                                      goesStale: scenePhase == .background && store.disconnectsWhenInactive)
     }
+#else
+    private static let disconnectGrace: Duration = .seconds(2.5)
+#endif
 
     var body: some View {
         @Bindable var store = store
@@ -194,7 +219,9 @@ struct RootView: View {
             }
         }
         .task { CompanionAttentionNotifications.shared.configure(store: store) }
+#if os(iOS)
         .task(id: fleetActivitySnapshot) { await fleetActivity.sync(fleetActivitySnapshot) }
+#endif
         .sheet(isPresented: Binding(
             get: { store.incomingPairingLink != nil },
             set: { if !$0 { store.incomingPairingLink = nil } }

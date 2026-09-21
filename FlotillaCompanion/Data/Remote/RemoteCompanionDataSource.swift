@@ -2,7 +2,9 @@ import CompanionKit
 import Foundation
 import Observation
 import SessionKit
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// A pairing attempt that didn't work, with a diagnosis for the error screen.
 struct PairingFailure: Error {
@@ -24,10 +26,18 @@ final class RemoteCompanionDataSource: CompanionDataSource {
     @ObservationIgnored private var desiredFocus: UUID?
     @ObservationIgnored var onAttention: (MacHost.ID, SessionAttentionEvent) -> Void = { _, _ in }
 
+    private nonisolated static var defaultDeviceName: String {
+        #if canImport(UIKit)
+        UIDevice.current.name
+        #else
+        Host.current().localizedName ?? "Mac"
+        #endif
+    }
+
     init(
         store: PairedMacStore = .default(),
         identityStore: any DeviceIdentityStoring = KeychainDeviceIdentityStore(),
-        deviceName: String = UIDevice.current.name
+        deviceName: String = defaultDeviceName
     ) {
         self.store = store
         self.identityStore = identityStore
