@@ -1,13 +1,4 @@
-# Flotilla
-
-A local command center for running multiple coding-agent sessions at once — Claude Code, Codex CLI, OpenCode, and Antigravity — on macOS.
-
-Flotilla gives every session its own real terminal, its own git worktree, and a lifecycle you can watch (working, waiting for input, ready for review, crashed) without losing context switching between projects. It's dark, keyboard-first, and built for developers who run several agents in parallel.
-
-<p align="center">
-  <img src="docs/images/ui-vocabulary/shell-home-dashboard.png" width="49%" alt="Flotilla home dashboard" />
-  <img src="docs/images/ui-vocabulary/grid-presentation.png" width="49%" alt="Flotilla mission control grid" />
-</p>
+<img width="4550" alt="flotilla" src="https://github.com/user-attachments/assets/87ecee38-74e7-4300-9c21-6bcfe236e4b4" />
 
 ## Features
 
