@@ -94,16 +94,23 @@ public enum FlotillaLayoutWidth: Sendable {
     public static let inspectorIdeal: CGFloat = 360
     public static let inspectorMax: CGFloat = 480
     public static let contentMax: CGFloat = 920
-    /// The floor the detail column needs to lay out its own content — Home's
-    /// project grid alone wants one 340pt card plus its horizontal padding.
-    /// Without a floor, dragging the sidebar toward `sidebarMax` on a
-    /// `windowMin`-wide window left the detail column narrower than its
-    /// content could shrink to, and the content overflowed the split
-    /// boundary on both sides instead of clipping to it.
-    public static let detailMin: CGFloat = 480
-    /// `windowMin` minus `sidebarIdeal` — what the detail column actually
-    /// gets on a freshly launched, minimum-size window.
-    public static let detailIdeal: CGFloat = 680
+    /// The width below which the detail column cannot actually lay out,
+    /// measured rather than estimated: 560pt of it is window chrome the
+    /// column keeps even with completely empty content, and Home's header
+    /// and project grid add the rest.
+    ///
+    /// This has to be the *real* floor, because `NavigationSplitView` holds
+    /// the sidebar at whatever width it has been dragged to and shrinks the
+    /// detail column to make room (both `.balanced` and `.prominentDetail`
+    /// behave this way). Once the detail hits its floor the split view stops
+    /// shrinking and slides its whole content leading-ward instead, which
+    /// hangs the sidebar off the window's leading edge and clips its rows.
+    /// The previous value of 480 was never reachable, so `windowMin` let the
+    /// window shrink ~270pt past the point where that clipping began.
+    public static let detailMin: CGFloat = 750
+    /// What the detail column gets beside a sidebar at `sidebarIdeal` on a
+    /// freshly launched, minimum-size window.
+    public static let detailIdeal: CGFloat = 950
     // Guarantees the detail column can always reach `detailMin`, even with
     // the sidebar dragged all the way to `sidebarMax`.
     public static let windowMin: CGFloat = sidebarMax + detailMin
