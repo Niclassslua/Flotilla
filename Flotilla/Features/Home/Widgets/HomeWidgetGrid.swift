@@ -119,31 +119,45 @@ struct HomeWidgetGrid: View {
             ? geometry.cell
             : (editor.isEditing ? contentHeight + (contentHeight > 0 ? HomeWidgetGridGeometry.gap : 0) + geometry.cell : contentHeight)
 
-        return ZStack(alignment: .topLeading) {
-            if isEmpty {
-                HomeWidgetGridEmptyState(store: store, insights: insights, geometry: geometry) {
-                    presentsGallery = true
-                }
-            } else {
-                if editor.isEditing {
-                    cellOutlines(geometry: geometry, height: height)
-                }
-                if let drag = editor.drag, let slot = frames[drag.id] {
-                    HomeWidgetCardMetrics.shape
-                        .fill(FlotillaColors.accent.opacity(0.08))
-                        .overlay(HomeWidgetCardMetrics.shape.strokeBorder(FlotillaColors.accent.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
-                        .frame(width: slot.width, height: slot.height)
-                        .offset(x: slot.minX, y: slot.minY)
-                        .animation(Self.reflow, value: slot)
-                }
-                ForEach(editor.entries) { entry in
-                    if let frame = frames[entry.id] {
-                        card(entry, frame: frame, geometry: geometry, frames: frames)
+        // The cards sit in an overlay rather than directly in the sized
+        // container. Every card carries an exact `.frame(width:)` derived from
+        // `width`, so as direct children they would set the container's own
+        // minimum width to the last measured layout — and `width` only ever
+        // updates from that same measurement. That is a one-way ratchet: the
+        // grid could grow but never shrink, which froze the whole detail
+        // column at its widest-ever size and pushed Home's content past the
+        // window's trailing edge. Overlay content does not feed back into the
+        // container's size, so the container always takes the width it is
+        // proposed and `width` tracks the window in both directions.
+        return Color.clear
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+            .overlay(alignment: .topLeading) {
+                ZStack(alignment: .topLeading) {
+                    if isEmpty {
+                        HomeWidgetGridEmptyState(store: store, insights: insights, geometry: geometry) {
+                            presentsGallery = true
+                        }
+                    } else {
+                        if editor.isEditing {
+                            cellOutlines(geometry: geometry, height: height)
+                        }
+                        if let drag = editor.drag, let slot = frames[drag.id] {
+                            HomeWidgetCardMetrics.shape
+                                .fill(FlotillaColors.accent.opacity(0.08))
+                                .overlay(HomeWidgetCardMetrics.shape.strokeBorder(FlotillaColors.accent.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+                                .frame(width: slot.width, height: slot.height)
+                                .offset(x: slot.minX, y: slot.minY)
+                                .animation(Self.reflow, value: slot)
+                        }
+                        ForEach(editor.entries) { entry in
+                            if let frame = frames[entry.id] {
+                                card(entry, frame: frame, geometry: geometry, frames: frames)
+                            }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-        }
-        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading)
         .coordinateSpace(.named(Self.space))
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .animation(Self.reflow, value: editor.isEditing)
