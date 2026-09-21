@@ -1,4 +1,4 @@
-<img width="4550" alt="flotilla" src="https://github.com/user-attachments/assets/87ecee38-74e7-4300-9c21-6bcfe236e4b4" />
+<img width="4550" alt="flotilla" src="https://github.com/user-attachments/assets/65b3544b-569c-4358-8b08-0dd3f5fb1026" />
 
 ## Features
 
