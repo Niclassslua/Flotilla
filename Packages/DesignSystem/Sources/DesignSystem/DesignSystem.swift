@@ -94,7 +94,16 @@ public enum FlotillaLayoutWidth: Sendable {
     public static let inspectorIdeal: CGFloat = 360
     public static let inspectorMax: CGFloat = 480
     public static let contentMax: CGFloat = 920
-    public static let windowMin: CGFloat = 1000
+    /// The floor the detail column needs to lay out its own content — Home's
+    /// project grid alone wants one 340pt card plus its horizontal padding.
+    /// Without a floor, dragging the sidebar toward `sidebarMax` on a
+    /// `windowMin`-wide window left the detail column narrower than its
+    /// content could shrink to, and the content overflowed the split
+    /// boundary on both sides instead of clipping to it.
+    public static let detailMin: CGFloat = 480
+    // Guarantees the detail column can always reach `detailMin`, even with
+    // the sidebar dragged all the way to `sidebarMax`.
+    public static let windowMin: CGFloat = sidebarMax + detailMin
     public static let windowHeightMin: CGFloat = 640
 }
 

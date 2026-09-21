@@ -205,6 +205,7 @@ struct FlotillaShell: View {
                 onCreateSession: { presentCreateSession() },
                 onCommandPalette: { navigator.presentedSheet = .commandPalette }
             )
+            .frame(minWidth: FlotillaLayoutWidth.detailMin)
             // Declared on the detail column rather than on the `ZStack` that
             // wraps the whole split view. From outside the `NavigationSplitView`
             // SwiftUI resolves every `ToolbarSpacer` against the *sidebar*
