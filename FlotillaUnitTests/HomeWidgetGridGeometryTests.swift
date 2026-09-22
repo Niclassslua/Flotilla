@@ -199,7 +199,7 @@ final class HomeWidgetEditorTests: XCTestCase {
         let ids = editor.entries.map(\.id)
         editor.move(id: ids[0], to: 2)
         XCTAssertEqual(Set(editor.entries.map(\.id)), Set(ids))
-        XCTAssertEqual(editor.entries.map(\.id), [ids[1], ids[2], ids[0], ids[3]])
+        XCTAssertEqual(editor.entries.map(\.id), [ids[1], ids[2], ids[0], ids[3], ids[4]])
     }
 
     func testAddUsesTheRequestedSizeOnlyIfTheWidgetSupportsIt() {
