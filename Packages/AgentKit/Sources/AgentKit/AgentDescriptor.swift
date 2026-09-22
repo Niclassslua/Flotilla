@@ -154,7 +154,8 @@ public enum AgentCatalog {
         claudeCode,
         codexCLI,
         openCode,
-        antigravity
+        antigravity,
+        cursorAgent
     ]
 
     public static func descriptor(for kind: AgentKind) -> AgentDescriptor {
@@ -163,6 +164,7 @@ public enum AgentCatalog {
         case .codexCLI: codexCLI
         case .openCode: openCode
         case .antigravity: antigravity
+        case .cursorAgent: cursorAgent
         }
     }
 
@@ -315,5 +317,71 @@ public enum AgentCatalog {
             placement: .appendFlags
         ),
         accessibilityIDPrefix: "Settings.Antigravity"
+    )
+
+    public static let cursorAgent = AgentDescriptor(
+        kind: .cursorAgent,
+        displayName: "Cursor Agent",
+        binaryName: "agent",
+        settingsKey: "cursorAgent",
+        modelFlag: .separateTokens("--model"),
+        // Effort is baked into the model slug (e.g. `grok-4.7-high`), not a
+        // separate `--effort` flag. The model picker offers one row per
+        // `/model` family and the effort picker resolves the slug — see
+        // `ModelCatalog.groupCursorModels`. `fast` stays out of this list;
+        // `/model` treats it as a parameter, and the plain slug is what we launch.
+        effortFlag: nil,
+        promptFlag: .bareValue,
+        effortLevels: [.minimal, .low, .medium, .high, .xhigh, .max],
+        effortLabels: [.xhigh: "Extra High"],
+        fallbackModels: [
+            "auto",
+            "grok-4.7-medium",
+            "cursor-grok-4.6-medium",
+            "composer-2.5",
+            "claude-opus-5-5-medium",
+            "claude-opus-5-medium",
+            "claude-opus-4-8-medium",
+            "gpt-5.6-sol-medium",
+            "gpt-5.5-medium",
+            "claude-fable-5-1-medium",
+            "claude-fable-5-medium",
+            "cursor-grok-4.5-medium",
+            "gemini-3.8-flash-medium",
+            "gemini-3.7-flash-medium",
+            "muse-spark-1.3-medium",
+            "gpt-5.6-terra-medium",
+            "claude-sonnet-5-medium",
+            "claude-4.6-sonnet-medium",
+            "gpt-5.3-codex",
+            "claude-opus-4-7-medium",
+            "gpt-5.4-medium",
+            "claude-4.6-opus-high",
+            "claude-4.5-opus-high",
+            "gpt-5.2",
+            "gpt-5.6-luna-medium",
+            "gemini-3.6-flash-medium",
+            "gemini-3.1-pro",
+            "gpt-5.4-mini-medium",
+            "gpt-5.4-nano-medium",
+            "claude-4.5-sonnet",
+            "gpt-5.1",
+            "gemini-3-flash",
+            "gemini-3.5-flash",
+            "claude-4-sonnet",
+            "gpt-5-mini",
+            "kimi-k3-high",
+            "kimi-k2.7-code",
+            "glm-5.2-high",
+        ],
+        multilineNewline: Data([0x0A]),
+        // Flotilla mints the chat id (session UUID) and launches with
+        // `--resume <id>`. Cursor accepts an unknown id as a fresh chat.
+        resume: .assignable(
+            assign: .separateTokens("--resume"),
+            resume: .separateTokens("--resume"),
+            placement: .appendFlags
+        ),
+        accessibilityIDPrefix: "Settings.CursorAgent"
     )
 }

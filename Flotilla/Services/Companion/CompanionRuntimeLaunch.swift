@@ -98,7 +98,9 @@ enum CompanionRuntimeLaunch {
         case .antigravity:
             descriptor = descriptor ?? .init(agent: .antigravity, endpoint: directory.appendingPathComponent(session.id.uuidString + ".agy.log").path, createdAt: .now)
             plan.arguments += ["--log-file", descriptor!.endpoint]
-        default: return executable
+        case .claudeCode, .cursorAgent:
+            // No companion control-endpoint rewrite — launch the binary as-is.
+            return executable
         }
         try JSONEncoder().encode(descriptor!).write(to: CompanionRuntimeDescriptor.file(session.id, support: support), options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: CompanionRuntimeDescriptor.file(session.id, support: support).path)

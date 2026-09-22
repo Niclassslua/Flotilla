@@ -48,7 +48,7 @@ struct TilesDesign: View {
         }
         .launcherSurface()
         .background { LauncherHiddenShortcuts(actions: actions) }
-        .task(id: draft.agent) { await coordinator.refresh() }
+        .task(id: draft.agent) { await coordinator.refresh(for: draft.agent) }
     }
 
     // MARK: - Tiles

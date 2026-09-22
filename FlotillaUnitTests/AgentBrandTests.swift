@@ -38,7 +38,7 @@ final class AgentBrandTests: XCTestCase {
         XCTAssertEqual(SkillFramework.claude.agentKind, .claudeCode)
         XCTAssertEqual(SkillFramework.codex.agentKind, .codexCLI)
         XCTAssertEqual(SkillFramework.gemini.agentKind, .antigravity)
-        XCTAssertNil(SkillFramework.cursor.agentKind)
+        XCTAssertEqual(SkillFramework.cursor.agentKind, .cursorAgent)
         XCTAssertNil(SkillFramework.agents.agentKind)
         XCTAssertNil(SkillFramework.custom.agentKind)
     }

@@ -193,9 +193,17 @@ public struct CLIAgentProvider: AgentProviding {
                 arguments += ["--mode", "plan"]
             case .openCode:
                 arguments += ["--agent", "plan"]
+            case .cursorAgent:
+                arguments += ["--plan"]
             case .codexCLI:
                 break
             }
+        }
+
+        // Cursor: trust the workspace up front so the interactive TUI does not
+        // hang on a trust dialog inside Flotilla's pane.
+        if kind == .cursorAgent {
+            arguments += ["--trust"]
         }
 
         var leadingSubcommands: [String] = []

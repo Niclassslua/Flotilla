@@ -147,6 +147,17 @@ enum BoardDemoFixtures {
             idleMinutes: 15,
             lastOutput: ""
         ),
+        Spec(
+            title: "Wire Cursor Agent launch path",
+            goal: "Land the agent binary, model catalog, and session resume for Cursor.",
+            agent: .cursorAgent,
+            status: .working,
+            waitingReason: nil,
+            branch: "flotilla/cursor-agent",
+            churn: (56, 8),
+            idleMinutes: 2,
+            lastOutput: "● Fetching model list from `agent models`…"
+        ),
     ]
 
     /// Deterministic per-index ids so `BoardDemoScreenReader` can map a
@@ -313,6 +324,7 @@ enum BoardDemoFixtures {
             (2, 15, "Claude Code", "claude@anthropic.com", .claudeCode, "feat(home): add busiest hours matrix", "Sources/Flotilla/Dashboard.swift", 90),
             (2, 20, "OpenCode", "opencode@opencode.ai", .openCode, "test(terminal): add snapshot tests for resize", "Sources/Flotilla/Terminal.swift", 45),
             (1, 10, "Antigravity", "antigravity@google.com", .antigravity, "feat(git): add worktree list helper", "Sources/Flotilla/GitService.swift", 75),
+            (1, 14, "Cursor Agent", "cursor@cursor.com", .cursorAgent, "feat(agent): add Cursor Agent launch path", "Sources/AgentKit/CursorSessionProvider.swift", 40),
             (1, 16, "Niclassslua", "niclassslua@users.noreply.github.com", nil, "docs: update hook coordinator architecture", "README.md", 25),
             (0, 9, "Niclassslua", "niclassslua@users.noreply.github.com", nil, "feat(shell): polish navigation bar layout", "Sources/Flotilla/Dashboard.swift", 45),
             (0, 11, "Claude Code", "claude@anthropic.com", .claudeCode, "fix(home): adjust chart layout and spacing", "Sources/Flotilla/Dashboard.swift", 30),

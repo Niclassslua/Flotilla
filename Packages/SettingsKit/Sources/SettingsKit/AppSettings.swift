@@ -32,17 +32,20 @@ public struct AgentPathOverrides: Codable, Equatable, Sendable {
     public var codexCLIPath: String
     public var openCodePath: String
     public var antigravityPath: String
+    public var cursorAgentPath: String
 
     public init(
         claudeCodePath: String = "",
         codexCLIPath: String = "",
         openCodePath: String = "",
-        antigravityPath: String = ""
+        antigravityPath: String = "",
+        cursorAgentPath: String = ""
     ) {
         self.claudeCodePath = claudeCodePath
         self.codexCLIPath = codexCLIPath
         self.openCodePath = openCodePath
         self.antigravityPath = antigravityPath
+        self.cursorAgentPath = cursorAgentPath
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -50,6 +53,7 @@ public struct AgentPathOverrides: Codable, Equatable, Sendable {
         case codexCLIPath
         case openCodePath
         case antigravityPath
+        case cursorAgentPath
     }
 
     public init(from decoder: any Decoder) throws {
@@ -58,6 +62,7 @@ public struct AgentPathOverrides: Codable, Equatable, Sendable {
         codexCLIPath = try container.decodeIfPresent(String.self, forKey: .codexCLIPath) ?? ""
         openCodePath = try container.decodeIfPresent(String.self, forKey: .openCodePath) ?? ""
         antigravityPath = try container.decodeIfPresent(String.self, forKey: .antigravityPath) ?? ""
+        cursorAgentPath = try container.decodeIfPresent(String.self, forKey: .cursorAgentPath) ?? ""
     }
 }
 
@@ -67,17 +72,20 @@ public struct AgentArgumentOverrides: Codable, Equatable, Sendable {
     public var codexCLIArguments: [String]
     public var openCodeArguments: [String]
     public var antigravityArguments: [String]
+    public var cursorAgentArguments: [String]
 
     public init(
         claudeCodeArguments: [String] = [],
         codexCLIArguments: [String] = [],
         openCodeArguments: [String] = [],
-        antigravityArguments: [String] = []
+        antigravityArguments: [String] = [],
+        cursorAgentArguments: [String] = []
     ) {
         self.claudeCodeArguments = claudeCodeArguments
         self.codexCLIArguments = codexCLIArguments
         self.openCodeArguments = openCodeArguments
         self.antigravityArguments = antigravityArguments
+        self.cursorAgentArguments = cursorAgentArguments
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -85,6 +93,7 @@ public struct AgentArgumentOverrides: Codable, Equatable, Sendable {
         case codexCLIArguments
         case openCodeArguments
         case antigravityArguments
+        case cursorAgentArguments
     }
 
     public init(from decoder: any Decoder) throws {
@@ -93,6 +102,7 @@ public struct AgentArgumentOverrides: Codable, Equatable, Sendable {
         codexCLIArguments = try container.decodeIfPresent([String].self, forKey: .codexCLIArguments) ?? []
         openCodeArguments = try container.decodeIfPresent([String].self, forKey: .openCodeArguments) ?? []
         antigravityArguments = try container.decodeIfPresent([String].self, forKey: .antigravityArguments) ?? []
+        cursorAgentArguments = try container.decodeIfPresent([String].self, forKey: .cursorAgentArguments) ?? []
     }
 }
 
@@ -636,7 +646,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 claudeCodePath: agentOverrides.paths["claudeCode"] ?? "",
                 codexCLIPath: agentOverrides.paths["codexCLI"] ?? "",
                 openCodePath: agentOverrides.paths["openCode"] ?? "",
-                antigravityPath: agentOverrides.paths["antigravity"] ?? ""
+                antigravityPath: agentOverrides.paths["antigravity"] ?? "",
+                cursorAgentPath: agentOverrides.paths["cursorAgent"] ?? ""
             )
         }
         set {
@@ -644,6 +655,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             if newValue.codexCLIPath.isEmpty { agentOverrides.paths.removeValue(forKey: "codexCLI") } else { agentOverrides.paths["codexCLI"] = newValue.codexCLIPath }
             if newValue.openCodePath.isEmpty { agentOverrides.paths.removeValue(forKey: "openCode") } else { agentOverrides.paths["openCode"] = newValue.openCodePath }
             if newValue.antigravityPath.isEmpty { agentOverrides.paths.removeValue(forKey: "antigravity") } else { agentOverrides.paths["antigravity"] = newValue.antigravityPath }
+            if newValue.cursorAgentPath.isEmpty { agentOverrides.paths.removeValue(forKey: "cursorAgent") } else { agentOverrides.paths["cursorAgent"] = newValue.cursorAgentPath }
         }
     }
 
@@ -653,7 +665,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 claudeCodeArguments: agentOverrides.arguments["claudeCode"] ?? [],
                 codexCLIArguments: agentOverrides.arguments["codexCLI"] ?? [],
                 openCodeArguments: agentOverrides.arguments["openCode"] ?? [],
-                antigravityArguments: agentOverrides.arguments["antigravity"] ?? []
+                antigravityArguments: agentOverrides.arguments["antigravity"] ?? [],
+                cursorAgentArguments: agentOverrides.arguments["cursorAgent"] ?? []
             )
         }
         set {
@@ -661,6 +674,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             if newValue.codexCLIArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "codexCLI") } else { agentOverrides.arguments["codexCLI"] = newValue.codexCLIArguments }
             if newValue.openCodeArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "openCode") } else { agentOverrides.arguments["openCode"] = newValue.openCodeArguments }
             if newValue.antigravityArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "antigravity") } else { agentOverrides.arguments["antigravity"] = newValue.antigravityArguments }
+            if newValue.cursorAgentArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "cursorAgent") } else { agentOverrides.arguments["cursorAgent"] = newValue.cursorAgentArguments }
         }
     }
 
@@ -706,12 +720,14 @@ public struct AppSettings: Codable, Equatable, Sendable {
         if !agentPaths.codexCLIPath.isEmpty { paths["codexCLI"] = agentPaths.codexCLIPath }
         if !agentPaths.openCodePath.isEmpty { paths["openCode"] = agentPaths.openCodePath }
         if !agentPaths.antigravityPath.isEmpty { paths["antigravity"] = agentPaths.antigravityPath }
+        if !agentPaths.cursorAgentPath.isEmpty { paths["cursorAgent"] = agentPaths.cursorAgentPath }
 
         var arguments: [String: [String]] = [:]
         if !agentArguments.claudeCodeArguments.isEmpty { arguments["claudeCode"] = agentArguments.claudeCodeArguments }
         if !agentArguments.codexCLIArguments.isEmpty { arguments["codexCLI"] = agentArguments.codexCLIArguments }
         if !agentArguments.openCodeArguments.isEmpty { arguments["openCode"] = agentArguments.openCodeArguments }
         if !agentArguments.antigravityArguments.isEmpty { arguments["antigravity"] = agentArguments.antigravityArguments }
+        if !agentArguments.cursorAgentArguments.isEmpty { arguments["cursorAgent"] = agentArguments.cursorAgentArguments }
 
         self.agentOverrides = AgentOverrides(paths: paths, arguments: arguments)
         self.openCodeSubscription = openCodeSubscription

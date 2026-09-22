@@ -27,6 +27,7 @@ enum AgentBrand {
         case .codexCLI: Color(red: 0x6D / 255, green: 0x8D / 255, blue: 0xF0 / 255) // #6D8DF0
         case .openCode: .white // #FFFFFF
         case .antigravity: Color(red: 0x79 / 255, green: 0xB3 / 255, blue: 0x6C / 255) // #79B36C
+        case .cursorAgent: Color(white: 0.90)
         }
     }
 

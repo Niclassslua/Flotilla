@@ -11,9 +11,10 @@ import DesignSystem
 /// popover listing real model names and — where published by the provider (e.g.
 /// Codex) — per-model descriptions, plus "Default" and "Custom…" entries.
 ///
-/// For Antigravity, models are grouped by base name (e.g. "Gemini 3.7 Flash");
-/// selecting a group resolves through `group.resolvedSlug(for:)` against the
-/// current reasoning effort rather than writing a raw base slug.
+/// Antigravity and Cursor Agent bake effort into the model slug. Those
+/// pickers list one row per family (Cursor's order matches the TUI `/model`
+/// command). Selecting a row resolves through `group.resolvedSlug(for:)`
+/// against the current reasoning effort.
 struct ModelPickerView: View {
     let agent: AgentKind
     let openCodeSubscription: OpenCodeSubscription
@@ -22,7 +23,7 @@ struct ModelPickerView: View {
     var accessibilityIdentifier: String? = nil
 
     @State private var profiles: [AgentModelProfile] = []
-    @State private var antigravityGroups: [AntigravityModelGroup] = []
+    @State private var variantGroups: [AntigravityModelGroup] = []
     @State private var isPresented = false
     @State private var isHovering = false
     @State private var hoveredID: String?
@@ -43,12 +44,20 @@ struct ModelPickerView: View {
         self._model = model
         self.effort = effort
         self.accessibilityIdentifier = accessibilityIdentifier
-        if agent == .antigravity {
-            self._antigravityGroups = State(initialValue: ModelCatalog.staticAntigravityGroups())
+        if agent.bakesEffortIntoModelSlug {
+            self._variantGroups = State(initialValue: Self.staticGroups(for: agent))
             self._profiles = State(initialValue: [])
         } else {
             self._profiles = State(initialValue: ModelCatalog.staticFallbackProfiles(for: agent, openCodeSubscription: openCodeSubscription))
-            self._antigravityGroups = State(initialValue: [])
+            self._variantGroups = State(initialValue: [])
+        }
+    }
+
+    private static func staticGroups(for agent: AgentKind) -> [AntigravityModelGroup] {
+        switch agent {
+        case .antigravity: ModelCatalog.staticAntigravityGroups()
+        case .cursorAgent: ModelCatalog.staticCursorGroups()
+        case .claudeCode, .codexCLI, .openCode: []
         }
     }
 
@@ -59,8 +68,8 @@ struct ModelPickerView: View {
     private var currentDisplayName: String {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "Default" }
-        if agent == .antigravity {
-            if let group = antigravityGroups.first(where: { isGroupSelected($0) }) {
+        if agent.bakesEffortIntoModelSlug {
+            if let group = variantGroups.first(where: { isGroupSelected($0) }) {
                 return group.displayName
             }
             return trimmed
@@ -87,11 +96,11 @@ struct ModelPickerView: View {
                 }
                 lastSeenAgent = agent
                 isLoading = true
-                if agent == .antigravity {
-                    antigravityGroups = ModelCatalog.staticAntigravityGroups()
-                    let live = await ModelCatalogCache.shared.antigravityGroups()
+                if agent.bakesEffortIntoModelSlug {
+                    variantGroups = Self.staticGroups(for: agent)
+                    let live = await liveGroups(for: agent)
                     guard !Task.isCancelled else { return }
-                    if !live.isEmpty { antigravityGroups = live }
+                    if !live.isEmpty { variantGroups = live }
                 } else {
                     profiles = ModelCatalog.staticFallbackProfiles(for: agent, openCodeSubscription: openCodeSubscription)
                     let live = await ModelCatalogCache.shared.profiles(for: agent, openCodeSubscription: openCodeSubscription)
@@ -175,8 +184,8 @@ struct ModelPickerView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    if agent == .antigravity {
-                        ForEach(antigravityGroups) { group in
+                    if agent.bakesEffortIntoModelSlug {
+                        ForEach(variantGroups) { group in
                             let isSelected = isGroupSelected(group)
                             card(
                                 title: group.displayName,
@@ -185,7 +194,7 @@ struct ModelPickerView: View {
                                 id: group.id
                             ) {
                                 isCustomActive = false
-                                selectAntigravityGroup(group)
+                                selectVariantGroup(group)
                                 isPresented = false
                             }
                         }
@@ -218,14 +227,22 @@ struct ModelPickerView: View {
         .frame(width: 300)
     }
 
-    private func selectAntigravityGroup(_ group: AntigravityModelGroup) {
-        let eff = effort ?? currentAntigravityEffort()
+    private func selectVariantGroup(_ group: AntigravityModelGroup) {
+        let eff = effort ?? currentVariantEffort()
         if let resolved = group.resolvedSlug(for: eff) {
             model = resolved
         } else if let sole = group.soleSlug {
             model = sole
         } else {
             model = group.baseSlug
+        }
+    }
+
+    private func liveGroups(for agent: AgentKind) async -> [AntigravityModelGroup] {
+        switch agent {
+        case .antigravity: await ModelCatalogCache.shared.antigravityGroups()
+        case .cursorAgent: await ModelCatalogCache.shared.cursorGroups()
+        case .claudeCode, .codexCLI, .openCode: []
         }
     }
 
@@ -236,10 +253,10 @@ struct ModelPickerView: View {
         return group.variants.values.contains(trimmed) || group.baseSlug == trimmed
     }
 
-    private func currentAntigravityEffort() -> AgentEffort? {
+    private func currentVariantEffort() -> AgentEffort? {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        for group in antigravityGroups {
+        for group in variantGroups {
             for (eff, slug) in group.variants where slug == trimmed {
                 return eff
             }
@@ -251,8 +268,8 @@ struct ModelPickerView: View {
         if isCustomActive { return true }
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        if agent == .antigravity {
-            return !antigravityGroups.contains(where: { isGroupSelected($0) })
+        if agent.bakesEffortIntoModelSlug {
+            return !variantGroups.contains(where: { isGroupSelected($0) })
         } else {
             return !profiles.contains(where: { $0.slug == trimmed })
         }

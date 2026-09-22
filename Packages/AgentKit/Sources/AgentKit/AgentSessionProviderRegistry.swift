@@ -9,17 +9,20 @@ public struct AgentSessionProviderRegistry: Sendable {
     public let openCodeProvider: OpenCodeSessionProvider
     public let codexProvider: CodexSessionProvider
     public let antigravityProvider: ExperimentalAntigravitySessionProvider
+    public let cursorProvider: CursorSessionProvider
 
     public init(
         claudeProvider: ClaudeSessionProvider = ClaudeSessionProvider(),
         openCodeProvider: OpenCodeSessionProvider = OpenCodeSessionProvider(),
         codexProvider: CodexSessionProvider = CodexSessionProvider(),
-        antigravityProvider: ExperimentalAntigravitySessionProvider = ExperimentalAntigravitySessionProvider()
+        antigravityProvider: ExperimentalAntigravitySessionProvider = ExperimentalAntigravitySessionProvider(),
+        cursorProvider: CursorSessionProvider = CursorSessionProvider()
     ) {
         self.claudeProvider = claudeProvider
         self.openCodeProvider = openCodeProvider
         self.codexProvider = codexProvider
         self.antigravityProvider = antigravityProvider
+        self.cursorProvider = cursorProvider
     }
 
     public func provider(for kind: AgentKind) -> any AgentSessionProviding {
@@ -32,6 +35,8 @@ public struct AgentSessionProviderRegistry: Sendable {
             return codexProvider
         case .antigravity:
             return antigravityProvider
+        case .cursorAgent:
+            return cursorProvider
         }
     }
 
@@ -52,8 +57,9 @@ public struct AgentSessionProviderRegistry: Sendable {
         async let openCodeSessions = (try? openCodeProvider.fetchSessions()) ?? []
         async let codexSessions = (try? codexProvider.fetchSessions()) ?? []
         async let antigravitySessions = (try? antigravityProvider.fetchSessions()) ?? []
+        async let cursorSessions = (try? cursorProvider.fetchSessions()) ?? []
 
-        let combined = await claudeSessions + openCodeSessions + codexSessions + antigravitySessions
+        let combined = await claudeSessions + openCodeSessions + codexSessions + antigravitySessions + cursorSessions
         return combined.sorted { ($0.lastActiveAt ?? .distantPast) > ($1.lastActiveAt ?? .distantPast) }
     }
 }

@@ -6,14 +6,17 @@ import TranscriptKit
 extension TranscriptCodecRegistry {
     enum CodecSetupError: LocalizedError {
         case openCodeNotInstalled
+        case cursorAgentNotInstalled
         case importFailed(String)
 
         var errorDescription: String? {
             switch self {
             case .openCodeNotInstalled:
                 return "OpenCode is not installed, so a session cannot be handed off to it."
+            case .cursorAgentNotInstalled:
+                return "Cursor Agent is not installed, so a session cannot be handed off to it."
             case let .importFailed(detail):
-                return "OpenCode refused the handed-off session: \(detail)"
+                return "The destination agent refused the handed-off session: \(detail)"
             }
         }
     }
@@ -33,6 +36,7 @@ extension TranscriptCodecRegistry {
     /// | Claude Code | yes | yes |
     /// | Codex CLI | yes | yes |
     /// | Antigravity | yes | yes — via a reverse-engineered format, see `FORMAT.md` |
+    /// | Cursor Agent | yes | yes — JSONL + `agent --print` store seed |
     /// | OpenCode | no — no supported way to release a session | yes |
     static func flotilla(
         commandRunner: any CommandRunning = ProcessCommandRunner(),
@@ -55,16 +59,43 @@ extension TranscriptCodecRegistry {
             }
         }
 
+        let cursor = CursorTranscriptCodec(seedStore: { sessionID, workingDirectory, entries in
+            guard let executable = locator.locate("agent") ?? locator.locate("cursor-agent") else {
+                throw CodecSetupError.cursorAgentNotInstalled
+            }
+            let prompt = CursorTranscriptCodec.handoffPrompt(from: entries)
+            let result = try await commandRunner.run(
+                [
+                    "--print",
+                    "--output-format", "text",
+                    "--resume", sessionID,
+                    "--trust",
+                    "--force",
+                    prompt
+                ],
+                executable: executable,
+                workingDirectory: workingDirectory
+            )
+            guard result.exitCode == 0 else {
+                let detail = result.stderr.isEmpty ? result.stdout : result.stderr
+                throw CodecSetupError.importFailed(
+                    detail.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+        })
+
         return TranscriptCodecRegistry(
             readers: [
                 ClaudeTranscriptCodec(),
                 CodexTranscriptCodec(),
-                AntigravityTranscriptCodec()
+                AntigravityTranscriptCodec(),
+                CursorTranscriptCodec()
             ],
             writers: [
                 ClaudeTranscriptCodec(),
                 CodexTranscriptCodec(),
                 AntigravityTranscriptCodec(),
+                cursor,
                 openCode
             ]
         )

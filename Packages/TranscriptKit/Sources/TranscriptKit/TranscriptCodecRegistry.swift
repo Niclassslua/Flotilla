@@ -25,11 +25,12 @@ public struct TranscriptCodecRegistry: Sendable {
     /// Antigravity is both a source and a target — see
     /// `AntigravityTranscriptCodec`'s doc comment and `FORMAT.md` alongside it
     /// for how an undocumented, reverse-engineered format backs both
-    /// directions. OpenCode is absent from `readers` pending its HTTP session
-    /// API.
+    /// directions. Cursor Agent reads its JSONL display transcript and writes
+    /// via JSONL + an injected `agent --print` store seed. OpenCode is absent
+    /// from `readers` pending its HTTP session API.
     public static let `default` = TranscriptCodecRegistry(
-        readers: [ClaudeTranscriptCodec(), CodexTranscriptCodec(), AntigravityTranscriptCodec()],
-        writers: [ClaudeTranscriptCodec(), CodexTranscriptCodec(), AntigravityTranscriptCodec()]
+        readers: [ClaudeTranscriptCodec(), CodexTranscriptCodec(), AntigravityTranscriptCodec(), CursorTranscriptCodec()],
+        writers: [ClaudeTranscriptCodec(), CodexTranscriptCodec(), AntigravityTranscriptCodec(), CursorTranscriptCodec()]
     )
 
     public func reader(for agent: AgentKind) -> (any TranscriptReading)? {

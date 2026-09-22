@@ -216,7 +216,8 @@ would append to the same history and fork it.
 |---|:-:|:-:|---|
 | Claude Code | yes | yes | JSONL transcript, readable and writable |
 | Codex CLI | yes | yes | rollout file; no catalog row required |
-| Antigravity | yes | **no** | resume state is undocumented protobuf |
+| Antigravity | yes | yes | reverse-engineered conversation DB; see `FORMAT.md` |
+| Cursor Agent | yes | yes | JSONL display transcript + `agent --print` store seed; release by deleting chat dir |
 | OpenCode | **no** | yes | no supported way to release a session |
 
 These differences are expressed **only** by which protocol each codec conforms

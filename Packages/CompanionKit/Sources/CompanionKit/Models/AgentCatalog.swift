@@ -230,6 +230,62 @@ public struct AgentCatalog: Hashable, Codable, Sendable {
                 ),
             ]
         ),
+        .cursorAgent: Entry(
+            models: [
+                ModelOption(slug: "auto", displayName: "Auto"),
+                ModelOption(slug: "grok-4.7-medium", displayName: "Grok 4.7"),
+                ModelOption(slug: "cursor-grok-4.6-medium", displayName: "Grok 4.6"),
+                ModelOption(slug: "composer-2.5", displayName: "Composer 2.5"),
+                ModelOption(slug: "claude-opus-5-5-medium", displayName: "Claude Opus 5.5"),
+                ModelOption(slug: "claude-opus-5-medium", displayName: "Claude Opus 5"),
+                ModelOption(slug: "gpt-5.6-sol-medium", displayName: "GPT-5.6 Sol"),
+                ModelOption(slug: "gpt-5.3-codex", displayName: "Codex 5.3"),
+                ModelOption(slug: "gemini-3.7-flash-medium", displayName: "Gemini 3.7 Flash"),
+            ],
+            defaultModel: "auto",
+            effortLevels: [.minimal, .low, .medium, .high, .xhigh, .max],
+            defaultEffort: .medium,
+            effortLabels: [.xhigh: "Extra High"],
+            antigravityGroups: [
+                AntigravityGroupOption(baseSlug: "auto", displayName: "Auto", soleSlug: "auto"),
+                AntigravityGroupOption(
+                    baseSlug: "grok-4.7",
+                    displayName: "Grok 4.7",
+                    variants: [.low: "grok-4.7-low", .medium: "grok-4.7-medium", .high: "grok-4.7-high", .xhigh: "grok-4.7-xhigh"]
+                ),
+                AntigravityGroupOption(
+                    baseSlug: "cursor-grok-4.6",
+                    displayName: "Grok 4.6",
+                    variants: [.low: "cursor-grok-4.6-low", .medium: "cursor-grok-4.6-medium", .high: "cursor-grok-4.6-high", .xhigh: "cursor-grok-4.6-xhigh"]
+                ),
+                AntigravityGroupOption(baseSlug: "composer-2.5", displayName: "Composer 2.5", soleSlug: "composer-2.5"),
+                AntigravityGroupOption(
+                    baseSlug: "claude-opus-5-5",
+                    displayName: "Claude Opus 5.5",
+                    variants: [.low: "claude-opus-5-5-low", .medium: "claude-opus-5-5-medium", .high: "claude-opus-5-5-high", .xhigh: "claude-opus-5-5-xhigh"]
+                ),
+                AntigravityGroupOption(
+                    baseSlug: "claude-opus-5",
+                    displayName: "Claude Opus 5",
+                    variants: [.low: "claude-opus-5-low", .medium: "claude-opus-5-medium", .high: "claude-opus-5-high", .xhigh: "claude-opus-5-xhigh"]
+                ),
+                AntigravityGroupOption(
+                    baseSlug: "gpt-5.6-sol",
+                    displayName: "GPT-5.6 Sol",
+                    variants: [.low: "gpt-5.6-sol-low", .medium: "gpt-5.6-sol-medium", .high: "gpt-5.6-sol-high", .xhigh: "gpt-5.6-sol-xhigh"]
+                ),
+                AntigravityGroupOption(
+                    baseSlug: "gpt-5.3-codex",
+                    displayName: "Codex 5.3",
+                    variants: [.low: "gpt-5.3-codex-low", .medium: "gpt-5.3-codex", .high: "gpt-5.3-codex-high", .xhigh: "gpt-5.3-codex-xhigh"]
+                ),
+                AntigravityGroupOption(
+                    baseSlug: "gemini-3.7-flash",
+                    displayName: "Gemini 3.7 Flash",
+                    variants: [.low: "gemini-3.7-flash-low", .medium: "gemini-3.7-flash-medium", .high: "gemini-3.7-flash-high"]
+                ),
+            ]
+        ),
     ])
 }
 

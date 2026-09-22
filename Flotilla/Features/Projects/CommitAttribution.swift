@@ -56,6 +56,9 @@ extension AgentKind {
         if name == "antigravity" || email.hasPrefix("antigravity@") {
             return .antigravity
         }
+        if name == "cursor" || name == "cursor agent" || email.hasPrefix("cursor@") {
+            return .cursorAgent
+        }
         return nil
     }
 

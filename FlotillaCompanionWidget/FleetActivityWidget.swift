@@ -313,7 +313,7 @@ private struct FleetProviderLogo: View {
                 .accessibilityHidden(true)
         case .openCode:
             ProviderLogo(agent: agent).colorInvert()
-        case .claudeCode, .antigravity:
+        case .claudeCode, .antigravity, .cursorAgent:
             ProviderLogo(agent: agent)
         }
     }

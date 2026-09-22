@@ -137,6 +137,10 @@ final class CompanionHost {
         isEnabled = defaults.bool(forKey: Self.enabledKey) || Self.autoPairsForAutomation
         adapters.screen = { id in await screenReader?.readScreen(for: id) }
         adapters.send = { [weak store] id, data in store?.process(for: id)?.send(input: data) }
+        adapters.deliver = { [weak store] id, text in
+            guard let store else { throw SessionProcessManager.MessageDeliveryError.noLiveProcess }
+            try await store.deliverMessage(text, to: id)
+        }
         adapters.bridge = bridge
         devices = storage.loadDevices()
         auth.setDevices(devices, revoked: storage.loadRevoked())
@@ -154,6 +158,9 @@ final class CompanionHost {
         }
         bridge.onAllowNote = { [weak self] sessionID, note in
             Task { try? await self?.store.deliverMessage(note, to: sessionID) }
+        }
+        bridge.onFollowUpPrompt = { [weak self] sessionID, text in
+            Task { try? await self?.store.deliverMessage(text, to: sessionID) }
         }
         Task { [weak self] in
             let live = await CompanionSnapshotBuilder.catalog(openCodeSubscription: openCodeSubscription())

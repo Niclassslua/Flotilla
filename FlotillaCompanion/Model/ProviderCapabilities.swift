@@ -34,6 +34,8 @@ struct ProviderCapabilities: Sendable {
             ProviderCapabilities(streaming: .tokens, planApprovalHasModeSplit: false, alwaysAllowScope: .commandPattern)
         case .antigravity:
             ProviderCapabilities(streaming: .steps, planApprovalHasModeSplit: false, alwaysAllowScope: .conversation)
+        case .cursorAgent:
+            ProviderCapabilities(streaming: .lines, planApprovalHasModeSplit: false, alwaysAllowScope: .session)
         }
     }
 

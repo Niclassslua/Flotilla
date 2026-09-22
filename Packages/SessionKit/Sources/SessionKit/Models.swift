@@ -5,6 +5,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case codexCLI
     case openCode
     case antigravity
+    case cursorAgent
 
     public var id: String { rawValue }
 
@@ -14,6 +15,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .codexCLI: return "Codex CLI"
         case .openCode: return "OpenCode"
         case .antigravity: return "Antigravity"
+        case .cursorAgent: return "Cursor Agent"
         }
     }
 
@@ -23,8 +25,17 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
     /// which of those a given model accepts) is `AgentEffortCatalog`'s job.
     public var supportsEffortSelection: Bool {
         switch self {
-        case .claudeCode, .codexCLI, .antigravity: true
+        case .claudeCode, .codexCLI, .antigravity, .cursorAgent: true
         case .openCode: false
+        }
+    }
+
+    /// Effort is chosen in the UI and written into the model slug. These CLIs
+    /// have no `--effort` flag — Antigravity and Cursor Agent both do this.
+    public var bakesEffortIntoModelSlug: Bool {
+        switch self {
+        case .antigravity, .cursorAgent: true
+        case .claudeCode, .codexCLI, .openCode: false
         }
     }
 }
@@ -231,6 +242,7 @@ public struct KanbanColumn: Codable, Hashable, Sendable, Identifiable {
             KanbanColumn(id: builtInID(kind: 2, index: 1), title: "Codex CLI", order: 1, agentFilter: .codexCLI),
             KanbanColumn(id: builtInID(kind: 2, index: 2), title: "OpenCode", order: 2, agentFilter: .openCode),
             KanbanColumn(id: builtInID(kind: 2, index: 3), title: "Antigravity", order: 3, agentFilter: .antigravity),
+            KanbanColumn(id: builtInID(kind: 2, index: 4), title: "Cursor Agent", order: 4, agentFilter: .cursorAgent),
         ]
     }
 

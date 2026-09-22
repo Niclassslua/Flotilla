@@ -86,8 +86,8 @@ struct MockFixtures {
                 updatedAt: ago(9), attentionSummary: "Move settings to SQLite"
             ),
             CompanionSession(
-                id: SessionID.readmeReview, title: "Refresh README screenshots", agent: .antigravity,
-                model: "gemini-3.7-flash-high", effort: .medium, status: .readyForReview,
+                id: SessionID.readmeReview, title: "Refresh README screenshots", agent: .cursorAgent,
+                model: "composer-2.5", effort: .medium, status: .readyForReview,
                 projectID: ProjectID.flotilla, branch: "flotilla/readme-shots", hasWorktree: true,
                 isProcessLive: false, updatedAt: ago(22), diffStat: bannerDiff.stat
             ),

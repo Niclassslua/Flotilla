@@ -242,6 +242,13 @@ Decisions made without asking, recorded so they can be revisited.
    `UI_TESTING` and in unit tests):
    - **Claude Code**: the blocking `PermissionRequest` hook through a
      fail-open socket shim (verified in `probe-claude-live-bridge.md`).
+   - **Cursor Agent**: interactive `agent` TUI in tmux; project
+     `.cursor/hooks.json` decision hooks (`preToolUse`,
+     `beforeShellExecution`, …) block on the same companion Unix socket
+     until phone or Mac answers (`allow`/`deny` only — never `ask`).
+     Always-allow is Flotilla session memory. Prompts use bracketed PTY
+     paste; Stop is deny-and-Escape. See
+     [Cursor companion notes](probe-cursor-companion.md).
    - **Codex**: a wrapper starts `codex app-server --listen unix://…` beside
      the TUI, which attaches with `--remote`; Flotilla is a second JSON-RPC
      client (experimental API) and answers `requestApproval` and
@@ -270,12 +277,12 @@ Decisions made without asking, recorded so they can be revisited.
    Mac app restarted shows **Needs the terminal** (the hook event file starts
    fresh on reattach). A waiting session without an answerable request shows
    that card too, naming what it waits for.
-10. **Stop** is `turn/interrupt` for Codex and `/abort` for OpenCode; Claude
-    and Antigravity get Escape in the terminal. A pending Claude card is denied
-    with `interrupt: true` instead.
+10. **Stop** is `turn/interrupt` for Codex and `/abort` for OpenCode; Claude,
+    Cursor, and Antigravity get Escape in the terminal. A pending Claude or
+    Cursor card is denied (Cursor: deny then Escape) instead.
 11. **Prompts go through the adapter**: `turn/start` or `turn/steer` for
-    Codex, `prompt_async` for OpenCode, a bracketed paste for Claude and
-    Antigravity (Antigravity queues mid-turn prompts for `injectSteps`), and
+    Codex, `prompt_async` for OpenCode, a bracketed paste for Claude, Cursor,
+    and Antigravity (Antigravity queues mid-turn prompts for `injectSteps`), and
     `AppStore.deliverMessage` for a session without an adapter. Prompts sent while working show as Queued until the
     transcript contains them.
 12. **Creating a session from the phone** uses the Mac's current defaults for

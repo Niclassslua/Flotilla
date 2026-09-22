@@ -26,7 +26,7 @@ final class StartupCheckViewModel {
             // opencode and antigravity are optional bonus agents — their absence is detected
             // (visible in the check summary) but not warned about, so a
             // missing opencode/antigravity never blocks or nags.
-            + missingAgents.filter { $0 != .openCode && $0 != .antigravity }.map(\.displayName)
+            + missingAgents.filter { $0 != .openCode && $0 != .antigravity && $0 != .cursorAgent }.map(\.displayName)
     }
 
     init(

@@ -25,6 +25,7 @@ public enum ProviderLogoAsset: String, CaseIterable, Sendable {
         case .codexCLI: self = .codex
         case .openCode: self = .openCode
         case .antigravity: self = .antigravity
+        case .cursorAgent: self = .cursor
         }
     }
 

@@ -172,20 +172,40 @@ enum ClaudePermissionPayload {
     }
 }
 
-/// Holds Claude Code and Codex permission requests for the phone.
+/// Holds Claude Code, Codex, and Cursor permission requests for the phone.
 ///
 /// Each request arrives on the companion socket as two lines — the session's
 /// hook event-file path (which names the Flotilla session) and the hook JSON —
 /// and the connection stays open until someone answers. Answering writes the
-/// decision and closes; retracting closes without writing, which the hook
-/// shim turns into "no decision", leaving the terminal dialog in charge.
+/// decision and closes; retracting closes without writing, which the Claude/
+/// Codex shim turns into "no decision" (terminal dialog stays in charge).
+/// Cursor's shim treats an empty answer as allow so the TUI does not hang.
 @MainActor
 final class ClaudePermissionBridge {
+    private enum ParsedRequest {
+        case claude(ClaudePermissionPayload.Parsed)
+        case cursor(CursorPermissionPayload.Parsed)
+
+        var interaction: PendingInteraction {
+            switch self {
+            case .claude(let parsed): parsed.interaction
+            case .cursor(let parsed): parsed.interaction
+            }
+        }
+
+        var toolUseID: String? {
+            switch self {
+            case .claude(let parsed): parsed.toolUseID
+            case .cursor(let parsed): parsed.toolUseID
+            }
+        }
+    }
+
     private final class Held {
-        let parsed: ClaudePermissionPayload.Parsed
+        let parsed: ParsedRequest
         let connection: NWConnection
 
-        init(parsed: ClaudePermissionPayload.Parsed, connection: NWConnection) {
+        init(parsed: ParsedRequest, connection: NWConnection) {
             self.parsed = parsed
             self.connection = connection
         }
@@ -196,6 +216,8 @@ final class ClaudePermissionBridge {
     /// this process's socket just because it was given the same path.
     private var socketLockDescriptor: Int32 = -1
     private var held: [UUID: [Held]] = [:]
+    /// Session-scoped always-allow patterns for Cursor (`tool:pattern`).
+    private var cursorAlwaysAllow: [UUID: Set<String>] = [:]
     /// When a session was first observed not-waiting, per session — reset the
     /// moment it reads as waiting again. `retractResolved` only acts once this
     /// has held continuously past the grace window, so one misread from the
@@ -207,6 +229,8 @@ final class ClaudePermissionBridge {
     var onChange: () -> Void = {}
     /// Called with a note the user attached to an Allow, to send as a prompt.
     var onAllowNote: (UUID, String) -> Void = { _, _ in }
+    /// Cursor question/plan answers that need a follow-up prompt after the hook.
+    var onFollowUpPrompt: (UUID, String) -> Void = { _, _ in }
 
     private(set) var socketURL: URL?
 
@@ -254,6 +278,7 @@ final class ClaudePermissionBridge {
         for requests in held.values { requests.forEach { $0.connection.cancel() } }
         held = [:]
         notWaitingSince = [:]
+        cursorAlwaysAllow = [:]
         onChange()
     }
 
@@ -265,7 +290,11 @@ final class ClaudePermissionBridge {
     }
 
     func pending(for sessionID: UUID) -> [PendingInteraction] {
-        held[sessionID]?.map(\.parsed.interaction) ?? []
+        var seen = Set<UUID>()
+        return held[sessionID]?.compactMap { held in
+            guard seen.insert(held.parsed.interaction.id).inserted else { return nil }
+            return held.parsed.interaction
+        } ?? []
     }
 
     var sessionsWithPending: Set<UUID> { Set(held.filter { !$0.value.isEmpty }.keys) }
@@ -274,16 +303,47 @@ final class ClaudePermissionBridge {
         !(held[sessionID] ?? []).isEmpty
     }
 
+    func clearAlwaysAllow(sessionID: UUID) {
+        cursorAlwaysAllow[sessionID] = nil
+    }
+
     func answer(sessionID: UUID, interactionID: UUID, with answer: InteractionAnswer) -> AnswerOutcome {
-        guard let index = held[sessionID]?.firstIndex(where: { $0.parsed.interaction.id == interactionID }),
-              let request = held[sessionID]?[index],
-              let decision = ClaudePermissionPayload.decision(for: answer, parsed: request.parsed) else {
+        guard let matching = held[sessionID]?.filter({ $0.parsed.interaction.id == interactionID }),
+              let request = matching.first else {
             return .alreadyAnswered
         }
-        held[sessionID]?.remove(at: index)
-        request.connection.send(content: decision + Data("\n".utf8), isComplete: true, completion: .contentProcessed { _ in
-            request.connection.cancel()
-        })
+        let decision: Data?
+        switch request.parsed {
+        case .claude(let parsed):
+            decision = ClaudePermissionPayload.decision(for: answer, parsed: parsed)
+        case .cursor(let parsed):
+            if case .alwaysAllow = answer {
+                cursorAlwaysAllow[sessionID, default: []].insert(parsed.alwaysAllowPattern)
+            }
+            decision = CursorPermissionPayload.decision(for: answer, parsed: parsed)
+            switch answer {
+            case .questionAnswers(let answers):
+                let text = answers.map { step in
+                    let parts = step.selected + (step.other.map { [$0] } ?? [])
+                    return parts.joined(separator: ", ")
+                }.joined(separator: "\n")
+                if !text.isEmpty { onFollowUpPrompt(sessionID, text) }
+            case .revisePlan(let message):
+                if !message.isEmpty { onFollowUpPrompt(sessionID, message) }
+            case .approvePlan:
+                onFollowUpPrompt(sessionID, "[Approved] Continue with the plan.")
+            default:
+                break
+            }
+        }
+        guard let decision else { return .alreadyAnswered }
+        held[sessionID]?.removeAll { $0.parsed.interaction.id == interactionID }
+        let payload = decision + Data("\n".utf8)
+        for heldRequest in matching {
+            heldRequest.connection.send(content: payload, isComplete: true, completion: .contentProcessed { _ in
+                heldRequest.connection.cancel()
+            })
+        }
         if case .allowWithNote(let note) = answer, !note.isEmpty {
             onAllowNote(sessionID, note)
         }
@@ -336,6 +396,7 @@ final class ClaudePermissionBridge {
         guard let requests = held.removeValue(forKey: sessionID) else { return }
         requests.forEach { $0.connection.cancel() }
         notWaitingSince[sessionID] = nil
+        cursorAlwaysAllow[sessionID] = nil
         onChange()
     }
 
@@ -347,7 +408,44 @@ final class ClaudePermissionBridge {
             Task { @MainActor in
                 guard let self, let lines,
                       let sessionID = UUID(uuidString: URL(fileURLWithPath: lines.0).deletingPathExtension().lastPathComponent),
-                      let parsed = ClaudePermissionPayload.parse(Data(lines.1.utf8)) else {
+                      let data = lines.1.data(using: .utf8) else {
+                    connection.cancel()
+                    return
+                }
+
+                if let cursor = CursorPermissionPayload.parse(data) {
+                    // Dual-fire: preToolUse then beforeShellExecution share a
+                    // tool_use_id — one card, both connections wait for the answer.
+                    if let toolUseID = cursor.toolUseID,
+                       let existing = self.held[sessionID]?.first(where: { $0.parsed.toolUseID == toolUseID }) {
+                        connection.stateUpdateHandler = { [weak self] state in
+                            if case .cancelled = state { return }
+                            if case .failed = state {
+                                Task { @MainActor in self?.drop(connection, sessionID: sessionID) }
+                            }
+                        }
+                        self.held[sessionID, default: []].append(Held(parsed: existing.parsed, connection: connection))
+                        return
+                    }
+                    if self.cursorAlwaysAllow[sessionID]?.contains(cursor.alwaysAllowPattern) == true {
+                        let allow = #"{"continue":true,"permission":"allow"}"#.data(using: .utf8)!
+                        connection.send(content: allow + Data("\n".utf8), isComplete: true, completion: .contentProcessed { _ in
+                            connection.cancel()
+                        })
+                        return
+                    }
+                    connection.stateUpdateHandler = { [weak self] state in
+                        if case .cancelled = state { return }
+                        if case .failed = state {
+                            Task { @MainActor in self?.drop(connection, sessionID: sessionID) }
+                        }
+                    }
+                    self.held[sessionID, default: []].append(Held(parsed: .cursor(cursor), connection: connection))
+                    self.onChange()
+                    return
+                }
+
+                guard let parsed = ClaudePermissionPayload.parse(data) else {
                     connection.cancel()
                     return
                 }
@@ -359,7 +457,7 @@ final class ClaudePermissionBridge {
                         Task { @MainActor in self?.drop(connection, sessionID: sessionID) }
                     }
                 }
-                self.held[sessionID, default: []].append(Held(parsed: parsed, connection: connection))
+                self.held[sessionID, default: []].append(Held(parsed: .claude(parsed), connection: connection))
                 self.onChange()
             }
         }

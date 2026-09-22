@@ -31,7 +31,8 @@ public enum SkillFramework: String, Sendable, Hashable, Codable, CaseIterable {
         case .claude: return .claudeCode
         case .codex: return .codexCLI
         case .gemini: return .antigravity
-        case .agents, .cursor, .custom: return nil
+        case .cursor: return .cursorAgent
+        case .agents, .custom: return nil
         }
     }
 

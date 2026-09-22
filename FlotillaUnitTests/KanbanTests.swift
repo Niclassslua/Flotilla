@@ -203,11 +203,12 @@ final class KanbanAppStoreTests: XCTestCase {
         store.updateKanbanBoardColumnMode(.agents)
         let board = try XCTUnwrap(store.selectedKanbanBoard)
         XCTAssertEqual(board.columnMode, .agents)
-        XCTAssertEqual(board.customColumns.count, 4)
+        XCTAssertEqual(board.customColumns.count, 5)
         XCTAssertEqual(board.customColumns[0].agentFilter, .claudeCode)
         XCTAssertEqual(board.customColumns[1].agentFilter, .codexCLI)
         XCTAssertEqual(board.customColumns[2].agentFilter, .openCode)
         XCTAssertEqual(board.customColumns[3].agentFilter, .antigravity)
+        XCTAssertEqual(board.customColumns[4].agentFilter, .cursorAgent)
     }
 
     func testUpdateKanbanBoardWorkflowMode() throws {
@@ -244,11 +245,12 @@ final class KanbanAppStoreTests: XCTestCase {
         let board = try XCTUnwrap(store.selectedKanbanBoard)
 
         let columns = store.getColumnsForBoard(board)
-        XCTAssertEqual(columns.count, 4)
+        XCTAssertEqual(columns.count, 5)
         XCTAssertEqual(columns[0].agentFilter, .claudeCode)
         XCTAssertEqual(columns[1].agentFilter, .codexCLI)
         XCTAssertEqual(columns[2].agentFilter, .openCode)
         XCTAssertEqual(columns[3].agentFilter, .antigravity)
+        XCTAssertEqual(columns[4].agentFilter, .cursorAgent)
     }
 
     func testMoveSessionToStatus() async throws {

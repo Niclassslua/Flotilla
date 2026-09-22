@@ -262,6 +262,30 @@ public final class HookEventReceiver: @unchecked Sendable {
                 )
             default: return nil
             }
+        case .cursorAgent:
+            guard let eventName = object["hook_event_name"] as? String else { return nil }
+            let payload = object["payload"] as? [String: Any] ?? object
+            switch eventName {
+            case "preToolUse", "beforeShellExecution", "beforeMCPExecution":
+                let tool = (payload["tool_name"] as? String) ?? (payload["toolName"] as? String)
+                let lowered = tool?.lowercased()
+                if lowered == "askquestion" || lowered == "ask_question" || lowered == "request_user_input" {
+                    return SessionStatusObservation(
+                        .waitingForInput,
+                        waitingReason: .question,
+                        cause: cause("hook: \(eventName) \(Self.toolLabel(tool))")
+                    )
+                }
+                // Permission wait is driven by the held companion bridge card;
+                // observationally this is still "working" until answered.
+                return SessionStatusObservation(.working, cause: cause("hook: \(eventName) \(Self.toolLabel(tool))"))
+            case "postToolUse", "afterShellExecution", "afterFileEdit":
+                return SessionStatusObservation(.working, cause: cause("hook: \(eventName)"))
+            case "sessionEnd", "stop":
+                return SessionStatusObservation(.readyForReview, cause: cause("hook: \(eventName)"))
+            default:
+                return nil
+            }
         }
     }
 
@@ -321,6 +345,8 @@ public final class HookEventReceiver: @unchecked Sendable {
         case .openCode:
             // OpenCode's events are flat {event: name} with no payload.
             raw = nil
+        case .cursorAgent:
+            raw = cursorPayloadSummary(from: object)
         }
         guard let raw, !raw.isEmpty else { return nil }
         return raw.count <= maxLength ? raw : String(raw.prefix(maxLength)) + "…"
@@ -395,6 +421,22 @@ public final class HookEventReceiver: @unchecked Sendable {
         // Stop events may carry last_assistant_message.
         if let message = object["last_assistant_message"] as? String, !message.isEmpty {
             return "last_message: \(message)"
+        }
+        return nil
+    }
+
+    // MARK: Cursor Agent
+
+    private static func cursorPayloadSummary(from object: [String: Any]) -> String? {
+        let payload = object["payload"] as? [String: Any] ?? object["request"] as? [String: Any] ?? object
+        if let toolInput = payload["tool_input"] as? [String: Any], !toolInput.isEmpty {
+            return compactJSON(toolInput)
+        }
+        if let command = payload["command"] as? String, !command.isEmpty {
+            return "command=\(command)"
+        }
+        if let tool = payload["tool_name"] as? String {
+            return "tool=\(tool)"
         }
         return nil
     }

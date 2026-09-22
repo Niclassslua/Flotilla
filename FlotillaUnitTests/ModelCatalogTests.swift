@@ -461,6 +461,85 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(groups[0].displayName, "Gemini 3.7 Flash")
     }
 
+    func testCursorGroupingMatchesSlashModelOrderAndCollapsesEffort() {
+        let output = """
+        Available models
+
+        gpt-5.3-codex-low - Codex 5.3 Low
+        gpt-5.3-codex-low-fast - Codex 5.3 Low Fast
+        gpt-5.3-codex - Codex 5.3
+        gpt-5.3-codex-high - Codex 5.3 High
+        composer-2.5 - Composer 2.5
+        composer-2.5-fast - Composer 2.5 Fast
+        grok-4.7-high-fast - Grok 4.7  High Fast
+        grok-4.7-high - Grok 4.7  High
+        grok-4.7-medium - Grok 4.7  Medium
+        auto - Auto (default)
+        claude-opus-5-thinking-high - Claude Opus 5 1M Thinking
+        claude-opus-5-high - Claude Opus 5 1M
+        gpt-5.5-none - GPT-5.5 1M None
+        gpt-5.5-medium - GPT-5.5 1M
+        gpt-5.5-extra-high - GPT-5.5 1M Extra High
+        """
+        let entries = ModelCatalogFetcher.parseCursorModelList(output)
+        let groups = ModelCatalog.groupCursorModels(entries)
+
+        XCTAssertEqual(groups.map(\.displayName), [
+            "Auto",
+            "Grok 4.7",
+            "Composer 2.5",
+            "Claude Opus 5",
+            "GPT-5.5",
+            "Codex 5.3",
+        ])
+
+        let grok = groups.first { $0.displayName == "Grok 4.7" }
+        XCTAssertEqual(grok?.variants[.high], "grok-4.7-high")
+        XCTAssertEqual(grok?.variants[.medium], "grok-4.7-medium")
+        XCTAssertFalse(grok?.variants.values.contains("grok-4.7-high-fast") ?? true)
+
+        let codex = groups.first { $0.displayName == "Codex 5.3" }
+        XCTAssertEqual(codex?.variants[.low], "gpt-5.3-codex-low")
+        XCTAssertEqual(codex?.variants[.medium], "gpt-5.3-codex")
+        XCTAssertEqual(codex?.variants[.high], "gpt-5.3-codex-high")
+
+        let composer = groups.first { $0.displayName == "Composer 2.5" }
+        XCTAssertEqual(composer?.soleSlug, "composer-2.5")
+        XCTAssertTrue(composer?.variants.isEmpty ?? false)
+
+        let opus = groups.first { $0.displayName == "Claude Opus 5" }
+        XCTAssertEqual(opus?.variants[.high], "claude-opus-5-high")
+
+        let gpt = groups.first { $0.displayName == "GPT-5.5" }
+        XCTAssertEqual(gpt?.variants[.medium], "gpt-5.5-medium")
+        XCTAssertEqual(gpt?.variants[.xhigh], "gpt-5.5-extra-high")
+        XCTAssertNil(gpt?.variants[.minimal])
+    }
+
+    func testCursorStaticGroupsFollowSlashModelOrderAndNarrowEffort() {
+        let names = ModelCatalog.staticCursorGroups().map(\.displayName)
+        XCTAssertEqual(Array(names.prefix(5)), [
+            "Auto",
+            "Grok 4.7",
+            "Grok 4.6",
+            "Composer 2.5",
+            "Claude Opus 5.5",
+        ])
+        let codexIndex = names.firstIndex(of: "Codex 5.3")
+        let sonnetIndex = names.firstIndex(of: "Claude Sonnet 4.6")
+        XCTAssertNotNil(codexIndex)
+        XCTAssertNotNil(sonnetIndex)
+        XCTAssertLessThan(sonnetIndex ?? 0, codexIndex ?? 0)
+
+        let profiles = ModelCatalog.staticFallbackProfiles(for: .cursorAgent)
+        let grok = AgentEffortCatalog.options(for: .cursorAgent, model: "grok-4.7-high", profiles: profiles)
+        XCTAssertEqual(grok.map(\.level), [.low, .medium, .high, .xhigh])
+        let auto = AgentEffortCatalog.options(for: .cursorAgent, model: "auto", profiles: profiles)
+        XCTAssertTrue(auto.isEmpty)
+        let composer = AgentEffortCatalog.options(for: .cursorAgent, model: "composer-2.5", profiles: profiles)
+        XCTAssertTrue(composer.isEmpty)
+    }
+
     func testAntigravityStaticGroupsResolveEveryVariant() {
         let groups = ModelCatalog.staticAntigravityGroups()
 

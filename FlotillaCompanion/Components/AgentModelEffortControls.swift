@@ -105,7 +105,7 @@ struct AgentModelEffortControls: View {
     private var supportsEffort: Bool {
         guard agent.supportsEffortSelection else { return false }
         let entry = catalog.entry(for: agent)
-        if agent == .antigravity {
+        if agent.bakesEffortIntoModelSlug {
             if entry.antigravityGroups.isEmpty {
                 return !entry.effortLevels.isEmpty
             }
@@ -123,7 +123,7 @@ struct AgentModelEffortControls: View {
 
     private var availableEffortLevels: [AgentEffort] {
         let entry = catalog.entry(for: agent)
-        if agent == .antigravity {
+        if agent.bakesEffortIntoModelSlug {
             let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
             if let group = entry.antigravityGroups.first(where: {
                 $0.variants.values.contains(trimmed) || $0.soleSlug == trimmed || $0.baseSlug == trimmed
@@ -137,7 +137,7 @@ struct AgentModelEffortControls: View {
 
     private var effectiveEffort: AgentEffort? {
         let entry = catalog.entry(for: agent)
-        if agent == .antigravity {
+        if agent.bakesEffortIntoModelSlug {
             let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
             if let group = entry.antigravityGroups.first(where: { $0.variants.values.contains(trimmed) }) {
                 for (lvl, s) in group.variants where s == trimmed {
@@ -152,7 +152,7 @@ struct AgentModelEffortControls: View {
     private var selectedModelDisplayName: String {
         let entry = catalog.entry(for: agent)
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        if agent == .antigravity {
+        if agent.bakesEffortIntoModelSlug {
             if let group = entry.antigravityGroups.first(where: {
                 $0.variants.values.contains(trimmed) || $0.soleSlug == trimmed || $0.baseSlug == trimmed
             }) {
@@ -200,7 +200,7 @@ struct AgentModelEffortControls: View {
     private func clampToAgent() {
         let entry = catalog.entry(for: agent)
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        if agent == .antigravity {
+        if agent.bakesEffortIntoModelSlug {
             let isKnown = entry.antigravityGroups.contains { group in
                 group.variants.values.contains(trimmed) || group.soleSlug == trimmed || group.baseSlug == trimmed
             } || entry.models.contains { $0.slug == trimmed }

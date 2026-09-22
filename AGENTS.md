@@ -269,7 +269,8 @@ Kanban agent-lane gesture.
 |---|:-:|:-:|
 | Claude Code | yes | yes |
 | Codex CLI | yes | yes |
-| Antigravity | yes | no |
+| Antigravity | yes | yes |
+| Cursor Agent | yes | yes |
 | OpenCode | no | yes |
 
 These differences are expressed by which protocol each codec conforms to

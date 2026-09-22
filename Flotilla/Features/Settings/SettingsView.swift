@@ -71,7 +71,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .git: "git branch worktree delete lifecycle"
         case .notifications: "notifications waiting input sound privacy never active always delivery"
         case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices speech dictation audio handy stt transcribe"
-        case .agents: "claude codex opencode agy antigravity executable arguments authentication developer tools git github gh tmux path"
+        case .agents: "claude codex opencode agy antigravity cursor agent executable arguments authentication developer tools git github gh tmux path"
         }
     }
 }

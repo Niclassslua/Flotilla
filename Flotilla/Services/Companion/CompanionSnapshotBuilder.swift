@@ -136,22 +136,22 @@ enum CompanionSnapshotBuilder {
             }
             let effortOptions = AgentEffortCatalog.options(for: agent, model: nil, profiles: profiles)
             let antigravityGroups: [CompanionKit.AntigravityGroupOption]
+            let catalogModels: [CompanionKit.ModelOption]
             if agent == .antigravity {
                 let groups = await ModelCatalogCache.shared.antigravityGroups()
-                antigravityGroups = groups.map {
-                    CompanionKit.AntigravityGroupOption(
-                        baseSlug: $0.baseSlug,
-                        displayName: $0.displayName,
-                        variants: $0.variants,
-                        soleSlug: $0.soleSlug
-                    )
-                }
+                antigravityGroups = Self.companionGroups(groups)
+                catalogModels = models
+            } else if agent == .cursorAgent {
+                let groups = await ModelCatalogCache.shared.cursorGroups()
+                antigravityGroups = Self.companionGroups(groups)
+                catalogModels = Self.familyModels(groups)
             } else {
                 antigravityGroups = []
+                catalogModels = models
             }
-            let defaultModel = models.first?.slug ?? AgentKit.AgentCatalog.descriptor(for: agent).fallbackModels.first ?? ""
+            let defaultModel = catalogModels.first?.slug ?? AgentKit.AgentCatalog.descriptor(for: agent).fallbackModels.first ?? ""
             entries[agent] = .init(
-                models: models,
+                models: catalogModels,
                 defaultModel: defaultModel,
                 effortLevels: effortOptions.map(\.level),
                 defaultEffort: agent.supportsEffortSelection ? (effortOptions.first { $0.level == .medium }?.level ?? effortOptions.first?.level) : nil,
@@ -172,21 +172,21 @@ enum CompanionSnapshotBuilder {
             }
             let options = AgentEffortCatalog.staticOptions(for: agent)
             let antigravityGroups: [CompanionKit.AntigravityGroupOption]
+            let catalogModels: [CompanionKit.ModelOption]
             if agent == .antigravity {
-                antigravityGroups = ModelCatalog.staticAntigravityGroups().map {
-                    CompanionKit.AntigravityGroupOption(
-                        baseSlug: $0.baseSlug,
-                        displayName: $0.displayName,
-                        variants: $0.variants,
-                        soleSlug: $0.soleSlug
-                    )
-                }
+                antigravityGroups = Self.companionGroups(ModelCatalog.staticAntigravityGroups())
+                catalogModels = models
+            } else if agent == .cursorAgent {
+                let groups = ModelCatalog.staticCursorGroups()
+                antigravityGroups = Self.companionGroups(groups)
+                catalogModels = Self.familyModels(groups)
             } else {
                 antigravityGroups = []
+                catalogModels = models
             }
-            let defaultModel = models.first?.slug ?? AgentKit.AgentCatalog.descriptor(for: agent).fallbackModels.first ?? ""
+            let defaultModel = catalogModels.first?.slug ?? AgentKit.AgentCatalog.descriptor(for: agent).fallbackModels.first ?? ""
             entries[agent] = .init(
-                models: models,
+                models: catalogModels,
                 defaultModel: defaultModel,
                 effortLevels: options.map(\.level),
                 defaultEffort: agent.supportsEffortSelection ? (options.first { $0.level == .medium }?.level ?? options.first?.level) : nil,
@@ -195,6 +195,28 @@ enum CompanionSnapshotBuilder {
             )
         }
         return .init(entries: entries)
+    }
+
+    private static func companionGroups(_ groups: [AntigravityModelGroup]) -> [CompanionKit.AntigravityGroupOption] {
+        groups.map {
+            CompanionKit.AntigravityGroupOption(
+                baseSlug: $0.baseSlug,
+                displayName: $0.displayName,
+                variants: $0.variants,
+                soleSlug: $0.soleSlug
+            )
+        }
+    }
+
+    /// One row per family, in group order, launching the medium variant when
+    /// the phone doesn't have a separate effort selection yet.
+    private static func familyModels(_ groups: [AntigravityModelGroup]) -> [CompanionKit.ModelOption] {
+        groups.map { group in
+            CompanionKit.ModelOption(
+                slug: group.resolvedSlug(for: .medium) ?? group.soleSlug ?? group.baseSlug,
+                displayName: group.displayName
+            )
+        }
     }
 
     // MARK: - Git

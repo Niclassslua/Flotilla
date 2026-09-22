@@ -13,7 +13,7 @@ final class StartupCheckViewModelTests: XCTestCase {
     func testMissingOpenCodeIsDetectedButExcludedFromWarningItems() {
         let viewModel = StartupCheckViewModel(
             locator: SelectiveExecutableLocator(
-                availableNames: ["git", "tmux", "gh", "claude", "codex", "agy"]
+                availableNames: ["git", "tmux", "gh", "claude", "codex", "agy", "agent"]
             )
         )
 
@@ -24,7 +24,7 @@ final class StartupCheckViewModelTests: XCTestCase {
     func testOtherMissingAgentStillAppearsInWarningItems() {
         let viewModel = StartupCheckViewModel(
             locator: SelectiveExecutableLocator(
-                availableNames: ["git", "tmux", "gh", "claude", "opencode", "agy"]
+                availableNames: ["git", "tmux", "gh", "claude", "opencode", "agy", "agent"]
             )
         )
 

@@ -39,14 +39,14 @@ struct EffortPickerSheet: View {
 
     private func select(_ level: AgentEffort) {
         effort = level
-        if agent == .antigravity {
+        if agent.bakesEffortIntoModelSlug {
             if let group = entry.antigravityGroups.first(where: {
                 $0.variants.values.contains(model) || $0.baseSlug == model
             }) {
                 if let resolved = group.resolvedSlug(for: level) {
                     model = resolved
                 }
-            } else if model.isEmpty, let defaultGroup = entry.antigravityGroups.first {
+            } else if model.isEmpty, let defaultGroup = entry.antigravityGroups.first(where: { !$0.variants.isEmpty }) {
                 if let resolved = defaultGroup.resolvedSlug(for: level) {
                     model = resolved
                 }

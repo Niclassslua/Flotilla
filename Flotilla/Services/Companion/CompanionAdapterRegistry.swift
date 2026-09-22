@@ -8,6 +8,10 @@ final class CompanionAdapterRegistry {
     private let support: URL
     var screen: ((UUID) async -> String?)?
     var send: ((UUID, Data) -> Void)?
+    /// Submits a prompt through the tmux-backed delivery path
+    /// (`AppStore.deliverMessage`). Raw PTY writes only *type* into an
+    /// agent's composer; this is the path that also *submits*.
+    var deliver: ((UUID, String) async throws -> Void)?
     var bridge: ClaudePermissionBridge?
     private var adapters: [UUID: any CompanionSessionAdapter] = [:]
     private var refreshing: Set<UUID> = []
@@ -21,8 +25,17 @@ final class CompanionAdapterRegistry {
             adapter.session = session
             return adapter
         }
-        if session.agent == .claudeCode, let screen, let send, let bridge {
-            let adapter = ClaudeCompanionAdapter(session: session, bridge: bridge, support: support, screen: screen, send: { send(session.id, $0) })
+        if session.agent == .claudeCode || session.agent == .cursorAgent, let screen, let send, let bridge {
+            let adapter: any CompanionSessionAdapter
+            if session.agent == .cursorAgent {
+                // Without the tmux-backed delivery seam there is no way to
+                // submit a phone prompt; returning nil lets the router fall
+                // back to `AppStore.deliverMessage` directly.
+                guard let deliver else { return nil }
+                adapter = CursorCompanionAdapter(session: session, bridge: bridge, support: support, screen: screen, send: { send(session.id, $0) }, deliver: { try await deliver(session.id, $0) })
+            } else {
+                adapter = ClaudeCompanionAdapter(session: session, bridge: bridge, support: support, screen: screen, send: { send(session.id, $0) })
+            }
             adapters[session.id] = adapter; return adapter
         }
         guard let descriptor = CompanionRuntimeDescriptor.read(session.id, support: support) else { return nil }
@@ -34,7 +47,8 @@ final class CompanionAdapterRegistry {
         case .antigravity:
             guard let screen, let send else { return nil }
             adapter = AntigravityCompanionAdapter(session: session, descriptor: descriptor, support: support, screen: screen, send: { send(session.id, $0) })
-        default: return nil
+        case .claudeCode, .cursorAgent:
+            return nil
         }
         if let codex = adapter as? CodexCompanionAdapter {
             codex.onChange = { [weak self] in self?.schedulePublish() }

@@ -27,7 +27,7 @@ struct ModelPickerSheet: View {
                 }
 
                 Section("Available Models") {
-                    if agent == .antigravity {
+                    if agent.bakesEffortIntoModelSlug {
                         ForEach(entry.antigravityGroups) { group in
                             Button {
                                 selectAntigravityGroup(group)

@@ -82,6 +82,8 @@ public struct ModelCatalogFetcher: Sendable {
                     try await self.fetchOpenCodeProfiles(executable: executable, subscription: openCodeSubscription)
                 case .antigravity:
                     try await self.fetchAntigravityProfiles(executable: executable)
+                case .cursorAgent:
+                    try await self.fetchCursorProfiles(executable: executable)
                 }
             }
         } catch {
@@ -313,9 +315,75 @@ public struct ModelCatalogFetcher: Sendable {
 
         let groups = ModelCatalog.groupAntigravityModels(models.map { ($0.slug, $0.displayName) })
         return models.map { model in
-            let options = ModelCatalog.antigravityEffortOptions(for: model.slug, in: groups)
+            let options = ModelCatalog.variantEffortOptions(for: model.slug, agent: .antigravity, in: groups)
             return AgentModelProfile(slug: model.slug, displayName: model.displayName, effortOptions: options)
         }
+    }
+
+    /// `agent --list-models` prints one exploded variant per line
+    /// (`grok-4.7-high - Grok 4.7  High`). Profiles keep every slug so a
+    /// selected variant can answer for its family's effort set; the picker
+    /// itself shows `groupCursorModels`, which matches `/model`.
+    private func fetchCursorProfiles(executable: URL) async throws -> [AgentModelProfile]? {
+        guard let entries = try await fetchCursorModelEntries(executable: executable) else { return nil }
+        let groups = ModelCatalog.groupCursorModels(entries)
+        return entries.map { entry in
+            AgentModelProfile(
+                slug: entry.slug,
+                displayName: entry.displayName,
+                effortOptions: ModelCatalog.variantEffortOptions(for: entry.slug, agent: .cursorAgent, in: groups)
+            )
+        }
+    }
+
+    func fetchCursorGroups(for agent: AgentKind) async -> [AntigravityModelGroup] {
+        guard let executable = locator.locate(binaryName(for: agent)) else {
+            return ModelCatalog.staticCursorGroups()
+        }
+        let entries: [(slug: String, displayName: String?)]?
+        do {
+            entries = try await withTimeout(seconds: timeoutSeconds) {
+                try await self.fetchCursorModelEntries(executable: executable)
+            }
+        } catch {
+            entries = nil
+        }
+        guard let entries, !entries.isEmpty else {
+            return ModelCatalog.staticCursorGroups()
+        }
+        return ModelCatalog.groupCursorModels(entries)
+    }
+
+    private func fetchCursorModelEntries(executable: URL) async throws -> [(slug: String, displayName: String?)]? {
+        let result = try await runner.run(
+            ["--list-models"],
+            executable: executable,
+            workingDirectory: FileManager.default.temporaryDirectory
+        )
+        guard result.exitCode == 0 else { return nil }
+        let entries = Self.parseCursorModelList(result.stdout)
+        return entries.isEmpty ? nil : entries
+    }
+
+    public static func parseCursorModelList(_ output: String) -> [(slug: String, displayName: String?)] {
+        output
+            .split(separator: "\n")
+            .compactMap { rawLine in
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !line.isEmpty,
+                      !line.lowercased().hasPrefix("available"),
+                      !line.lowercased().hasPrefix("usage") else {
+                    return nil
+                }
+                if let dash = line.range(of: " - ") {
+                    let slug = String(line[..<dash.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    let name = String(line[dash.upperBound...]).trimmingCharacters(in: .whitespaces)
+                    guard !slug.isEmpty, !slug.contains(" ") else { return nil }
+                    return (slug, name.isEmpty ? nil : name)
+                }
+                guard !line.contains(" "), !line.hasPrefix("-") else { return nil }
+                return (line, nil)
+            }
     }
 
     private func fetchAntigravityModelEntries(executable: URL) async throws -> [AntigravityModelEntry]? {
@@ -482,13 +550,11 @@ private func withTimeout<T: Sendable>(
     }
 }
 
-/// One Antigravity model, grouped from the one-or-more slugs that share a
-/// base name — e.g. `gemini-3.7-flash-{low,medium,high}` become a single
-/// "Gemini 3.7 Flash" group with three variants. Antigravity bakes reasoning
-/// effort into the model slug itself rather than accepting it as a separate
-/// flag, so the model picker offers the base name and a second, group-scoped
-/// picker offers the variant — see `AgentDescriptor.antigravity.effortFlag`
-/// (`nil`: no `--effort` is ever sent) and `AntigravityModelEffortCoordinator`.
+/// One model whose reasoning effort is a slug suffix rather than a CLI flag.
+/// Antigravity (`gemini-3.7-flash-{low,medium,high}`) and Cursor Agent
+/// (`grok-4.7-{low,medium,high,xhigh}`) both use this shape: the model picker
+/// offers the base name, and the effort picker writes the variant slug.
+/// See `AntigravityModelEffortCoordinator`.
 public struct AntigravityModelGroup: Sendable, Equatable, Identifiable {
     public let baseSlug: String
     public let displayName: String
@@ -537,7 +603,14 @@ public enum ModelCatalog {
         if agent == .antigravity {
             let groups = staticAntigravityGroups()
             return antigravityFallbackModels.map { entry in
-                let options = antigravityEffortOptions(for: entry.slug, in: groups)
+                let options = variantEffortOptions(for: entry.slug, agent: .antigravity, in: groups)
+                return AgentModelProfile(slug: entry.slug, displayName: entry.displayName, effortOptions: options)
+            }
+        }
+        if agent == .cursorAgent {
+            let groups = staticCursorGroups()
+            return cursorFallbackModels.map { entry in
+                let options = variantEffortOptions(for: entry.slug, agent: .cursorAgent, in: groups)
                 return AgentModelProfile(slug: entry.slug, displayName: entry.displayName, effortOptions: options)
             }
         }
@@ -559,7 +632,7 @@ public enum ModelCatalog {
         switch agent {
         case .claudeCode: claudeModelDisplayName(for: slug)
         case .openCode: openCodeModelDisplayName(for: slug)
-        case .codexCLI, .antigravity: nil
+        case .codexCLI, .antigravity, .cursorAgent: nil
         }
     }
 
@@ -724,6 +797,219 @@ public enum ModelCatalog {
         }
     }
 
+    /// Display names in the order Cursor's TUI `/model` picker shows them
+    /// (parameterized models, with Auto moved to the front). `--list-models`
+    /// explodes every effort and fast variant in a different order; grouping
+    /// re-sorts families to match this list. A family the CLI adds later
+    /// keeps its relative position after the known names.
+    private static let cursorSlashModelOrder: [String] = [
+        "Auto",
+        "Grok 4.7",
+        "Grok 4.6",
+        "Composer 2.5",
+        "Claude Opus 5.5",
+        "Claude Opus 5",
+        "Claude Opus 4.8",
+        "GPT-5.6 Sol",
+        "GPT-5.5",
+        "Claude Fable 5.1",
+        "Claude Fable 5",
+        "Grok 4.5",
+        "Gemini 3.8 Flash",
+        "Gemini 3.7 Flash",
+        "Muse Spark 1.3",
+        "GPT-5.6 Terra",
+        "Claude Sonnet 5",
+        "Claude Sonnet 4.6",
+        "Codex 5.3",
+        "Claude Opus 4.7",
+        "GPT-5.4",
+        "Claude Opus 4.6",
+        "Claude Opus 4.5",
+        "GPT-5.2",
+        "GPT-5.6 Luna",
+        "Gemini 3.6 Flash",
+        "Gemini 3.1 Pro",
+        "GPT-5.4 Mini",
+        "GPT-5.4 Nano",
+        "Claude Haiku 4.5",
+        "Claude Sonnet 4.5",
+        "GPT-5.1",
+        "Gemini 3 Flash",
+        "Gemini 3.5 Flash",
+        "Claude Sonnet 4",
+        "GPT-5 Mini",
+        "Kimi K3",
+        "Kimi K2.7 Code",
+        "GLM 5.2",
+    ]
+
+    public static func staticCursorGroups() -> [AntigravityModelGroup] {
+        groupCursorModels(cursorFallbackModels.map { ($0.slug, Optional($0.displayName)) })
+    }
+
+    /// Collapses Cursor's exploded `--list-models` variants into the rows
+    /// `/model` shows, in that picker's order.
+    ///
+    /// `fast` and `thinking` are parameters on the same row, not separate
+    /// models. When several slugs share an effort, the plain slug wins over
+    /// a thinking or fast variant. A slug with no effort token (Codex's bare
+    /// `gpt-5.3-codex`) fills Medium when that level isn't already taken.
+    /// `none` is not an `AgentEffort` and is left out of the picker.
+    public static func groupCursorModels(_ entries: [(slug: String, displayName: String?)]) -> [AntigravityModelGroup] {
+        struct Parsed {
+            let baseSlug: String
+            let displayName: String
+            let effort: AgentEffort?
+            let penalty: Int
+            let isNone: Bool
+            let slug: String
+            let sourceIndex: Int
+        }
+
+        let parsed: [Parsed] = entries.enumerated().map { index, entry in
+            let slugParts = parseCursorSlug(entry.slug)
+            let displayName = cursorFamilyDisplayName(from: entry.displayName ?? entry.slug)
+            return Parsed(
+                baseSlug: slugParts.base,
+                displayName: displayName,
+                effort: slugParts.effort,
+                penalty: slugParts.penalty,
+                isNone: slugParts.isNone,
+                slug: entry.slug,
+                sourceIndex: index
+            )
+        }
+
+        var order: [String] = []
+        var byBase: [String: [Parsed]] = [:]
+        for entry in parsed {
+            if byBase[entry.baseSlug] == nil { order.append(entry.baseSlug) }
+            byBase[entry.baseSlug, default: []].append(entry)
+        }
+
+        let rankByName = Dictionary(uniqueKeysWithValues: cursorSlashModelOrder.enumerated().map { ($0.element, $0.offset) })
+        let grouped: [(group: AntigravityModelGroup, rank: Int, sourceIndex: Int)] = order.compactMap { base in
+            guard let members = byBase[base], let first = members.first else { return nil }
+            var variants: [AgentEffort: (slug: String, penalty: Int)] = [:]
+            var plain: (slug: String, penalty: Int)?
+            var none: (slug: String, penalty: Int)?
+            for member in members {
+                if let effort = member.effort {
+                    if let existing = variants[effort], existing.penalty <= member.penalty { continue }
+                    variants[effort] = (member.slug, member.penalty)
+                } else if member.isNone {
+                    if let existing = none, existing.penalty <= member.penalty { continue }
+                    none = (member.slug, member.penalty)
+                } else {
+                    if let existing = plain, existing.penalty <= member.penalty { continue }
+                    plain = (member.slug, member.penalty)
+                }
+            }
+            if let plain, variants[.medium] == nil, !variants.isEmpty {
+                variants[.medium] = plain
+            }
+            let resolved = variants.mapValues(\.slug)
+            let sole: String?
+            if resolved.isEmpty {
+                sole = plain?.slug ?? none?.slug ?? first.slug
+            } else {
+                sole = nil
+            }
+            let group = AntigravityModelGroup(
+                baseSlug: base,
+                displayName: first.displayName,
+                variants: resolved,
+                soleSlug: sole
+            )
+            let rank = rankByName[first.displayName] ?? Int.max
+            return (group, rank, first.sourceIndex)
+        }
+
+        return grouped
+            .sorted { lhs, rhs in
+                if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+                return lhs.sourceIndex < rhs.sourceIndex
+            }
+            .map(\.group)
+    }
+
+    /// Trailing effort and parameter words Cursor prints after the family
+    /// name (`Grok 4.7  High Fast`, `Claude Opus 5 1M Thinking`).
+    static func cursorFamilyDisplayName(from raw: String) -> String {
+        var name = String(String.UnicodeScalarView(raw.unicodeScalars.filter { scalar in
+            let category = scalar.properties.generalCategory
+            return category != .format && category != .control
+        }))
+        while let open = name.firstIndex(of: "("), let close = name[open...].firstIndex(of: ")") {
+            name.removeSubrange(open...close)
+        }
+        let suffixes = ["Extra High", "No Thinking", "Thinking", "Minimal", "Medium", "None", "High", "Low", "Fast", "Max", "1M"]
+        var didStrip = true
+        while didStrip {
+            didStrip = false
+            name = name.trimmingCharacters(in: .whitespaces)
+            let lowercased = name.lowercased()
+            for suffix in suffixes where lowercased.hasSuffix(suffix.lowercased()) {
+                let cut = name.index(name.endIndex, offsetBy: -suffix.count)
+                if cut == name.startIndex || name[name.index(before: cut)].isWhitespace {
+                    name = String(name[..<cut])
+                    didStrip = true
+                    break
+                }
+            }
+        }
+        return name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// Strips trailing `-fast`, `-thinking`, and effort tokens. `fast` and
+    /// `thinking` raise `penalty` so a plain slug is preferred for that effort.
+    private static func parseCursorSlug(_ slug: String) -> (base: String, effort: AgentEffort?, penalty: Int, isNone: Bool) {
+        var parts = slug.split(separator: "-").map(String.init)
+        var effort: AgentEffort?
+        var penalty = 0
+        var sawNone = false
+        while !parts.isEmpty {
+            if parts.count >= 2, parts[parts.count - 2] == "extra", parts[parts.count - 1] == "high" {
+                if effort == nil { effort = .xhigh }
+                parts.removeLast(2)
+                continue
+            }
+            switch parts.last {
+            case "fast":
+                penalty += 2
+                parts.removeLast()
+            case "thinking":
+                penalty += 1
+                parts.removeLast()
+            case "xhigh":
+                if effort == nil { effort = .xhigh }
+                parts.removeLast()
+            case "minimal":
+                if effort == nil { effort = .minimal }
+                parts.removeLast()
+            case "low":
+                if effort == nil { effort = .low }
+                parts.removeLast()
+            case "medium":
+                if effort == nil { effort = .medium }
+                parts.removeLast()
+            case "high":
+                if effort == nil { effort = .high }
+                parts.removeLast()
+            case "max":
+                if effort == nil { effort = .max }
+                parts.removeLast()
+            case "none":
+                sawNone = true
+                parts.removeLast()
+            default:
+                return (parts.joined(separator: "-"), effort, penalty, sawNone && effort == nil)
+            }
+        }
+        return (parts.joined(separator: "-"), effort, penalty, sawNone && effort == nil)
+    }
+
     private static let antigravityFallbackModels: [(slug: String, displayName: String)] = [
         ("gemini-3.7-flash-high", "Gemini 3.7 Flash (High)"),
         ("gemini-3.7-flash-medium", "Gemini 3.7 Flash (Medium)"),
@@ -741,10 +1027,61 @@ public enum ModelCatalog {
         ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"),
     ]
 
-    static func antigravityEffortOptions(for slug: String, in groups: [AntigravityModelGroup]) -> [AgentEffortOption] {
-        let staticOptions = AgentEffortCatalog.staticOptions(for: .antigravity)
+    /// Offline Cursor families in `/model` order. Live `agent --list-models`
+    /// replaces this. Each slug's display name is the family, so grouping
+    /// doesn't depend on effort words being present.
+    private static let cursorFallbackModels: [(slug: String, displayName: String)] =
+        cursorFamily("Auto", "auto")
+        + cursorFamily("Grok 4.7", "grok-4.7-low", "grok-4.7-medium", "grok-4.7-high", "grok-4.7-xhigh")
+        + cursorFamily("Grok 4.6", "cursor-grok-4.6-low", "cursor-grok-4.6-medium", "cursor-grok-4.6-high", "cursor-grok-4.6-xhigh")
+        + cursorFamily("Composer 2.5", "composer-2.5")
+        + cursorFamily("Claude Opus 5.5", "claude-opus-5-5-low", "claude-opus-5-5-medium", "claude-opus-5-5-high", "claude-opus-5-5-xhigh", "claude-opus-5-5-max")
+        + cursorFamily("Claude Opus 5", "claude-opus-5-low", "claude-opus-5-medium", "claude-opus-5-high", "claude-opus-5-xhigh")
+        + cursorFamily("Claude Opus 4.8", "claude-opus-4-8-low", "claude-opus-4-8-medium", "claude-opus-4-8-high", "claude-opus-4-8-xhigh", "claude-opus-4-8-max")
+        + cursorFamily("GPT-5.6 Sol", "gpt-5.6-sol-low", "gpt-5.6-sol-medium", "gpt-5.6-sol-high", "gpt-5.6-sol-xhigh", "gpt-5.6-sol-max")
+        + cursorFamily("GPT-5.5", "gpt-5.5-low", "gpt-5.5-medium", "gpt-5.5-high", "gpt-5.5-extra-high")
+        + cursorFamily("Claude Fable 5.1", "claude-fable-5-1-low", "claude-fable-5-1-medium", "claude-fable-5-1-high", "claude-fable-5-1-xhigh", "claude-fable-5-1-max")
+        + cursorFamily("Claude Fable 5", "claude-fable-5-low", "claude-fable-5-medium", "claude-fable-5-high", "claude-fable-5-xhigh", "claude-fable-5-max")
+        + cursorFamily("Grok 4.5", "cursor-grok-4.5-low", "cursor-grok-4.5-medium", "cursor-grok-4.5-high")
+        + cursorFamily("Gemini 3.8 Flash", "gemini-3.8-flash-low", "gemini-3.8-flash-medium", "gemini-3.8-flash-high")
+        + cursorFamily("Gemini 3.7 Flash", "gemini-3.7-flash-low", "gemini-3.7-flash-medium", "gemini-3.7-flash-high")
+        + cursorFamily("Muse Spark 1.3", "muse-spark-1.3-minimal", "muse-spark-1.3-low", "muse-spark-1.3-medium", "muse-spark-1.3-high", "muse-spark-1.3-xhigh", "muse-spark-1.3-max")
+        + cursorFamily("GPT-5.6 Terra", "gpt-5.6-terra-low", "gpt-5.6-terra-medium", "gpt-5.6-terra-high", "gpt-5.6-terra-xhigh", "gpt-5.6-terra-max")
+        + cursorFamily("Claude Sonnet 5", "claude-sonnet-5-low", "claude-sonnet-5-medium", "claude-sonnet-5-high", "claude-sonnet-5-xhigh", "claude-sonnet-5-max")
+        + cursorFamily("Claude Sonnet 4.6", "claude-4.6-sonnet-medium")
+        + cursorFamily("Codex 5.3", "gpt-5.3-codex-low", "gpt-5.3-codex", "gpt-5.3-codex-high", "gpt-5.3-codex-xhigh")
+        + cursorFamily("Claude Opus 4.7", "claude-opus-4-7-low", "claude-opus-4-7-medium", "claude-opus-4-7-high", "claude-opus-4-7-xhigh", "claude-opus-4-7-max")
+        + cursorFamily("GPT-5.4", "gpt-5.4-low", "gpt-5.4-medium", "gpt-5.4-high", "gpt-5.4-xhigh")
+        + cursorFamily("Claude Opus 4.6", "claude-4.6-opus-high", "claude-4.6-opus-max")
+        + cursorFamily("Claude Opus 4.5", "claude-4.5-opus-high")
+        + cursorFamily("GPT-5.2", "gpt-5.2-low", "gpt-5.2", "gpt-5.2-high", "gpt-5.2-xhigh")
+        + cursorFamily("GPT-5.6 Luna", "gpt-5.6-luna-low", "gpt-5.6-luna-medium", "gpt-5.6-luna-high", "gpt-5.6-luna-xhigh", "gpt-5.6-luna-max")
+        + cursorFamily("Gemini 3.6 Flash", "gemini-3.6-flash-minimal", "gemini-3.6-flash-low", "gemini-3.6-flash-medium", "gemini-3.6-flash-high")
+        + cursorFamily("Gemini 3.1 Pro", "gemini-3.1-pro")
+        + cursorFamily("GPT-5.4 Mini", "gpt-5.4-mini-none", "gpt-5.4-mini-low", "gpt-5.4-mini-medium", "gpt-5.4-mini-high", "gpt-5.4-mini-xhigh")
+        + cursorFamily("GPT-5.4 Nano", "gpt-5.4-nano-none", "gpt-5.4-nano-low", "gpt-5.4-nano-medium", "gpt-5.4-nano-high", "gpt-5.4-nano-xhigh")
+        + cursorFamily("Claude Sonnet 4.5", "claude-4.5-sonnet")
+        + cursorFamily("GPT-5.1", "gpt-5.1-low", "gpt-5.1", "gpt-5.1-high")
+        + cursorFamily("Gemini 3 Flash", "gemini-3-flash")
+        + cursorFamily("Gemini 3.5 Flash", "gemini-3.5-flash")
+        + cursorFamily("Claude Sonnet 4", "claude-4-sonnet")
+        + cursorFamily("GPT-5 Mini", "gpt-5-mini")
+        + cursorFamily("Kimi K3", "kimi-k3-low", "kimi-k3-high", "kimi-k3-max")
+        + cursorFamily("Kimi K2.7 Code", "kimi-k2.7-code")
+        + cursorFamily("GLM 5.2", "glm-5.2-high", "glm-5.2-max")
+
+    private static func cursorFamily(_ displayName: String, _ slugs: String...) -> [(slug: String, displayName: String)] {
+        slugs.map { ($0, displayName) }
+    }
+
+    static func variantEffortOptions(
+        for slug: String,
+        agent: AgentKind,
+        in groups: [AntigravityModelGroup]
+    ) -> [AgentEffortOption] {
+        let staticOptions = AgentEffortCatalog.staticOptions(for: agent)
         let optionsByLevel = Dictionary(uniqueKeysWithValues: staticOptions.map { ($0.level, $0) })
-        guard let group = groups.first(where: { $0.variants.values.contains(slug) || $0.soleSlug == slug }) else {
+        guard let group = groups.first(where: { $0.variants.values.contains(slug) || $0.soleSlug == slug || $0.baseSlug == slug }) else {
             return staticOptions
         }
         if group.variants.isEmpty { return [] }
@@ -785,6 +1122,7 @@ public actor ModelCatalogCache {
 
     private var cache: [AgentKind: [AgentModelProfile]] = [:]
     private var antigravityGroupsCache: [AntigravityModelGroup]?
+    private var cursorGroupsCache: [AntigravityModelGroup]?
     private let fetcher: ModelCatalogFetcher
 
     public init(fetcher: ModelCatalogFetcher = ModelCatalogFetcher()) {
@@ -811,6 +1149,16 @@ public actor ModelCatalogCache {
         }
         let groups = await fetcher.fetchAntigravityGroups(for: .antigravity)
         antigravityGroupsCache = groups
+        return groups
+    }
+
+    /// Cursor's models grouped the way the TUI `/model` picker shows them.
+    public func cursorGroups() async -> [AntigravityModelGroup] {
+        if let cached = cursorGroupsCache {
+            return cached
+        }
+        let groups = await fetcher.fetchCursorGroups(for: .cursorAgent)
+        cursorGroupsCache = groups
         return groups
     }
 }
