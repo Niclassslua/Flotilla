@@ -81,8 +81,8 @@ field 4, not a dedicated top-level field — see below.
 
 | # | meaning |
 |---|---|
-| 1 | response text |
-| 8 | response text again (duplicate value) |
+| 1 | response text — **or the full reasoning trace** when a thinking-capable model (e.g. Claude Sonnet via Cursor's inference API) is in use |
+| 8 | visible response text. Identical to field 1 in non-thinking sessions; contains only the final response (no reasoning) in thinking-model sessions. **Always prefer field 8** when decoding for display. |
 | 14 → 2 → 1 | an opaque ~250-byte blob, assistant steps only. Very likely a Gemini encrypted thought-signature — genuinely opaque by design (server-encrypted), not merely undecoded wire format. Notably absent from user-step content, which is why synthesizing a user-role step (the write path) does not need to fabricate anything like it. |
 
 ### System-notice content (field 114)

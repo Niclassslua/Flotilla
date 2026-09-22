@@ -112,6 +112,28 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
         ])
     }
 
+    /// Simulates a step produced by a thinking-capable model: `reasoning` in
+    /// field 20.1 (the chain-of-thought) and `response` in field 20.8 (the
+    /// clean visible reply). In non-thinking sessions both fields are identical.
+    private static func thinkingAssistantStepPayload(
+        reasoning: String,
+        response: String,
+        seconds: UInt64 = 1_789_000_001
+    ) -> Data {
+        let envelope: [AntigravityWireFormat.Field] = [
+            timestampField(1, seconds: seconds),
+            AntigravityWireFormat.varintField(3, 2) // role: assistant
+        ]
+        return AntigravityWireFormat.serialize([
+            AntigravityWireFormat.varintField(1, 15),
+            AntigravityWireFormat.messageField(5, envelope),
+            AntigravityWireFormat.messageField(20, [
+                AntigravityWireFormat.stringField(1, reasoning), // 20.1: reasoning trace
+                AntigravityWireFormat.stringField(8, response)   // 20.8: visible response
+            ])
+        ])
+    }
+
     private static func systemStepPayload(text: String, seconds: UInt64 = 1_789_000_002) -> Data {
         let envelope: [AntigravityWireFormat.Field] = [
             timestampField(1, seconds: seconds),
@@ -215,6 +237,31 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
             return XCTFail("expected an assistant message, got \(entries[0])")
         }
         XCTAssertEqual(text, "kept")
+    }
+
+    /// When `agy` routes through a thinking-capable model (e.g. Claude Sonnet
+    /// via Cursor's inference API), the assistant step stores the full reasoning
+    /// trace in field 20.1 and the clean visible response in field 20.8. The
+    /// codec must return only field 20.8 so the companion app never receives
+    /// the raw chain-of-thought.
+    func testThinkingModelReasoningIsNotDecodedAsAssistantMessage() throws {
+        let reasoning = "Let me carefully think through this problem step by step…"
+        let response  = "The answer is 42."
+
+        let url = try writeDatabase(steps: [
+            (15, Self.thinkingAssistantStepPayload(reasoning: reasoning, response: response))
+        ])
+
+        let entries = try codec.readNative(at: url)
+
+        XCTAssertEqual(entries.count, 1, "thinking step must produce exactly one assistant entry")
+        guard case let .assistantMessage(text, _) = entries[0] else {
+            return XCTFail("expected assistantMessage, got \(entries[0])")
+        }
+        XCTAssertEqual(text, response,
+                       "codec must return field 20.8 (visible response), not field 20.1 (reasoning)")
+        XCTAssertFalse(text.contains(reasoning),
+                       "reasoning trace must not reach the companion app")
     }
 
     // MARK: - Discovery

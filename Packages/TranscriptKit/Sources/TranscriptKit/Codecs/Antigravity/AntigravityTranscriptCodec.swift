@@ -128,7 +128,14 @@ public struct AntigravityTranscriptCodec: TranscriptReading, TranscriptWriting {
 
         case 15: // assistant
             let content = AntigravityWireFormat.message(top, 20)
-            guard let text = AntigravityWireFormat.string(content, 1), !text.isEmpty else { return [] }
+            // Field 20.8 is the visible response text. Field 20.1 contains the
+            // full reasoning trace when a thinking-capable model (e.g. Claude
+            // Sonnet via Cursor's inference API) is in use; in non-thinking
+            // sessions the two fields are identical. Always prefer 20.8 so the
+            // companion app never receives the raw chain-of-thought.
+            let text = AntigravityWireFormat.string(content, 8)
+                ?? AntigravityWireFormat.string(content, 1)
+            guard let text, !text.isEmpty else { return [] }
             return [.assistantMessage(text: text, timestamp: timestamp)]
 
         case 101: // system notice, auto-inserted by agy itself
