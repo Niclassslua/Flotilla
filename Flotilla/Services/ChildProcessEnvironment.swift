@@ -28,7 +28,6 @@ enum ChildProcessEnvironment {
         "XCTestSessionIdentifierPrototype",
         "XPC_FLAGS",
         "XPC_SERVICE_NAME",
-        "__CFBundleIdentifier",
         "__XPC_LLVM_PROFILE_FILE",
     ]
 
@@ -44,7 +43,13 @@ enum ChildProcessEnvironment {
     ]
 
     static func sanitized(_ environment: [String: String]) -> [String: String] {
-        environment.filter { key, _ in !isBlocked(key) }
+        var env = environment.filter { key, _ in !isBlocked(key) }
+        if env["__CFBundleIdentifier"] == nil,
+           let bundleID = Bundle.main.bundleIdentifier,
+           bundleID.hasPrefix("com.niclassslua.flotilla") {
+            env["__CFBundleIdentifier"] = bundleID
+        }
+        return env
     }
 
     static func blockedVariableNames(in environment: [String: String]) -> Set<String> {

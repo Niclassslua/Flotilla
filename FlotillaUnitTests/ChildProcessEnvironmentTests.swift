@@ -27,9 +27,11 @@ final class ChildProcessEnvironmentTests: XCTestCase {
         XCTAssertEqual(sanitized["PATH"], "/usr/bin:/bin")
         XCTAssertEqual(sanitized["HOME"], "/tmp/test-home")
         XCTAssertEqual(sanitized["FLOTILLA_SELF_REPORT_PATH"], "/tmp/self-report.json")
+        XCTAssertEqual(sanitized["__CFBundleIdentifier"], "com.niclassslua.flotilla")
         for key in contaminatedEnvironment.keys where key != "PATH"
             && key != "HOME"
-            && key != "FLOTILLA_SELF_REPORT_PATH" {
+            && key != "FLOTILLA_SELF_REPORT_PATH"
+            && key != "__CFBundleIdentifier" {
             XCTAssertNil(sanitized[key], "Expected \(key) to be removed")
         }
     }
@@ -46,16 +48,19 @@ final class ChildProcessEnvironmentTests: XCTestCase {
 
         XCTAssertTrue(launch.arguments.contains("PATH=/usr/bin:/bin"))
         XCTAssertTrue(launch.arguments.contains("FLOTILLA_SELF_REPORT_PATH=/tmp/self-report.json"))
+        XCTAssertTrue(launch.arguments.contains("__CFBundleIdentifier=com.niclassslua.flotilla"))
         XCTAssertTrue(
             zip(launch.arguments, launch.arguments.dropFirst()).contains { pair in
                 pair.0 == "-u" && pair.1 == "DYLD_INSERT_LIBRARIES"
             }
         )
         XCTAssertEqual(launch.environment["PATH"], "/usr/bin:/bin")
+        XCTAssertEqual(launch.environment["__CFBundleIdentifier"], "com.niclassslua.flotilla")
         XCTAssertEqual(launch.environment["TERM"], "xterm-256color")
         for key in contaminatedEnvironment.keys where key != "PATH"
             && key != "HOME"
-            && key != "FLOTILLA_SELF_REPORT_PATH" {
+            && key != "FLOTILLA_SELF_REPORT_PATH"
+            && key != "__CFBundleIdentifier" {
             XCTAssertNil(launch.environment[key], "Expected \(key) to be removed")
             XCTAssertFalse(
                 launch.arguments.contains(where: { $0.hasPrefix("\(key)=") }),

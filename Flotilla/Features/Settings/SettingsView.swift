@@ -8,6 +8,8 @@ import DesignSystem
 
 private enum SettingsTab: String, CaseIterable, Identifiable {
     case general
+    case appearance
+    case permissions
     case sessions
     case terminal
     case git
@@ -20,6 +22,8 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: "General"
+        case .appearance: "Appearance"
+        case .permissions: "Permissions"
         case .sessions: "Sessions"
         case .terminal: "Terminal"
         case .git: "Git & Worktrees"
@@ -32,6 +36,8 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .general: "gearshape.fill"
+        case .appearance: "paintpalette.fill"
+        case .permissions: "hand.raised.fill"
         case .sessions: "rectangle.3.group.fill"
         case .terminal: "terminal.fill"
         case .git: "arrow.triangle.branch"
@@ -44,6 +50,8 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var color: Color {
         switch self {
         case .general: .gray
+        case .appearance: .blue
+        case .permissions: .teal
         case .sessions: .indigo
         case .terminal: .cyan
         case .git: .orange
@@ -55,7 +63,9 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
 
     var searchText: String {
         switch self {
-        case .general: "worktrees workspace grid density directory appearance light dark theme accent color custom"
+        case .general: "worktrees workspace grid density directory base directory sidebar rail labels"
+        case .appearance: "appearance light dark theme accent color custom system"
+        case .permissions: "permissions screen recording capture privacy security"
         case .sessions: "session defaults coding agent prompt worktree"
         case .terminal: "terminal font size scroll option meta editor monaco curly braces"
         case .git: "git branch worktree delete lifecycle"
@@ -172,6 +182,10 @@ struct SettingsView: View {
         switch selectedTab {
         case .general:
             GeneralSettingsPane(viewModel: viewModel)
+        case .appearance:
+            AppearanceSettingsPane(viewModel: viewModel)
+        case .permissions:
+            PermissionsSettingsPane(viewModel: viewModel)
         case .sessions:
             SessionSettingsPane(viewModel: viewModel)
         case .terminal:
@@ -241,27 +255,6 @@ private struct GeneralSettingsPane: View {
     var body: some View {
         Form {
             Section {
-                Picker("Appearance", selection: $viewModel.settings.appearance) {
-                    Text("System").tag(AppearanceMode.system)
-                    Text("Light").tag(AppearanceMode.light)
-                    Text("Dark").tag(AppearanceMode.dark)
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("Settings.AppearancePicker")
-            } header: {
-                SettingsSectionHeader("Appearance", systemImage: "circle.lefthalf.filled")
-            }
-
-            Section {
-                AccentColorPicker(
-                    accentColor: $viewModel.settings.accentColor,
-                    customStorageKey: "settings.appearance.custom-accent"
-                )
-            } header: {
-                SettingsSectionHeader("Accent Color", systemImage: "paintpalette")
-            }
-
-            Section {
                 LabeledContent("Base directory") {
                     HStack(spacing: 8) {
                         TextField("Base Directory", text: $viewModel.settings.worktreeBaseDirectory)
@@ -305,6 +298,94 @@ private struct GeneralSettingsPane: View {
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
             viewModel.settings.worktreeBaseDirectory = url.path
+        }
+    }
+}
+
+private struct AppearanceSettingsPane: View {
+    @Bindable var viewModel: SettingsViewModel
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Appearance", selection: $viewModel.settings.appearance) {
+                    Text("System").tag(AppearanceMode.system)
+                    Text("Light").tag(AppearanceMode.light)
+                    Text("Dark").tag(AppearanceMode.dark)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("Settings.AppearancePicker")
+            } header: {
+                SettingsSectionHeader("Appearance", systemImage: "circle.lefthalf.filled")
+            }
+
+            Section {
+                AccentColorPicker(
+                    accentColor: $viewModel.settings.accentColor,
+                    customStorageKey: "settings.appearance.custom-accent"
+                )
+            } header: {
+                SettingsSectionHeader("Accent Color", systemImage: "paintpalette")
+            }
+        }
+        .flotillaSettingsFormLayout()
+    }
+}
+
+private struct PermissionsSettingsPane: View {
+    @Bindable var viewModel: SettingsViewModel
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Screen Recording") {
+                    HStack(spacing: 8) {
+                        HStack(spacing: 5) {
+                            Image(systemName: viewModel.hasScreenRecordingPermission ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                .foregroundStyle(viewModel.hasScreenRecordingPermission ? .green : .orange)
+                            Text(viewModel.hasScreenRecordingPermission ? "Granted" : "Not Granted")
+                                .font(.callout)
+                                .foregroundStyle(viewModel.hasScreenRecordingPermission ? .primary : .secondary)
+                        }
+                        Spacer()
+                        if !viewModel.hasScreenRecordingPermission {
+                            Button("Grant Permission…") {
+                                viewModel.requestScreenRecordingPermission()
+                            }
+                            .accessibilityIdentifier(AXID.settingsGrantScreenRecordingPermission.rawValue)
+                        }
+                        Button("Open System Settings…") {
+                            viewModel.openScreenRecordingSettings()
+                        }
+                        .accessibilityIdentifier(AXID.settingsOpenScreenRecordingSettings.rawValue)
+                        Button {
+                            viewModel.checkScreenRecordingPermission()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .help("Check Again")
+                        .accessibilityIdentifier(AXID.settingsRefreshScreenRecordingPermission.rawValue)
+                    }
+                }
+                .accessibilityIdentifier(AXID.settingsScreenRecordingPermissionRow.rawValue)
+
+                Text(viewModel.hasScreenRecordingPermission
+                    ? "Coding agents running in Flotilla can capture screenshots and inspect window previews. If you recently toggled this permission, macOS requires quitting (⌘Q) and reopening Flotilla for it to take effect."
+                    : "Allows coding agents running in Flotilla to capture screenshots and inspect window previews. macOS requires granting permission and quitting (⌘Q) and reopening Flotilla for it to take effect.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                SettingsSectionHeader("Screen Recording", systemImage: "rectangle.inset.filled.and.cursorarrow")
+            } footer: {
+                Text("Flotilla itself never transmits screen captures off your Mac. Permissions are used locally by coding agents when inspecting UI.")
+            }
+        }
+        .flotillaSettingsFormLayout()
+        .onAppear {
+            viewModel.checkScreenRecordingPermission()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            viewModel.checkScreenRecordingPermission()
         }
     }
 }

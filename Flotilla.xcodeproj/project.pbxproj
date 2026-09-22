@@ -469,6 +469,7 @@
 		98B4342FFAD05F5A43DC6FFD /* HomeWidgetGridLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9349C0F0D92D076892BA5524 /* HomeWidgetGridLayout.swift */; };
 		98DFE5388FB10814B443298B /* folder-open.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2629C3453D4DD4A9C5E57CB2 /* folder-open.svg */; };
 		98F2D203F8B11B114754B08F /* npm.svg in Resources */ = {isa = PBXBuildFile; fileRef = 72B5F63F023F96204B72B4CB /* npm.svg */; };
+		9942625D3D0EA9D425D683CB /* SettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F03DF2BEB8A3F361AE84220 /* SettingsViewModelTests.swift */; };
 		9969F2DD9ACA3ECB77E6DEF2 /* sass.svg in Resources */ = {isa = PBXBuildFile; fileRef = 740FDD2C6D955AC6EBFAE5C2 /* sass.svg */; };
 		999C3EE6A91C0AC74D3AEA6C /* folder-test-open.svg in Resources */ = {isa = PBXBuildFile; fileRef = 27E23A83A490E53614716B56 /* folder-test-open.svg */; };
 		99FD92EC6C777940FF6D3100 /* ChildProcessEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761DC27E7FA9F1BBA78CB09A /* ChildProcessEnvironmentTests.swift */; };
@@ -859,6 +860,7 @@
 		13A5B80F477AE3E0441F3591 /* lua.svg */ = {isa = PBXFileReference; path = lua.svg; sourceTree = "<group>"; };
 		1431D6F1F2780952A6697EB2 /* GitBranchIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitBranchIcon.swift; sourceTree = "<group>"; };
 		1505FDEBF32FDDA8F3148254 /* AXID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXID.swift; sourceTree = "<group>"; };
+		162C23EFDF3E22346B94A2D6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		16781BC5824C1FFA14F302F5 /* GridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridView.swift; sourceTree = "<group>"; };
 		16E4FC042B1A1E5D900E895B /* SessionQueueWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionQueueWidgets.swift; sourceTree = "<group>"; };
 		173F440DE231387E5366F895 /* SessionTileDragPreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTileDragPreviewTests.swift; sourceTree = "<group>"; };
@@ -1060,6 +1062,7 @@
 		7D1C6AA6CFB7D0EDA39FC2C8 /* javascript.svg */ = {isa = PBXFileReference; path = javascript.svg; sourceTree = "<group>"; };
 		7DB910821E23F60CA8585408 /* HomeWidgetsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeWidgetsUITests.swift; sourceTree = "<group>"; };
 		7DB98E66F256A7E941840F5A /* AntigravityTranscriptCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityTranscriptCodecTests.swift; sourceTree = "<group>"; };
+		7F03DF2BEB8A3F361AE84220 /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		7F15D545EF64036535A2F93F /* TerminalKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TerminalKit; path = Packages/TerminalKit; sourceTree = SOURCE_ROOT; };
 		7FC34CF73E7A586705943393 /* FlotillaCompanionWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaCompanionWidgetBundle.swift; sourceTree = "<group>"; };
 		8007B7DFF42E35CB2C584727 /* KanbanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanTests.swift; sourceTree = "<group>"; };
@@ -1662,6 +1665,7 @@
 		3B58405213944059CAA749AF /* Flotilla */ = {
 			isa = PBXGroup;
 			children = (
+				162C23EFDF3E22346B94A2D6 /* Info.plist */,
 				E3440C85F915219567E13AA5 /* App */,
 				515BB7F05EFD02DCB6CF719D /* Components */,
 				4986182EB87E38C6AD63F03B /* Features */,
@@ -2146,6 +2150,7 @@
 				4711010EB433CD4522F5AF6F /* SessionStatusChangedAtTests.swift */,
 				173F440DE231387E5366F895 /* SessionTileDragPreviewTests.swift */,
 				317375274369CC35C23D6991 /* SettingsKitTests.swift */,
+				7F03DF2BEB8A3F361AE84220 /* SettingsViewModelTests.swift */,
 				492EDF0F2835D3BAB2C79D15 /* SidebarProjectCollapseStateTests.swift */,
 				9E981131F173F30668314C97 /* SkillFrontmatterTests.swift */,
 				D32EAF18F627D0C7FB28DE2A /* StartupCheckViewModelTests.swift */,
@@ -3030,6 +3035,7 @@
 				1C36B9FBA46970726001C769 /* SessionStatusChangedAtTests.swift in Sources */,
 				61B5E1935F7D7632796A3F5D /* SessionTileDragPreviewTests.swift in Sources */,
 				A0E3F72416EEFECD3A87AEA3 /* SettingsKitTests.swift in Sources */,
+				9942625D3D0EA9D425D683CB /* SettingsViewModelTests.swift in Sources */,
 				A08295D577651AE480EED0E4 /* SidebarProjectCollapseStateTests.swift in Sources */,
 				898E0363CFDA00161E6395C4 /* SkillFrontmatterTests.swift in Sources */,
 				72E7F6AD179284F461BD994B /* StartupCheckViewModelTests.swift in Sources */,
@@ -3450,6 +3456,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Flotilla/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3496,6 +3503,7 @@
 				DEVELOPMENT_TEAM = UWAHVC4JTL;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Flotilla/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3582,6 +3590,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Flotilla/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flotilla Ephemeral";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -3645,6 +3654,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Flotilla/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flotilla Ephemeral";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -3665,6 +3675,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Flotilla/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flotilla Ephemeral";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -3909,6 +3920,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Flotilla/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flotilla Ephemeral";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

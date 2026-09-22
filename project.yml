@@ -70,6 +70,10 @@ targets:
       - path: Flotilla.icon
         buildPhase: resources
         optional: true
+    info:
+      path: Flotilla/Info.plist
+      properties:
+        NSScreenCaptureUsageDescription: Flotilla allows coding agents to inspect screen and window previews.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla
@@ -111,6 +115,10 @@ targets:
       - path: Flotilla
       - path: FlotillaEphemeral.icon
         buildPhase: resources
+    info:
+      path: Flotilla/Info.plist
+      properties:
+        NSScreenCaptureUsageDescription: Flotilla allows coding agents to inspect screen and window previews.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.ephemeral

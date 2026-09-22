@@ -125,6 +125,8 @@ public enum AXID: String, Sendable {
     // MARK: - Settings
     case settingsAppearancePicker = "Settings.AppearancePicker"
     case settingsGeneralTab = "Settings.GeneralTab"
+    case settingsAppearanceTab = "Settings.AppearanceTab"
+    case settingsPermissionsTab = "Settings.PermissionsTab"
     case settingsTerminalTab = "Settings.TerminalTab"
     case settingsAgentsTab = "Settings.AgentsTab"
     case settingsNotificationsTab = "Settings.NotificationsTab"
@@ -132,6 +134,10 @@ public enum AXID: String, Sendable {
     case settingsGitTab = "Settings.GitTab"
     case settingsAdvancedTab = "Settings.AdvancedTab"
     case settingsWorktreeBaseDirectory = "Settings.WorktreeBaseDirectory"
+    case settingsScreenRecordingPermissionRow = "Settings.ScreenRecordingPermissionRow"
+    case settingsGrantScreenRecordingPermission = "Settings.GrantScreenRecordingPermission"
+    case settingsOpenScreenRecordingSettings = "Settings.OpenScreenRecordingSettings"
+    case settingsRefreshScreenRecordingPermission = "Settings.RefreshScreenRecordingPermission"
     case settingsView = "SettingsView"
 
     // MARK: - Delete Session Dialog
