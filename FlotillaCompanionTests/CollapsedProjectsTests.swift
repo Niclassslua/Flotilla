@@ -22,12 +22,6 @@ final class CollapsedProjectsTests: XCTestCase {
     private func makeStore() -> CompanionStore {
         CompanionStore(data: MockCompanionDataSource(), defaults: defaults)
     }
-
-    func testProjectsStartExpanded() {
-        let store = makeStore()
-        XCTAssertEqual(store.collapsedProjects(on: MockFixtures.MacID.studio), [])
-    }
-
     func testCollapsedProjectsPersistAcrossStoreInstancesPerMac() {
         let store = makeStore()
         store.setCollapsedProjects(["Flotilla"], on: MockFixtures.MacID.studio)

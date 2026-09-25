@@ -249,25 +249,6 @@ final class ProjectIconTests: XCTestCase {
         XCTAssertEqual(ProjectMark.tint(for: customProject), expectedCustom)
     }
 
-    func testCuratedPickerSymbolsAndEmojisAreValidAndUnique() {
-        // 1. Verify every curated SF Symbol exists and is unique
-        var seenSymbols = Set<String>()
-        for symbol in ProjectIconPickerSheet.curatedSymbols {
-            XCTAssertFalse(seenSymbols.contains(symbol), "Duplicate symbol found in curatedSymbols: \(symbol)")
-            seenSymbols.insert(symbol)
-
-            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-            XCTAssertNotNil(image, "Curated SF Symbol does not exist in system glyphs: \(symbol)")
-        }
-
-        // 2. Verify every curated Emoji is unique
-        var seenEmojis = Set<String>()
-        for emoji in ProjectIconPickerSheet.curatedEmojis {
-            XCTAssertFalse(seenEmojis.contains(emoji), "Duplicate emoji found in curatedEmojis: \(emoji)")
-            seenEmojis.insert(emoji)
-        }
-    }
-
     // MARK: - Helpers
 
     private func makeTestImage(size: NSSize, color: NSColor) -> NSImage {

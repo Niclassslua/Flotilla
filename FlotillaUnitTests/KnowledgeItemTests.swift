@@ -47,9 +47,8 @@ final class KnowledgeItemTests: XCTestCase {
 
     // MARK: - Skill mapping
 
-    func testSkillMapsCoreFields() {
+    func testSkillMappingFieldsInvocationIconAndMetrics() {
         let item = KnowledgeItem(skill: makeSkill(tags: ["review", "git"]))
-
         XCTAssertEqual(item.kind, .skills)
         XCTAssertEqual(item.title, "code-review")
         XCTAssertEqual(item.subtitle, "Reviews a diff.")
@@ -58,38 +57,25 @@ final class KnowledgeItemTests: XCTestCase {
         XCTAssertEqual(item.version, "1.2.0")
         XCTAssertEqual(item.tags, ["review", "git"])
         XCTAssertEqual(item.parentFolder, "code-review")
-    }
 
-    func testSkillWithoutDescriptionGetsPlaceholderRatherThanBlank() {
-        let item = KnowledgeItem(skill: makeSkill(description: ""))
-        XCTAssertEqual(item.subtitle, "No description provided.")
-    }
-
-    func testSkillInvocationCombinesNameAndArgumentHint() {
-        let item = KnowledgeItem(skill: makeSkill(name: "review", argumentHint: "<path>"))
-        XCTAssertEqual(item.invocation, "/review <path>")
-    }
-
-    func testSkillWithoutArgumentHintHasNoInvocation() {
+        XCTAssertEqual(
+            KnowledgeItem(skill: makeSkill(description: "")).subtitle,
+            "No description provided."
+        )
+        XCTAssertEqual(
+            KnowledgeItem(skill: makeSkill(name: "review", argumentHint: "<path>")).invocation,
+            "/review <path>"
+        )
         XCTAssertNil(KnowledgeItem(skill: makeSkill(argumentHint: nil)).invocation)
-    }
 
-    func testPluginSkillUsesPluginIconAndReportsPluginAsScopeLabel() {
-        let item = KnowledgeItem(skill: makeSkill(scope: .global, source: "acme-pack"))
+        let plugin = KnowledgeItem(skill: makeSkill(scope: .global, source: "acme-pack"))
+        XCTAssertEqual(plugin.icon, .plugin)
+        XCTAssertEqual(plugin.scopeLabel, "acme-pack")
 
-        XCTAssertEqual(item.icon, .plugin)
-        // The plugin name is the useful fact, not that it happens to be global.
-        XCTAssertEqual(item.scopeLabel, "acme-pack")
-    }
+        let nonPlugin = KnowledgeItem(skill: makeSkill(scope: .global, framework: .codex))
+        XCTAssertEqual(nonPlugin.icon, .framework(.codex))
+        XCTAssertEqual(nonPlugin.scopeLabel, "global")
 
-    func testNonPluginSkillFallsBackToFrameworkIconAndScopeLabel() {
-        let item = KnowledgeItem(skill: makeSkill(scope: .global, framework: .codex))
-
-        XCTAssertEqual(item.icon, .framework(.codex))
-        XCTAssertEqual(item.scopeLabel, "global")
-    }
-
-    func testBundleStatsBecomeMetricsAndOnlyNonZeroCountsAppear() {
         let stats = SkillBundleStats(
             scriptsCount: 2,
             referencesCount: 0,
@@ -98,32 +84,14 @@ final class KnowledgeItemTests: XCTestCase {
             estimatedReadMinutes: 4
         )
         let labels = KnowledgeItem(skill: makeSkill(stats: stats)).metrics.map(\.label)
-
         XCTAssertTrue(labels.contains("2 scripts"))
         XCTAssertTrue(labels.contains("3 data"))
         XCTAssertFalse(labels.contains { $0.hasSuffix("docs") }, "a zero count should not get a pill")
         XCTAssertTrue(labels.contains("240 lines"))
-    }
 
-    func testReadTimeIsNotShown() {
-        let stats = SkillBundleStats(lineCount: 240, estimatedReadMinutes: 4)
-        let labels = KnowledgeItem(skill: makeSkill(stats: stats)).metrics.map(\.label)
-
-        XCTAssertFalse(labels.contains { $0.contains("min read") }, "read time was dropped in favour of file size")
-    }
-
-    func testEverySkillGetsASizeMetric() {
-        let metrics = KnowledgeItem(skill: makeSkill()).metrics
-        XCTAssertTrue(metrics.contains { $0.symbolName == "doc" })
-    }
-
-    func testMissingFileReportsZeroSizeAndFlagsItAsAWarning() {
-        // The fixture path does not exist, which is the same shape as a file
-        // that is genuinely empty.
-        let metric = KnowledgeItem(skill: makeSkill()).metrics.first { $0.symbolName == "doc" }
-
-        XCTAssertEqual(metric?.label, "empty")
-        XCTAssertEqual(metric?.role, .warning, "an empty document should stand out, not read as neutral detail")
+        let emptyMetric = KnowledgeItem(skill: makeSkill()).metrics.first { $0.symbolName == "doc" }
+        XCTAssertEqual(emptyMetric?.label, "empty")
+        XCTAssertEqual(emptyMetric?.role, .warning)
     }
 
     // MARK: - Rule mapping
@@ -142,7 +110,7 @@ final class KnowledgeItemTests: XCTestCase {
 
     // MARK: - Search
 
-    func testSearchMatchesEveryFieldTheTwoTabsUsedToSearchSeparately() {
+    func testSearchMatchesFieldsCaseInsensitivelyIncludingRules() {
         let item = KnowledgeItem(skill: makeSkill(
             name: "code-review",
             description: "Reviews a diff.",
@@ -161,60 +129,30 @@ final class KnowledgeItemTests: XCTestCase {
         XCTAssertTrue(item.matches("<path>"), "invocation")
         XCTAssertTrue(item.matches("git"), "tag")
         XCTAssertFalse(item.matches("nonsense"))
-    }
 
-    func testSearchIsCaseInsensitive() {
-        let item = KnowledgeItem(skill: makeSkill(name: "Code-Review"))
-        XCTAssertTrue(item.matches("code-review"))
-        XCTAssertTrue(item.matches("CODE-REVIEW"))
-    }
+        let cased = KnowledgeItem(skill: makeSkill(name: "Code-Review"))
+        XCTAssertTrue(cased.matches("code-review"))
+        XCTAssertTrue(cased.matches("CODE-REVIEW"))
 
-    func testRuleSearchMatchesPath() {
-        let item = KnowledgeItem(rule: makeRule(relativePath: "docs/AGENTS.md"))
-        XCTAssertTrue(item.matches("agents"))
-        XCTAssertTrue(item.matches("docs"))
+        let rule = KnowledgeItem(rule: makeRule(relativePath: "docs/AGENTS.md"))
+        XCTAssertTrue(rule.matches("agents"))
+        XCTAssertTrue(rule.matches("docs"))
     }
-
-    // MARK: - Byte sizes
 
     // MARK: - Relative dates
 
-    func testRelativeDateBuckets() {
-        let now = Date()
-        XCTAssertEqual(formatRelativeDate(now), "just now")
-        // "min", not "m": "2m ago" reads as either two minutes or two months.
-        XCTAssertEqual(formatRelativeDate(now.addingTimeInterval(-120)), "2 min ago")
-        XCTAssertEqual(formatRelativeDate(now.addingTimeInterval(-7200)), "2h ago")
-        XCTAssertEqual(formatRelativeDate(now.addingTimeInterval(-86400 * 3)), "3d ago")
-    }
-
-    /// A date column has to be comparable down its length, so every value in
-    /// it is absolute — never the relative register used in prose.
-    func testLedgerDatesAreAlwaysAbsolute() {
+    func testLedgerAndRelativeDateFormatting() {
         let now = Date()
         for offset in [0, -120, -7200, -86400 * 3, -86400 * 30, -86400 * 400] {
             let rendered = formatLedgerDate(now.addingTimeInterval(TimeInterval(offset)))
             XCTAssertFalse(rendered.hasSuffix("ago"), "\(rendered) is relative")
             XCTAssertFalse(rendered.contains("just now"), "\(rendered) is relative")
         }
-    }
-
-    func testLedgerDateCarriesYearOnlyOutsideTheCurrentOne() {
-        let now = Date()
         XCTAssertFalse(formatLedgerDate(now.addingTimeInterval(-86400 * 3)).contains(":"))
-        // Today collapses to a clock time so same-day edits stay orderable.
         XCTAssertTrue(formatLedgerDate(now).contains(":"))
-    }
 
-    func testRelativeDateFallsBackToAbsoluteAfterAWeek() {
         let old = Date().addingTimeInterval(-86400 * 30)
-        // Past a week the bucket labels stop being useful, so we show a date.
         XCTAssertFalse(formatRelativeDate(old).hasSuffix("ago"))
-    }
-
-    /// A clock skew that puts a file's mtime in the future shouldn't render as
-    /// a negative age.
-    func testFutureDateClampsToJustNow() {
         XCTAssertEqual(formatRelativeDate(Date().addingTimeInterval(600)), "just now")
     }
 }

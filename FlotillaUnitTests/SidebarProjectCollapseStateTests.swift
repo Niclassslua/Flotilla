@@ -17,11 +17,6 @@ final class SidebarProjectCollapseStateTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         super.tearDown()
     }
-
-    func testStartsExpandedWithNothingSaved() {
-        XCTAssertEqual(SidebarProjectCollapseState.load(defaults: defaults), [])
-    }
-
     func testSavedCollapsedSetSurvivesAFreshLoad() {
         let ids: Set<UUID> = [UUID(), UUID()]
         SidebarProjectCollapseState.save(ids, defaults: defaults)

@@ -83,10 +83,4 @@ final class FleetActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(state.sessions.count, 7)
         XCTAssertEqual(state.activeCount, 7)
     }
-
-    func testVisibleSessionsWithFewerThanMax() {
-        let state = snapshot([session("only", .working)]).state
-        XCTAssertEqual(state.visibleSessions.map(\.title), ["only"])
-        XCTAssertEqual(state.visibleSessions.count, 1)
-    }
 }

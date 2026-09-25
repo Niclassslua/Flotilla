@@ -55,108 +55,71 @@ final class ProjectKnowledgeViewModelTests: XCTestCase {
 
     // MARK: - Filtering
 
-    func testScopeFilterNarrowsToGlobalOrProject() async {
-        let viewModel = await loadedSkillsViewModel([
+    func testScopeAndSearchFiltering() async {
+        let scoped = await loadedSkillsViewModel([
             skill(name: "global-one", scope: .global),
             skill(name: "project-one", scope: .project),
         ])
+        scoped.filter = .all
+        XCTAssertEqual(scoped.filteredItems.count, 2)
+        scoped.filter = .global
+        XCTAssertEqual(scoped.filteredItems.map(\.title), ["global-one"])
+        scoped.filter = .project
+        XCTAssertEqual(scoped.filteredItems.map(\.title), ["project-one"])
 
-        viewModel.filter = .all
-        XCTAssertEqual(viewModel.filteredItems.count, 2)
-
-        viewModel.filter = .global
-        XCTAssertEqual(viewModel.filteredItems.map(\.title), ["global-one"])
-
-        viewModel.filter = .project
-        XCTAssertEqual(viewModel.filteredItems.map(\.title), ["project-one"])
-    }
-
-    func testSearchAndScopeFilterCompose() async {
-        let viewModel = await loadedSkillsViewModel([
+        let composed = await loadedSkillsViewModel([
             skill(name: "review", scope: .global),
             skill(name: "review-local", scope: .project),
             skill(name: "deploy", scope: .project),
         ])
+        composed.filter = .project
+        composed.searchText = "review"
+        XCTAssertEqual(composed.filteredItems.map(\.title), ["review-local"])
 
-        viewModel.filter = .project
-        viewModel.searchText = "review"
-
-        XCTAssertEqual(viewModel.filteredItems.map(\.title), ["review-local"])
-    }
-
-    func testBlankSearchIsNotAFilter() async {
-        let viewModel = await loadedSkillsViewModel([skill(name: "review"), skill(name: "deploy")])
-
-        viewModel.searchText = "   "
-        XCTAssertEqual(viewModel.filteredItems.count, 2)
+        let blank = await loadedSkillsViewModel([skill(name: "review"), skill(name: "deploy")])
+        blank.searchText = "   "
+        XCTAssertEqual(blank.filteredItems.count, 2)
     }
 
     // MARK: - Sorting
 
-    func testDefaultSortIsAlphabetical() async {
-        let viewModel = await loadedSkillsViewModel([
+    func testNameModifiedAndSizeSorting() async {
+        let alphabetical = await loadedSkillsViewModel([
             skill(name: "zeta"), skill(name: "alpha"), skill(name: "Mid"),
         ])
+        XCTAssertEqual(alphabetical.sort, .name)
+        XCTAssertEqual(alphabetical.filteredItems.map(\.title), ["alpha", "Mid", "zeta"])
 
-        XCTAssertEqual(viewModel.sort, .name)
-        XCTAssertEqual(viewModel.filteredItems.map(\.title), ["alpha", "Mid", "zeta"])
-    }
-
-    func testSortByNameIsCaseInsensitiveAndNumberAware() async {
-        let viewModel = await loadedSkillsViewModel([
+        let numbered = await loadedSkillsViewModel([
             skill(name: "step-10"), skill(name: "step-2"),
         ])
-
         XCTAssertEqual(
-            viewModel.filteredItems.map(\.title),
+            numbered.filteredItems.map(\.title),
             ["step-2", "step-10"],
             "localizedStandardCompare orders embedded numbers naturally"
         )
-    }
 
-    func testSortByModifiedPutsNewestFirstAndUndatedItemsLast() {
         let now = Date()
-        let older = item(title: "older", modified: now.addingTimeInterval(-3600))
-        let newer = item(title: "newer", modified: now)
-        let undated = item(title: "undated", modified: nil)
+        let byModified = [
+            item(title: "older", modified: now.addingTimeInterval(-3600)),
+            item(title: "undated", modified: nil),
+            item(title: "newer", modified: now),
+        ].sorted(by: KnowledgeSort.modified.areInIncreasingOrder)
+        XCTAssertEqual(byModified.map(\.title), ["newer", "older", "undated"])
 
-        let sorted = [older, undated, newer].sorted(by: KnowledgeSort.modified.areInIncreasingOrder)
-
-        XCTAssertEqual(sorted.map(\.title), ["newer", "older", "undated"])
-    }
-
-    func testSortBySizePutsLargestFirst() {
-        let sorted = [
+        let bySize = [
             item(title: "small", bytes: 10),
             item(title: "big", bytes: 9000),
             item(title: "mid", bytes: 500),
         ].sorted(by: KnowledgeSort.size.areInIncreasingOrder)
+        XCTAssertEqual(bySize.map(\.title), ["big", "mid", "small"])
 
-        XCTAssertEqual(sorted.map(\.title), ["big", "mid", "small"])
-    }
-
-    func testEqualSizesFallBackToNameSoOrderIsStable() {
-        let sorted = [
+        let equalSize = [
             item(title: "beta", bytes: 100),
             item(title: "alpha", bytes: 100),
         ].sorted(by: KnowledgeSort.size.areInIncreasingOrder)
-
-        XCTAssertEqual(sorted.map(\.title), ["alpha", "beta"])
+        XCTAssertEqual(equalSize.map(\.title), ["alpha", "beta"])
     }
-
-    func testSortAppliesAfterFilteringNotBeforeIt() async {
-        let viewModel = await loadedSkillsViewModel([
-            skill(name: "zeta", scope: .global),
-            skill(name: "alpha", scope: .project),
-            skill(name: "beta", scope: .project),
-        ])
-        viewModel.filter = .project
-
-        XCTAssertEqual(viewModel.filteredItems.map(\.title), ["alpha", "beta"])
-    }
-
-    // MARK: - Editing
-
     func testSelectLoadsFileContents() async {
         let service = StubWorkspaceFileService()
         service.skillsToReturn = [skill(name: "review")]

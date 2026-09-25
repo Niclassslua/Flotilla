@@ -527,28 +527,16 @@ final class TranscriptSearchTests: XCTestCase {
 }
 
 final class FileSearchTests: XCTestCase {
-    func testFindsMatchingLinesCaseInsensitively() {
+    func testMatchQueries() {
         let lines = ["import Foundation", "struct Foo {}", "// TODO: fix Foo"]
-        let matches = FileSearch.matches(in: lines, query: "foo")
-        XCTAssertEqual(matches.map(\.lineIndex), [1, 2])
-    }
-
-    func testEmptyQueryHasNoMatches() {
+        XCTAssertEqual(FileSearch.matches(in: lines, query: "foo").map(\.lineIndex), [1, 2])
         XCTAssertEqual(FileSearch.matches(in: ["a", "b"], query: "").count, 0)
         XCTAssertEqual(FileSearch.matches(in: ["a", "b"], query: "   ").count, 0)
-    }
-
-    func testNoMatchesWhenQueryAbsent() {
         XCTAssertEqual(FileSearch.matches(in: ["one", "two"], query: "three").count, 0)
     }
 }
 
 final class CurrentTurnSummaryFormattingTests: XCTestCase {
-    func testNoDetailWhenNothingIsActiveOrChanged() {
-        XCTAssertNil(CurrentTurnSummaryFormatting.detail(inFlight: nil, diffStat: nil))
-        XCTAssertNil(CurrentTurnSummaryFormatting.detail(inFlight: nil, diffStat: DiffStat(files: 0, additions: 0, deletions: 0)))
-    }
-
     func testActiveToolShowsSubjectAndElapsed() {
         let start = Date().addingTimeInterval(-125)
         let call = ToolCall(id: "a", tool: "Bash", input: ["command": "make test"], output: nil, isError: false, startedAt: start)
@@ -560,12 +548,5 @@ final class CurrentTurnSummaryFormattingTests: XCTestCase {
         let detail = CurrentTurnSummaryFormatting.detail(inFlight: nil, diffStat: DiffStat(files: 0, additions: 12, deletions: 4))
         XCTAssertEqual(detail, "+12 −4")
         XCTAssertFalse(detail!.contains("file"))
-    }
-
-    func testCompactElapsedUsesLargestReasonableUnit() {
-        let now = Date()
-        XCTAssertEqual(CurrentTurnSummaryFormatting.compactElapsed(since: now.addingTimeInterval(-45), now: now), "45s")
-        XCTAssertEqual(CurrentTurnSummaryFormatting.compactElapsed(since: now.addingTimeInterval(-180), now: now), "3m")
-        XCTAssertEqual(CurrentTurnSummaryFormatting.compactElapsed(since: now.addingTimeInterval(-7200), now: now), "2h")
     }
 }

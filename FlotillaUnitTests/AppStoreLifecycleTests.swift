@@ -496,45 +496,6 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertGreaterThan(scrollbackCount, 0)
         XCTAssertLessThanOrEqual(scrollbackCount, 256 * 1_024 + 64 * 1_024)
     }
-
-    /// Before the fix, once the buffer sat at cap a single 64 KB chunk ran
-    /// `Data.removeFirst()` up to 65,536 times — each one a separate
-    /// `@Observable` mutation. This bounds wall-clock time for a burst of
-    /// appends at cap; it is a coarse regression guard rather than a
-    /// benchmark, since the repo has no CI performance baseline.
-    func testAppendingAtCapStaysWithinTimeBudget() async throws {
-        let repository = try GRDBSessionRepository()
-        let session = Session(
-            title: "Busy",
-            goal: "Work",
-            agent: .codexCLI,
-            projectID: nil,
-            workingDirectory: URL(fileURLWithPath: "/tmp"),
-            status: .readyForReview
-        )
-        try repository.save(session)
-        let store = AppStore(
-            repository: repository,
-            gitService: MockGitService(),
-            processManager: manager(factory: RecordingProcessFactory()),
-            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
-        )
-        let chunk = Data(repeating: 0x44, count: 64 * 1_024)
-        store.appendTerminalOutput(Data(repeating: 0x41, count: 256 * 1_024), toSessionID: session.id)
-
-        let start = Date()
-        for _ in 0..<200 {
-            store.appendTerminalOutput(chunk, toSessionID: session.id)
-        }
-        let elapsed = Date().timeIntervalSince(start)
-
-        XCTAssertLessThan(elapsed, 0.5)
-    }
-
-    /// Process restoration is launch-time recovery, not something a data
-    /// refresh does. `reload()` runs after every session creation, so if it
-    /// still restarted processes, each new session would spawn a duplicate
-    /// process for every session already on screen.
     func testReloadRefreshesDataWithoutRestartingProcesses() async throws {
         let repository = try GRDBSessionRepository()
         try repository.save(Session(

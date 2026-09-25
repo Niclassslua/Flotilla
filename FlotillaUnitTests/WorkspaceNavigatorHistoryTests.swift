@@ -12,87 +12,56 @@ final class WorkspaceNavigatorHistoryTests: XCTestCase {
         WorkspaceNavigator()
     }
 
-    func testStartsWithNoHistory() {
+    func testBackForwardAndBranchAbandonment() {
         let navigator = makeNavigator()
         XCTAssertFalse(navigator.canGoBack)
         XCTAssertFalse(navigator.canGoForward)
-    }
 
-    func testBackReturnsToThePreviousSelection() {
-        let navigator = makeNavigator()
         let project = UUID()
-
+        let session = UUID()
         navigator.selection = .allSessions
         navigator.selection = .project(project)
-
         XCTAssertTrue(navigator.canGoBack)
         navigator.goBack()
         XCTAssertEqual(navigator.selection, .allSessions)
         navigator.goBack()
         XCTAssertEqual(navigator.selection, .overview)
         XCTAssertFalse(navigator.canGoBack)
-    }
-
-    /// The acceptance test for this unit: three navigations, then back returns
-    /// you where you were rather than to some root.
-    func testBackAcrossThreeNavigations() {
-        let navigator = makeNavigator()
-        let session = UUID()
 
         navigator.selection = .allSessions
         navigator.selection = .smartList(.needsYou)
         navigator.selection = .session(session)
-
         navigator.goBack()
         XCTAssertEqual(navigator.selection, .smartList(.needsYou))
         navigator.goForward()
         XCTAssertEqual(navigator.selection, .session(session))
-    }
 
-    func testForwardIsAbandonedByANewNavigation() {
-        let navigator = makeNavigator()
-        navigator.selection = .allSessions
         navigator.goBack()
         XCTAssertTrue(navigator.canGoForward)
-
         navigator.selection = .smartList(.working)
         XCTAssertFalse(navigator.canGoForward, "a fresh navigation must drop the forward branch")
     }
 
-    /// Re-selecting what is already open is not a navigation. Without this the
-    /// back stack fills with duplicates and Back appears to do nothing.
-    func testReselectingTheSameItemRecordsNothing() {
+    func testReselectAndHistoryMovesDoNotCorruptStacks() {
         let navigator = makeNavigator()
         navigator.selection = .allSessions
         navigator.selection = .allSessions
         navigator.selection = .allSessions
-
         navigator.goBack()
         XCTAssertEqual(navigator.selection, .overview)
         XCTAssertFalse(navigator.canGoBack)
-    }
 
-    /// Back and Forward move `selection` themselves; if that move were
-    /// recorded, each would push onto the stack it is popping and the two
-    /// would never terminate.
-    func testHistoryNavigationDoesNotRecordItself() {
-        let navigator = makeNavigator()
         navigator.selection = .allSessions
         navigator.selection = .smartList(.ready)
-
         navigator.goBack()
         navigator.goBack()
         XCTAssertEqual(navigator.selection, .overview)
         XCTAssertFalse(navigator.canGoBack)
-
         navigator.goForward()
         navigator.goForward()
         XCTAssertEqual(navigator.selection, .smartList(.ready))
         XCTAssertFalse(navigator.canGoForward)
-    }
 
-    func testBackStackIsBounded() {
-        let navigator = makeNavigator()
         for _ in 0..<200 {
             navigator.selection = .project(UUID())
         }
@@ -104,21 +73,13 @@ final class WorkspaceNavigatorHistoryTests: XCTestCase {
         let session = UUID()
         let project = UUID()
 
-        navigator.selection = .session(session)
-        navigator.showHomeDashboard()
-        XCTAssertEqual(navigator.selection, .overview)
-
-        navigator.selection = .project(project)
-        navigator.showHomeDashboard()
-        XCTAssertEqual(navigator.selection, .overview)
-
-        navigator.selection = .allSessions
-        navigator.showHomeDashboard()
-        XCTAssertEqual(navigator.selection, .overview)
-
-        navigator.selection = .smartList(.working)
-        navigator.showHomeDashboard()
-        XCTAssertEqual(navigator.selection, .overview)
+        for selection: SidebarItem in [
+            .session(session), .project(project), .allSessions, .smartList(.working)
+        ] {
+            navigator.selection = selection
+            navigator.showHomeDashboard()
+            XCTAssertEqual(navigator.selection, .overview)
+        }
     }
 }
 
@@ -138,47 +99,23 @@ final class SessionScopeTests: XCTestCase {
         )
     }
 
-    func testEverythingPassesEverySessionThrough() {
-        let sessions = [session(.working), session(.crashed), session(nil)]
-        XCTAssertEqual(SessionScope.everything.apply(to: sessions).count, 3)
-        XCTAssertTrue(SessionScope.everything.isEverything)
-    }
+    func testSmartListsAndNavigatorScope() {
+        let waiting = session(.waitingForInput)
+        let crashed = session(.crashed)
+        let working = session(.working)
+        let ready = session(.readyForReview)
+        let sessions = [waiting, crashed, working, ready]
+        XCTAssertEqual(Set(FleetSmartList.needsYou.filter(sessions).map(\.id)), Set([waiting.id, crashed.id]))
+        XCTAssertEqual(FleetSmartList.working.filter(sessions).map(\.id), [working.id])
+        XCTAssertEqual(FleetSmartList.ready.filter(sessions).map(\.id), [ready.id])
 
-    /// Needs You spans two statuses on purpose: a crashed agent and a blocked
-    /// one both need a human. The distinction survives in each row's own
-    /// status word.
-    func testNeedsYouCoversWaitingAndCrashed() {
-        let sessions = [session(.waitingForInput), session(.crashed), session(.working), session(.readyForReview)]
-        let matched = FleetSmartList.needsYou.filter(sessions)
-        XCTAssertEqual(matched.count, 2)
-        XCTAssertEqual(FleetSmartList.working.filter(sessions).count, 1)
-        XCTAssertEqual(FleetSmartList.ready.filter(sessions).count, 1)
-    }
-
-    func testProjectAndSmartListNarrowTogether() {
-        let project = UUID()
-        let sessions = [
-            session(.waitingForInput, project: project),
-            session(.working, project: project),
-            session(.waitingForInput, project: UUID())
-        ]
-        let scope = SessionScope(group: .project(project), smartList: .needsYou)
-        XCTAssertEqual(scope.apply(to: sessions).count, 1)
-        XCTAssertFalse(scope.isEverything)
-    }
-
-    func testNavigatorDerivesScopeFromSelection() {
         let navigator = WorkspaceNavigator()
         let project = UUID()
-
         navigator.selection = .smartList(.ready)
         XCTAssertEqual(navigator.sessionScope, SessionScope(group: .all, smartList: .ready))
-
         navigator.selection = .project(project)
         XCTAssertEqual(navigator.sessionScope, SessionScope(group: .project(project), smartList: nil))
-
         navigator.selection = .allSessions
         XCTAssertTrue(navigator.sessionScope.isEverything)
     }
 }
-

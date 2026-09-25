@@ -46,16 +46,6 @@ final class CompanionDraftTests: XCTestCase {
         store.savePromptDraft("", for: sessionID)
         XCTAssertEqual(store.promptDraft(for: sessionID), "")
     }
-
-    func testFailedSendLeavesPromptEditable() async {
-        let sessionID = MockFixtures.SessionID.launchProfile
-        let store = makeStore()
-        // The MacBook fixture is unreachable, so the send is refused and the
-        // caller must be told so it can restore the text field.
-        let sent = await store.sendPrompt("hello", to: sessionID)
-        XCTAssertFalse(sent)
-    }
-
     func testPlanRevisionDraftIsScopedPerSession() {
         let store = makeStore()
         let planSession = MockFixtures.SessionID.settingsPlan

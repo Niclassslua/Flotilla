@@ -83,35 +83,59 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
     // MARK: - The two audiences
 
-    /// A handed-off transcript must feed the model *and* the TUI's scrollback.
-    /// Without the mirror the user resumes into a blank screen.
-    func testHandoffMarkerAddsTUIMirrorRecords() async throws {
-        let entries: [CanonicalEntry] = [
-            .userMessage(text: "add a test", timestamp: Self.writeTime),
-            .assistantMessage(text: "done", timestamp: Self.writeTime),
-            .handoffMarker(from: .claudeCode, to: .codexCLI, reason: "user-requested", timestamp: Self.writeTime)
+    /// A handed-off transcript must feed the model *and* the TUI's scrollback
+    /// (without the mirror the user resumes into a blank screen). An ordinary
+    /// write — one Codex itself would have produced — must not duplicate turns,
+    /// or the scrollback shows everything twice.
+    func testHandoffMarkerControlsTUIMirrorRecords() async throws {
+        struct Case {
+            let name: String
+            let entries: [CanonicalEntry]
+            let expectedEventMsg: [String]
+            let expectedResponseItem: [String]
+        }
+
+        let cases: [Case] = [
+            Case(
+                name: "handoff marker adds TUI mirror",
+                entries: [
+                    .userMessage(text: "add a test", timestamp: Self.writeTime),
+                    .assistantMessage(text: "done", timestamp: Self.writeTime),
+                    .handoffMarker(from: .claudeCode, to: .codexCLI, reason: "user-requested", timestamp: Self.writeTime)
+                ],
+                expectedEventMsg: ["user_message", "agent_message"],
+                expectedResponseItem: ["message", "message"]
+            ),
+            Case(
+                name: "without handoff marker no mirror is written",
+                entries: [
+                    .userMessage(text: "add a test", timestamp: Self.writeTime),
+                    .assistantMessage(text: "done", timestamp: Self.writeTime)
+                ],
+                expectedEventMsg: [],
+                expectedResponseItem: ["message", "message"]
+            ),
         ]
 
-        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
-        let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
+        for entry in cases {
+            let handle = try await codec.writeNative(
+                entry.entries,
+                workingDirectory: workingDirectory,
+                sessionID: sessionID
+            )
+            let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
 
-        XCTAssertEqual(payloadTypes(in: parsed, ofRecordType: "event_msg"), ["user_message", "agent_message"])
-        XCTAssertEqual(payloadTypes(in: parsed, ofRecordType: "response_item"), ["message", "message"])
-    }
-
-    /// An ordinary write — one Codex itself would have produced — must not
-    /// duplicate turns, or the scrollback shows everything twice.
-    func testWithoutHandoffMarkerNoMirrorIsWritten() async throws {
-        let entries: [CanonicalEntry] = [
-            .userMessage(text: "add a test", timestamp: Self.writeTime),
-            .assistantMessage(text: "done", timestamp: Self.writeTime)
-        ]
-
-        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
-        let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
-
-        XCTAssertTrue(payloadTypes(in: parsed, ofRecordType: "event_msg").isEmpty)
-        XCTAssertEqual(payloadTypes(in: parsed, ofRecordType: "response_item"), ["message", "message"])
+            XCTAssertEqual(
+                payloadTypes(in: parsed, ofRecordType: "event_msg"),
+                entry.expectedEventMsg,
+                entry.name
+            )
+            XCTAssertEqual(
+                payloadTypes(in: parsed, ofRecordType: "response_item"),
+                entry.expectedResponseItem,
+                entry.name
+            )
+        }
     }
 
     // MARK: - Tool calls
@@ -137,51 +161,66 @@ final class CodexTranscriptCodecTests: XCTestCase {
 
     /// Codex draws tool activity from `CommandExecution` items built out of
     /// live process state we do not have, so carried-over tool calls are
-    /// mirrored as commentary. Without this the resumed scrollback shows the
-    /// talking but none of the doing.
-    func testToolActivityIsMirroredAsCommentaryForTheTUI() async throws {
-        let entries: [CanonicalEntry] = [
-            .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls -la"}"#.utf8), timestamp: Self.writeTime),
-            .toolResult(toolUseID: "call_1", output: "file.txt", isError: false, timestamp: Self.writeTime),
-            .toolUse(id: "call_2", tool: "Read", input: Data(#"{"file_path":"README.md"}"#.utf8), timestamp: Self.writeTime),
-            .toolResult(toolUseID: "call_2", output: "boom, it failed", isError: true, timestamp: Self.writeTime),
-            .handoffMarker(from: .claudeCode, to: .codexCLI, reason: "user-requested", timestamp: Self.writeTime)
-        ]
-
-        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
-        let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
-
-        let commentary: [String] = parsed.compactMap { record in
-            guard record["type"] as? String == "event_msg",
-                  let payload = record["payload"] as? [String: Any],
-                  payload["phase"] as? String == "commentary"
-            else { return nil }
-            return payload["message"] as? String
+    /// mirrored as commentary when a handoff marker is present. Without the
+    /// marker, tool activity must not be mirrored.
+    func testHandoffMarkerControlsToolActivityCommentaryMirror() async throws {
+        struct Case {
+            let name: String
+            let entries: [CanonicalEntry]
+            let check: ([[String: Any]]) throws -> Void
         }
 
-        XCTAssertEqual(commentary.count, 3, "two calls and the one failure")
-        XCTAssertTrue(commentary[0].contains("Bash"))
-        XCTAssertTrue(commentary[0].contains("ls -la"), "the command a human would recognise, not raw JSON")
-        XCTAssertTrue(commentary[1].contains("README.md"))
-        XCTAssertTrue(commentary[2].contains("boom, it failed"), "a failed tool is worth showing")
+        let cases: [Case] = [
+            Case(
+                name: "with handoff marker, tool activity is mirrored as commentary",
+                entries: [
+                    .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls -la"}"#.utf8), timestamp: Self.writeTime),
+                    .toolResult(toolUseID: "call_1", output: "file.txt", isError: false, timestamp: Self.writeTime),
+                    .toolUse(id: "call_2", tool: "Read", input: Data(#"{"file_path":"README.md"}"#.utf8), timestamp: Self.writeTime),
+                    .toolResult(toolUseID: "call_2", output: "boom, it failed", isError: true, timestamp: Self.writeTime),
+                    .handoffMarker(from: .claudeCode, to: .codexCLI, reason: "user-requested", timestamp: Self.writeTime)
+                ]
+            ) { parsed in
+                let commentary: [String] = parsed.compactMap { record in
+                    guard record["type"] as? String == "event_msg",
+                          let payload = record["payload"] as? [String: Any],
+                          payload["phase"] as? String == "commentary"
+                    else { return nil }
+                    return payload["message"] as? String
+                }
 
-        // The model still reads the real records, not the commentary.
-        XCTAssertEqual(
-            payloadTypes(in: parsed, ofRecordType: "response_item"),
-            ["function_call", "function_call_output", "function_call", "function_call_output"]
-        )
-    }
+                XCTAssertEqual(commentary.count, 3, "two calls and the one failure")
+                XCTAssertTrue(commentary[0].contains("Bash"))
+                XCTAssertTrue(commentary[0].contains("ls -la"), "the command a human would recognise, not raw JSON")
+                XCTAssertTrue(commentary[1].contains("README.md"))
+                XCTAssertTrue(commentary[2].contains("boom, it failed"), "a failed tool is worth showing")
 
-    func testWithoutAHandoffMarkerToolActivityIsNotMirrored() async throws {
-        let entries: [CanonicalEntry] = [
-            .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls"}"#.utf8), timestamp: Self.writeTime),
-            .toolResult(toolUseID: "call_1", output: "nope", isError: true, timestamp: Self.writeTime)
+                // The model still reads the real records, not the commentary.
+                XCTAssertEqual(
+                    self.payloadTypes(in: parsed, ofRecordType: "response_item"),
+                    ["function_call", "function_call_output", "function_call", "function_call_output"]
+                )
+            },
+            Case(
+                name: "without handoff marker, tool activity is not mirrored",
+                entries: [
+                    .toolUse(id: "call_1", tool: "Bash", input: Data(#"{"command":"ls"}"#.utf8), timestamp: Self.writeTime),
+                    .toolResult(toolUseID: "call_1", output: "nope", isError: true, timestamp: Self.writeTime)
+                ]
+            ) { parsed in
+                XCTAssertTrue(parsed.filter { $0["type"] as? String == "event_msg" }.isEmpty)
+            },
         ]
 
-        let handle = try await codec.writeNative(entries, workingDirectory: workingDirectory, sessionID: sessionID)
-        let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
-
-        XCTAssertTrue(parsed.filter { $0["type"] as? String == "event_msg" }.isEmpty)
+        for entry in cases {
+            let handle = try await codec.writeNative(
+                entry.entries,
+                workingDirectory: workingDirectory,
+                sessionID: sessionID
+            )
+            let parsed = try records(at: XCTUnwrap(handle.transcriptURL))
+            try entry.check(parsed)
+        }
     }
 
     func testCommentaryIsNotReadBackAsConversation() async throws {

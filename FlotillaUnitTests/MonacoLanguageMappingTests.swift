@@ -3,40 +3,37 @@ import XCTest
 
 final class MonacoLanguageMappingTests: XCTestCase {
 
-    func testSwiftLanguageMapping() {
-        let url = URL(fileURLWithPath: "/path/to/File.swift")
-        XCTAssertEqual(MonacoLanguage.from(url: url), .swift)
-    }
+    func testLanguageMappingFromFilename() {
+        let cases: [(path: String, language: MonacoLanguage)] = [
+            ("/path/to/File.swift", .swift),
+            ("/src/app.ts", .typescript),
+            ("/src/app.tsx", .typescript),
+            ("/src/index.js", .javascript),
+            ("/src/index.jsx", .javascript),
+            ("/main.py", .python),
+            ("/main.rs", .rust),
+            ("/main.go", .go),
+            ("/config.json", .json),
+            ("/config.yaml", .yaml),
+            ("/config.yml", .yaml),
+            ("/README.md", .markdown),
+            ("/index.html", .html),
+            ("/styles.css", .css),
+            ("/styles.scss", .scss),
+            ("/script.sh", .shell),
+            ("/query.sql", .sql),
+            ("/Dockerfile", .dockerfile),
+            ("/Info.plist", .xml),
+            ("/notes.unknown", .plaintext),
+            ("/LICENSE", .plaintext),
+        ]
 
-    func testTypeScriptAndJavaScriptLanguageMapping() {
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/src/app.ts")), .typescript)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/src/app.tsx")), .typescript)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/src/index.js")), .javascript)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/src/index.jsx")), .javascript)
-    }
-
-    func testPythonRustGoLanguageMapping() {
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/main.py")), .python)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/main.rs")), .rust)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/main.go")), .go)
-    }
-
-    func testConfigAndMarkupLanguageMapping() {
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/config.json")), .json)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/config.yaml")), .yaml)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/config.yml")), .yaml)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/README.md")), .markdown)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/index.html")), .html)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/styles.css")), .css)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/styles.scss")), .scss)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/script.sh")), .shell)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/query.sql")), .sql)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/Dockerfile")), .dockerfile)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/Info.plist")), .xml)
-    }
-
-    func testFallbackToPlaintext() {
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/notes.unknown")), .plaintext)
-        XCTAssertEqual(MonacoLanguage.from(url: URL(fileURLWithPath: "/LICENSE")), .plaintext)
+        for entry in cases {
+            XCTAssertEqual(
+                MonacoLanguage.from(url: URL(fileURLWithPath: entry.path)),
+                entry.language,
+                entry.path
+            )
+        }
     }
 }

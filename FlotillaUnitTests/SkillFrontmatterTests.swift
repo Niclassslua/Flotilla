@@ -3,8 +3,8 @@ import XCTest
 
 final class SkillFrontmatterTests: XCTestCase {
 
-    func testParsesStandardNameAndDescription() {
-        let text = """
+    func testParsesStandardQuotedFoldedCRLFAndExtendedFields() {
+        let standard = """
         ---
         name: code-review
         description: Performs code reviews on pull requests.
@@ -12,28 +12,22 @@ final class SkillFrontmatterTests: XCTestCase {
         # Skill Body
         Instructions here.
         """
+        let parsedStandard = SkillFrontmatter.parse(standard)
+        XCTAssertEqual(parsedStandard.name, "code-review")
+        XCTAssertEqual(parsedStandard.description, "Performs code reviews on pull requests.")
 
-        let parsed = SkillFrontmatter.parse(text)
-        XCTAssertEqual(parsed.name, "code-review")
-        XCTAssertEqual(parsed.description, "Performs code reviews on pull requests.")
-    }
-
-    func testParsesQuotedValues() {
-        let text = """
+        let quoted = """
         ---
         name: "my-skill"
         description: 'A helpful skill for formatting.'
         ---
         Body
         """
+        let parsedQuoted = SkillFrontmatter.parse(quoted)
+        XCTAssertEqual(parsedQuoted.name, "my-skill")
+        XCTAssertEqual(parsedQuoted.description, "A helpful skill for formatting.")
 
-        let parsed = SkillFrontmatter.parse(text)
-        XCTAssertEqual(parsed.name, "my-skill")
-        XCTAssertEqual(parsed.description, "A helpful skill for formatting.")
-    }
-
-    func testParsesMultiLineFoldedDescription() {
-        let text = """
+        let folded = """
         ---
         name: doc-generator
         description: >
@@ -42,45 +36,19 @@ final class SkillFrontmatterTests: XCTestCase {
         ---
         Body
         """
+        let parsedFolded = SkillFrontmatter.parse(folded)
+        XCTAssertEqual(parsedFolded.name, "doc-generator")
+        XCTAssertEqual(
+            parsedFolded.description,
+            "Generates comprehensive documentation for Swift and TypeScript codebases."
+        )
 
-        let parsed = SkillFrontmatter.parse(text)
-        XCTAssertEqual(parsed.name, "doc-generator")
-        XCTAssertEqual(parsed.description, "Generates comprehensive documentation for Swift and TypeScript codebases.")
-    }
+        let crlf = "---\r\nname: crlf-skill\r\ndescription: Works with CRLF.\r\n---\r\nBody"
+        let parsedCRLF = SkillFrontmatter.parse(crlf)
+        XCTAssertEqual(parsedCRLF.name, "crlf-skill")
+        XCTAssertEqual(parsedCRLF.description, "Works with CRLF.")
 
-    func testHandlesCRLFLineEndings() {
-        let text = "---\r\nname: crlf-skill\r\ndescription: Works with CRLF.\r\n---\r\nBody"
-
-        let parsed = SkillFrontmatter.parse(text)
-        XCTAssertEqual(parsed.name, "crlf-skill")
-        XCTAssertEqual(parsed.description, "Works with CRLF.")
-    }
-
-    func testReturnsNilWhenNoFrontmatterPresent() {
-        let text = """
-        # Just Markdown
-        No frontmatter in this file.
-        """
-
-        let parsed = SkillFrontmatter.parse(text)
-        XCTAssertNil(parsed.name)
-        XCTAssertNil(parsed.description)
-    }
-
-    func testReturnsNilWhenFrontmatterIsUnclosed() {
-        let text = """
-        ---
-        name: broken
-        description: never closes
-        """
-
-        let parsed = SkillFrontmatter.parse(text)
-        XCTAssertNil(parsed.name)
-        XCTAssertNil(parsed.description)
-    }
-
-    func testParsesExtendedFieldsAndTags() {
-        let text = """
+        let extended = """
         ---
         name: impeccable
         description: Create distinctive, production-grade frontend interfaces.
@@ -93,16 +61,33 @@ final class SkillFrontmatterTests: XCTestCase {
         ---
         Body content
         """
+        let parsedExtended = SkillFrontmatter.parse(extended)
+        XCTAssertEqual(parsedExtended.name, "impeccable")
+        XCTAssertEqual(parsedExtended.version, "2.1.1")
+        XCTAssertEqual(parsedExtended.userInvocable, true)
+        XCTAssertEqual(parsedExtended.argumentHint, "[craft|teach|extract]")
+        XCTAssertEqual(parsedExtended.author, "Anthropic")
+        XCTAssertEqual(parsedExtended.license, "Apache-2.0")
+        XCTAssertEqual(parsedExtended.tags, ["swift", "ui", "design"])
+    }
 
-        let parsed = SkillFrontmatter.parse(text)
-        XCTAssertEqual(parsed.name, "impeccable")
-        XCTAssertEqual(parsed.description, "Create distinctive, production-grade frontend interfaces.")
-        XCTAssertEqual(parsed.version, "2.1.1")
-        XCTAssertEqual(parsed.userInvocable, true)
-        XCTAssertEqual(parsed.argumentHint, "[craft|teach|extract]")
-        XCTAssertEqual(parsed.author, "Anthropic")
-        XCTAssertEqual(parsed.license, "Apache-2.0")
-        XCTAssertEqual(parsed.tags, ["swift", "ui", "design"])
+    func testMissingOrUnclosedFrontmatterYieldsNilFields() {
+        let none = """
+        # Just Markdown
+        No frontmatter in this file.
+        """
+        let parsedNone = SkillFrontmatter.parse(none)
+        XCTAssertNil(parsedNone.name)
+        XCTAssertNil(parsedNone.description)
+
+        let unclosed = """
+        ---
+        name: broken
+        description: never closes
+        """
+        let parsedUnclosed = SkillFrontmatter.parse(unclosed)
+        XCTAssertNil(parsedUnclosed.name)
+        XCTAssertNil(parsedUnclosed.description)
     }
 
     func testParsesMarkdownFallbackWhenNoFrontmatter() {

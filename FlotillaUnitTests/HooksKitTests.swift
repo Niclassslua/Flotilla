@@ -6,32 +6,38 @@ import HooksKit
 final class SessionStatusHeuristicTests: XCTestCase {
     private let heuristic = SessionStatusHeuristic()
 
-    func testDetectsCommonWaitingPhrases() {
-        XCTAssertEqual(heuristic.detectStatus(in: "Do you want to proceed?"), .waitingForInput)
-        XCTAssertEqual(heuristic.detectStatus(in: "Continue? (y/n)"), .waitingForInput)
-        XCTAssertEqual(heuristic.detectStatus(in: "Permission required to write file"), .waitingForInput)
-    }
+    func testDetectStatusPhrasesAndNonMatches() {
+        let waiting = [
+            "Do you want to proceed?",
+            "Continue? (y/n)",
+            "Permission required to write file",
+        ]
+        for phrase in waiting {
+            XCTAssertEqual(heuristic.detectStatus(in: phrase), .waitingForInput, phrase)
+        }
 
-    func testOrdinaryOutputDetectsNothing() {
-        XCTAssertNil(heuristic.detectStatus(in: "Compiling module SessionKit..."))
-        XCTAssertNil(heuristic.detectStatus(in: "Permission accepted; continuing"))
-        XCTAssertNil(heuristic.detectStatus(in: ""))
+        let ignored = [
+            "Compiling module SessionKit...",
+            "Permission accepted; continuing",
+            "",
+        ]
+        for phrase in ignored {
+            XCTAssertNil(heuristic.detectStatus(in: phrase), phrase)
+        }
     }
 }
 
 final class WaitingNotificationGateTests: XCTestCase {
-    func testFiresOnlyOnTransitionIntoWaiting() {
+    func testNotifiesOnlyOnTransitionIntoWaiting() {
         let gate = WaitingNotificationGate()
         XCTAssertTrue(gate.shouldNotify(for: .waitingForInput))
-        XCTAssertFalse(gate.shouldNotify(for: .waitingForInput)) // still waiting, no repeat
+        XCTAssertFalse(gate.shouldNotify(for: .waitingForInput), "still waiting, no repeat")
         XCTAssertFalse(gate.shouldNotify(for: .working))
-        XCTAssertTrue(gate.shouldNotify(for: .waitingForInput)) // waiting again after leaving
-    }
+        XCTAssertTrue(gate.shouldNotify(for: .waitingForInput), "waiting again after leaving")
 
-    func testNeverFiresForNonWaitingStatuses() {
-        let gate = WaitingNotificationGate()
+        let fresh = WaitingNotificationGate()
         for status: SessionStatus in [.working, .readyForReview, .crashed] {
-            XCTAssertFalse(gate.shouldNotify(for: status))
+            XCTAssertFalse(fresh.shouldNotify(for: status), "\(status)")
         }
     }
 }
@@ -69,86 +75,50 @@ final class TerminalScreenHeuristicTests: XCTestCase {
       2. No, and tell Claude what to do differently
     """
 
-    func testInterruptHintMeansWorking() {
-        XCTAssertEqual(heuristic.status(forScreen: workingScreen), .working)
-    }
+    private let antigravityWorkingScreen = """
+    ● Bash(find /Users/test/Flotilla/hooks -name '*.jsonl' -empty | wc -l)
+    ⣯  Generating...
+    ──────────────────────────────────────────────────────────────
+    > Accept-edits mode: file edits auto-approved
+    ──────────────────────────────────────────────────────────────
+    esc to cancel                              Gemini 3.8 Flash · medium
+    """
 
-    func testAntigravityCancelHintMeansWorking() {
-        let screen = """
-        ● Bash(find /Users/test/Flotilla/hooks -name '*.jsonl' -empty | wc -l)
-        ⣯  Generating...
-        ──────────────────────────────────────────────────────────────
-        > Accept-edits mode: file edits auto-approved
-        ──────────────────────────────────────────────────────────────
-        esc to cancel                              Gemini 3.8 Flash · medium
-        """
+    private let antigravityPermissionScreen = """
+    ● Bash(find '/Users/test/Flotilla/hooks' -name '*.jsonl' -empty | wc -l)
+    Command
+    ──────────────────────────────────────────────────────────────
+    Requesting permission for:
+      find /Users/test/Flotilla/hooks -name '*.jsonl' -empty | wc -l
 
-        XCTAssertEqual(
-            heuristic.status(forScreen: screen),
-            .working,
-            "Antigravity's live generation footer must not look review-ready"
-        )
-    }
+    Run this command?
+    > 1. Yes, run command
+      2. Yes, and always allow in this conversation for commands that start with
+    'find /Users/test/Flotilla/hooks' -name '*.jsonl' -empty
+      3. Yes, and always allow for commands that start with 'find
+    /Users/test/Flotilla/hooks' -name '*.jsonl' -empty (Persist to settings.json)
+      4. No, cancel
 
-    func testComposerWithProviderFooterMeansReady() {
-        XCTAssertEqual(heuristic.status(forScreen: idleScreen), .readyForReview)
-    }
-
-    func testPermissionPromptMeansWaiting() {
-        XCTAssertEqual(
-            heuristic.observation(forScreen: permissionScreen),
-            SessionStatusObservation(.waitingForInput, waitingReason: .permission)
-        )
-    }
-
-    func testAntigravityRequestingPermissionWordingMeansWaiting() {
-        let screen = """
-        ● Bash(find '/Users/test/Flotilla/hooks' -name '*.jsonl' -empty | wc -l)
-        Command
-        ──────────────────────────────────────────────────────────────
-        Requesting permission for:
-          find /Users/test/Flotilla/hooks -name '*.jsonl' -empty | wc -l
-
-        Run this command?
-        > 1. Yes, run command
-          2. Yes, and always allow in this conversation for commands that start with
-        'find /Users/test/Flotilla/hooks' -name '*.jsonl' -empty
-          3. Yes, and always allow for commands that start with 'find
-        /Users/test/Flotilla/hooks' -name '*.jsonl' -empty (Persist to settings.json)
-          4. No, cancel
-
-          ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
-        esc to cancel                              Gemini 3.8 Flash · medium
-        """
-
-        XCTAssertEqual(
-            heuristic.observation(forScreen: screen),
-            SessionStatusObservation(.waitingForInput, waitingReason: .permission),
-            "Antigravity's permission picker must remain detectable when wrapping pushes it beyond the ordinary tail"
-        )
-    }
+      ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+    esc to cancel                              Gemini 3.8 Flash · medium
+    """
 
     /// A prompt outranks a spinner: some CLIs keep drawing the busy line
     /// underneath a question they are blocked on.
-    func testPromptWinsOverSimultaneousInterruptHint() {
-        let screen = """
-        Do you want to allow this edit?
-        ❯ 1. Yes
-          2. No
-        ✻ Waiting… (esc to interrupt)
-        """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .waitingForInput)
-    }
+    private let promptWinsOverInterrupt = """
+    Do you want to allow this edit?
+    ❯ 1. Yes
+      2. No
+    ✻ Waiting… (esc to interrupt)
+    """
 
-    /// The reason only the bottom of the screen is consulted: transcript
-    /// text scrolled above the status area must not be mistaken for it.
     /// Markers still count while they sit within the inspected tail — this
     /// is a heuristic, and its protection is exactly the tail window.
-    func testTranscriptScrolledAboveTheStatusAreaIsIgnored() {
+    private var scrolledTranscriptIgnored: String {
         let transcript = (1...12)
             .map { "● Step \($0): the hint reads \"esc to interrupt\", then asks \"Do you want to proceed?\"" }
             .joined(separator: "\n")
-        let screen = """
+        return """
         \(transcript)
         ╭──────────────────────────────────────────╮
         │ > Try "fix the status indicator"         │
@@ -159,121 +129,107 @@ final class TerminalScreenHeuristicTests: XCTestCase {
           main ✱ 3 files changed
           claude-opus-5
         """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
     }
 
-    /// A numbered list the agent merely printed is not an open question —
-    /// only a list with a live selection caret is.
-    func testNumberedListWithoutSelectionCaretIsNotWaiting() {
-        let screen = """
-        Here are the next steps:
-        1. Fix the beacon
-        2. Fix the status word
-        3. Ship it
+    private let numberedListWithoutCaret = """
+    Here are the next steps:
+    1. Fix the beacon
+    2. Fix the status word
+    3. Ship it
 
-        │ >                                        │
-        """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
+    │ >                                        │
+    """
+
+    private let liveCodexComposer = """
+    • Plan implemented and the worktree remains clean.
+
+    ────────────────────────────────────────────
+    › Ask Codex to do anything
+
+      gpt-5.6-sol medium · ~/Documents/Projects/SwiftUi/Flotilla
+    """
+
+    private let liveClaudeComposer = """
+    ⏺ The requested change is complete.
+    ✻ Worked for 42s
+    ─────────────────────────────── test-plan-mode ─
+    ❯ clean up the worktree and branch
+    ────────────────────────────────────────────────
+    Est. usage: 1 Standard request
+    ⏵⏵ auto mode on · 1 file changed
+    """
+
+    private let waitingForInputProseWhileWorking = """
+    ● The toggle is labeled "Agent is waiting for input".
+    ⣯  Generating...
+    ──────────────────────────────────────────────────────────────
+    esc to cancel                              Gemini 3.8 Flash · medium
+    """
+
+    private let waitingForInputProseWithComposer = """
+    ● The toggle you added is "Agent is waiting for input".
+    ╭──────────────────────────────────────────╮
+    │ > Try "fix the status indicator"         │
+    ╰──────────────────────────────────────────╯
+      ? for shortcuts
+    """
+
+    private let unremarkableScreen = """
+    Claude Code v1.0.0
+    Connected to workspace
+    Building dependencies...
+    """
+
+    private let emptyComposerOnly = """
+    ╭──────────────────────────────────────────╮
+    │ >                                        │
+    ╰──────────────────────────────────────────╯
+    """
+
+    func testScreenStatusClassification() {
+        let cases: [(name: String, screen: String, expected: SessionStatus?)] = [
+            ("interrupt hint means working", workingScreen, .working),
+            ("antigravity cancel hint means working", antigravityWorkingScreen, .working),
+            ("composer with provider footer means ready", idleScreen, .readyForReview),
+            ("prompt wins over simultaneous interrupt hint", promptWinsOverInterrupt, .waitingForInput),
+            ("transcript scrolled above status area is ignored", scrolledTranscriptIgnored, .readyForReview),
+            ("numbered list without selection caret is not waiting", numberedListWithoutCaret, .readyForReview),
+            ("live codex composer with footer means ready", liveCodexComposer, .readyForReview),
+            ("live claude composer with several footers means ready", liveClaudeComposer, .readyForReview),
+            ("prose 'waiting for input' while working stays working", waitingForInputProseWhileWorking, .working),
+            ("prose 'waiting for input' with composer is ready", waitingForInputProseWithComposer, .readyForReview),
+            ("unremarkable screen without markers", unremarkableScreen, nil),
+            ("composer prompt without transcript", emptyComposerOnly, nil),
+        ]
+
+        for entry in cases {
+            XCTAssertEqual(heuristic.status(forScreen: entry.screen), entry.expected, entry.name)
+        }
     }
 
-    func testLiveCodexComposerWithFooterMeansReady() {
-        let screen = """
-        • Plan implemented and the worktree remains clean.
+    func testWaitingObservationsCarryReason() {
+        let cases: [(name: String, screen: String, expected: SessionStatusObservation?)] = [
+            ("permission prompt", permissionScreen, SessionStatusObservation(.waitingForInput, waitingReason: .permission)),
+            ("antigravity requesting permission wording", antigravityPermissionScreen, SessionStatusObservation(.waitingForInput, waitingReason: .permission)),
+            ("codex question", """
+            Question 1/1 (1 unanswered)
+            Which approach should I take?
+            ❯ 1. Keep compatibility
+              2. Simplify the API
+            """, SessionStatusObservation(.waitingForInput, waitingReason: .question)),
+            ("plan approval", """
+            Proposed Plan
+            1. Update the model
+            2. Wire the UI
+            Approve this plan?
+            """, SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)),
+            ("unremarkable", unremarkableScreen, nil),
+            ("empty composer", emptyComposerOnly, nil),
+        ]
 
-        ────────────────────────────────────────────
-        › Ask Codex to do anything
-
-          gpt-5.6-sol medium · ~/Documents/Projects/SwiftUi/Flotilla
-        """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
-    }
-
-    func testLiveClaudeComposerWithSeveralFootersMeansReady() {
-        let screen = """
-        ⏺ The requested change is complete.
-        ✻ Worked for 42s
-        ─────────────────────────────── test-plan-mode ─
-        ❯ clean up the worktree and branch
-        ────────────────────────────────────────────────
-        Est. usage: 1 Standard request
-        ⏵⏵ auto mode on · 1 file changed
-        """
-        XCTAssertEqual(heuristic.status(forScreen: screen), .readyForReview)
-    }
-
-    func testCodexQuestionCarriesAnswerReason() {
-        let screen = """
-        Question 1/1 (1 unanswered)
-        Which approach should I take?
-        ❯ 1. Keep compatibility
-          2. Simplify the API
-        """
-        XCTAssertEqual(
-            heuristic.observation(forScreen: screen),
-            SessionStatusObservation(.waitingForInput, waitingReason: .question)
-        )
-    }
-
-    func testPlanApprovalCarriesPlanReadyReason() {
-        let screen = """
-        Proposed Plan
-        1. Update the model
-        2. Wire the UI
-        Approve this plan?
-        """
-        XCTAssertEqual(
-            heuristic.observation(forScreen: screen),
-            SessionStatusObservation(.waitingForInput, waitingReason: .planApproval)
-        )
-    }
-
-    func testTextMentioningWaitingForInputWhileWorkingRemainsWorking() {
-        let screen = """
-        ● The toggle is labeled "Agent is waiting for input".
-        ⣯  Generating...
-        ──────────────────────────────────────────────────────────────
-        esc to cancel                              Gemini 3.8 Flash · medium
-        """
-        XCTAssertEqual(
-            heuristic.status(forScreen: screen),
-            .working,
-            "Prose mentioning 'waiting for input' during generation must not override the working status"
-        )
-    }
-
-    func testTextMentioningWaitingForInputWithComposerMeansReadyForReview() {
-        let screen = """
-        ● The toggle you added is "Agent is waiting for input".
-        ╭──────────────────────────────────────────╮
-        │ > Try "fix the status indicator"         │
-        ╰──────────────────────────────────────────╯
-          ? for shortcuts
-        """
-        XCTAssertEqual(
-            heuristic.status(forScreen: screen),
-            .readyForReview,
-            "Transcript mentioning 'waiting for input' at a composer prompt must be ready for review, not waiting"
-        )
-    }
-
-    func testUnremarkableScreenWithoutMarkersReturnsNil() {
-        let screen = """
-        Claude Code v1.0.0
-        Connected to workspace
-        Building dependencies...
-        """
-        XCTAssertNil(heuristic.observation(forScreen: screen))
-        XCTAssertNil(heuristic.status(forScreen: screen))
-    }
-
-    func testComposerPromptWithoutTranscriptReturnsNil() {
-        let screen = """
-        ╭──────────────────────────────────────────╮
-        │ >                                        │
-        ╰──────────────────────────────────────────╯
-        """
-        XCTAssertNil(heuristic.observation(forScreen: screen))
-        XCTAssertNil(heuristic.status(forScreen: screen))
+        for entry in cases {
+            XCTAssertEqual(heuristic.observation(forScreen: entry.screen), entry.expected, entry.name)
+        }
     }
 }
 
@@ -316,75 +272,61 @@ final class SessionScreenMonitorTests: XCTestCase {
         func append(_ observation: SessionStatusObservation) { values.append(observation) }
     }
 
-    /// The property that fixes the reported bug: a screen that keeps saying
-    /// the same thing produces exactly one status, no matter how many times
-    /// it is redrawn or re-read.
-    func testUnchangingScreenReportsStatusOnlyOnce() async {
+    func testScreenMonitorDedupesRedrawsAndFollowsTransitions() async {
         let readyScreen = "● Done.\n> ready"
-        let reader = ScriptedScreenReader([readyScreen, readyScreen, readyScreen, readyScreen])
-        let monitor = SessionScreenMonitor(
+        let stableReader = ScriptedScreenReader([readyScreen, readyScreen, readyScreen, readyScreen])
+        let stable = SessionScreenMonitor(
             sessionID: UUID(),
-            reader: reader,
+            reader: stableReader,
             pollInterval: .milliseconds(30)
         )
-        let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [SessionStatusObservation(.readyForReview)])
-        let readCount = await reader.readCount
+        let stableObserved = await collect(from: stable)
+        XCTAssertEqual(stableObserved, [SessionStatusObservation(.readyForReview)])
+        let readCount = await stableReader.readCount
         XCTAssertGreaterThan(readCount, 1, "the monitor should have polled repeatedly")
-    }
 
-    func testUnremarkableScreenReportsNothing() async {
-        let reader = ScriptedScreenReader([
-            "Claude Code v1.0.0\nInitializing...",
-            "Claude Code v1.0.0\nReading repository...",
-        ])
-        let monitor = SessionScreenMonitor(
+        let unremarkable = SessionScreenMonitor(
             sessionID: UUID(),
-            reader: reader,
+            reader: ScriptedScreenReader([
+                "Claude Code v1.0.0\nInitializing...",
+                "Claude Code v1.0.0\nReading repository...",
+            ]),
             pollInterval: .milliseconds(30)
         )
-        let observed = await collect(from: monitor)
-        XCTAssertTrue(observed.isEmpty, "screens without markers must not produce status updates")
-    }
+        let unremarkableObserved = await collect(from: unremarkable)
+        XCTAssertTrue(unremarkableObserved.isEmpty, "screens without markers must not produce status updates")
 
-    /// An animating spinner changes the screen on every frame but never
-    /// changes what it means, so it must not produce a stream of updates.
-    func testAnimatingSpinnerReportsWorkingOnlyOnce() async {
         let frames = ["✻", "✢", "·", "✳"].map { "\($0) Thinking… (esc to interrupt)" }
-        let monitor = SessionScreenMonitor(
+        let spinner = SessionScreenMonitor(
             sessionID: UUID(),
             reader: ScriptedScreenReader(frames),
             pollInterval: .milliseconds(30)
         )
-        let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [SessionStatusObservation(.working)])
-    }
+        let spinnerObserved = await collect(from: spinner)
+        XCTAssertEqual(spinnerObserved, [SessionStatusObservation(.working)])
 
-    func testFollowsTheScreenFromWorkingToReady() async {
-        let reader = ScriptedScreenReader([
-            "✻ Thinking… (esc to interrupt)",
-            "✻ Thinking… (esc to interrupt)",
-            "● Done.\n│ > │\n  ? for shortcuts",
-        ])
-        let monitor = SessionScreenMonitor(
+        let transition = SessionScreenMonitor(
             sessionID: UUID(),
-            reader: reader,
+            reader: ScriptedScreenReader([
+                "✻ Thinking… (esc to interrupt)",
+                "✻ Thinking… (esc to interrupt)",
+                "● Done.\n│ > │\n  ? for shortcuts",
+            ]),
             pollInterval: .milliseconds(30)
         )
-        let observed = await collect(from: monitor)
-        XCTAssertEqual(observed, [SessionStatusObservation(.working), SessionStatusObservation(.readyForReview)])
-    }
+        let transitionObserved = await collect(from: transition)
+        XCTAssertEqual(
+            transitionObserved,
+            [SessionStatusObservation(.working), SessionStatusObservation(.readyForReview)]
+        )
 
-    /// An unreadable screen is "no information" — the status must be left
-    /// alone rather than decaying to idle on an absence.
-    func testUnreadableScreenReportsNothing() async {
-        let monitor = SessionScreenMonitor(
+        let unreadable = SessionScreenMonitor(
             sessionID: UUID(),
             reader: ScriptedScreenReader([nil]),
             pollInterval: .milliseconds(30)
         )
-        let observed = await collect(from: monitor)
-        XCTAssertTrue(observed.isEmpty)
+        let unreadableObserved = await collect(from: unreadable)
+        XCTAssertTrue(unreadableObserved.isEmpty)
     }
 }
 
@@ -849,14 +791,6 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertEqual(process.terminationStatus, 0)
         return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     }
-
-    func testSupportsHooksMatchesImplementedProviders() {
-        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .claudeCode))
-        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .antigravity))
-        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .codexCLI))
-        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .openCode))
-    }
-
     func testConfigureHooksNeverTouchesSharedSettingsFile() {
         let writer = HookConfigurationWriter()
         let sessionID = UUID()
@@ -1012,36 +946,16 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertEqual(preToolGroups.first?["matcher"] as? String, "AskUserQuestion|ExitPlanMode")
     }
 
-    // OpenCode is hook-capable but its wiring travels through
+    // OpenCode and Antigravity are hook-capable but their wiring travels through
     // configureHooks's stable project-plugin write, not launchArguments.
-    func testLaunchArgumentsEmptyForOpenCodeEvenThoughItSupportsHooks() {
-        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .openCode))
-        XCTAssertTrue(HookConfigurationWriter.launchArguments(
-            for: .openCode,
-            supportDirectory: supportDirectory
-        ).isEmpty)
-    }
-
-    func testLaunchArgumentsEnableStableCodexHooksFeature() {
-        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .codexCLI))
-        XCTAssertEqual(
-            Array(HookConfigurationWriter.launchArguments(
-                for: .codexCLI,
-                supportDirectory: supportDirectory
-            ).prefix(2)),
-            ["--config", "features.hooks=true"]
-        )
-    }
-
-    // Antigravity is hook-capable but its wiring travels through
-    // `configureHooks`'s shared-file write, not `launchArguments` — unlike
-    // Claude Code, which has no per-invocation settings-override flag.
-    func testLaunchArgumentsEmptyForAntigravityEvenThoughItSupportsHooks() {
-        XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: .antigravity))
-        XCTAssertTrue(HookConfigurationWriter.launchArguments(
-            for: .antigravity,
-            supportDirectory: supportDirectory
-        ).isEmpty)
+    func testLaunchArgumentsEmptyForPluginWiredProviders() {
+        for agent in [AgentKind.openCode, .antigravity] {
+            XCTAssertTrue(HookConfigurationWriter.supportsHooks(for: agent), "\(agent)")
+            XCTAssertTrue(
+                HookConfigurationWriter.launchArguments(for: agent, supportDirectory: supportDirectory).isEmpty,
+                "\(agent)"
+            )
+        }
     }
 
     private var antigravityHooksFile: URL {
@@ -1300,31 +1214,6 @@ final class HookConfigurationWriterTests: XCTestCase {
 
         XCTAssertEqual(try Data(contentsOf: configFile), existing)
     }
-
-    func testOpenCodeWritesAPerSessionPluginFile() throws {
-        let writer = HookConfigurationWriter()
-        let sessionID = UUID()
-        let succeeded = writer.configureHooks(
-            for: .openCode,
-            sessionID: sessionID,
-            workingDirectory: workingDirectory,
-            supportDirectory: supportDirectory
-        )
-        XCTAssertTrue(succeeded)
-
-        let pluginPath = workingDirectory
-            .appendingPathComponent(".opencode/plugins", isDirectory: true)
-            .appendingPathComponent("flotilla-status.js", isDirectory: false)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: pluginPath.path))
-
-        let contents = try String(contentsOf: pluginPath, encoding: .utf8)
-        XCTAssertTrue(contents.contains(HookConfigurationWriter.eventFileEnvironmentKey))
-        XCTAssertTrue(contents.contains("tool.execute.after"))
-        XCTAssertTrue(contents.contains("session.idle"))
-        XCTAssertTrue(contents.contains("permission.asked"))
-        XCTAssertTrue(contents.contains("question.asked"))
-    }
-
     func testOpenCodeRelaunchOverwritesRatherThanAccumulating() throws {
         let writer = HookConfigurationWriter()
         let sessionID = UUID()
@@ -1407,24 +1296,20 @@ final class HookConfigurationWriterTests: XCTestCase {
 }
 
 final class SystemNotificationDispatcherRequestTests: XCTestCase {
-    func testWaitingForInputRequestCarriesSessionIdentityAndCategory() {
+    func testNotificationRequestsCarrySessionIdentity() {
         let sessionID = UUID()
-        let request = SystemNotificationDispatcher.waitingForInputRequest(sessionTitle: "Fix the build", sessionID: sessionID)
 
-        XCTAssertEqual(request.content.userInfo["sessionID"] as? String, sessionID.uuidString)
-        XCTAssertEqual(request.content.threadIdentifier, sessionID.uuidString)
-        XCTAssertEqual(request.content.categoryIdentifier, SystemNotificationDispatcher.waitingForInputCategoryIdentifier)
-        XCTAssertEqual(request.content.title, "Needs Your Input")
-        XCTAssertTrue(request.content.body.contains("Fix the build"))
-    }
+        let waiting = SystemNotificationDispatcher.waitingForInputRequest(sessionTitle: "Fix the build", sessionID: sessionID)
+        XCTAssertEqual(waiting.content.userInfo["sessionID"] as? String, sessionID.uuidString)
+        XCTAssertEqual(waiting.content.threadIdentifier, sessionID.uuidString)
+        XCTAssertEqual(waiting.content.categoryIdentifier, SystemNotificationDispatcher.waitingForInputCategoryIdentifier)
+        XCTAssertEqual(waiting.content.title, "Needs Your Input")
+        XCTAssertTrue(waiting.content.body.contains("Fix the build"))
 
-    func testFinishedRequestCarriesSessionIdentityWithoutReplyCategory() {
-        let sessionID = UUID()
-        let request = SystemNotificationDispatcher.finishedRequest(sessionTitle: "Fix the build", sessionID: sessionID)
-
-        XCTAssertEqual(request.content.userInfo["sessionID"] as? String, sessionID.uuidString)
-        XCTAssertEqual(request.content.threadIdentifier, sessionID.uuidString)
-        XCTAssertTrue(request.content.categoryIdentifier.isEmpty, "a finished session shouldn't offer the Reply action")
-        XCTAssertEqual(request.content.title, "Session Finished")
+        let finished = SystemNotificationDispatcher.finishedRequest(sessionTitle: "Fix the build", sessionID: sessionID)
+        XCTAssertEqual(finished.content.userInfo["sessionID"] as? String, sessionID.uuidString)
+        XCTAssertEqual(finished.content.threadIdentifier, sessionID.uuidString)
+        XCTAssertTrue(finished.content.categoryIdentifier.isEmpty, "a finished session shouldn't offer the Reply action")
+        XCTAssertEqual(finished.content.title, "Session Finished")
     }
 }

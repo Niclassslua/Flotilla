@@ -6,8 +6,8 @@ import ProcessKit
 /// only through a real git repo — precise edge cases (multiple hunks in
 /// one file, multiple files in one diff) are much easier to set up this way.
 final class UnifiedDiffParsingTests: XCTestCase {
-    func testParsesMultipleHunksAcrossMultipleFiles() {
-        let raw = """
+    func testParseUnifiedDiffShapes() {
+        let multi = """
         diff --git a/file1.txt b/file1.txt
         index abc123..def456 100644
         --- a/file1.txt
@@ -31,30 +31,21 @@ final class UnifiedDiffParsingTests: XCTestCase {
         +world
         """
 
-        let diffs = GitService.parseUnifiedDiff(raw)
-
+        let diffs = GitService.parseUnifiedDiff(multi)
         XCTAssertEqual(diffs.count, 2)
+        XCTAssertEqual(diffs[0].path, "file1.txt")
+        XCTAssertEqual(diffs[0].hunks.count, 2)
+        XCTAssertEqual(diffs[0].hunks[0].header, "@@ -1,3 +1,4 @@")
+        XCTAssertEqual(diffs[0].hunks[0].lines, [" line1", "-line2", "+line2 modified", "+line2b", " line3"])
+        XCTAssertEqual(diffs[0].hunks[1].header, "@@ -10,2 +11,2 @@")
+        XCTAssertEqual(diffs[0].hunks[1].lines, ["-old10", "+new10", " line11"])
+        XCTAssertEqual(diffs[1].path, "file2.txt")
+        XCTAssertEqual(diffs[1].hunks.count, 1)
+        XCTAssertEqual(diffs[1].hunks[0].lines, ["-hello", "+world"])
 
-        let file1 = diffs[0]
-        XCTAssertEqual(file1.path, "file1.txt")
-        XCTAssertEqual(file1.hunks.count, 2)
-        XCTAssertEqual(file1.hunks[0].header, "@@ -1,3 +1,4 @@")
-        XCTAssertEqual(file1.hunks[0].lines, [" line1", "-line2", "+line2 modified", "+line2b", " line3"])
-        XCTAssertEqual(file1.hunks[1].header, "@@ -10,2 +11,2 @@")
-        XCTAssertEqual(file1.hunks[1].lines, ["-old10", "+new10", " line11"])
-
-        let file2 = diffs[1]
-        XCTAssertEqual(file2.path, "file2.txt")
-        XCTAssertEqual(file2.hunks.count, 1)
-        XCTAssertEqual(file2.hunks[0].lines, ["-hello", "+world"])
-    }
-
-    func testEmptyDiffProducesNoFiles() {
         XCTAssertTrue(GitService.parseUnifiedDiff("").isEmpty)
-    }
 
-    func testDeletedFileKeepsOriginalPathInsteadOfDevNull() {
-        let raw = """
+        let deleted = """
         diff --git a/obsolete.swift b/obsolete.swift
         deleted file mode 100644
         index 1234567..0000000
@@ -63,25 +54,22 @@ final class UnifiedDiffParsingTests: XCTestCase {
         @@ -1 +0,0 @@
         -let obsolete = true
         """
-
-        let diff = GitService.parseUnifiedDiff(raw).first
+        let diff = GitService.parseUnifiedDiff(deleted).first
         XCTAssertEqual(diff?.path, "obsolete.swift")
         XCTAssertEqual(diff?.hunks.first?.lines, ["-let obsolete = true"])
     }
 }
 
 final class NumstatParsingTests: XCTestCase {
-    func testSumsMultipleFiles() {
-        let raw = "10\t2\tfile1.swift\n3\t0\tfile2.swift\n"
-        XCTAssertEqual(GitService.parseNumstat(raw), GitDiffStat(files: 2, additions: 13, deletions: 2))
-    }
-
-    func testBinaryFilesContributeZero() {
-        let raw = "-\t-\timage.png\n5\t1\tcode.swift\n"
-        XCTAssertEqual(GitService.parseNumstat(raw), GitDiffStat(files: 1, additions: 5, deletions: 1))
-    }
-
-    func testEmptyInputIsZero() {
+    func testParseNumstatShapes() {
+        XCTAssertEqual(
+            GitService.parseNumstat("10\t2\tfile1.swift\n3\t0\tfile2.swift\n"),
+            GitDiffStat(files: 2, additions: 13, deletions: 2)
+        )
+        XCTAssertEqual(
+            GitService.parseNumstat("-\t-\timage.png\n5\t1\tcode.swift\n"),
+            GitDiffStat(files: 1, additions: 5, deletions: 1)
+        )
         XCTAssertEqual(GitService.parseNumstat(""), GitDiffStat(additions: 0, deletions: 0))
     }
 }
@@ -132,22 +120,20 @@ final class GitServiceRealRepoTests: XCTestCase {
         try await runner.run(["git"] + args, executable: URL(fileURLWithPath: "/usr/bin/env"), workingDirectory: repoPath)
     }
 
-    func testCurrentBranch() async throws {
-        let branch = try await service.currentBranch(at: repoPath)
-        XCTAssertEqual(branch, "main")
-    }
+    func testCurrentDefaultBranchAndWorkingTreeStatus() async throws {
+        let current = try await service.currentBranch(at: repoPath)
+        XCTAssertEqual(current, "main")
 
-    func testDefaultBranchPrefersMainFromFeatureBranch() async throws {
         try await git(["switch", "-c", "feature"])
-
         let defaultBranch = try await service.defaultBranch(at: repoPath)
         XCTAssertEqual(defaultBranch, "main")
-    }
+        try await git(["switch", "main"])
 
-    func testStatusReportsUntrackedAndModifiedFiles() async throws {
+        let clean = try await service.diffStat(at: repoPath)
+        XCTAssertEqual(clean, GitDiffStat(additions: 0, deletions: 0))
+
         try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
         try "new\n".write(to: repoPath.appendingPathComponent("NEW.md"), atomically: true, encoding: .utf8)
-
         let status = try await service.status(at: repoPath)
         let paths = Set(status.entries.map(\.path))
         XCTAssertTrue(paths.contains("README.md"))
@@ -184,11 +170,6 @@ final class GitServiceRealRepoTests: XCTestCase {
         // Staged: +2 −1. Unstaged: +1 −0. Untracked NEW.md: +3 −0.
         // Files: README.md and NEW.md, one entry each in git status.
         XCTAssertEqual(stat, GitDiffStat(files: 2, additions: 6, deletions: 1))
-    }
-
-    func testDiffStatIsZeroForCleanTree() async throws {
-        let stat = try await service.diffStat(at: repoPath)
-        XCTAssertEqual(stat, GitDiffStat(additions: 0, deletions: 0))
     }
 
     func testChangesComparedIncludesCommittedWorkingTreeAndUntrackedChanges() async throws {
@@ -348,57 +329,36 @@ final class GitServiceRealRepoTests: XCTestCase {
 
     // MARK: - Write path (stage / unstage / discard / commit / push / fetch)
 
-    func testStageMovesFileIntoIndex() async throws {
+    func testStageUnstageDiscardAndCommit() async throws {
         try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
-
         try await service.stage(paths: ["README.md"], at: repoPath)
-
-        let status = try await service.status(at: repoPath)
-        XCTAssertEqual(status.entries.first?.indexStatus, "M")
-    }
-
-    func testUnstageMovesFileBackOutOfIndex() async throws {
-        try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
-        try await git(["add", "README.md"])
+        let stagedStatus = try await service.status(at: repoPath)
+        XCTAssertEqual(stagedStatus.entries.first?.indexStatus, "M")
 
         try await service.unstage(paths: ["README.md"], at: repoPath)
-
-        let status = try await service.status(at: repoPath)
-        XCTAssertEqual(status.entries.first?.indexStatus, " ")
-        XCTAssertEqual(status.entries.first?.worktreeStatus, "M")
-    }
-
-    func testDiscardRestoresTrackedFileContent() async throws {
-        try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        let unstaged = try await service.status(at: repoPath)
+        XCTAssertEqual(unstaged.entries.first?.indexStatus, " ")
+        XCTAssertEqual(unstaged.entries.first?.worktreeStatus, "M")
 
         try await service.discard(paths: ["README.md"], at: repoPath)
+        XCTAssertEqual(
+            try String(contentsOf: repoPath.appendingPathComponent("README.md"), encoding: .utf8),
+            "hello\n"
+        )
 
-        let content = try String(contentsOf: repoPath.appendingPathComponent("README.md"), encoding: .utf8)
-        XCTAssertEqual(content, "hello\n")
-    }
-
-    func testDiscardRemovesUntrackedFile() async throws {
         let newFile = repoPath.appendingPathComponent("NEW.md")
         try "new\n".write(to: newFile, atomically: true, encoding: .utf8)
-
         try await service.discard(paths: ["NEW.md"], at: repoPath)
-
         XCTAssertFalse(FileManager.default.fileExists(atPath: newFile.path))
-    }
 
-    func testCommitClearsStagedChanges() async throws {
         try "changed\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
         try await service.stage(paths: ["README.md"], at: repoPath)
-
         try await service.commit(message: "Update README", at: repoPath)
-
-        let snapshot = try await service.changes(at: repoPath)
-        XCTAssertTrue(snapshot.staged.isEmpty)
+        let afterCommit = try await service.changes(at: repoPath)
+        XCTAssertTrue(afterCommit.staged.isEmpty)
         let log = try await git(["log", "-1", "--format=%s"])
         XCTAssertEqual(log.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "Update README")
-    }
 
-    func testCommitWithNothingStagedThrowsNothingToCommit() async throws {
         do {
             try await service.commit(message: "empty", at: repoPath)
             XCTFail("expected nothingToCommit error")
@@ -407,38 +367,30 @@ final class GitServiceRealRepoTests: XCTestCase {
         }
     }
 
-    func testPushSetsUpstreamOnFirstPushAndSucceedsOnSecond() async throws {
-        let remotePath = worktreeBase.appendingPathComponent("origin.git")
-        try await runner.run(["git", "init", "--bare", remotePath.path], executable: URL(fileURLWithPath: "/usr/bin/env"), workingDirectory: worktreeBase)
-        try await git(["remote", "add", "origin", remotePath.path])
-
-        try await service.push(branch: "main", at: repoPath)
-
-        let upstream = try await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
-        XCTAssertEqual(upstream.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "origin/main")
-
-        // Second push, upstream already configured, should still succeed.
-        try "more\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
-        try await service.stage(paths: ["README.md"], at: repoPath)
-        try await service.commit(message: "second commit", at: repoPath)
-        try await service.push(branch: "main", at: repoPath)
-    }
-
-    func testPushWithNoRemoteThrowsNoRemoteConfigured() async throws {
+    func testPushFetchAndMissingRemote() async throws {
         do {
             try await service.push(branch: "main", at: repoPath)
             XCTFail("expected noRemoteConfigured error")
         } catch GitServiceError.noRemoteConfigured {
             // expected
         }
-    }
 
-    func testFetchSucceedsAgainstConfiguredRemote() async throws {
-        let remotePath = worktreeBase.appendingPathComponent("origin-fetch.git")
-        try await runner.run(["git", "init", "--bare", remotePath.path], executable: URL(fileURLWithPath: "/usr/bin/env"), workingDirectory: worktreeBase)
+        let remotePath = worktreeBase.appendingPathComponent("origin.git")
+        try await runner.run(
+            ["git", "init", "--bare", remotePath.path],
+            executable: URL(fileURLWithPath: "/usr/bin/env"),
+            workingDirectory: worktreeBase
+        )
         try await git(["remote", "add", "origin", remotePath.path])
-        try await service.push(branch: "main", at: repoPath)
 
+        try await service.push(branch: "main", at: repoPath)
+        let upstream = try await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+        XCTAssertEqual(upstream.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "origin/main")
+
+        try "more\n".write(to: repoPath.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try await service.stage(paths: ["README.md"], at: repoPath)
+        try await service.commit(message: "second commit", at: repoPath)
+        try await service.push(branch: "main", at: repoPath)
         try await service.fetch(at: repoPath)
     }
 

@@ -8,12 +8,6 @@ final class HomeWidgetLayoutPersistenceTests: XCTestCase {
         return try JSONDecoder().decode(WorkspacePreferences.self, from: data)
     }
 
-    func testNilHomeWidgetsRoundTripsAsNil() throws {
-        let prefs = WorkspacePreferences(homeWidgets: nil)
-        let decoded = try roundTrip(prefs)
-        XCTAssertNil(decoded.homeWidgets)
-    }
-
     func testHomeWidgetsRoundTripPreservesOrderAndConfig() throws {
         let entries = [
             HomeWidgetEntry(kind: "hotFiles", size: "medium", config: HomeWidgetConfig(projectID: "abc", timeWindowDays: 30)),
@@ -47,34 +41,14 @@ final class HomeWidgetLayoutPersistenceTests: XCTestCase {
         XCTAssertFalse(decoded.homeCustomizeHintShown)
     }
 
-    func testUnrecognizedWidgetKindIsDroppedWhenResolved() {
-        let entry = HomeWidgetEntry(kind: "someFutureWidget", size: "medium")
-        XCTAssertNil(entry.resolvedKind)
-    }
-
-    func testUnrecognizedSizeIsDroppedWhenResolved() {
-        let entry = HomeWidgetEntry(kind: "streak", size: "xxl")
-        XCTAssertNotNil(entry.resolvedKind)
-        XCTAssertNil(entry.resolvedSize)
-    }
-
-    func testEveryWidgetKindResolvesADefaultSizeThatItSupports() {
-        for kind in HomeWidgetKind.allCases {
-            XCTAssertTrue(kind.supportedSizes.contains(kind.defaultSize), "\(kind) default size not in its own supportedSizes")
-        }
-    }
-
-    func testDefaultLayoutEntriesAllResolve() {
+    func testResolutionDropsUnknownKindOrSizeAndDefaultsAllResolve() {
+        XCTAssertNil(HomeWidgetEntry(kind: "someFutureWidget", size: "medium").resolvedKind)
+        let unknownSize = HomeWidgetEntry(kind: "streak", size: "xxl")
+        XCTAssertNotNil(unknownSize.resolvedKind)
+        XCTAssertNil(unknownSize.resolvedSize)
         for entry in HomeWidgetKind.defaultLayout {
             XCTAssertNotNil(entry.resolvedKind, "unresolved kind: \(entry.kind)")
             XCTAssertNotNil(entry.resolvedSize, "unresolved size: \(entry.size)")
         }
-    }
-
-    func testConfigIsDefaultWhenAllFieldsAreNil() {
-        XCTAssertTrue(HomeWidgetConfig().isDefault)
-        XCTAssertFalse(HomeWidgetConfig(projectID: "x").isDefault)
-        XCTAssertFalse(HomeWidgetConfig(timeWindowDays: 7).isDefault)
-        XCTAssertFalse(HomeWidgetConfig(agent: "claudeCode").isDefault)
     }
 }

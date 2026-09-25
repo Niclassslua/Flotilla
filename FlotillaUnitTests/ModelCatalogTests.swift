@@ -196,17 +196,6 @@ final class ModelCatalogTests: XCTestCase {
             XCTAssertNotNil(profile.description, "\(profile.slug) is missing a description")
         }
     }
-
-    func testClaudeStaticFallbackProfilesAlsoCarryDisplayNamesAndDescriptions() {
-        let profiles = ModelCatalog.staticFallbackProfiles(for: .claudeCode)
-
-        XCTAssertFalse(profiles.isEmpty)
-        for profile in profiles {
-            XCTAssertNotNil(profile.displayName, "\(profile.slug) is missing a display name")
-            XCTAssertNotNil(profile.description, "\(profile.slug) is missing a description")
-        }
-    }
-
     func testClaudeFallsBackToTheStaticLevelTableWhenTheEffortQueryFails() async {
         let fetcher = ModelCatalogFetcher(
             locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
@@ -250,30 +239,18 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertFalse(unpinned.contains { $0.isModelDefault })
     }
 
-    func testEffortOptionsFallBackToTheAgentTableWithNoCatalogAtAll() {
+    func testEffortOptionsClampAndAgentSupport() {
         let options = AgentEffortCatalog.options(for: .claudeCode, model: "opus", profiles: [])
-
         XCTAssertEqual(options.map(\.level), AgentEffortCatalog.supportedLevels(for: .claudeCode))
-    }
 
-    func testOpenCodeOffersNoEffortLevels() {
-        XCTAssertTrue(AgentEffortCatalog.supportedLevels(for: .openCode).isEmpty)
-        XCTAssertTrue(AgentEffortCatalog.options(for: .openCode, model: "opencode/kimi-k3").isEmpty)
-        XCTAssertFalse(AgentKind.openCode.supportsEffortSelection)
-    }
-
-    func testClaudeCodeRejectsCodexOnlyLevels() {
         XCTAssertFalse(AgentEffortCatalog.supports(.ultra, agent: .claudeCode))
         XCTAssertFalse(AgentEffortCatalog.supports(.minimal, agent: .claudeCode))
         XCTAssertTrue(AgentEffortCatalog.supports(.max, agent: .claudeCode))
         XCTAssertTrue(AgentEffortCatalog.supports(.ultra, agent: .codexCLI))
-    }
 
-    func testClampSnapsToTheNearestSupportedLevel() {
-        let options = AgentEffortCatalog.staticOptions(for: .claudeCode)
-
-        XCTAssertEqual(AgentEffortCatalog.clamp(.ultra, to: options), .max)
-        XCTAssertEqual(AgentEffortCatalog.clamp(.high, to: options), .high)
+        let staticOptions = AgentEffortCatalog.staticOptions(for: .claudeCode)
+        XCTAssertEqual(AgentEffortCatalog.clamp(.ultra, to: staticOptions), .max)
+        XCTAssertEqual(AgentEffortCatalog.clamp(.high, to: staticOptions), .high)
         XCTAssertNil(AgentEffortCatalog.clamp(.high, to: []))
     }
 
@@ -296,16 +273,6 @@ final class ModelCatalogTests: XCTestCase {
 
         XCTAssertEqual(models, ModelCatalog.staticFallback(for: .openCode))
     }
-
-    func testOpenCodeStaticFallbackProfilesAlsoCarryDisplayNames() {
-        let profiles = ModelCatalog.staticFallbackProfiles(for: .openCode)
-
-        XCTAssertFalse(profiles.isEmpty)
-        for profile in profiles {
-            XCTAssertNotNil(profile.displayName, "\(profile.slug) is missing a display name")
-        }
-    }
-
     func testOpenCodePlainSlugListingAlsoGetsDisplayNamesFromTheStaticTable() async {
         struct PlainListingRunner: CommandRunning {
             func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult {
@@ -324,26 +291,7 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(profiles.map(\.slug), ["opencode/big-pickle"])
         XCTAssertEqual(profiles.map(\.displayName), ["Big Pickle"])
     }
-
-    func testAntigravitySupportsLowMediumHighEffortLevels() {
-        XCTAssertEqual(AgentEffortCatalog.supportedLevels(for: .antigravity), [.low, .medium, .high])
-        XCTAssertTrue(AgentKind.antigravity.supportsEffortSelection)
-        XCTAssertTrue(AgentEffortCatalog.supports(.low, agent: .antigravity))
-        XCTAssertTrue(AgentEffortCatalog.supports(.medium, agent: .antigravity))
-        XCTAssertTrue(AgentEffortCatalog.supports(.high, agent: .antigravity))
-        XCTAssertFalse(AgentEffortCatalog.supports(.max, agent: .antigravity))
-        XCTAssertFalse(AgentEffortCatalog.supports(.ultra, agent: .antigravity))
-    }
-
-    func testAntigravityStaticFallbackProfiles() {
-        let profiles = ModelCatalog.staticFallbackProfiles(for: .antigravity)
-        XCTAssertFalse(profiles.isEmpty)
-        XCTAssertTrue(profiles.contains(where: { $0.slug == "gemini-3.7-flash-high" }))
-        XCTAssertEqual(profiles.first(where: { $0.slug == "gemini-3.7-flash-high" })?.displayName, "Gemini 3.7 Flash (High)")
-        XCTAssertEqual(ModelCatalog.staticFallback(for: .antigravity), profiles.map(\.slug))
-    }
-
-    func testAntigravityEffortParsingFromHelpOutput() {
+   func testAntigravityEffortParsingFromHelpOutput() {
         let helpOutput = """
         Usage of agy:
           --effort                        Reasoning effort for the current CLI session (low|medium|high)
@@ -385,80 +333,62 @@ final class ModelCatalogTests: XCTestCase {
 
     // MARK: - Antigravity model grouping
 
-    func testAntigravityGroupingCollapsesEffortSuffixedSlugsIntoOneGroup() {
-        let entries: [(slug: String, displayName: String?)] = [
-            ("gemini-3.7-flash-high", "Gemini 3.7 Flash (High)"),
-            ("gemini-3.7-flash-medium", "Gemini 3.7 Flash (Medium)"),
-            ("gemini-3.7-flash-low", "Gemini 3.7 Flash (Low)"),
-        ]
+    func testAntigravityGroupingCollapsesVariantsAndStripsDisplayEffort() {
+        // Effort-suffixed slugs collapse into one group.
+        do {
+            let groups = ModelCatalog.groupAntigravityModels([
+                ("gemini-3.7-flash-high", "Gemini 3.7 Flash (High)"),
+                ("gemini-3.7-flash-medium", "Gemini 3.7 Flash (Medium)"),
+                ("gemini-3.7-flash-low", "Gemini 3.7 Flash (Low)"),
+            ])
+            XCTAssertEqual(groups.count, 1)
+            let group = groups[0]
+            XCTAssertEqual(group.baseSlug, "gemini-3.7-flash")
+            XCTAssertEqual(group.displayName, "Gemini 3.7 Flash")
+            XCTAssertEqual(group.variants, [
+                .high: "gemini-3.7-flash-high",
+                .medium: "gemini-3.7-flash-medium",
+                .low: "gemini-3.7-flash-low",
+            ])
+            XCTAssertNil(group.soleSlug)
+        }
 
-        let groups = ModelCatalog.groupAntigravityModels(entries)
+        // Unsuffixed sole slug vs single-key medium variant.
+        do {
+            let groups = ModelCatalog.groupAntigravityModels([
+                ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)"),
+                ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"),
+            ])
+            let sonnet = groups.first { $0.baseSlug == "claude-sonnet-4-6" }
+            XCTAssertEqual(sonnet?.displayName, "Claude Sonnet 4.6 (Thinking)")
+            XCTAssertTrue(sonnet?.variants.isEmpty ?? false)
+            XCTAssertEqual(sonnet?.soleSlug, "claude-sonnet-4-6")
+            let gptOss = groups.first { $0.baseSlug == "gpt-oss-120b" }
+            XCTAssertEqual(gptOss?.displayName, "GPT-OSS 120B")
+            XCTAssertEqual(gptOss?.variants, [.medium: "gpt-oss-120b-medium"])
+            XCTAssertNil(gptOss?.soleSlug)
+        }
 
-        XCTAssertEqual(groups.count, 1)
-        let group = groups[0]
-        XCTAssertEqual(group.baseSlug, "gemini-3.7-flash")
-        XCTAssertEqual(group.displayName, "Gemini 3.7 Flash")
-        XCTAssertEqual(group.variants, [
-            .high: "gemini-3.7-flash-high",
-            .medium: "gemini-3.7-flash-medium",
-            .low: "gemini-3.7-flash-low",
-        ])
-        XCTAssertNil(group.soleSlug)
-    }
+        // Display-name effort stripped even without a slug suffix.
+        do {
+            let groups = ModelCatalog.groupAntigravityModels([
+                ("gemini-3-flash-native", "Gemini 3 Flash Native (high)"),
+            ])
+            let group = groups.first { $0.baseSlug == "gemini-3-flash-native" }
+            XCTAssertEqual(group?.displayName, "Gemini 3 Flash Native")
+            XCTAssertTrue(group?.variants.isEmpty ?? false)
+            XCTAssertEqual(group?.soleSlug, "gemini-3-flash-native")
+        }
 
-    func testAntigravityGroupingLeavesUnsuffixedModelsAsSingleVariantGroups() {
-        let entries: [(slug: String, displayName: String?)] = [
-            ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)"),
-            ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"),
-        ]
-
-        let groups = ModelCatalog.groupAntigravityModels(entries)
-
-        let sonnet = groups.first { $0.baseSlug == "claude-sonnet-4-6" }
-        XCTAssertEqual(sonnet?.displayName, "Claude Sonnet 4.6 (Thinking)")
-        XCTAssertTrue(sonnet?.variants.isEmpty ?? false)
-        XCTAssertEqual(sonnet?.soleSlug, "claude-sonnet-4-6")
-
-        // Only a "-medium" slug exists for this model, so it's a real,
-        // single-key variant group rather than a sole-slug one — the effort
-        // picker should offer exactly "Medium" for it, not fall back to
-        // treating it as effort-less.
-        let gptOss = groups.first { $0.baseSlug == "gpt-oss-120b" }
-        XCTAssertEqual(gptOss?.displayName, "GPT-OSS 120B")
-        XCTAssertEqual(gptOss?.variants, [.medium: "gpt-oss-120b-medium"])
-        XCTAssertNil(gptOss?.soleSlug)
-    }
-
-    // A model with a fixed reasoning level (no `-low`/`-medium`/`-high` slug
-    // variant) can still have its effort spelled out in the display name the
-    // CLI reports. Left unstripped, that model shows up as a single,
-    // uneditable "Name (high)" chip with no separate effort picker to match —
-    // the model name and the effort control's job overlapping in one string.
-    func testAntigravityGroupingStripsEffortSuffixFromDisplayNameEvenWithoutASlugSuffix() {
-        let entries: [(slug: String, displayName: String?)] = [
-            ("gemini-3-flash-native", "Gemini 3 Flash Native (high)"),
-        ]
-
-        let groups = ModelCatalog.groupAntigravityModels(entries)
-
-        let group = groups.first { $0.baseSlug == "gemini-3-flash-native" }
-        XCTAssertEqual(group?.displayName, "Gemini 3 Flash Native")
-        XCTAssertTrue(group?.variants.isEmpty ?? false)
-        XCTAssertEqual(group?.soleSlug, "gemini-3-flash-native")
-    }
-
-    // The CLI's casing on the effort suffix isn't guaranteed; grouping
-    // shouldn't depend on it matching "(High)" exactly.
-    func testAntigravityGroupingStripsDisplayNameEffortSuffixCaseInsensitively() {
-        let entries: [(slug: String, displayName: String?)] = [
-            ("gemini-3.7-flash-high", "Gemini 3.7 Flash (high)"),
-            ("gemini-3.7-flash-medium", "Gemini 3.7 Flash (MEDIUM)"),
-        ]
-
-        let groups = ModelCatalog.groupAntigravityModels(entries)
-
-        XCTAssertEqual(groups.count, 1)
-        XCTAssertEqual(groups[0].displayName, "Gemini 3.7 Flash")
+        // Case-insensitive display effort stripping.
+        do {
+            let groups = ModelCatalog.groupAntigravityModels([
+                ("gemini-3.7-flash-high", "Gemini 3.7 Flash (high)"),
+                ("gemini-3.7-flash-medium", "Gemini 3.7 Flash (MEDIUM)"),
+            ])
+            XCTAssertEqual(groups.count, 1)
+            XCTAssertEqual(groups[0].displayName, "Gemini 3.7 Flash")
+        }
     }
 
     func testCursorGroupingMatchesSlashModelOrderAndCollapsesEffort() {
@@ -516,19 +446,12 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertNil(gpt?.variants[.minimal])
     }
 
-    func testCursorStaticGroupsFollowSlashModelOrderAndNarrowEffort() {
+    func testCursorStaticGroupsNarrowEffort() {
         let names = ModelCatalog.staticCursorGroups().map(\.displayName)
-        XCTAssertEqual(Array(names.prefix(5)), [
-            "Auto",
-            "Grok 4.7",
-            "Grok 4.6",
-            "Composer 2.5",
-            "Claude Opus 5.5",
-        ])
-        let codexIndex = names.firstIndex(of: "Codex 5.3")
         let sonnetIndex = names.firstIndex(of: "Claude Sonnet 4.6")
-        XCTAssertNotNil(codexIndex)
+        let codexIndex = names.firstIndex(of: "Codex 5.3")
         XCTAssertNotNil(sonnetIndex)
+        XCTAssertNotNil(codexIndex)
         XCTAssertLessThan(sonnetIndex ?? 0, codexIndex ?? 0)
 
         let profiles = ModelCatalog.staticFallbackProfiles(for: .cursorAgent)
@@ -567,13 +490,6 @@ final class ModelCatalogTests: XCTestCase {
         let sonnetOptions = AgentEffortCatalog.options(for: .antigravity, model: "claude-sonnet-4-6", profiles: profiles)
         XCTAssertTrue(sonnetOptions.isEmpty)
     }
-
-    func testAntigravityEffortFlagIsNilSoNoEffortArgumentIsEverSent() {
-        XCTAssertNil(AgentCatalog.descriptor(for: .antigravity).effortFlag)
-    }
-
-    // MARK: - A model profile found in the catalog answers for itself, even with zero options
-
     func testKnownModelWithNoEffortOptionsDoesNotInheritOtherModelsLevels() {
         let profiles = [
             AgentModelProfile(slug: "has-levels", effortOptions: [

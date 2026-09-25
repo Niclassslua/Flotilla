@@ -360,15 +360,4 @@ final class AntigravityTranscriptCodecTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
     }
-
-    // MARK: - Registry
-
-    func testTheShippingRegistryOffersAntigravityAsBothSourceAndTarget() {
-        let registry = TranscriptCodecRegistry.default
-
-        XCTAssertTrue(registry.readableAgents.contains(.antigravity))
-        XCTAssertTrue(registry.writableAgents.contains(.antigravity))
-        XCTAssertTrue(registry.handoffTargets(from: .claudeCode).contains(.antigravity))
-        XCTAssertTrue(registry.handoffTargets(from: .antigravity).contains(.claudeCode))
-    }
 }

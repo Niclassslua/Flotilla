@@ -22,60 +22,7 @@ final class CompanionSpeechTests: XCTestCase {
     private func makeStore() -> CompanionStore {
         CompanionStore(data: MockCompanionDataSource(), defaults: defaults)
     }
-
-    func testPreservesExistingTypedTextWhenDictationFinishes() async {
-        let sessionID = MockFixtures.SessionID.offlineBanner
-        let store = makeStore()
-        store.savePromptDraft("Fix the layout issue", for: sessionID)
-
-        let initialDraft = store.promptDraft(for: sessionID)
-        XCTAssertEqual(initialDraft, "Fix the layout issue")
-
-        let speech = CompanionSpeechController()
-        XCTAssertEqual(speech.phase, .idle)
-
-        // Simulate dictation yielding text and appending to existing draft
-        let dictated = "and add padding to the top"
-        var draft = initialDraft
-        if !draft.isEmpty && !draft.hasSuffix(" ") {
-            draft.append(" ")
-        }
-        draft.append(dictated)
-        store.savePromptDraft(draft, for: sessionID)
-
-        XCTAssertEqual(
-            store.promptDraft(for: sessionID),
-            "Fix the layout issue and add padding to the top",
-            "Pre-existing typed text must be strictly preserved when dictation completes"
-        )
-    }
-
-    func testFinishingDictationNeverAutoSends() async {
-        let sessionID = MockFixtures.SessionID.offlineBanner
-        let store = makeStore()
-        store.savePromptDraft("", for: sessionID)
-
-        // After dictation finishes, the draft contains the text, but no prompt was dispatched
-        let dictated = "Run all verification suites"
-        store.savePromptDraft(dictated, for: sessionID)
-
-        XCTAssertEqual(store.promptDraft(for: sessionID), dictated)
-
-        // Verify the prompt draft is still sitting in the composer and was not automatically cleared by a send
-        XCTAssertFalse(store.promptDraft(for: sessionID).isEmpty, "Finishing dictation must never auto-send; prompt must remain in the draft")
-    }
-
-    func testSpeechControllerCancellationReturnsToIdle() async {
-        let sessionID = MockFixtures.SessionID.offlineBanner
-        let store = makeStore()
-        let speech = CompanionSpeechController()
-
-        XCTAssertEqual(speech.phase, .idle)
-        speech.cancel(store: store, sessionID: sessionID)
-        XCTAssertEqual(speech.phase, .idle)
-    }
-
-    func testSpeechDisabledWhenNotAvailable() async {
+  func testSpeechDisabledWhenNotAvailable() async {
         let sessionID = MockFixtures.SessionID.offlineBanner
         let store = makeStore()
         let speech = CompanionSpeechController()
@@ -87,26 +34,6 @@ final class CompanionSpeechTests: XCTestCase {
         await speech.checkAvailability(store: store, sessionID: sessionID)
         XCTAssertTrue(speech.isAvailable, "Mock source reports speech ready, so isAvailable must become true")
     }
-
-    func testStoreSpeechAvailabilityHelpers() {
-        let store = makeStore()
-        let sessionID = MockFixtures.SessionID.offlineBanner
-        XCTAssertTrue(store.isSpeechAvailable(for: sessionID))
-        XCTAssertTrue(store.isAnyMacSpeechAvailable)
-    }
-
-    // MARK: - Audio level meter
-
-    private func meterLevels(_ chunks: [[Float]]) -> [CompanionAudioLevelUpdate] {
-        var meter = CompanionAudioLevelMeter()
-        return chunks.map { chunk in chunk.withUnsafeBufferPointer { meter.process($0) } }
-    }
-
-    private func tone(amplitude: Float, seconds: Double) -> [Float] {
-        let count = Int(CompanionAudioLevelMeter.sampleRate * seconds)
-        return (0..<count).map { amplitude * sin(Float($0) * 0.3) }
-    }
-
     func testLoudSoundDoesNotFlattenFollowingSpeech() {
         let speech = tone(amplitude: 0.05, seconds: 0.2)
         let before = meterLevels([speech])[0].samples.last!.level

@@ -48,49 +48,77 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
 
     // MARK: - Location
 
-    func testProjectSlugReplacesEverySeparatorWithADash() {
-        XCTAssertEqual(
-            ClaudeTranscriptCodec.projectSlug(for: URL(fileURLWithPath: "/private/tmp/acme-queue/arm1")),
-            "-private-tmp-acme-queue-arm1"
-        )
-    }
+    /// Slug mapping is path-only (separators → dashes; existence must not relocate
+    /// a session), and URL resolution must find the file via the slug directory,
+    /// fall back to the session-id filename when the slug diverges, or return nil.
+    func testProjectSlugAndTranscriptURLDiscovery() throws {
+        struct Case {
+            let name: String
+            let needsFreshHome: Bool
+            let run: () throws -> Void
+        }
 
-    /// `standardizedFileURL` resolves symlinks only for paths that *exist*, so
-    /// standardizing here would silently relocate a session's transcript the
-    /// first time its worktree was created — writing it where the agent does
-    /// not look. The slug must be a function of the path and nothing else.
-    func testProjectSlugDoesNotChangeWhenTheDirectoryComesIntoExistence() throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SlugStability-\(UUID().uuidString)", isDirectory: true)
-        let beforeItExists = ClaudeTranscriptCodec.projectSlug(for: directory)
+        let cases: [Case] = [
+            Case(name: "separators become dashes", needsFreshHome: false) {
+                XCTAssertEqual(
+                    ClaudeTranscriptCodec.projectSlug(for: URL(fileURLWithPath: "/private/tmp/acme-queue/arm1")),
+                    "-private-tmp-acme-queue-arm1"
+                )
+            },
+            // `standardizedFileURL` resolves symlinks only for paths that *exist*,
+            // so standardizing here would silently relocate a session's transcript
+            // the first time its worktree was created — writing it where the agent
+            // does not look. The slug must be a function of the path and nothing else.
+            Case(name: "slug unchanged when directory comes into existence", needsFreshHome: false) {
+                let directory = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SlugStability-\(UUID().uuidString)", isDirectory: true)
+                let beforeItExists = ClaudeTranscriptCodec.projectSlug(for: directory)
 
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                defer { try? FileManager.default.removeItem(at: directory) }
 
-        XCTAssertEqual(ClaudeTranscriptCodec.projectSlug(for: directory), beforeItExists)
-    }
+                XCTAssertEqual(ClaudeTranscriptCodec.projectSlug(for: directory), beforeItExists)
+            },
+            Case(name: "resolves via the slug directory", needsFreshHome: true) {
+                let written = try self.writeTranscript([#"{"type":"user","sessionId":"\#(self.sessionID)"}"#])
+                let found = try self.codec.transcriptURL(
+                    sessionID: self.sessionID,
+                    workingDirectory: self.workingDirectory
+                )
+                XCTAssertEqual(found?.standardizedFileURL, written.standardizedFileURL)
+            },
+            // The slug mapping is ambiguous and a session's `workingDirectory` can
+            // be rewritten after launch, so resolution must still succeed when the
+            // directory name does not match. The filename is the session id.
+            Case(name: "falls back to filename when slug does not match", needsFreshHome: true) {
+                let written = try self.writeTranscript(
+                    [#"{"type":"user","sessionId":"\#(self.sessionID)"}"#],
+                    slug: "-somewhere-else-entirely"
+                )
+                let found = try self.codec.transcriptURL(
+                    sessionID: self.sessionID,
+                    workingDirectory: self.workingDirectory
+                )
+                XCTAssertEqual(found?.standardizedFileURL, written.standardizedFileURL)
+            },
+            Case(name: "nil when nothing matches", needsFreshHome: true) {
+                try self.writeTranscript([#"{"type":"user","sessionId":"\#(self.sessionID)"}"#])
+                XCTAssertNil(try self.codec.transcriptURL(
+                    sessionID: UUID().uuidString,
+                    workingDirectory: self.workingDirectory
+                ))
+            },
+        ]
 
-    func testTranscriptURLResolvesViaTheSlugDirectory() throws {
-        let written = try writeTranscript([#"{"type":"user","sessionId":"\#(sessionID)"}"#])
-        let found = try codec.transcriptURL(sessionID: sessionID, workingDirectory: workingDirectory)
-        XCTAssertEqual(found?.standardizedFileURL, written.standardizedFileURL)
-    }
-
-    /// The slug mapping is ambiguous and a session's `workingDirectory` can be
-    /// rewritten after launch, so resolution must still succeed when the
-    /// directory name does not match. The filename is the session id.
-    func testTranscriptURLFallsBackToFilenameWhenSlugDoesNotMatch() throws {
-        let written = try writeTranscript(
-            [#"{"type":"user","sessionId":"\#(sessionID)"}"#],
-            slug: "-somewhere-else-entirely"
-        )
-        let found = try codec.transcriptURL(sessionID: sessionID, workingDirectory: workingDirectory)
-        XCTAssertEqual(found?.standardizedFileURL, written.standardizedFileURL)
-    }
-
-    func testTranscriptURLIsNilWhenNothingMatches() throws {
-        try writeTranscript([#"{"type":"user","sessionId":"\#(sessionID)"}"#])
-        XCTAssertNil(try codec.transcriptURL(sessionID: UUID().uuidString, workingDirectory: workingDirectory))
+        for entry in cases {
+            if entry.needsFreshHome {
+                try? FileManager.default.removeItem(at: home)
+                home = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("TranscriptKitTests-\(UUID().uuidString)", isDirectory: true)
+                codec = ClaudeTranscriptCodec(homeDirectory: home)
+            }
+            try entry.run()
+        }
     }
 
     func testEmbeddedSessionIDIsReadFromTheFirstRecordThatCarriesOne() throws {
@@ -156,130 +184,125 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         XCTAssertFalse(isError)
     }
 
-    /// A subagent's conversation has its own parent chain; splicing it into the
-    /// main thread would interleave two histories into one unreadable list.
-    /// System-reminders and background-task notifications are injected onto
-    /// a `user`-role turn because that's the only non-assistant role the API
-    /// accepts — they were never typed by a human and must not render as if
-    /// they were (docs/companion.md).
-    func testSyntheticUserTurnsAreExcluded() throws {
-        let url = try writeTranscript([
-            #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
-            #"{"type":"user","timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"<system-reminder>\nSome injected reminder text\n</system-reminder>"}}"#,
-            #"{"type":"user","timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":[{"type":"text","text":"<task-notification>\n<task-id>abc</task-id>\n</task-notification>"}]}}"#
-        ])
-
-        let entries = try codec.readNative(at: url)
-
-        XCTAssertEqual(entries.count, 1)
-        guard case let .userMessage(text, _) = entries[0] else {
-            return XCTFail("expected a user message, got \(entries[0])")
+    /// Synthetic / sidechain / meta-only resumes, unknown blocks, and empty
+    /// sidecar-only files must not surface as human conversation — or break the
+    /// reader. A subagent's parent chain would interleave two histories;
+    /// system-reminders and task notifications ride a `user` role only because
+    /// the API requires it; image coordinate companions and `--resume` self-nudges
+    /// are CLI-injected; `isMeta` alone is legitimate (another session handing
+    /// back a message); unfamiliar block types arrive between upstream releases.
+    func testExclusionAndSkipPolicies() throws {
+        struct Case {
+            let name: String
+            let lines: [String]
+            let check: ([CanonicalEntry]) throws -> Void
         }
-        XCTAssertEqual(text, "real question")
-    }
 
-    /// Claude adds image dimensions and coordinate scaling as a synthetic
-    /// companion turn after image inspection. It is useful to the model, but
-    /// must not appear as a message from the person using Flotilla.
-    func testImageCoordinateCompanionTurnIsExcluded() throws {
         let imageMetadata = "[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]"
-        let url = try writeTranscript([
-            #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
-            #"{"type":"user","isMeta":true,"turnCompanion":true,"timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"\#(imageMetadata)"}}"#,
-            #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":"\#(imageMetadata)"}}"#
-        ])
 
-        let entries = try codec.readNative(at: url)
+        let cases: [Case] = [
+            Case(
+                name: "system-reminder and task-notification turns are excluded",
+                lines: [
+                    #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
+                    #"{"type":"user","timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"<system-reminder>\nSome injected reminder text\n</system-reminder>"}}"#,
+                    #"{"type":"user","timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":[{"type":"text","text":"<task-notification>\n<task-id>abc</task-id>\n</task-notification>"}]}}"#
+                ]
+            ) { entries in
+                XCTAssertEqual(entries.count, 1)
+                guard case let .userMessage(text, _) = entries[0] else {
+                    return XCTFail("expected a user message, got \(entries[0])")
+                }
+                XCTAssertEqual(text, "real question")
+            },
+            Case(
+                name: "image-coordinate companion turn is excluded; unmarked meta is kept",
+                lines: [
+                    #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
+                    #"{"type":"user","isMeta":true,"turnCompanion":true,"timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"\#(imageMetadata)"}}"#,
+                    #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":"\#(imageMetadata)"}}"#
+                ]
+            ) { entries in
+                XCTAssertEqual(entries.count, 2)
+                guard case let .userMessage(first, _) = entries[0],
+                      case let .userMessage(second, _) = entries[1] else {
+                    return XCTFail("expected the real and unmarked messages, got \(entries)")
+                }
+                XCTAssertEqual(first, "real question")
+                XCTAssertEqual(second, imageMetadata)
+            },
+            Case(
+                name: "resume self-nudge and synthetic no-op reply are excluded",
+                lines: [
+                    #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
+                    #"{"type":"assistant","timestamp":"2026-09-08T01:18:37Z","message":{"role":"assistant","content":"real answer"}}"#,
+                    #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":[{"type":"text","text":"Continue from where you left off."}]}}"#,
+                    #"{"type":"assistant","timestamp":"2026-09-08T01:18:38Z","message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"No response requested."}]}}"#
+                ]
+            ) { entries in
+                XCTAssertEqual(entries.count, 2)
+                guard case let .userMessage(userText, _) = entries[0],
+                      case let .assistantMessage(assistantText, _) = entries[1] else {
+                    return XCTFail("expected the real exchange, got \(entries)")
+                }
+                XCTAssertEqual(userText, "real question")
+                XCTAssertEqual(assistantText, "real answer")
+            },
+            Case(
+                name: "isMeta alone does not exclude legitimate content",
+                lines: [
+                    #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"Another Claude session sent a message: hello"}}"#
+                ]
+            ) { entries in
+                XCTAssertEqual(entries.count, 1)
+                guard case let .userMessage(text, _) = entries[0] else {
+                    return XCTFail("expected a user message, got \(entries[0])")
+                }
+                XCTAssertEqual(text, "Another Claude session sent a message: hello")
+            },
+            Case(
+                name: "sidechain records are excluded",
+                lines: [
+                    #"{"type":"user","isSidechain":false,"timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"main thread"}}"#,
+                    #"{"type":"user","isSidechain":true,"timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"subagent thread"}}"#
+                ]
+            ) { entries in
+                XCTAssertEqual(entries.count, 1)
+                guard case let .userMessage(text, _) = entries[0] else {
+                    return XCTFail("expected a user message, got \(entries[0])")
+                }
+                XCTAssertEqual(text, "main thread")
+            },
+            Case(
+                name: "unknown block types and malformed lines are skipped, not fatal",
+                lines: [
+                    "not json at all",
+                    #"{"type":"assistant","timestamp":"2026-09-08T01:18:40Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"answer"}]}}"#,
+                    ""
+                ]
+            ) { entries in
+                XCTAssertEqual(entries.count, 1)
+                guard case let .assistantMessage(text, _) = entries[0] else {
+                    return XCTFail("expected an assistant message, got \(entries[0])")
+                }
+                XCTAssertEqual(text, "answer")
+            },
+            Case(
+                name: "transcript without conversation is reported as such",
+                lines: [
+                    #"{"type":"mode","mode":"default"}"#,
+                    #"{"type":"cost-state","totalCostUSD":0}"#
+                ]
+            ) { entries in
+                XCTAssertFalse(entries.hasConversationalContent)
+            },
+        ]
 
-        XCTAssertEqual(entries.count, 2)
-        guard case let .userMessage(first, _) = entries[0],
-              case let .userMessage(second, _) = entries[1] else {
-            return XCTFail("expected the real and unmarked messages, got \(entries)")
+        for entry in cases {
+            let url = try writeTranscript(entry.lines)
+            let entries = try codec.readNative(at: url)
+            try entry.check(entries)
         }
-        XCTAssertEqual(first, "real question")
-        XCTAssertEqual(second, imageMetadata)
-    }
-
-    /// `--resume` makes the CLI nudge itself with an `isMeta` "Continue from
-    /// where you left off." turn; when nothing was pending it answers itself
-    /// client-side with "No response requested." (model `<synthetic>`, zero
-    /// usage). Neither half is something a human said or the agent decided.
-    func testResumeSelfNudgeAndSyntheticNoOpReplyAreExcluded() throws {
-        let url = try writeTranscript([
-            #"{"type":"user","timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"real question"}}"#,
-            #"{"type":"assistant","timestamp":"2026-09-08T01:18:37Z","message":{"role":"assistant","content":"real answer"}}"#,
-            #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:38Z","message":{"role":"user","content":[{"type":"text","text":"Continue from where you left off."}]}}"#,
-            #"{"type":"assistant","timestamp":"2026-09-08T01:18:38Z","message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"No response requested."}]}}"#
-        ])
-
-        let entries = try codec.readNative(at: url)
-
-        XCTAssertEqual(entries.count, 2)
-        guard case let .userMessage(userText, _) = entries[0],
-              case let .assistantMessage(assistantText, _) = entries[1] else {
-            return XCTFail("expected the real exchange, got \(entries)")
-        }
-        XCTAssertEqual(userText, "real question")
-        XCTAssertEqual(assistantText, "real answer")
-    }
-
-    /// `isMeta` also covers legitimate content — another Claude session
-    /// handing back a message — so it must not be treated as synthetic on
-    /// its own, only alongside the exact resume-nudge text.
-    func testIsMetaAloneDoesNotExcludeLegitimateContent() throws {
-        let url = try writeTranscript([
-            #"{"type":"user","isMeta":true,"timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"Another Claude session sent a message: hello"}}"#
-        ])
-
-        let entries = try codec.readNative(at: url)
-
-        XCTAssertEqual(entries.count, 1)
-        guard case let .userMessage(text, _) = entries[0] else {
-            return XCTFail("expected a user message, got \(entries[0])")
-        }
-        XCTAssertEqual(text, "Another Claude session sent a message: hello")
-    }
-
-    func testSidechainRecordsAreExcluded() throws {
-        let url = try writeTranscript([
-            #"{"type":"user","isSidechain":false,"timestamp":"2026-09-08T01:18:36Z","message":{"role":"user","content":"main thread"}}"#,
-            #"{"type":"user","isSidechain":true,"timestamp":"2026-09-08T01:18:37Z","message":{"role":"user","content":"subagent thread"}}"#
-        ])
-
-        let entries = try codec.readNative(at: url)
-
-        XCTAssertEqual(entries.count, 1)
-        guard case let .userMessage(text, _) = entries[0] else {
-            return XCTFail("expected a user message, got \(entries[0])")
-        }
-        XCTAssertEqual(text, "main thread")
-    }
-
-    /// These formats gain record and block types between upstream releases, so
-    /// a reader that fails on the unfamiliar would break on every update.
-    func testUnknownBlockTypesAndMalformedLinesAreSkippedNotFatal() throws {
-        let url = try writeTranscript([
-            "not json at all",
-            #"{"type":"assistant","timestamp":"2026-09-08T01:18:40Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"answer"}]}}"#,
-            ""
-        ])
-
-        let entries = try codec.readNative(at: url)
-
-        XCTAssertEqual(entries.count, 1)
-        guard case let .assistantMessage(text, _) = entries[0] else {
-            return XCTFail("expected an assistant message, got \(entries[0])")
-        }
-        XCTAssertEqual(text, "answer")
-    }
-
-    func testTranscriptWithoutConversationIsReportedAsSuch() throws {
-        let url = try writeTranscript([
-            #"{"type":"mode","mode":"default"}"#,
-            #"{"type":"cost-state","totalCostUSD":0}"#
-        ])
-
-        XCTAssertFalse(try codec.readNative(at: url).hasConversationalContent)
     }
 
     // MARK: - Images & Screenshots

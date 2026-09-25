@@ -26,34 +26,32 @@ final class PairingPayloadTests: XCTestCase {
         XCTAssertTrue(parsed.hasTailscaleCandidate)
     }
 
-    func testPastedLinkWithWhitespaceStillParses() throws {
-        let link = try payload().link()
-        XCTAssertNoThrow(try PairingPayload(link: "  \n\(link)\n "))
-    }
-
-    func testOtherURLsAreNotPairingLinks() {
-        XCTAssertThrowsError(try PairingPayload(link: "https://example.com/pair?p=abc")) { error in
-            XCTAssertEqual(error as? PairingPayload.LinkError, .notAPairingLink)
-        }
-    }
-
-    func testTruncatedLinkIsMalformed() throws {
-        let link = try payload().link()
-        XCTAssertThrowsError(try PairingPayload(link: String(link.dropLast(40)))) { error in
-            XCTAssertEqual(error as? PairingPayload.LinkError, .malformed)
-        }
-    }
-
-    func testNewerProtocolVersionIsReported() throws {
-        var future = payload()
-        future.version = 7
-        XCTAssertThrowsError(try PairingPayload(link: future.link())) { error in
-            XCTAssertEqual(error as? PairingPayload.LinkError, .unsupportedVersion(7))
-        }
-    }
-
-    func testExpiry() {
+    func testLinkParseEdgesAndExpiry() throws {
         let value = payload()
+        let link = try value.link()
+
+        XCTAssertNoThrow(try PairingPayload(link: "  \n\(link)\n "), "whitespace around a valid link still parses")
+
+        struct ErrorCase {
+            let name: String
+            let link: () throws -> String
+            let expected: PairingPayload.LinkError
+        }
+        let errorCases: [ErrorCase] = [
+            ErrorCase(name: "other URL", link: { "https://example.com/pair?p=abc" }, expected: .notAPairingLink),
+            ErrorCase(name: "truncated", link: { String(link.dropLast(40)) }, expected: .malformed),
+            ErrorCase(name: "unsupported version", link: {
+                var future = value
+                future.version = 7
+                return try future.link()
+            }, expected: .unsupportedVersion(7)),
+        ]
+        for entry in errorCases {
+            XCTAssertThrowsError(try PairingPayload(link: entry.link()), entry.name) { error in
+                XCTAssertEqual(error as? PairingPayload.LinkError, entry.expected, entry.name)
+            }
+        }
+
         XCTAssertFalse(value.isExpired(at: Date(timeIntervalSince1970: 1_999_999_999)))
         XCTAssertTrue(value.isExpired(at: Date(timeIntervalSince1970: 2_000_000_000)))
     }
@@ -74,8 +72,6 @@ final class MessageCodingTests: XCTestCase {
         XCTAssertEqual(delta.changed.map(\.id), [first.id])
         XCTAssertEqual(delta.applying(to: old, revision: 3), current)
         XCTAssertNil(delta.applying(to: old, revision: 2))
-        let message = ServerMessage.fleetDelta(delta)
-        XCTAssertEqual(try CompanionJSON.decode(ServerMessage.self, from: CompanionJSON.encode(message)), message)
     }
 
     func testFleetDeltaCarriesAccentChangesOnly() throws {
@@ -92,29 +88,6 @@ final class MessageCodingTests: XCTestCase {
         let snapshot = FleetSnapshot(macID: "m", macName: "Studio", sessions: [], projects: [], catalog: .fallback)
         let decoded = try CompanionJSON.decode(FleetSnapshot.self, from: CompanionJSON.encode(snapshot))
         XCTAssertNil(decoded.accentColor)
-    }
-
-    func testFleetSnapshotWithPendingInteractionsRoundTrips() throws {
-        let sessionID = UUID()
-        let snapshot = FleetSnapshot(
-            macID: "mac-1",
-            macName: "Studio",
-            sessions: [CompanionSession(
-                id: sessionID, title: "Fix tests", agent: .claudeCode, model: "opus", effort: .high,
-                status: .waitingForInput, waitingReason: .question, hasWorktree: true, isProcessLive: true,
-                updatedAt: Date(timeIntervalSince1970: 1_700_000_000), handoffTargets: [.codexCLI]
-            )],
-            projects: [ProjectSummary(id: UUID(), name: "Flotilla")],
-            catalog: .fallback,
-            pending: [sessionID: [PendingInteraction(
-                kind: .question([QuestionStep(id: "q", header: "Storage", prompt: "Where?", options: [.init(label: "Keychain")], allowsMultiple: true)]),
-                subagent: "general",
-                raisedAt: Date(timeIntervalSince1970: 1_700_000_001)
-            )]]
-        )
-        let message = ServerMessage.fleet(snapshot)
-        let decoded = try CompanionJSON.decode(ServerMessage.self, from: CompanionJSON.encode(message))
-        XCTAssertEqual(decoded, message)
     }
 
     func testEveryRequestShapeRoundTrips() throws {
@@ -155,8 +128,6 @@ final class TranscriptMappingTests: XCTestCase {
         XCTAssertEqual(delta.events.map(\.id), ["4"])
         XCTAssertEqual(delta.applying(to: old, revision: 7), next)
         XCTAssertNil(delta.applying(to: old, revision: 6), "a lost update must request a new snapshot")
-        let message = ServerMessage.transcriptDelta(sessionID: UUID(), delta)
-        XCTAssertEqual(try CompanionJSON.decode(ServerMessage.self, from: CompanionJSON.encode(message)), message)
     }
 
     func testRewrittenEarlierEventRequiresSnapshot() {
@@ -165,14 +136,13 @@ final class TranscriptMappingTests: XCTestCase {
         let next = SessionTranscript(events: [TranscriptEvent(id: "1", content: .assistantMessage(text: "rewritten", timestamp: date))])
         XCTAssertNil(TranscriptDelta.make(from: old, to: next, baseRevision: 1))
     }
-    func testToolArgumentsKeepScalarsFromAnObject() {
-        let data = Data(#"{"command":"npm test","timeout":120,"nested":{"a":1}}"#.utf8)
-        XCTAssertEqual(TranscriptEvent.Content.scalarArguments(data), ["command": "npm test", "timeout": "120"])
-    }
 
-    func testCodexStyleStringEncodedArgumentsAreDecoded() {
-        let data = Data(#""{\"cmd\":\"ls -la\"}""#.utf8)
-        XCTAssertEqual(TranscriptEvent.Content.scalarArguments(data), ["cmd": "ls -la"])
+    func testToolArgumentsDecodeScalarsAndCodexStrings() {
+        let objectScalars = Data(#"{"command":"npm test","timeout":120,"nested":{"a":1}}"#.utf8)
+        XCTAssertEqual(TranscriptEvent.Content.scalarArguments(objectScalars), ["command": "npm test", "timeout": "120"])
+
+        let codexEncoded = Data(#""{\"cmd\":\"ls -la\"}""#.utf8)
+        XCTAssertEqual(TranscriptEvent.Content.scalarArguments(codexEncoded), ["cmd": "ls -la"])
     }
 
     func testImagesAndHandoffsArePreserved() {

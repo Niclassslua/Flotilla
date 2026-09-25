@@ -2,35 +2,28 @@ import XCTest
 @testable import Flotilla
 
 final class FlotillaNotificationDelegateTests: XCTestCase {
-    func testExtractsSessionIDFromValidUserInfo() {
+    func testSessionIDParsing() {
         let sessionID = UUID()
-        let userInfo: [AnyHashable: Any] = ["sessionID": sessionID.uuidString]
+        let cases: [(userInfo: [AnyHashable: Any], expected: UUID?)] = [
+            (["sessionID": sessionID.uuidString], sessionID),
+            ([:], nil),
+            (["sessionID": "not-a-uuid"], nil),
+            (["sessionID": 42], nil),
+        ]
 
-        XCTAssertEqual(FlotillaNotificationDelegate.sessionID(from: userInfo), sessionID)
+        for entry in cases {
+            XCTAssertEqual(
+                FlotillaNotificationDelegate.sessionID(from: entry.userInfo),
+                entry.expected
+            )
+        }
     }
 
-    func testReturnsNilWhenSessionIDKeyIsMissing() {
-        XCTAssertNil(FlotillaNotificationDelegate.sessionID(from: [:]))
-    }
-
-    func testReturnsNilWhenValueIsNotAValidUUIDString() {
-        let userInfo: [AnyHashable: Any] = ["sessionID": "not-a-uuid"]
-        XCTAssertNil(FlotillaNotificationDelegate.sessionID(from: userInfo))
-    }
-
-    func testReturnsNilWhenValueIsWrongType() {
-        let userInfo: [AnyHashable: Any] = ["sessionID": 42]
-        XCTAssertNil(FlotillaNotificationDelegate.sessionID(from: userInfo))
-    }
-
-    func testPresentationOptionsSuppressedWhenForegroundPresentationDisabled() {
+    func testPresentationOptionsFollowForegroundSetting() {
         XCTAssertEqual(
             FlotillaNotificationDelegate.presentationOptions(shouldPresentInForeground: false),
             []
         )
-    }
-
-    func testPresentationOptionsIncludesBannerAndSoundWhenForegroundPresentationEnabled() {
         XCTAssertEqual(
             FlotillaNotificationDelegate.presentationOptions(shouldPresentInForeground: true),
             [.banner, .sound]

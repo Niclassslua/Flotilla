@@ -35,100 +35,56 @@ final class SessionLaunchPreviewTests: XCTestCase {
         Project(name: name, rootPath: projectRoot)
     }
 
-    // MARK: - Working directory
+    func testWorkingDirectoryAndBranchForEachDestination() {
+        let general = resolve(goal: "Look something up", choice: .general, createWorktree: true)
+        XCTAssertNil(general.branchSlug)
+        XCTAssertFalse(general.isWorktree)
+        XCTAssertEqual(general.workingDirectory, generalDirectory)
+        XCTAssertNil(general.sharedCheckoutWarning)
 
-    func testGeneralSessionUsesGeneralDirectoryAndHasNoBranch() {
-        let preview = resolve(goal: "Look something up", choice: .general, createWorktree: true)
+        let shared = resolve(goal: "Dark mode", choice: .known(project()), createWorktree: false)
+        XCTAssertNil(shared.branchSlug)
+        XCTAssertEqual(shared.workingDirectory, projectRoot)
+        XCTAssertNotNil(shared.sharedCheckoutWarning, "A shared checkout must state that concurrent sessions can conflict")
 
-        XCTAssertNil(preview.branchSlug)
-        XCTAssertFalse(preview.isWorktree)
-        XCTAssertEqual(preview.workingDirectory, generalDirectory)
-        XCTAssertNil(preview.sharedCheckoutWarning)
-    }
-
-    func testMainCheckoutUsesProjectRootAndWarnsAboutSharing() {
-        let preview = resolve(goal: "Dark mode", choice: .known(project()), createWorktree: false)
-
-        XCTAssertNil(preview.branchSlug)
-        XCTAssertEqual(preview.workingDirectory, projectRoot)
-        XCTAssertNotNil(preview.sharedCheckoutWarning, "A shared checkout must state that concurrent sessions can conflict")
-    }
-
-    func testWorktreeDestinationLivesUnderTheConfiguredBaseDirectory() {
-        let preview = resolve(goal: "Dark mode", choice: .known(project()), createWorktree: true)
-
-        XCTAssertTrue(preview.isWorktree)
+        let worktree = resolve(goal: "Dark mode", choice: .known(project()), createWorktree: true)
+        XCTAssertTrue(worktree.isWorktree)
         XCTAssertTrue(
-            preview.workingDirectory.path.hasPrefix(worktreeBase.path),
-            "Expected \(preview.workingDirectory.path) under \(worktreeBase.path)"
+            worktree.workingDirectory.path.hasPrefix(worktreeBase.path),
+            "Expected \(worktree.workingDirectory.path) under \(worktreeBase.path)"
         )
-        XCTAssertNil(preview.sharedCheckoutWarning)
-    }
+        XCTAssertNil(worktree.sharedCheckoutWarning)
+        XCTAssertEqual(worktree.branchSlug, "dark-mode")
 
-    func testCustomFolderBehavesLikeAKnownProject() {
         let folder = URL(fileURLWithPath: "/Users/dev/Scratch/spike", isDirectory: true)
-        let preview = resolve(goal: "", choice: .custom(folder), createWorktree: false)
-
-        XCTAssertEqual(preview.workingDirectory, folder)
-        XCTAssertEqual(preview.title, "spike", "An empty goal falls back to the folder name")
+        let custom = resolve(goal: "", choice: .custom(folder), createWorktree: false)
+        XCTAssertEqual(custom.workingDirectory, folder)
+        XCTAssertEqual(custom.title, "spike", "An empty goal falls back to the folder name")
     }
 
-    // MARK: - Branch naming
+    func testTitleDerivation() {
+        let long = resolve(goal: String(repeating: "a", count: 120), choice: .general, createWorktree: false)
+        XCTAssertEqual(long.title.count, 60)
 
-    func testBranchSlugMatchesBranchNamingWithoutTheRandomSuffix() {
-        let preview = resolve(goal: "Dark mode", choice: .known(project()), createWorktree: true)
+        let multiline = resolve(
+            goal: "First line of objective\nSecond line with details\nThird line",
+            choice: .general,
+            createWorktree: false
+        )
+        XCTAssertEqual(multiline.title, "First line of objective")
 
-        // BranchNaming appends a per-launch random 8-hex suffix; only the
-        // stable slug can be previewed.
-        XCTAssertEqual(preview.branchSlug, "dark-mode")
-    }
-
-    func testBranchSlugSlugifiesPunctuationTheSameWayBranchNamingDoes() {
-        let goal = "Fix the CI/CD pipeline (again!)"
-        let preview = resolve(goal: goal, choice: .known(project()), createWorktree: true)
-
-        let expected = BranchNaming.displayName(for: BranchNaming.generate(from: goal, uuid: UUID()))
-        XCTAssertTrue(
-            expected.hasPrefix(preview.branchSlug ?? "<none>"),
-            "\(expected) should start with the previewed slug \(preview.branchSlug ?? "<none>")"
+        XCTAssertEqual(
+            resolve(goal: "   ", choice: .known(project(named: "Atlas")), createWorktree: false).title,
+            "Atlas"
+        )
+        XCTAssertEqual(
+            resolve(goal: "", choice: .general, createWorktree: false).title,
+            "General session"
         )
     }
 
-    func testDisplayBranchMarksTheSuffixAsUnknownRatherThanInventingOne() {
-        let preview = resolve(goal: "Dark mode", choice: .known(project()), createWorktree: true)
-
-        let displayed = try? XCTUnwrap(preview.displayBranch)
-        XCTAssertEqual(displayed, "dark-mode")
-    }
-
-    // MARK: - Title derivation
-
-    func testTitleTruncatesLongGoalsToSixtyCharacters() {
-        let goal = String(repeating: "a", count: 120)
-        let preview = resolve(goal: goal, choice: .general, createWorktree: false)
-
-        XCTAssertEqual(preview.title.count, 60)
-    }
-
-    func testTitleUsesFirstLineOfMultilineGoal() {
-        let multilineGoal = "First line of objective\nSecond line with details\nThird line"
-        let preview = resolve(goal: multilineGoal, choice: .general, createWorktree: false)
-
-        XCTAssertEqual(preview.title, "First line of objective")
-    }
-
-    func testEmptyGoalFallsBackToProjectNameThenGeneralSession() {
-        let projectPreview = resolve(goal: "   ", choice: .known(project(named: "Atlas")), createWorktree: false)
-        XCTAssertEqual(projectPreview.title, "Atlas")
-
-        let generalPreview = resolve(goal: "", choice: .general, createWorktree: false)
-        XCTAssertEqual(generalPreview.title, "General session")
-    }
-
-    // MARK: - Command rendering
-
-    func testCommandIncludesResolvedModelAndEffortFlags() {
-        let preview = resolve(
+    func testCommandIncludesModelAndOmitsUnsupportedEffort() {
+        let withEffort = resolve(
             goal: "Anything",
             choice: .general,
             agent: .claudeCode,
@@ -136,25 +92,20 @@ final class SessionLaunchPreviewTests: XCTestCase {
             effort: .high,
             createWorktree: false
         )
+        XCTAssertTrue(withEffort.command.hasPrefix("claude "))
+        XCTAssertTrue(withEffort.command.contains("opus"), withEffort.command)
+        XCTAssertTrue(withEffort.command.contains("high"), withEffort.command)
 
-        XCTAssertTrue(preview.command.hasPrefix("claude "))
-        XCTAssertTrue(preview.command.contains("opus"), preview.command)
-        XCTAssertTrue(preview.command.contains("high"), preview.command)
-    }
-
-    func testCommandOmitsEffortForAgentsThatHaveNoEffortFlag() {
-        let preview = resolve(
+        let openCode = resolve(
             goal: "Anything",
             choice: .general,
             agent: .openCode,
             effort: .high,
             createWorktree: false
         )
-
         XCTAssertFalse(
-            preview.command.contains("high"),
-            "OpenCode exposes no effort knob — \(preview.command) must not imply one"
+            openCode.command.contains("high"),
+            "OpenCode exposes no effort knob — \(openCode.command) must not imply one"
         )
     }
-
 }

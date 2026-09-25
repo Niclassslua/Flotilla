@@ -362,49 +362,75 @@ final class ClaudePermissionPayloadTests: XCTestCase {
     }
 
     private let bash = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"rm -rf build"},"agent_type":"general","permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"rm:*"}],"behavior":"allow","destination":"session"}]}"#
+    private let askQuestion = #"{"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Which toppings?","header":"Pizza","multiSelect":true,"options":[{"label":"Cheese"},{"label":"Basil"}]}]}}"#
+    private let exitPlan = ##"{"tool_name":"ExitPlanMode","tool_input":{"plan":"# Move settings\n\n1. Add table"}}"##
 
-    func testBashRequestBecomesAPermissionCard() throws {
-        let parsed = try XCTUnwrap(ClaudePermissionPayload.parse(Data(bash.utf8)))
-        XCTAssertEqual(parsed.interaction.kind, .permission(PermissionRequest(tool: "Bash", summary: "rm -rf build", detail: "rm -rf build")))
-        XCTAssertEqual(parsed.interaction.subagent, "general")
+    func testEnvelopeMapsToCardKind() throws {
+        struct Case {
+            let name: String
+            let payload: String
+            let check: (ClaudePermissionPayload.Parsed) throws -> Void
+        }
+        let cases: [Case] = [
+            Case(name: "Bash→permission", payload: bash) { parsed in
+                XCTAssertEqual(parsed.interaction.kind, .permission(PermissionRequest(tool: "Bash", summary: "rm -rf build", detail: "rm -rf build")))
+                XCTAssertEqual(parsed.interaction.subagent, "general")
+            },
+            Case(name: "AskUserQuestion→question", payload: askQuestion) { parsed in
+                guard case .question(let steps) = parsed.interaction.kind else { return XCTFail("expected a question") }
+                XCTAssertEqual(steps.first?.allowsMultiple, true)
+            },
+            Case(name: "ExitPlanMode→plan", payload: exitPlan) { parsed in
+                XCTAssertEqual(parsed.interaction.kind, .plan(PlanProposal(title: "Move settings", markdown: "# Move settings\n\n1. Add table")))
+            },
+        ]
+        for entry in cases {
+            let parsed = try XCTUnwrap(ClaudePermissionPayload.parse(Data(entry.payload.utf8)), entry.name)
+            try entry.check(parsed)
+        }
     }
 
-    func testAllowDenyAndStop() throws {
-        XCTAssertEqual(try decision(.allow, payload: bash)["behavior"] as? String, "allow")
-        let deny = try decision(.denyWithNote("Use make clean"), payload: bash)
-        XCTAssertEqual(deny["behavior"] as? String, "deny")
-        XCTAssertEqual(deny["message"] as? String, "Use make clean")
-        XCTAssertEqual(try decision(.denyAndStop, payload: bash)["interrupt"] as? Bool, true)
-    }
-
-    func testAlwaysAllowEchoesClaudesOwnSuggestion() throws {
-        let rules = try XCTUnwrap(try decision(.alwaysAllow, payload: bash)["updatedPermissions"] as? [[String: Any]])
-        XCTAssertEqual(rules.first?["destination"] as? String, "session")
-        XCTAssertEqual((rules.first?["rules"] as? [[String: Any]])?.first?["ruleContent"] as? String, "rm:*")
+    func testPermissionDecisions() throws {
+        struct Case {
+            let name: String
+            let answer: InteractionAnswer
+            let check: ([String: Any]) throws -> Void
+        }
+        let cases: [Case] = [
+            Case(name: "allow", answer: .allow) { decision in
+                XCTAssertEqual(decision["behavior"] as? String, "allow")
+            },
+            Case(name: "denyWithNote", answer: .denyWithNote("Use make clean")) { decision in
+                XCTAssertEqual(decision["behavior"] as? String, "deny")
+                XCTAssertEqual(decision["message"] as? String, "Use make clean")
+            },
+            Case(name: "denyAndStop", answer: .denyAndStop) { decision in
+                XCTAssertEqual(decision["interrupt"] as? Bool, true)
+            },
+            Case(name: "alwaysAllow", answer: .alwaysAllow) { decision in
+                let rules = try XCTUnwrap(decision["updatedPermissions"] as? [[String: Any]])
+                XCTAssertEqual(rules.first?["destination"] as? String, "session")
+                XCTAssertEqual((rules.first?["rules"] as? [[String: Any]])?.first?["ruleContent"] as? String, "rm:*")
+            },
+        ]
+        for entry in cases {
+            try entry.check(try decision(entry.answer, payload: bash))
+        }
     }
 
     func testQuestionAnswersJoinMultiSelectAndOther() throws {
-        let payload = #"{"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Which toppings?","header":"Pizza","multiSelect":true,"options":[{"label":"Cheese"},{"label":"Basil"}]}]}}"#
-        let parsed = try XCTUnwrap(ClaudePermissionPayload.parse(Data(payload.utf8)))
-        guard case .question(let steps) = parsed.interaction.kind else { return XCTFail("expected a question") }
-        XCTAssertEqual(steps.first?.allowsMultiple, true)
-
-        let result = try decision(.questionAnswers([QuestionAnswer(stepID: "q0", selected: ["Cheese", "Basil"], other: "Olives")]), payload: payload)
+        let result = try decision(.questionAnswers([QuestionAnswer(stepID: "q0", selected: ["Cheese", "Basil"], other: "Olives")]), payload: askQuestion)
         let updated = try XCTUnwrap(result["updatedInput"] as? [String: Any])
         XCTAssertEqual((updated["answers"] as? [String: String])?["Which toppings?"], "Cheese, Basil, Olives")
         XCTAssertNotNil(updated["questions"], "the original questions must be echoed")
     }
 
     func testPlanApprovalSetsTheChosenMode() throws {
-        let payload = ##"{"tool_name":"ExitPlanMode","tool_input":{"plan":"# Move settings\n\n1. Add table"}}"##
-        let parsed = try XCTUnwrap(ClaudePermissionPayload.parse(Data(payload.utf8)))
-        XCTAssertEqual(parsed.interaction.kind, .plan(PlanProposal(title: "Move settings", markdown: "# Move settings\n\n1. Add table")))
-
-        let auto = try decision(.approvePlan(.autoAccept), payload: payload)
+        let auto = try decision(.approvePlan(.autoAccept), payload: exitPlan)
         XCTAssertEqual((auto["updatedPermissions"] as? [[String: Any]])?.first?["mode"] as? String, "acceptEdits")
-        let manual = try decision(.approvePlan(.askForEdits), payload: payload)
+        let manual = try decision(.approvePlan(.askForEdits), payload: exitPlan)
         XCTAssertEqual((manual["updatedPermissions"] as? [[String: Any]])?.first?["mode"] as? String, "default")
-        let revise = try decision(.revisePlan("Keep the blob"), payload: payload)
+        let revise = try decision(.revisePlan("Keep the blob"), payload: exitPlan)
         XCTAssertEqual(revise["behavior"] as? String, "deny")
     }
 
@@ -793,27 +819,39 @@ final class CodexAsyncQuestionTests: XCTestCase {
 final class CursorPermissionPayloadTests: XCTestCase {
     private let shell = #"{"flotilla_provider":"cursor","hook_event_name":"preToolUse","request":{"tool_name":"Shell","tool_use_id":"tool_1","tool_input":{"command":"rm -rf build"}}}"#
 
-    func testShellBecomesPermissionCard() throws {
-        let parsed = try XCTUnwrap(CursorPermissionPayload.parse(Data(shell.utf8)))
-        guard case .permission(let request) = parsed.interaction.kind else { return XCTFail("permission") }
-        XCTAssertEqual(request.summary, "rm -rf build")
-        XCTAssertEqual(parsed.alwaysAllowPattern, "Shell:rm")
-        XCTAssertEqual(parsed.toolUseID, "tool_1")
-    }
-
-    func testAskQuestionBecomesQuestionCard() throws {
-        let payload = #"{"flotilla_provider":"cursor","request":{"tool_name":"AskQuestion","tool_input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"A"},{"label":"B"}]}]}}}"#
-        let parsed = try XCTUnwrap(CursorPermissionPayload.parse(Data(payload.utf8)))
-        guard case .question(let steps) = parsed.interaction.kind else { return XCTFail("question") }
-        XCTAssertEqual(steps.first?.prompt, "Which?")
-        XCTAssertEqual(steps.first?.options.map(\.label), ["A", "B"])
-    }
-
-    func testCreatePlanBecomesPlanCard() throws {
-        let payload = ##"{"flotilla_provider":"cursor","request":{"tool_name":"CreatePlan","tool_input":{"plan":"# Ship it\n\n1. Build"}}}"##
-        let parsed = try XCTUnwrap(CursorPermissionPayload.parse(Data(payload.utf8)))
-        guard case .plan(let plan) = parsed.interaction.kind else { return XCTFail("plan") }
-        XCTAssertEqual(plan.title, "Ship it")
+    func testEnvelopeMapsToCardKind() throws {
+        struct Case {
+            let name: String
+            let payload: String
+            let check: (CursorPermissionPayload.Parsed) throws -> Void
+        }
+        let cases: [Case] = [
+            Case(name: "Shell→permission", payload: shell) { parsed in
+                guard case .permission(let request) = parsed.interaction.kind else { return XCTFail("permission") }
+                XCTAssertEqual(request.summary, "rm -rf build")
+                XCTAssertEqual(parsed.alwaysAllowPattern, "Shell:rm")
+                XCTAssertEqual(parsed.toolUseID, "tool_1")
+            },
+            Case(
+                name: "AskQuestion→question",
+                payload: #"{"flotilla_provider":"cursor","request":{"tool_name":"AskQuestion","tool_input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"A"},{"label":"B"}]}]}}}"#
+            ) { parsed in
+                guard case .question(let steps) = parsed.interaction.kind else { return XCTFail("question") }
+                XCTAssertEqual(steps.first?.prompt, "Which?")
+                XCTAssertEqual(steps.first?.options.map(\.label), ["A", "B"])
+            },
+            Case(
+                name: "CreatePlan→plan",
+                payload: ##"{"flotilla_provider":"cursor","request":{"tool_name":"CreatePlan","tool_input":{"plan":"# Ship it\n\n1. Build"}}}"##
+            ) { parsed in
+                guard case .plan(let plan) = parsed.interaction.kind else { return XCTFail("plan") }
+                XCTAssertEqual(plan.title, "Ship it")
+            },
+        ]
+        for entry in cases {
+            let parsed = try XCTUnwrap(CursorPermissionPayload.parse(Data(entry.payload.utf8)), entry.name)
+            try entry.check(parsed)
+        }
     }
 
     func testDecisionsAreAllowOrDenyOnly() throws {

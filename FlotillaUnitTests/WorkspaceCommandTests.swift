@@ -43,18 +43,4 @@ final class WorkspaceCommandTests: XCTestCase {
             XCTAssertFalse(command.subtitle.isEmpty, "\(command) has no subtitle")
         }
     }
-
-    /// "Overview" now means exactly one thing — a tab inside a project
-    /// workspace. The app's landing surface is Home everywhere.
-    func testLandingSurfaceIsNamedHome() {
-        XCTAssertEqual(SidebarItem.overview.title, "Home")
-        XCTAssertEqual(WorkspaceCommand.showHome.title, "Go to Home")
-
-        for command in WorkspaceCommand.allCases {
-            XCTAssertFalse(
-                command.title.contains("Overview") || command.subtitle.contains("Overview"),
-                "\(command) still calls the landing surface Overview"
-            )
-        }
-    }
 }

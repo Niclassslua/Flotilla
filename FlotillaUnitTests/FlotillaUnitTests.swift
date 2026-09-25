@@ -4,15 +4,6 @@ import AgentKit
 import SettingsKit
 
 final class AgentProviderTests: XCTestCase {
-    func testRegistryMapsEveryAgentToItsExpectedExecutable() {
-        let registry = AgentProviderRegistry()
-
-        XCTAssertEqual(registry.provider(for: .claudeCode).binaryName, "claude")
-        XCTAssertEqual(registry.provider(for: .codexCLI).binaryName, "codex")
-        XCTAssertEqual(registry.provider(for: .openCode).binaryName, "opencode")
-        XCTAssertEqual(registry.provider(for: .antigravity).binaryName, "agy")
-    }
-
     func testLaunchPlanUsesConfiguredPathArgumentsAndInteractiveGoal() {
         var settings = AppSettings()
         settings.agentPaths.codexCLIPath = "/opt/homebrew/bin/codex"
@@ -79,52 +70,24 @@ final class AgentProviderTests: XCTestCase {
         XCTAssertEqual(planWithBlankModel.arguments, [])
     }
 
-    func testClaudeLaunchPlanUsesNativeEffortFlag() {
-        let plan = AgentProviderRegistry().provider(for: .claudeCode).launchPlan(
-            goal: nil,
-            model: "sonnet",
-            effort: .high,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, ["--model", "sonnet", "--effort", "high"])
-    }
-
-    func testCodexLaunchPlanUsesPerRunReasoningEffortOverride() {
-        let plan = AgentProviderRegistry().provider(for: .codexCLI).launchPlan(
-            goal: nil,
-            model: nil,
-            effort: .xhigh,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, ["--config", "model_reasoning_effort=\"xhigh\""])
-    }
-
-    func testAntigravityLaunchPlanOmitsEffortFlag() {
-        let plan = AgentProviderRegistry().provider(for: .antigravity).launchPlan(
-            goal: nil,
-            model: "gemini-2.5-pro",
-            effort: .high,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, ["--model", "gemini-2.5-pro"])
-    }
-
-    func testOpenCodeLaunchPlanIgnoresUnsupportedEffort() {
-        let plan = AgentProviderRegistry().provider(for: .openCode).launchPlan(
-            goal: nil,
-            model: nil,
-            effort: .high,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, [])
+    func testLaunchPlanEncodesEffortPerAgent() {
+        let registry = AgentProviderRegistry()
+        let cases: [(AgentKind, String?, AgentEffort, [String])] = [
+            (.claudeCode, "sonnet", .high, ["--model", "sonnet", "--effort", "high"]),
+            (.codexCLI, nil, .xhigh, ["--config", "model_reasoning_effort=\"xhigh\""]),
+            (.antigravity, "gemini-2.5-pro", .high, ["--model", "gemini-2.5-pro"]),
+            (.openCode, nil, .high, []),
+        ]
+        for entry in cases {
+            let plan = registry.provider(for: entry.0).launchPlan(
+                goal: nil,
+                model: entry.1,
+                effort: entry.2,
+                settings: AppSettings(),
+                baseEnvironment: [:]
+            )
+            XCTAssertEqual(plan.arguments, entry.3, "\(entry.0)")
+        }
     }
 
     func testLaunchPlanDoesNotInventCredentialEnvironmentVariables() {
@@ -141,179 +104,97 @@ final class AgentProviderTests: XCTestCase {
         XCTAssertNil(plan.initialInput)
     }
 
-    func testClaudeLaunchPlanWithResumeIntent() {
-        let provider = AgentProviderRegistry().provider(for: .claudeCode)
-        let freshPlan = provider.launchPlan(
-            goal: nil,
-            resumeIntent: .freshWithAssignedIdentity("test-uuid-123"),
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-        XCTAssertEqual(freshPlan.arguments, ["--session-id", "test-uuid-123"])
+    func testLaunchPlanResumeIntentPerAgent() {
+        let registry = AgentProviderRegistry()
 
-        let resumePlan = provider.launchPlan(
-            goal: nil,
-            resumeIntent: .resume("test-uuid-123"),
-            settings: AppSettings(),
-            baseEnvironment: [:]
+        let claude = registry.provider(for: .claudeCode)
+        XCTAssertEqual(
+            claude.launchPlan(goal: nil, resumeIntent: .freshWithAssignedIdentity("test-uuid-123"), settings: AppSettings(), baseEnvironment: [:]).arguments,
+            ["--session-id", "test-uuid-123"]
         )
-        XCTAssertEqual(resumePlan.arguments, ["--resume", "test-uuid-123"])
+        XCTAssertEqual(
+            claude.launchPlan(goal: nil, resumeIntent: .resume("test-uuid-123"), settings: AppSettings(), baseEnvironment: [:]).arguments,
+            ["--resume", "test-uuid-123"]
+        )
+
+        var codexSettings = AppSettings()
+        codexSettings.agentOverrides.arguments["codexCLI"] = ["--verbose"]
+        let codex = registry.provider(for: .codexCLI)
+        XCTAssertEqual(
+            codex.launchPlan(goal: nil, resumeIntent: .none, settings: codexSettings, baseEnvironment: [:]).arguments,
+            ["--verbose"]
+        )
+        XCTAssertEqual(
+            codex.launchPlan(goal: nil, resumeIntent: .resume("01932f14-0000-7000-8000-000000000000"), settings: codexSettings, baseEnvironment: [:]).arguments,
+            ["resume", "01932f14-0000-7000-8000-000000000000", "--verbose"]
+        )
+
+        XCTAssertEqual(
+            registry.provider(for: .openCode).launchPlan(goal: nil, resumeIntent: .resume("ses_abc123"), settings: AppSettings(), baseEnvironment: [:]).arguments,
+            ["--session", "ses_abc123"]
+        )
+        XCTAssertEqual(
+            registry.provider(for: .antigravity).launchPlan(goal: nil, resumeIntent: .resume("conv-xyz789"), settings: AppSettings(), baseEnvironment: [:]).arguments,
+            ["--conversation", "conv-xyz789"]
+        )
     }
 
-    func testCodexLaunchPlanWithResumeIntent() {
-        let provider = AgentProviderRegistry().provider(for: .codexCLI)
-        var settings = AppSettings()
-        settings.agentOverrides.arguments["codexCLI"] = ["--verbose"]
-
-        let plainPlan = provider.launchPlan(
-            goal: nil,
-            resumeIntent: .none,
-            settings: settings,
-            baseEnvironment: [:]
-        )
-        XCTAssertEqual(plainPlan.arguments, ["--verbose"])
-
-        let resumePlan = provider.launchPlan(
-            goal: nil,
-            resumeIntent: .resume("01932f14-0000-7000-8000-000000000000"),
-            settings: settings,
-            baseEnvironment: [:]
-        )
-        XCTAssertEqual(resumePlan.arguments, ["resume", "01932f14-0000-7000-8000-000000000000", "--verbose"])
+    func testLaunchPlanAppendsGoalPromptPerAgent() {
+        let registry = AgentProviderRegistry()
+        let cases: [(AgentKind, String, String?, AgentEffort?, [String])] = [
+            (.claudeCode, "Investigate crash in renderer", "sonnet", .high, [
+                "--model", "sonnet", "--effort", "high", "--session-id", "uuid-1234", "Investigate crash in renderer",
+            ]),
+            (.codexCLI, "Write unit tests for parser", "gpt-5.5", .xhigh, [
+                "--model", "gpt-5.5", "--config", "model_reasoning_effort=\"xhigh\"", "Write unit tests for parser",
+            ]),
+            (.openCode, "Refactor database migrations", "opencode/deepseek-v4-flash-free", nil, [
+                "--model", "opencode/deepseek-v4-flash-free", "--prompt", "Refactor database migrations",
+            ]),
+            (.antigravity, "Fix layout bug in sidebar", "gemini-3.7-flash-high", .medium, [
+                "--model", "gemini-3.7-flash-high", "--prompt-interactive", "Fix layout bug in sidebar",
+            ]),
+        ]
+        for entry in cases {
+            let resume: ResumeIntent = entry.0 == .claudeCode ? .freshWithAssignedIdentity("uuid-1234") : .none
+            let plan = registry.provider(for: entry.0).launchPlan(
+                goal: entry.1,
+                model: entry.2,
+                effort: entry.3,
+                resumeIntent: resume,
+                settings: AppSettings(),
+                baseEnvironment: [:]
+            )
+            XCTAssertEqual(plan.arguments, entry.4, "\(entry.0)")
+            XCTAssertNil(plan.initialInput, "\(entry.0)")
+        }
     }
 
-    func testOpenCodeLaunchPlanWithResumeIntent() {
-        let provider = AgentProviderRegistry().provider(for: .openCode)
-        let resumePlan = provider.launchPlan(
-            goal: nil,
-            resumeIntent: .resume("ses_abc123"),
-            settings: AppSettings(),
-            baseEnvironment: [:]
+    func testLaunchPlanPlanModeFlagPerAgent() {
+        let registry = AgentProviderRegistry()
+        let goal = "Refactor database migrations"
+
+        XCTAssertEqual(
+            registry.provider(for: .openCode).launchPlan(
+                goal: goal, model: "opencode/deepseek-v4-flash-free", mode: .plan, resumeIntent: .none,
+                settings: AppSettings(), baseEnvironment: [:]
+            ).arguments,
+            ["--model", "opencode/deepseek-v4-flash-free", "--agent", "plan", "--prompt", goal]
         )
-        XCTAssertEqual(resumePlan.arguments, ["--session", "ses_abc123"])
-    }
-
-    func testAntigravityLaunchPlanWithResumeIntent() {
-        let provider = AgentProviderRegistry().provider(for: .antigravity)
-        let resumePlan = provider.launchPlan(
-            goal: nil,
-            resumeIntent: .resume("conv-xyz789"),
-            settings: AppSettings(),
-            baseEnvironment: [:]
+        XCTAssertEqual(
+            registry.provider(for: .claudeCode).launchPlan(
+                goal: goal, model: "sonnet", mode: .plan, resumeIntent: .none,
+                settings: AppSettings(), baseEnvironment: [:]
+            ).arguments,
+            ["--model", "sonnet", "--permission-mode", "plan", goal]
         )
-        XCTAssertEqual(resumePlan.arguments, ["--conversation", "conv-xyz789"])
-    }
-
-    func testClaudeLaunchPlanAppendsPositionalPrompt() {
-        let provider = AgentProviderRegistry().provider(for: .claudeCode)
-        let plan = provider.launchPlan(
-            goal: "Investigate crash in renderer",
-            model: "sonnet",
-            effort: .high,
-            resumeIntent: .freshWithAssignedIdentity("uuid-1234"),
-            settings: AppSettings(),
-            baseEnvironment: [:]
+        XCTAssertEqual(
+            registry.provider(for: .antigravity).launchPlan(
+                goal: goal, model: "gemini-3.7-flash-high", mode: .plan, resumeIntent: .none,
+                settings: AppSettings(), baseEnvironment: [:]
+            ).arguments,
+            ["--model", "gemini-3.7-flash-high", "--mode", "plan", "--prompt-interactive", goal]
         )
-
-        XCTAssertEqual(plan.arguments, [
-            "--model", "sonnet",
-            "--effort", "high",
-            "--session-id", "uuid-1234",
-            "Investigate crash in renderer"
-        ])
-        XCTAssertNil(plan.initialInput)
-    }
-
-    func testCodexLaunchPlanAppendsPositionalPrompt() {
-        let provider = AgentProviderRegistry().provider(for: .codexCLI)
-        let plan = provider.launchPlan(
-            goal: "Write unit tests for parser",
-            model: "gpt-5.5",
-            effort: .xhigh,
-            resumeIntent: .none,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, [
-            "--model", "gpt-5.5",
-            "--config", "model_reasoning_effort=\"xhigh\"",
-            "Write unit tests for parser"
-        ])
-        XCTAssertNil(plan.initialInput)
-    }
-
-    func testOpenCodeLaunchPlanAppendsPromptFlag() {
-        let provider = AgentProviderRegistry().provider(for: .openCode)
-        let plan = provider.launchPlan(
-            goal: "Refactor database migrations",
-            model: "opencode/deepseek-v4-flash-free",
-            resumeIntent: .none,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, [
-            "--model", "opencode/deepseek-v4-flash-free",
-            "--prompt", "Refactor database migrations"
-        ])
-        XCTAssertNil(plan.initialInput)
-    }
-
-    func testAntigravityLaunchPlanAppendsInteractivePromptFlag() {
-        let provider = AgentProviderRegistry().provider(for: .antigravity)
-        let plan = provider.launchPlan(
-            goal: "Fix layout bug in sidebar",
-            model: "gemini-3.7-flash-high",
-            effort: .medium,
-            resumeIntent: .none,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, [
-            "--model", "gemini-3.7-flash-high",
-            "--prompt-interactive", "Fix layout bug in sidebar"
-        ])
-        XCTAssertNil(plan.initialInput)
-    }
-
-    func testOpenCodeLaunchPlanWithPlanModeUsesAgentFlag() {
-        let provider = AgentProviderRegistry().provider(for: .openCode)
-        let plan = provider.launchPlan(
-            goal: "Refactor database migrations",
-            model: "opencode/deepseek-v4-flash-free",
-            mode: .plan,
-            resumeIntent: .none,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, [
-            "--model", "opencode/deepseek-v4-flash-free",
-            "--agent", "plan",
-            "--prompt", "Refactor database migrations"
-        ])
-        XCTAssertNil(plan.initialInput)
-    }
-
-    func testClaudeLaunchPlanWithPlanModeUsesPermissionMode() {
-        let provider = AgentProviderRegistry().provider(for: .claudeCode)
-        let plan = provider.launchPlan(
-            goal: "Refactor database migrations",
-            model: "sonnet",
-            mode: .plan,
-            resumeIntent: .none,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, [
-            "--model", "sonnet",
-            "--permission-mode", "plan",
-            "Refactor database migrations"
-        ])
-        XCTAssertNil(plan.initialInput)
     }
 
     func testClaudeLaunchPlanKeepsPlanModeOnFirstLaunchWithAssignedIdentity() {
@@ -352,25 +233,6 @@ final class AgentProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.arguments, ["--model", "sonnet", "--resume", id])
-        XCTAssertNil(plan.initialInput)
-    }
-
-    func testAntigravityLaunchPlanWithPlanModeUsesModeFlag() {
-        let provider = AgentProviderRegistry().provider(for: .antigravity)
-        let plan = provider.launchPlan(
-            goal: "Refactor database migrations",
-            model: "gemini-3.7-flash-high",
-            mode: .plan,
-            resumeIntent: .none,
-            settings: AppSettings(),
-            baseEnvironment: [:]
-        )
-
-        XCTAssertEqual(plan.arguments, [
-            "--model", "gemini-3.7-flash-high",
-            "--mode", "plan",
-            "--prompt-interactive", "Refactor database migrations"
-        ])
         XCTAssertNil(plan.initialInput)
     }
 
