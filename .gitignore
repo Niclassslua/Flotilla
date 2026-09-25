@@ -1,6 +1,8 @@
-# Xcode
+# Xcode / build products
 build/
 DerivedData/
+*.xcresult
+*.xcuserstate
 *.pbxuser
 !default.pbxuser
 *.mode1v3
@@ -12,22 +14,29 @@ DerivedData/
 xcuserdata/
 *.xcscmblueprint
 *.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
 
 # Swift Package Manager
 .build/
 .swiftpm/
 Packages/*/.build/
 
-# CocoaPods / Carthage (unused but harmless to ignore)
+# CocoaPods / Carthage (unused but harmless)
 Pods/
 Carthage/Build/
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon?
 
-# Xcode automatic signing
-*.xcuserstate
-# Personal Apple Developer team for iPhone builds (Config/CompanionSigning.xcconfig)
+# Personal Apple Developer team for iPhone builds
+# (see Config/CompanionSigning.xcconfig → #include?)
 Config/*.local.xcconfig
 
 # Playgrounds
@@ -39,12 +48,16 @@ Ideas/
 fixtures/
 /scratch/
 
-# Flotilla-generated per-machine agent hook wiring (HookConfigurationWriter),
-# not something to check in — absolute paths to this user's Application
-# Support directory, rewritten on every agent-managed session launch.
-/.claude/settings.json
-/.agents/hooks.json
+# Editor / agent tooling (machine-local; reinstallable)
+.cursor/
+.vscode/
+.idea/
+.claude/
+.agents/
+skills-lock.json
 
-# Agent directories
-.claude
-.agents
+# Flotilla-generated per-machine agent hook wiring (HookConfigurationWriter).
+# Absolute paths into this user's Application Support; rewritten on launch.
+# Kept explicit even though .claude/ and .agents/ are ignored above.
+.claude/settings.json
+.agents/hooks.json
