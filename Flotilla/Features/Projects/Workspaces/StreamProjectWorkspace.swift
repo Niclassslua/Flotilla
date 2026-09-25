@@ -38,7 +38,7 @@ struct StreamProjectWorkspace: View {
     private let laneWidth: CGFloat = 20
     private let columnGap: CGFloat = 14
     private let readingWidth: CGFloat = 820
-    private let contextWidth: CGFloat = 344
+    private let contextWidth: CGFloat = FlotillaLayoutWidth.projectContextWidth
     private let worktreePreview = 12
 
     private var project: Project {

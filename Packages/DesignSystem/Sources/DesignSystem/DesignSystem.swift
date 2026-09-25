@@ -100,10 +100,17 @@ public enum FlotillaLayoutWidth: Sendable {
     public static let inspectorIdeal: CGFloat = 360
     public static let inspectorMax: CGFloat = 480
     public static let contentMax: CGFloat = 920
+    /// Project overview's trailing context rail (working tree / worktrees /
+    /// this week). Fixed width inside the detail column — not collapsible —
+    /// so it raises the detail floor whenever a project is open beside the
+    /// session sidebar.
+    public static let projectContextWidth: CGFloat = 344
     /// The width below which the detail column cannot actually lay out,
     /// measured rather than estimated: 560pt of it is window chrome the
     /// column keeps even with completely empty content, and Home's header
-    /// and project grid add the rest.
+    /// and project grid add the rest (~750). The project overview then
+    /// parks a fixed `projectContextWidth` rail beside the feed, so the
+    /// real floor is Home's measurement plus that rail.
     ///
     /// This has to be the *real* floor, because `NavigationSplitView` holds
     /// the sidebar at whatever width it has been dragged to and shrinks the
@@ -111,12 +118,12 @@ public enum FlotillaLayoutWidth: Sendable {
     /// behave this way). Once the detail hits its floor the split view stops
     /// shrinking and slides its whole content leading-ward instead, which
     /// hangs the sidebar off the window's leading edge and clips its rows.
-    /// The previous value of 480 was never reachable, so `windowMin` let the
-    /// window shrink ~270pt past the point where that clipping began.
-    public static let detailMin: CGFloat = 750
+    /// Omitting the project context rail let that clipping return whenever
+    /// a project was open with both sidebars visible.
+    public static let detailMin: CGFloat = 750 + projectContextWidth
     /// What the detail column gets beside a sidebar at `sidebarIdeal` on a
-    /// freshly launched, minimum-size window.
-    public static let detailIdeal: CGFloat = 950
+    /// freshly launched, minimum-size window (`windowMin - sidebarIdeal`).
+    public static let detailIdeal: CGFloat = sidebarMax + detailMin - sidebarIdeal
     // Guarantees the detail column can always reach `detailMin`, even with
     // the sidebar dragged all the way to `sidebarMax`.
     public static let windowMin: CGFloat = sidebarMax + detailMin
