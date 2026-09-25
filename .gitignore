@@ -33,7 +33,6 @@ Carthage/Build/
 .DS_Store
 .AppleDouble
 .LSOverride
-Icon?
 
 # Personal Apple Developer team for iPhone builds
 # (see Config/CompanionSigning.xcconfig → #include?)
