@@ -11,21 +11,11 @@ struct DeleteSessionSheet: View {
     let onCancel: () -> Void
     let onDelete: (Bool) -> Void
 
+    @State private var deleteWorktree = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "trash.circle.fill")
-                    .font(.system(size: 34))
-                    .foregroundStyle(.red)
-                    .symbolRenderingMode(.hierarchical)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Delete “\(session.title)”?")
-                        .font(.title3.weight(.semibold))
-                    Text(explanation)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+        VStack(alignment: .leading, spacing: FlotillaSpacing.xLarge) {
+            header
 
             if isRunning {
                 Label(
@@ -40,74 +30,170 @@ struct DeleteSessionSheet: View {
             }
 
             if let worktree = session.worktree {
-                VStack(alignment: .leading, spacing: 4) {
-                    GitBranchLabel(worktree.branchName, size: 12)
-                    Text(worktree.worktreePath.path)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
+                worktreeDetails(worktree)
+                worktreeChoices
             }
 
-            // Stacked full-width rather than a row: at this sheet's width three
-            // buttons side by side truncated "Keep Worktree, Delete Session" to
-            // "Keep Worktree, Delete Ses…" — the one label that distinguishes
-            // the two destructive outcomes. Return belongs to Cancel; deleting
-            // a branch on a keypress has no undo.
-            VStack(spacing: 8) {
-                if session.worktree != nil {
-                    destructiveButton(
-                        "Delete Session & Worktree",
-                        axID: "DeleteSessionDialog.DeleteWithWorktree"
-                    ) { onDelete(true) }
+            Divider()
 
-                    // `role: .destructive` renders as an ordinary button outside
-                    // a confirmation dialog, so the outcomes are separated by
-                    // tint as well as by label: only the branch-destroying path
-                    // is red.
-                    Button("Keep Worktree, Delete Session Only") { onDelete(false) }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity)
-                        .accessibilityIdentifier("DeleteSessionDialog.KeepWorktreeDeleteSession")
-                } else {
-                    destructiveButton(
-                        "Delete Session",
-                        axID: "DeleteSessionDialog.DeleteSessionOnly"
-                    ) { onDelete(false) }
-                }
-
+            HStack(spacing: FlotillaSpacing.small) {
                 Button("Cancel", action: onCancel)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.bordered)
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("DeleteSessionDialog.Cancel")
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    onDelete(deleteWorktree)
+                } label: {
+                    Label(
+                        deleteWorktree ? "Delete Session & Worktree" : "Delete Session",
+                        systemImage: "trash"
+                    )
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, FlotillaSpacing.large)
+                    .padding(.vertical, FlotillaSpacing.small)
+                    .background(FlotillaColors.danger, in: RoundedRectangle(cornerRadius: FlotillaRadius.control))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(deleteButtonID)
             }
+            .controlSize(.large)
         }
-        .padding(24)
-        .frame(width: 500)
+        .padding(FlotillaSpacing.xLarge)
+        .frame(width: session.worktree == nil ? 480 : 620)
     }
 
-    private func destructiveButton(
-        _ title: String,
+    private var header: some View {
+        HStack(alignment: .top, spacing: FlotillaSpacing.large) {
+            Image(systemName: "trash")
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(FlotillaColors.danger)
+                .frame(width: 44, height: 44)
+                .background(FlotillaColors.dangerSurface, in: RoundedRectangle(cornerRadius: FlotillaRadius.card))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
+                Text("Delete session?")
+                    .font(.system(size: 25, weight: .semibold))
+
+                Text(session.title)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Terminal history and session metadata will be permanently removed.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func worktreeDetails(_ worktree: WorktreeInfo) -> some View {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.xSmall) {
+            HStack {
+                Text("LINKED WORKTREE")
+                    .font(.caption2.weight(.semibold))
+                    .tracking(1.2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                GitBranchLabel(worktree.branchName, size: 12)
+                    .font(.caption)
+            }
+
+            Text(worktree.worktreePath.path)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var worktreeChoices: some View {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
+            Text("What happens to the worktree?")
+                .font(.callout.weight(.semibold))
+
+            HStack(alignment: .top, spacing: FlotillaSpacing.small) {
+                worktreeChoice(
+                    title: "Keep worktree",
+                    detail: "Its files and branch stay on disk.",
+                    symbol: "folder",
+                    isSelected: !deleteWorktree,
+                    isDestructive: false,
+                    axID: "DeleteSessionDialog.KeepWorktreeOption"
+                ) { deleteWorktree = false }
+
+                worktreeChoice(
+                    title: "Remove worktree",
+                    detail: "Remove its files. Branch cleanup follows Git settings.",
+                    symbol: "trash",
+                    isSelected: deleteWorktree,
+                    isDestructive: true,
+                    axID: "DeleteSessionDialog.RemoveWorktreeOption"
+                ) { deleteWorktree = true }
+            }
+        }
+    }
+
+    private func worktreeChoice(
+        title: String,
+        detail: String,
+        symbol: String,
+        isSelected: Bool,
+        isDestructive: Bool,
         axID: String,
         action: @escaping () -> Void
     ) -> some View {
-        Button(title, role: .destructive, action: action)
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .tint(.red)
-            .frame(maxWidth: .infinity)
-            .accessibilityIdentifier(axID)
+        let accent = isDestructive ? FlotillaColors.danger : FlotillaColors.accent
+
+        return Button(action: action) {
+            VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
+                HStack {
+                    Image(systemName: symbol)
+                        .font(.system(size: 18))
+                        .foregroundStyle(isSelected ? accent : .secondary)
+                    Spacer()
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? accent : .secondary)
+                }
+
+                VStack(alignment: .leading, spacing: FlotillaSpacing.xSmall) {
+                    Text(title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+            .padding(FlotillaSpacing.medium)
+            .background(
+                isSelected ? accent.opacity(0.09) : Color(nsColor: .controlBackgroundColor),
+                in: RoundedRectangle(cornerRadius: FlotillaRadius.card)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: FlotillaRadius.card)
+                    .strokeBorder(isSelected ? accent.opacity(0.75) : FlotillaColors.separator, lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: FlotillaRadius.card))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title). \(detail)")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityIdentifier(axID)
     }
 
-    private var explanation: String {
-        session.worktree == nil
-            ? "Terminal history and session metadata will be permanently removed."
-            : "Remove only Flotilla's session record, or also clean up its isolated worktree and branch from Git."
+    private var deleteButtonID: String {
+        if session.worktree == nil { return "DeleteSessionDialog.DeleteSessionOnly" }
+        return deleteWorktree
+            ? "DeleteSessionDialog.DeleteWithWorktree"
+            : "DeleteSessionDialog.KeepWorktreeDeleteSession"
     }
 }

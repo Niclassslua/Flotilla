@@ -47,6 +47,10 @@ final class DeleteSessionUITests: XCTestCase {
         XCTAssertTrue(deleteFixLoginItem.waitForExistence(timeout: 3))
         deleteFixLoginItem.click()
 
+        let removeWorktreeOption = element(app, .deleteSessionRemoveWorktreeOption)
+        XCTAssertTrue(removeWorktreeOption.waitForExistence(timeout: 3))
+        removeWorktreeOption.click()
+
         let deleteWithWorktreeButton = element(app, .deleteSessionDeleteWithWorktree)
         XCTAssertTrue(deleteWithWorktreeButton.waitForExistence(timeout: 3))
         deleteWithWorktreeButton.click()

@@ -142,6 +142,8 @@ public enum AXID: String, Sendable {
 
     // MARK: - Delete Session Dialog
     case deleteSessionCancel = "DeleteSessionDialog.Cancel"
+    case deleteSessionKeepWorktreeOption = "DeleteSessionDialog.KeepWorktreeOption"
+    case deleteSessionRemoveWorktreeOption = "DeleteSessionDialog.RemoveWorktreeOption"
     case deleteSessionKeepWorktree = "DeleteSessionDialog.KeepWorktreeDeleteSession"
     case deleteSessionDeleteWithWorktree = "DeleteSessionDialog.DeleteWithWorktree"
     case deleteSessionDeleteOnly = "DeleteSessionDialog.DeleteSessionOnly"
