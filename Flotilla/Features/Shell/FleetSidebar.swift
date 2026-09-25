@@ -196,6 +196,7 @@ struct FleetSessionList: View {
                 Section {
                     ProjectHeaderRow(
                         project: project,
+                        isSelected: selection.contains(.project(project.id)),
                         isCollapsed: isCollapsed,
                         sessionCount: projectSessions.count,
                         onToggleCollapse: { toggleCollapsed(project.id) }
@@ -204,6 +205,7 @@ struct FleetSessionList: View {
                     .tag(SidebarItem.project(project.id))
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(liquidGlassEnabled ? Color.clear : FlotillaColors.sidebar)
+                    .background(ListSelectionHighlightSuppressor(isSuppressed: liquidGlassEnabled))
                     .accessibilityIdentifier(AXID.sidebarProjectRow.rawValue + project.name)
                     .contextMenu {
                         Button("Change Icon & Color…") {
@@ -364,7 +366,9 @@ private struct NavigatorRow: View {
 /// beside an 18pt title; this is the same identity at navigator scale.
 private struct ProjectHeaderRow: View {
     @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
+    @Environment(\.appearsActive) private var appearsActive
     let project: Project
+    let isSelected: Bool
     let isCollapsed: Bool
     let sessionCount: Int
     let onToggleCollapse: () -> Void
@@ -422,6 +426,16 @@ private struct ProjectHeaderRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, liquidGlassEnabled ? 10 : 0)
         .padding(.vertical, liquidGlassEnabled ? 11 : 6)
+        // Glass mode turns off AppKit's highlight (see
+        // `ListSelectionHighlightSuppressor`), so the row draws its own.
+        .background {
+            if liquidGlassEnabled && isSelected {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(SidebarSelectionFill.color(appearsActive: appearsActive))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+            }
+        }
         // In the project's own accent, so the divider says whose sessions
         // follow rather than just where the group starts.
         .overlay(alignment: .bottom) {
@@ -530,12 +544,12 @@ struct SessionSidebarRow: View {
         return "\(BranchNaming.displayName(for: branch))\n\(path)"
     }
 
-    /// In the key window, an opaque list-row background hides AppKit's blue
-    /// highlight so the rounded neutral selection can take its place. When
-    /// inactive, the system's subdued selection should show through instead.
+    /// Glass mode turns off AppKit's highlight entirely, so this rounded fill
+    /// is the only selection, active or not. Without glass, an opaque list-row
+    /// background hides AppKit's blue highlight so this fill can replace it.
     private var rowFill: Color {
         if liquidGlassEnabled {
-            if isSelected { return appearsActive ? FlotillaColors.surfaceElevated : .clear }
+            if isSelected { return SidebarSelectionFill.color(appearsActive: appearsActive) }
             if isHovering { return FlotillaColors.textPrimary.opacity(0.07) }
             return .clear
         }
@@ -626,11 +640,11 @@ struct SessionSidebarRow: View {
             }
         )
         .listRowInsets(EdgeInsets())
-        // Cover the active blue selection across the full cell. In an inactive
-        // window, let AppKit draw its own muted highlight without a dark box.
-        .listRowBackground(
-            liquidGlassEnabled && (!isSelected || !appearsActive) ? Color.clear : FlotillaColors.sidebar
-        )
+        // Without glass, cover AppKit's blue selection across the full cell.
+        // With glass there is none to cover, and an opaque cell would show
+        // as a dark band on the translucent sidebar.
+        .listRowBackground(liquidGlassEnabled ? Color.clear : FlotillaColors.sidebar)
+        .background(ListSelectionHighlightSuppressor(isSuppressed: liquidGlassEnabled))
         .modifier(SwipeToDeleteSession(
             accessibilityID: "SessionRow-\(session.title)-SwipeDelete",
             onConfirm: { onRequestDelete(session.id) }
@@ -673,6 +687,52 @@ struct SessionSidebarRow: View {
         }
     }
 
+}
+
+/// The rounded selection every glass-mode sidebar row draws for itself.
+enum SidebarSelectionFill {
+    static func color(appearsActive: Bool) -> Color {
+        appearsActive ? FlotillaColors.surfaceElevated : FlotillaColors.surfaceElevated.opacity(0.55)
+    }
+}
+
+/// Turns AppKit's own selection highlight off on the `NSTableView` behind the
+/// sidebar `List`, whose rows draw their selection themselves.
+///
+/// There's no SwiftUI API for this. Covering the highlight with an opaque
+/// `listRowBackground` works on an opaque sidebar, but on a glass one the
+/// cover shows as a dark band, and leaving the highlight uncovered shows
+/// AppKit's full-width gray band behind the row whenever the window is inactive.
+struct ListSelectionHighlightSuppressor: NSViewRepresentable {
+    let isSuppressed: Bool
+
+    func makeNSView(context: Context) -> ProbeView {
+        ProbeView()
+    }
+
+    func updateNSView(_ nsView: ProbeView, context: Context) {
+        nsView.isSuppressed = isSuppressed
+    }
+
+    final class ProbeView: NSView {
+        var isSuppressed = false {
+            didSet { if oldValue != isSuppressed { apply() } }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply()
+        }
+
+        private func apply() {
+            var view = superview
+            while let current = view, !(current is NSTableView) { view = current.superview }
+            guard let table = view as? NSTableView else { return }
+            // `.sourceList` is what `.listStyle(.sidebar)` itself installs.
+            let style: NSTableView.SelectionHighlightStyle = isSuppressed ? .none : .sourceList
+            if table.selectionHighlightStyle != style { table.selectionHighlightStyle = style }
+        }
+    }
 }
 
 private struct SwipeToDeleteSession: ViewModifier {
