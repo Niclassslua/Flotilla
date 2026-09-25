@@ -18,7 +18,7 @@ struct KnowledgeCatalogView<HeaderExtra: View>: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .task(id: viewModel.projectRoot) {
             await viewModel.load()
         }
@@ -59,7 +59,7 @@ struct KnowledgeCatalogView<HeaderExtra: View>: View {
         }
         .padding(.horizontal, FlotillaSpacing.large)
         .padding(.vertical, FlotillaSpacing.small + 2)
-        .background(FlotillaColors.surface)
+        .flotillaLiquidSurface(FlotillaColors.surface, glassTintOpacity: FlotillaGlassTint.elevated)
     }
 
     // MARK: - Content
@@ -69,7 +69,6 @@ struct KnowledgeCatalogView<HeaderExtra: View>: View {
         if viewModel.isLoading && viewModel.items.isEmpty {
             ProgressView("Scanning \(viewModel.kind.title.lowercased())…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(FlotillaColors.canvas)
         } else {
             LedgerDesign(items: items, viewModel: viewModel, actions: actions)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

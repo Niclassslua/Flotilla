@@ -11,6 +11,7 @@ enum SessionCardVariant {
 }
 
 struct SessionCard<Terminal: View>: View {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     let session: Session
     let variant: SessionCardVariant
     let diffStatStore: DiffStatStore?
@@ -71,6 +72,69 @@ struct SessionCard<Terminal: View>: View {
     // MARK: - Row Variant (Sidebar)
 
     private var rowView: some View {
+        Group {
+            if liquidGlassEnabled {
+                glassSidebarRow
+            } else {
+                opaqueSidebarRow
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .contextMenu { contextMenu }
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Quiet provider metadata, a legible title, then location and state.
+    private var glassSidebarRow: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                ProviderLogo(agent: session.agent)
+                    .frame(width: 13, height: 13)
+                    .accessibilityHidden(true)
+                Text(session.model ?? session.agent.displayName)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(compactTimestamp(for: session.lastActiveAt))
+                    .monospacedDigit()
+            }
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(isSelected ? FlotillaColors.textSecondary : FlotillaColors.textTertiary)
+
+            Text(session.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(FlotillaColors.textPrimary)
+                .lineLimit(1)
+
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 5, height: 5)
+                    .accessibilityHidden(true)
+                Text(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
+                    .foregroundStyle(statusColor)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
+                    .accessibilityIdentifier("SessionRow-\(session.title)-Status")
+                if let branch = session.worktree?.branchName {
+                    Text("·")
+                        .foregroundStyle(isSelected ? FlotillaColors.textSecondary : FlotillaColors.textTertiary)
+                    Text(BranchNaming.displayName(for: branch))
+                        .foregroundStyle(isSelected ? FlotillaColors.textSecondary : FlotillaColors.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+                if let diffStatStore {
+                    SessionDiffStatView(session: session, diffStatStore: diffStatStore, style: .plain)
+                }
+            }
+            .font(.system(size: 10, weight: .medium))
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var opaqueSidebarRow: some View {
         // Plain content, not a `Button`: inside a `List` on macOS, wrapping
         // row content in a `Button` wins the hit-test race and swallows the
         // click before AppKit's own table-view selection ever sees it —
@@ -103,14 +167,6 @@ struct SessionCard<Terminal: View>: View {
             }
         }
         .padding(.vertical, 5)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .contextMenu { contextMenu }
-        // `.contain` keeps the row addressable by the identifier the call
-        // site assigns while still exposing children (status word, etc.)
-        // individually — without it SwiftUI collapses the row into a single
-        // element and drops them from the accessibility tree.
-        .accessibilityElement(children: .contain)
     }
 
     // MARK: - Tile Variant (Grid) — Dense status card + last output line
@@ -121,7 +177,11 @@ struct SessionCard<Terminal: View>: View {
             Divider()
             tileContent
         }
-        .background(FlotillaColors.terminalCanvas)
+        .flotillaLiquidSurface(
+            FlotillaColors.terminalCanvas,
+            cornerRadius: 8,
+            glassTintOpacity: FlotillaGlassTint.terminal
+        )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(tileBorder)
         .contentShape(Rectangle())
@@ -245,7 +305,12 @@ struct SessionCard<Terminal: View>: View {
             }
         }
         .padding(10)
-        .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+        .flotillaLiquidSurface(
+            FlotillaColors.surfaceElevated,
+            cornerRadius: FlotillaRadius.card,
+            glassTintOpacity: FlotillaGlassTint.elevated
+        )
+        .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
                 .strokeBorder(FlotillaColors.separator)
@@ -388,7 +453,7 @@ struct SessionCard<Terminal: View>: View {
             statusWord
             if let diffStatStore {
                 Spacer(minLength: 2)
-                SessionDiffStatView(session: session, diffStatStore: diffStatStore)
+                SessionDiffStatView(session: session, diffStatStore: diffStatStore, style: .plain)
             }
         }
         .foregroundStyle(.secondary)

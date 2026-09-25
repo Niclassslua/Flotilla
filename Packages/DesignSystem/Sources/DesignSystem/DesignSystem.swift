@@ -8,6 +8,12 @@ import UIKit
 public typealias PlatformColor = UIColor
 #endif
 
+public extension EnvironmentValues {
+    /// Whether the workspace uses macOS 26's translucent Liquid Glass chrome.
+    /// The app owns the persisted preference; the design system only consumes it.
+    @Entry var flotillaLiquidGlassEnabled = true
+}
+
 // MARK: - Core Tokens
 public enum FlotillaSpacing: Sendable {
     public static let xSmall: CGFloat = 4
@@ -291,13 +297,37 @@ public struct FlotillaColors: Sendable {
     public init(colorScheme: ColorScheme = .dark) {}
 }
 
+// MARK: - Glass Tint Tokens
+/// Named opacities for `.flotillaLiquidSurface` / inspector chrome so Features
+/// do not invent magic numbers per call site.
+public enum FlotillaGlassTint: Sendable {
+    /// Detail column / primary workspace canvas.
+    public static let detail: CGFloat = 0.24
+    /// Navigator / sidebar column.
+    public static let sidebar: CGFloat = 0.42
+    /// Terminal tile and session card surfaces.
+    public static let terminal: CGFloat = 0.48
+    /// Elevated cards (home, project, floating overlays).
+    public static let elevated: CGFloat = 0.34
+    /// Docked inspectors (git / diff / screenshots).
+    public static let inspector: CGFloat = 0.55
+}
+
 // MARK: - Shared Components
 public struct FlotillaPanel: ViewModifier {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     public init() {}
 
     public func body(content: Content) -> some View {
         content
-            .background(FlotillaColors.surface)
+            .background {
+                if liquidGlassEnabled, #available(macOS 26.0, iOS 26.0, *) {
+                    Color.clear
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
+                } else {
+                    FlotillaColors.surface
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)
@@ -306,9 +336,212 @@ public struct FlotillaPanel: ViewModifier {
     }
 }
 
+/// Elevated floating card (palette, launcher, sheets). Glass when enabled;
+/// opaque `surface` with hairline stroke when not.
+public struct FlotillaFloatingCard: ViewModifier {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
+    let cornerRadius: CGFloat
+    let glassTintOpacity: CGFloat
+
+    public init(
+        cornerRadius: CGFloat = FlotillaRadius.modal,
+        glassTintOpacity: CGFloat = FlotillaGlassTint.elevated
+    ) {
+        self.cornerRadius = cornerRadius
+        self.glassTintOpacity = glassTintOpacity
+    }
+
+    public func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .background {
+                if liquidGlassEnabled, #available(macOS 26.0, iOS 26.0, *) {
+                    Color.clear
+                        .glassEffect(
+                            .regular.tint(FlotillaColors.canvas.opacity(glassTintOpacity)),
+                            in: shape
+                        )
+                } else {
+                    FlotillaColors.surface
+                }
+            }
+            .clipShape(shape)
+            .overlay {
+                shape.strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+            }
+    }
+}
+
+/// Preference-gated glass chrome for capsules (action clusters, agent chips).
+/// Pass `fallback: nil` when glass-off should leave the view unbacked (e.g. a
+/// focus-bar action cluster that is only chrome in glass mode).
+public struct FlotillaChromeCapsule: ViewModifier {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
+    let tint: Color?
+    let interactive: Bool
+    let fallback: Color?
+
+    public init(
+        tint: Color? = nil,
+        interactive: Bool = false,
+        fallback: Color? = FlotillaColors.surfaceElevated
+    ) {
+        self.tint = tint
+        self.interactive = interactive
+        self.fallback = fallback
+    }
+
+    public func body(content: Content) -> some View {
+        content
+            .background {
+                if liquidGlassEnabled, #available(macOS 26.0, iOS 26.0, *) {
+                    Color.clear
+                        .glassEffect(glassStyle, in: .capsule)
+                } else if let fallback {
+                    Capsule().fill(fallback)
+                }
+            }
+    }
+
+    @available(macOS 26.0, iOS 26.0, *)
+    private var glassStyle: Glass {
+        var style: Glass = .regular
+        if let tint {
+            style = style.tint(tint)
+        }
+        if interactive {
+            style = style.interactive()
+        }
+        return style
+    }
+}
+
+/// Preference-gated glass chrome for circular controls (FABs).
+public struct FlotillaChromeCircle: ViewModifier {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
+    let interactive: Bool
+    let fallback: Color
+
+    public init(
+        interactive: Bool = true,
+        fallback: Color = FlotillaColors.surfaceElevated
+    ) {
+        self.interactive = interactive
+        self.fallback = fallback
+    }
+
+    public func body(content: Content) -> some View {
+        content
+            .background {
+                if liquidGlassEnabled, #available(macOS 26.0, iOS 26.0, *) {
+                    Color.clear
+                        .glassEffect(
+                            interactive ? .regular.interactive() : .regular,
+                            in: .circle
+                        )
+                } else {
+                    Circle().fill(fallback)
+                }
+            }
+    }
+}
+
 public extension View {
     func flotillaPanel() -> some View {
         modifier(FlotillaPanel())
+    }
+
+    /// Elevated floating overlay card (command palette, launcher, sheets).
+    func flotillaFloatingCard(
+        cornerRadius: CGFloat = FlotillaRadius.modal,
+        glassTintOpacity: CGFloat = FlotillaGlassTint.elevated
+    ) -> some View {
+        modifier(FlotillaFloatingCard(cornerRadius: cornerRadius, glassTintOpacity: glassTintOpacity))
+    }
+
+    /// Docked inspector column (git sidebar, diff panel, screenshot panel).
+    func flotillaInspectorSurface(
+        ignoresSafeAreaEdges: Edge.Set = []
+    ) -> some View {
+        flotillaLiquidSurface(
+            FlotillaColors.sidebar,
+            glassTintOpacity: FlotillaGlassTint.inspector,
+            ignoresSafeAreaEdges: ignoresSafeAreaEdges
+        )
+    }
+
+    /// Capsule chrome for bar chips and action clusters.
+    /// Pass `fallback: nil` when glass-off should leave the view unbacked.
+    func flotillaChromeCapsule(
+        tint: Color? = nil,
+        interactive: Bool = false,
+        fallback: Color? = FlotillaColors.surfaceElevated
+    ) -> some View {
+        modifier(FlotillaChromeCapsule(tint: tint, interactive: interactive, fallback: fallback))
+    }
+
+    /// Circle chrome for FABs and round controls.
+    func flotillaChromeCircle(
+        interactive: Bool = true,
+        fallback: Color = FlotillaColors.surfaceElevated
+    ) -> some View {
+        modifier(FlotillaChromeCircle(interactive: interactive, fallback: fallback))
+    }
+
+    /// A full-height workspace surface: refractive in Liquid Glass mode and
+    /// the original opaque surface when the user disables that appearance.
+    ///
+    /// `ignoresSafeAreaEdges` mirrors `background(_:ignoresSafeAreaEdges:)`:
+    /// a column passes `.top` so its glass continues under a window toolbar
+    /// whose own background is hidden, instead of stopping at its bottom edge.
+    func flotillaLiquidSurface(
+        _ fallback: Color,
+        cornerRadius: CGFloat = 0,
+        glassTintOpacity: CGFloat = FlotillaGlassTint.elevated,
+        stableTintOpacity: CGFloat = 0,
+        ignoresSafeAreaEdges: Edge.Set = []
+    ) -> some View {
+        modifier(
+            FlotillaLiquidSurface(
+                fallback: fallback,
+                cornerRadius: cornerRadius,
+                glassTintOpacity: glassTintOpacity,
+                stableTintOpacity: stableTintOpacity,
+                ignoresSafeAreaEdges: ignoresSafeAreaEdges
+            )
+        )
+    }
+}
+
+public struct FlotillaLiquidSurface: ViewModifier {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
+    let fallback: Color
+    let cornerRadius: CGFloat
+    let glassTintOpacity: CGFloat
+    let stableTintOpacity: CGFloat
+    let ignoresSafeAreaEdges: Edge.Set
+
+    public func body(content: Content) -> some View {
+        content.background {
+            Group {
+                if liquidGlassEnabled, #available(macOS 26.0, iOS 26.0, *) {
+                    Color.clear
+                        .glassEffect(
+                            .regular.tint(FlotillaColors.canvas.opacity(glassTintOpacity)),
+                            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        )
+                        .overlay {
+                            if stableTintOpacity > 0 {
+                                fallback.opacity(stableTintOpacity)
+                                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                            }
+                        }
+                } else {
+                    fallback
+                }
+            }
+            .ignoresSafeArea(edges: ignoresSafeAreaEdges)
+        }
     }
 }
 

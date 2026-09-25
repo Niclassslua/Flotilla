@@ -38,7 +38,11 @@ struct HomeProjectCard: View {
         }
         .padding(FlotillaSpacing.large + 2)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous))
+        .flotillaLiquidSurface(
+            FlotillaColors.surface,
+            cornerRadius: FlotillaRadius.modal,
+            glassTintOpacity: FlotillaGlassTint.elevated
+        )
         .overlay {
             RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous)
                 .strokeBorder(

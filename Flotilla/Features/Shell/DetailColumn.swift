@@ -4,6 +4,7 @@ import DesignSystem
 import TerminalKit
 
 struct DetailColumn: View {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
     @Bindable var store: AppStore
@@ -42,7 +43,13 @@ struct DetailColumn: View {
         .safeAreaInset(edge: .top, spacing: 0) { banners }
         .navigationTitle(scopeTitle)
         .navigationSubtitle(scopeSubtitle)
-        .background(FlotillaColors.canvas)
+        // Extends under the window toolbar so its glass capsules refract the
+        // same surface the content sits on, rather than a separate band.
+        .flotillaLiquidSurface(
+            FlotillaColors.canvas,
+            glassTintOpacity: FlotillaGlassTint.detail,
+            ignoresSafeAreaEdges: .top
+        )
         .inspector(isPresented: inspectorPresented) {
             inspectorContent
                 .inspectorColumnWidth(
@@ -287,11 +294,11 @@ struct DetailColumn: View {
                     inputHandler: {}
                 ),
                 presentation: .session,
-                isFocused: true
+                isFocused: true,
+                contentInsets: NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
             )
             .id(session.id)
             .accessibilityIdentifier("TerminalView-\(session.title)")
-            .background(FlotillaColors.terminalCanvas)
         } else {
             terminalUnavailableState(for: session)
         }
@@ -353,7 +360,9 @@ struct DetailColumn: View {
         }
         .padding(FlotillaSpacing.xxLarge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(FlotillaColors.terminalCanvas)
+        // The detail column supplies the glass backdrop. An opaque terminal
+        // fill here hid it whenever no process was attached.
+        .background(liquidGlassEnabled ? Color.clear : FlotillaColors.terminalCanvas)
     }
 
     @ViewBuilder
@@ -471,7 +480,7 @@ struct EmptyWorkspaceView: View {
             )
             .allowsHitTesting(false)
         }
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 10)
         .animation(reduceMotion ? nil : .smooth(duration: 0.5), value: appeared)

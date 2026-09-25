@@ -50,7 +50,7 @@ struct CommitDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .accessibilityIdentifier("ProjectHistory.Detail")
         .onChange(of: commit?.sha) { _, _ in
             isMessageExpanded = false

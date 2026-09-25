@@ -109,7 +109,12 @@ public struct StatusBadge: View {
         }
         .padding(.horizontal, size.horizontalPadding)
         .padding(.vertical, size.verticalPadding)
-        .background(statusColor.opacity(0.1), in: Capsule())
+        // A solid-enough capsule fill keeps the pill shape readable on liquid
+        // glass hero washes; a near-transparent tint can read as a square blot.
+        .background {
+            Capsule(style: .continuous)
+                .fill(statusColor.opacity(0.18))
+        }
         .accessibilityLabel(statusLabel)
         .accessibilityAddTraits(status == .waitingForInput ? [.updatesFrequently] : [])
     }

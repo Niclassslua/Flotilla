@@ -175,7 +175,11 @@ struct HomeDashboardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(FlotillaSpacing.xxLarge)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous))
+        .flotillaLiquidSurface(
+            FlotillaColors.surface,
+            cornerRadius: FlotillaRadius.modal,
+            glassTintOpacity: FlotillaGlassTint.elevated
+        )
     }
 
     // MARK: - Background

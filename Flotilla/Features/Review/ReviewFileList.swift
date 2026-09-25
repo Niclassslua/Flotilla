@@ -27,7 +27,7 @@ struct ReviewFileList: View {
             footer
         }
         .frame(width: 360)
-        .background(FlotillaColors.sidebar)
+        .flotillaInspectorSurface()
         .accessibilityIdentifier(AXID.reviewFileList.rawValue)
     }
 

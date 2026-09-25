@@ -171,8 +171,13 @@ final class CompanionHost {
         if isEnabled {
             start()
         }
-        Task { [weak self] in
-            await self?.checkHandyConnection()
+        // A capability probe connects to Handy and may request approval. Do
+        // not do that merely because Flotilla launched with the companion off;
+        // the Settings pane checks on appearance when the user needs it.
+        if isEnabled {
+            Task { [weak self] in
+                await self?.checkHandyConnection()
+            }
         }
     }
 

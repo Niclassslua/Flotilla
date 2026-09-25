@@ -45,6 +45,7 @@ struct HomeWidgetCard<Content: View>: View {
     @ViewBuilder let content: Content
 
     @Environment(\.homeWidgetOpaqueSurface) private var opaque
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.small + 2) {
@@ -58,10 +59,12 @@ struct HomeWidgetCard<Content: View>: View {
         // outright instead of growing to fit oversized content.
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .background {
-            if opaque {
+            if opaque || !liquidGlassEnabled {
                 HomeWidgetCardMetrics.shape.fill(FlotillaColors.surfaceElevated.opacity(0.92))
-            } else {
+            } else if #available(macOS 26.0, *) {
                 Color.clear.glassEffect(.regular, in: HomeWidgetCardMetrics.shape)
+            } else {
+                HomeWidgetCardMetrics.shape.fill(FlotillaColors.surfaceElevated.opacity(0.92))
             }
         }
         .overlay {

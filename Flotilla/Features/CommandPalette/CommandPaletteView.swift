@@ -211,14 +211,9 @@ struct CommandPaletteView: View {
         // the whole window. `maxWidth`/`maxHeight` pin it back to the size it
         // was always meant to be.
         .frame(minWidth: 540, idealWidth: 620, maxWidth: 620, minHeight: 460, idealHeight: 500, maxHeight: 500)
-        .background(FlotillaColors.surface)
         // A real `.sheet` window got rounded corners and a shadow from AppKit
         // for free; as a floating overlay, this view has to draw its own.
-        .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous)
-                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-        }
+        .flotillaFloatingCard()
         .flotillaShadow(.level3)
         // Without `.contain`, SwiftUI exposes this identifier on several
         // descendants independently (the search icon, the field, the esc
@@ -342,18 +337,14 @@ struct KeyboardShortcutsView: View {
                             }
                         }
                         .padding(16)
-                        .background(FlotillaColors.surface, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(FlotillaColors.separator)
-                        }
+                        .flotillaFloatingCard(cornerRadius: 8)
                     }
                 }
                 .padding(20)
             }
         }
         .frame(width: 760, height: 500)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .accessibilityIdentifier("KeyboardShortcuts")
     }
 

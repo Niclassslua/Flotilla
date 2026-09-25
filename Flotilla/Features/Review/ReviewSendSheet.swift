@@ -31,7 +31,7 @@ struct ReviewSendSheet: View {
             footer
         }
         .frame(width: 720, height: 460)
-        .background(FlotillaColors.canvas)
+        .flotillaFloatingCard(cornerRadius: FlotillaRadius.panel)
         .accessibilityIdentifier(AXID.reviewSendSheet.rawValue)
     }
 

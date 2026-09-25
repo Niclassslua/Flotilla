@@ -47,6 +47,7 @@ struct FileBrowserView: View {
                 .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .task(id: rootURL) {
             await viewModel.loadIfNeeded()
         }
@@ -187,7 +188,6 @@ struct FileBrowserView: View {
             if viewModel.isLoading && viewModel.nodes.isEmpty {
                 ProgressView("Loading files…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(FlotillaColors.surface)
             } else if let errorMessage = viewModel.errorMessage, viewModel.nodes.isEmpty {
                 ContentUnavailableView(
                     "Error Loading Files",
@@ -195,7 +195,6 @@ struct FileBrowserView: View {
                     description: Text(errorMessage)
                 )
                 .accessibilityIdentifier("FileBrowser.Error")
-                .background(FlotillaColors.surface)
             } else if viewModel.nodes.isEmpty {
                 ContentUnavailableView(
                     "Empty Folder",
@@ -203,7 +202,6 @@ struct FileBrowserView: View {
                     description: Text("No files found in this workspace.")
                 )
                 .accessibilityIdentifier("FileBrowser.Empty")
-                .background(FlotillaColors.surface)
             } else {
                 List {
                     OutlineGroup(filteredNodes, children: \.children) { node in
@@ -273,11 +271,10 @@ struct FileBrowserView: View {
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
-                .background(FlotillaColors.surface)
                 .accessibilityIdentifier("FileBrowser.List")
             }
         }
-        .background(FlotillaColors.surface)
+        .flotillaInspectorSurface()
     }
 
     private var fileTreeHeader: some View {
@@ -398,7 +395,7 @@ struct FileBrowserView: View {
                             MarkdownView(markdown: viewModel.content)
                                 .padding(FlotillaSpacing.large)
                         }
-                        .background(FlotillaColors.canvas)
+                        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
                         .accessibilityIdentifier("FileBrowser.MarkdownEditor")
                         .accessibilityLabel("Markdown editor for \(node.name)")
                     } else {

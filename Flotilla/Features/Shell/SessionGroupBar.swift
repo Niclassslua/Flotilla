@@ -16,6 +16,7 @@ import DesignSystem
 /// them — scope changes *what* is on screen, presentation changes *how*, and
 /// the two must not be entangled.
 struct SessionGroupBar: View {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     @Bindable var store: AppStore
     @Bindable var navigator: WorkspaceNavigator
     @Bindable var settingsViewModel: SettingsViewModel
@@ -39,7 +40,9 @@ struct SessionGroupBar: View {
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .frame(height: 40)
-        .background(FlotillaColors.surface)
+        // Transparent in glass mode so the bar joins the header glass the
+        // window toolbar sits on, instead of an opaque strip beneath it.
+        .background(liquidGlassEnabled ? Color.clear : FlotillaColors.surface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.sessionsGroupBar.rawValue)
     }

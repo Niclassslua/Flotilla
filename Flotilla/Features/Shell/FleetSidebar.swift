@@ -13,6 +13,8 @@ struct SessionsSidebar: View {
     @Bindable var store: AppStore
     @Binding var selection: Set<SidebarItem>
     @Binding var searchText: String
+    let isHomeSelected: Bool
+    let onSelectHome: () -> Void
     let onOpenSession: (UUID) -> Void
     let onRequestDelete: (UUID) -> Void
     let onCreateSession: () -> Void
@@ -21,6 +23,7 @@ struct SessionsSidebar: View {
     /// changes what *clicking* a row does — see `SessionSidebarRow`.
     var gridMembership: GridMembership? = nil
     @State private var collapsedProjects: Set<UUID> = []
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,10 +68,24 @@ struct SessionsSidebar: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(FlotillaColors.surfaceElevated.opacity(0.5), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .flotillaLiquidSurface(
+                FlotillaColors.surfaceElevated.opacity(liquidGlassEnabled ? 0.35 : 0.5),
+                cornerRadius: liquidGlassEnabled ? 9 : 6,
+                glassTintOpacity: FlotillaGlassTint.sidebar
+            )
             .padding(.horizontal, 10)
             .padding(.top, 10)
             .padding(.bottom, 6)
+
+            if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button(action: onSelectHome) {
+                    NavigatorRow(title: "Home", systemImage: "house", isSelected: isHomeSelected)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AXID.sidebarOverview.rawValue)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+            }
 
             FleetSessionList(
                 store: store,
@@ -83,26 +100,43 @@ struct SessionsSidebar: View {
             .overlay(alignment: .bottomLeading) {
                 // The 36-point glass stays visually compact; its 44-point
                 // frame preserves a comfortable pointer/accessibility target.
-                Button(action: onCreateSession) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(FlotillaColors.textPrimary)
-                        .frame(width: 36, height: 36)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .focusEffectDisabled()
-                .help("Create new session (⌘N)")
-                .accessibilityLabel("New Session")
-                .accessibilityIdentifier("NewSessionButton")
-                .padding(.leading, 10)
-                .padding(.bottom, 10)
+                newSessionFAB
             }
         }
-        .background(FlotillaColors.sidebar)
+        // Continues under the traffic lights: the window toolbar draws no
+        // band of its own in glass mode (see `FlotillaShell`).
+        .flotillaLiquidSurface(
+            FlotillaColors.sidebar,
+            glassTintOpacity: FlotillaGlassTint.sidebar,
+            stableTintOpacity: 0.12,
+            ignoresSafeAreaEdges: .top
+        )
+    }
+
+    private var newSessionFAB: some View {
+        Button(action: onCreateSession) {
+            Color.clear
+                .frame(width: 36, height: 36)
+                .flotillaChromeCircle()
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // Paint the symbol above the glass surface so it retains full contrast.
+        .overlay {
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(FlotillaColors.textPrimary)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .focusable(false)
+        .focusEffectDisabled()
+        .help("Create new session (⌘N)")
+        .accessibilityLabel("New Session")
+        .accessibilityIdentifier("NewSessionButton")
+        .padding(.leading, 10)
+        .padding(.bottom, 10)
     }
 }
 
@@ -116,6 +150,7 @@ struct SessionsSidebar: View {
 /// but not selectable — which is why opening one meant leaving the sidebar
 /// entirely and going through Home.
 struct FleetSessionList: View {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     @Bindable var store: AppStore
     /// Native multi-select: a plain click, arrow key, or Shift/⌘-click
     /// range-selects through AppKit's own table-view handling, which is why
@@ -146,18 +181,6 @@ struct FleetSessionList: View {
 
     var body: some View {
         List(selection: $selection) {
-            // Home is the only standing destination left up here. The three
-            // smart lists and All Sessions used to sit beside it, five rows
-            // deep, restating counts every session row already carries — and
-            // all four are still one keystroke away in the Go menu (⌘1, ⌘2,
-            // and a button apiece).
-            if !isSearching {
-                Section {
-                    NavigatorRow(item: .overview, title: "Home", systemImage: "house")
-                        .accessibilityIdentifier(AXID.sidebarOverview.rawValue)
-                }
-            }
-
             if filtered.projects.isEmpty && filtered.generalSessions.isEmpty {
                 Text(isSearching ? "No matches" : "No sessions yet")
                     .foregroundStyle(.secondary)
@@ -174,12 +197,13 @@ struct FleetSessionList: View {
                     ProjectHeaderRow(
                         project: project,
                         isCollapsed: isCollapsed,
+                        sessionCount: projectSessions.count,
                         onToggleCollapse: { toggleCollapsed(project.id) }
                     )
                     .contentShape(Rectangle())
                     .tag(SidebarItem.project(project.id))
                     .listRowInsets(EdgeInsets())
-                    .listRowBackground(FlotillaColors.sidebar)
+                    .listRowBackground(liquidGlassEnabled ? Color.clear : FlotillaColors.sidebar)
                     .accessibilityIdentifier(AXID.sidebarProjectRow.rawValue + project.name)
                     .contextMenu {
                         Button("Change Icon & Color…") {
@@ -232,7 +256,7 @@ struct FleetSessionList: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(FlotillaColors.sidebar)
+        .background(Color.clear)
         .accessibilityIdentifier(AXID.sidebarList.rawValue)
         // Finder/Mail-standard: Delete/Backspace acts on whatever's
         // selected. Only wired for a single selected session for now — a
@@ -295,14 +319,13 @@ enum SidebarProjectCollapseState {
 
 // MARK: - Navigator row
 
-/// A standing destination row: icon, label. Home is the only one left — the
-/// smart lists and All Sessions moved out of the navigator entirely, and a
-/// project draws its own header (`ProjectHeaderRow`) rather than borrowing
-/// this one, which is what kept its title at 12pt under 13pt session titles.
+/// Home's standalone button label, outside the List's native selection layer.
 private struct NavigatorRow: View {
-    let item: SidebarItem
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
+    @Environment(\.appearsActive) private var appearsActive
     let title: String
     var systemImage: String = "folder.fill"
+    let isSelected: Bool
 
     var body: some View {
         HStack(spacing: 6) {
@@ -319,9 +342,16 @@ private struct NavigatorRow: View {
             Spacer(minLength: 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
+        .padding(.horizontal, liquidGlassEnabled ? 8 : 0)
+        .padding(.vertical, liquidGlassEnabled ? 7 : 2)
+        .flotillaLiquidSurface(
+            liquidGlassEnabled
+                ? FlotillaColors.surfaceElevated.opacity(0.35)
+                : (isSelected ? FlotillaColors.surfaceElevated : .clear),
+            cornerRadius: 9,
+            glassTintOpacity: isSelected && appearsActive ? 0.32 : FlotillaGlassTint.sidebar
+        )
         .contentShape(Rectangle())
-        .tag(item)
     }
 }
 
@@ -333,8 +363,10 @@ private struct NavigatorRow: View {
 /// as smaller than the things inside it. Home draws its project cards at 38pt
 /// beside an 18pt title; this is the same identity at navigator scale.
 private struct ProjectHeaderRow: View {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     let project: Project
     let isCollapsed: Bool
+    let sessionCount: Int
     let onToggleCollapse: () -> Void
 
     private var tint: Color { ProjectMark.tint(for: project) }
@@ -363,33 +395,41 @@ private struct ProjectHeaderRow: View {
             .accessibilityLabel(isCollapsed ? "Expand \(project.name)" : "Collapse \(project.name)")
             .accessibilityIdentifier(AXID.sidebarProjectCollapseToggle(project.name))
 
-            ProjectMark(project: project, size: 28)
+            ProjectMark(project: project, size: liquidGlassEnabled ? 20 : 28)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(project.name)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: liquidGlassEnabled ? 13 : 15, weight: .semibold))
                     .foregroundStyle(FlotillaColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(homeRelativePath)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(FlotillaColors.textTertiary)
-                    .lineLimit(1)
-                    // Head-truncated: the last components identify the
-                    // project, the first ones are the same for every row.
-                    .truncationMode(.head)
+                if !liquidGlassEnabled {
+                    Text(homeRelativePath)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
             }
 
             Spacer(minLength: 4)
+            if liquidGlassEnabled {
+                Text(sessionCount, format: .number)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 6)
+        .padding(.horizontal, liquidGlassEnabled ? 10 : 0)
+        .padding(.vertical, liquidGlassEnabled ? 11 : 6)
         // In the project's own accent, so the divider says whose sessions
         // follow rather than just where the group starts.
         .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(tint.opacity(0.45))
-                .frame(height: 1)
+            if !liquidGlassEnabled {
+                Rectangle()
+                    .fill(tint.opacity(0.45))
+                    .frame(height: 1)
+            }
         }
     }
 }
@@ -460,6 +500,8 @@ extension AppStore {
 // MARK: - Session row component
 
 struct SessionSidebarRow: View {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
+    @Environment(\.appearsActive) private var appearsActive
     let session: Session
     /// Whether this row is the item `navigator.selection` currently has
     /// open, from `FleetSessionList`'s `Set` membership check.
@@ -488,21 +530,15 @@ struct SessionSidebarRow: View {
         return "\(BranchNaming.displayName(for: branch))\n\(path)"
     }
 
-    /// Exactly one state wins — layering translucent tints on top of each
-    /// other (or on top of whatever AppKit's own `.sidebar`-style selection
-    /// paints on the row underneath, which no `.background` can occlude
-    /// since it's drawn by a separate `NSTableRowView` layer) is what
-    /// produced a doubled-up look. Painting our own opaque backdrop first
-    /// (below) hides that native layer entirely, so this is the only thing
-    /// that's ever visible.
-    ///
-    /// Attention outranks everything. It used to lose to grid membership and
-    /// to "this row is open", so on a supervision dashboard a session blocked
-    /// on a human stopped standing out the moment you put it in the grid.
-    /// Membership is no longer a row tint at all — it has its own control —
-    /// which also retires the hover state that painted healthy rows in the
-    /// crash colour.
+    /// In the key window, an opaque list-row background hides AppKit's blue
+    /// highlight so the rounded neutral selection can take its place. When
+    /// inactive, the system's subdued selection should show through instead.
     private var rowFill: Color {
+        if liquidGlassEnabled {
+            if isSelected { return appearsActive ? FlotillaColors.surfaceElevated : .clear }
+            if isHovering { return FlotillaColors.textPrimary.opacity(0.07) }
+            return .clear
+        }
         if session.status == .waitingForInput || session.status == .crashed {
             return StatusPresentation.color(for: session.status).opacity(isSelected ? 0.26 : 0.14)
         }
@@ -517,6 +553,7 @@ struct SessionSidebarRow: View {
             variant: .row,
             diffStatStore: store.diffStatStore,
             activityStore: nil,
+            isSelected: isSelected,
             onTap: { onOpenSession(session.id) },
             onDelete: { onRequestDelete(session.id) },
             onRestart: { store.restartSession(sessionID: session.id) },
@@ -526,15 +563,20 @@ struct SessionSidebarRow: View {
             terminal: { EmptyView() }
         )
         // Inner padding: breathing room *inside* the border.
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, liquidGlassEnabled ? 12 : 8)
+        .padding(.vertical, liquidGlassEnabled ? 1 : 4)
         .background {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(FlotillaColors.sidebar)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(rowFill)
-                }
+            if liquidGlassEnabled {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(rowFill)
+            } else {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(FlotillaColors.sidebar)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(rowFill)
+                    }
+            }
         }
         // Membership is drawn on the row's own chrome rather than added to its
         // contents: a border, with a checkmark straddling the corner. Nothing
@@ -564,7 +606,7 @@ struct SessionSidebarRow: View {
         // The gap between rows. Applied after the background and overlays —
         // before them it just grows the bordered box instead of separating one
         // box from the next.
-        .padding(.vertical, 4)
+        .padding(.vertical, liquidGlassEnabled ? 1 : 4)
         .accessibilityLabel(isGridMember ? "\(session.title), in grid" : session.title)
         // The worktree path, which is otherwise only in the delete sheet and
         // behind right-click → Copy Path. Costs no screen space, so it does
@@ -584,13 +626,11 @@ struct SessionSidebarRow: View {
             }
         )
         .listRowInsets(EdgeInsets())
-        // The row's own background, spanning the whole cell rect rather than
-        // just this view. `.sidebar` list style insets row *content* but paints
-        // its selection across the full cell, so an opaque colour applied
-        // inside the row could never reach the strip at either edge — which is
-        // where the system blue kept showing. Selection is drawn by `rowFill`
-        // instead, which is the lighter fill the rest of the app uses.
-        .listRowBackground(FlotillaColors.sidebar)
+        // Cover the active blue selection across the full cell. In an inactive
+        // window, let AppKit draw its own muted highlight without a dark box.
+        .listRowBackground(
+            liquidGlassEnabled && (!isSelected || !appearsActive) ? Color.clear : FlotillaColors.sidebar
+        )
         .modifier(SwipeToDeleteSession(
             accessibilityID: "SessionRow-\(session.title)-SwipeDelete",
             onConfirm: { onRequestDelete(session.id) }

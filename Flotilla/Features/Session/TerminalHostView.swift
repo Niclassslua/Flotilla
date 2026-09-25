@@ -1,11 +1,13 @@
 import SwiftUI
 import AppKit
 import TerminalKit
+import DesignSystem
 
 /// Bridges a cached `TerminalController` renderer into SwiftUI. The same
 /// NSView is returned for a given controller and presentation, while full and
 /// grid presentations remain independent so each can fit its own container.
 struct TerminalHostView: NSViewRepresentable {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     let controller: TerminalController
     var presentation: TerminalPresentation = .session
     var isFocused = true
@@ -17,7 +19,8 @@ struct TerminalHostView: NSViewRepresentable {
             presentation: presentation,
             terminalView: controller.terminalView(for: presentation),
             isFocused: isFocused,
-            contentInsets: contentInsets
+            contentInsets: contentInsets,
+            liquidGlassEnabled: liquidGlassEnabled
         )
         // Only the intent is recorded here. The renderer has no window and a
         // zero frame until SwiftUI inserts this container into the hierarchy,
@@ -39,7 +42,8 @@ struct TerminalHostView: NSViewRepresentable {
             presentation: presentation,
             terminalView: terminalView,
             isFocused: isFocused,
-            contentInsets: contentInsets
+            contentInsets: contentInsets,
+            liquidGlassEnabled: liquidGlassEnabled
         )
         if isRemount {
             controller.makeAuthoritative(presentation)
@@ -57,6 +61,11 @@ private final class XirpTerminalContainerView: NSView {
     private var terminalConstraints: [NSLayoutConstraint] = []
     private var shouldFocusTerminal = false
     private var hasRequestedFocus = false
+    private var liquidGlassEnabled = true
+    /// A real AppKit visual-effect layer gives SwiftTerm's translucent cells
+    /// something to composite with. A SwiftUI effect alone sits behind an
+    /// opaque NSWindow unless the hosting window opts into alpha compositing.
+    private let glassBackdrop = NSVisualEffectView()
     /// `layout()` is also reached while SwiftTerm is moving through its
     /// scrollback. Do not feed that scroll-driven layout churn back into the
     /// controller's PTY sizing/reflow path when the container did not change
@@ -69,23 +78,34 @@ private final class XirpTerminalContainerView: NSView {
         presentation: TerminalPresentation,
         terminalView: NSView,
         isFocused: Bool,
-        contentInsets: NSEdgeInsets
+        contentInsets: NSEdgeInsets,
+        liquidGlassEnabled: Bool
     ) {
         self.presentation = presentation
+        self.liquidGlassEnabled = liquidGlassEnabled
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor(
-            srgbRed: 10 / 255,
-            green: 10 / 255,
-            blue: 12 / 255,
-            alpha: 1
-        ).cgColor
+        // SwiftTerm's default cells now carry a controlled alpha. Leaving the
+        // bridge clear lets the SwiftUI glass backdrop composite beneath them.
+        layer?.backgroundColor = NSColor.clear.cgColor
+        glassBackdrop.material = .hudWindow
+        glassBackdrop.blendingMode = .behindWindow
+        glassBackdrop.state = .active
+        glassBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(glassBackdrop, positioned: .below, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            glassBackdrop.topAnchor.constraint(equalTo: topAnchor),
+            glassBackdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glassBackdrop.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glassBackdrop.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
         attach(
             controller: controller,
             presentation: presentation,
             terminalView: terminalView,
             isFocused: isFocused,
-            contentInsets: contentInsets
+            contentInsets: contentInsets,
+            liquidGlassEnabled: liquidGlassEnabled
         )
     }
 
@@ -113,6 +133,16 @@ private final class XirpTerminalContainerView: NSView {
         if window == nil {
             keyDownMonitor.remove()
         } else {
+            // SwiftTerm's alpha background is only composited when its host
+            // window is non-opaque with a clear backdrop. The workspace
+            // appearance preference controls that opt-in.
+            window?.isOpaque = !liquidGlassEnabled
+            window?.backgroundColor = liquidGlassEnabled ? .clear : NSColor(
+                srgbRed: 10 / 255,
+                green: 10 / 255,
+                blue: 12 / 255,
+                alpha: 1
+            )
             installKeyDownMonitor()
         }
         requestTerminalFocusIfNeeded()
@@ -146,10 +176,12 @@ private final class XirpTerminalContainerView: NSView {
         presentation: TerminalPresentation,
         terminalView: NSView,
         isFocused: Bool,
-        contentInsets: NSEdgeInsets
+        contentInsets: NSEdgeInsets,
+        liquidGlassEnabled: Bool
     ) {
         self.controller = controller
         self.presentation = presentation
+        self.liquidGlassEnabled = liquidGlassEnabled
         let rendererChanged = mountedTerminalView !== terminalView || terminalView.superview !== self
         if rendererChanged {
             lastSyncedBounds = nil

@@ -18,6 +18,11 @@ SCENARIO ?=
 # override signing on the command line, e.g.:
 #   make build SIGNING_OVERRIDE="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="
 SIGNING_OVERRIDE ?=
+# A local development team signs Ephemeral with a stable identity so Handy can
+# remember its approval across rebuilds. Without the ignored local signing
+# config, the project keeps its ad-hoc signing for CI and other contributors.
+EPHEMERAL_DEVELOPMENT_TEAM := $(shell awk -F= '/^[[:space:]]*DEVELOPMENT_TEAM[[:space:]]*=/ {gsub(/[[:space:]]/, "", $$2); print $$2; exit}' Config/CompanionSigning.local.xcconfig 2>/dev/null)
+EPHEMERAL_SIGNING_OVERRIDE ?= $(if $(EPHEMERAL_DEVELOPMENT_TEAM),CODE_SIGN_IDENTITY=Apple\ Development DEVELOPMENT_TEAM=$(EPHEMERAL_DEVELOPMENT_TEAM))
 
 xcodegen:
 	xcodegen generate
@@ -48,6 +53,7 @@ build-ephemeral: xcodegen
 		-configuration Ephemeral \
 		-destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) \
+		$(EPHEMERAL_SIGNING_OVERRIDE) \
 		build
 
 build-companion: xcodegen

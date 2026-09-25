@@ -117,7 +117,7 @@ struct ProjectGraphView: View {
                 legendBar
             }
         }
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
     }
 
     private var loadingState: some View {

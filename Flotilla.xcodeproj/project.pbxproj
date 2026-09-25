@@ -238,6 +238,7 @@
 		4A0E8A2AF589766D9B95FB64 /* tailwindcss.svg in Resources */ = {isa = PBXBuildFile; fileRef = EB717523525E6357E9B0BC2A /* tailwindcss.svg */; };
 		4A20A104CAFD942AB6CEE910 /* SessionLaunchPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC604BC3DA6DB79BECE2C2FC /* SessionLaunchPreview.swift */; };
 		4A56C60A92C83C2519133922 /* Flotilla.icon in Resources */ = {isa = PBXBuildFile; fileRef = C5EB5FF1FDC1128604459E68 /* Flotilla.icon */; };
+		4A6F99E6E2FF2B7084E3F3F9 /* LiquidGlassWindowConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 960862CC41C3095160466701 /* LiquidGlassWindowConfigurator.swift */; };
 		4AC1EB92525C60E9AEFFB5D4 /* WorkspaceNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EAAAB3E707A7482A2AAE988 /* WorkspaceNavigator.swift */; };
 		4AC6E1979816B7B92F04486A /* git.svg in Resources */ = {isa = PBXBuildFile; fileRef = ACF1BC73FD352D9CADCA8CC9 /* git.svg */; };
 		4AE876834E2C0CC01C83E1F6 /* HomeWidgetKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB60408F54F8B5D0EE76AA94 /* HomeWidgetKind.swift */; };
@@ -375,6 +376,7 @@
 		76F2C75FA09583861226B553 /* EffortLevelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E145E46FA66C4B797A708D /* EffortLevelPicker.swift */; };
 		7709F004EF8D7FB5C7E9B4C8 /* CommitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9E093A8C26CA753EA9C323 /* CommitDetailView.swift */; };
 		77CACDE63B862533F87A95C6 /* AgentSelfReportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12C3E4FA609560CB29D08025 /* AgentSelfReportCoordinator.swift */; };
+		7927638B88EEDE9E7CFDF6BB /* LiquidGlassWindowConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 960862CC41C3095160466701 /* LiquidGlassWindowConfigurator.swift */; };
 		79487EA23C46135232451FB2 /* HooksKit in Frameworks */ = {isa = PBXBuildFile; productRef = C25FA4077872094789200E11 /* HooksKit */; };
 		79606B677281BBDA3BA0A990 /* CompanionSpeechController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00251B8FCFE0440E476517 /* CompanionSpeechController.swift */; };
 		79D5B27C28DFCA549146D7D6 /* typescript-def.svg in Resources */ = {isa = PBXBuildFile; fileRef = 46F6F4F4BEABA3ED096AB412 /* typescript-def.svg */; };
@@ -1106,6 +1108,7 @@
 		935848EC63B4A85AD4942215 /* jest.svg */ = {isa = PBXFileReference; path = jest.svg; sourceTree = "<group>"; };
 		935B8D4A79AF0F1376AA3CFC /* FlotillaNotificationDelegateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaNotificationDelegateTests.swift; sourceTree = "<group>"; };
 		94A5A3A97EA3DF9A5D933D80 /* TerminalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalHostView.swift; sourceTree = "<group>"; };
+		960862CC41C3095160466701 /* LiquidGlassWindowConfigurator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassWindowConfigurator.swift; sourceTree = "<group>"; };
 		96262704F0E073633EE1AA24 /* ProcessKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ProcessKit; path = Packages/ProcessKit; sourceTree = SOURCE_ROOT; };
 		96331BA001B5E82B33496459 /* SessionGitSidebarModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGitSidebarModels.swift; sourceTree = "<group>"; };
 		96BD8D2E6B333FCDD8A3BE44 /* FileNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNode.swift; sourceTree = "<group>"; };
@@ -2192,6 +2195,7 @@
 				AF9FCFE487E7C501795C38FF /* EphemeralWindowStateDisabler.swift */,
 				179ED2D6FC5AA9AEAF3BE74D /* FlotillaApp.swift */,
 				21B8F05E680043FBA0A1BDE3 /* FlotillaNotificationDelegate.swift */,
+				960862CC41C3095160466701 /* LiquidGlassWindowConfigurator.swift */,
 				1BD0E51ECF35F3C9E7E50FB0 /* PerfLog.swift */,
 				6460C3400F65BAB84C0513A4 /* ReviewFixtureContent.swift */,
 				A311B269879399C20B86A4F2 /* UITestWindowPlacer.swift */,
@@ -2888,6 +2892,7 @@
 				697D471C9AF526ACE6848321 /* LauncherParts.swift in Sources */,
 				12B38140EAA56C423911E2C8 /* LauncherTriggers.swift in Sources */,
 				EA9D9C7B5B61FD4C2955F309 /* LedgerDesign.swift in Sources */,
+				7927638B88EEDE9E7CFDF6BB /* LiquidGlassWindowConfigurator.swift in Sources */,
 				84609379CAFF9C04B4BF433D /* MarkdownView.swift in Sources */,
 				8C6E24D1CEC48AB288B3BD2B /* MaterialFileIcon.swift in Sources */,
 				83B64626A14EB05CD6410FF7 /* MissionControlGrid.swift in Sources */,
@@ -3215,6 +3220,7 @@
 				8020245043EE7A04F068B85C /* LauncherParts.swift in Sources */,
 				66E23054AF11AA9BFE983803 /* LauncherTriggers.swift in Sources */,
 				0DD425204736A345A97B75FE /* LedgerDesign.swift in Sources */,
+				4A6F99E6E2FF2B7084E3F3F9 /* LiquidGlassWindowConfigurator.swift in Sources */,
 				B4A38809E4CFB671B5376798 /* MarkdownView.swift in Sources */,
 				96BE1000E5DDE993140FA686 /* MaterialFileIcon.swift in Sources */,
 				FF2A5E1E8E8273105A55479D /* MissionControlGrid.swift in Sources */,

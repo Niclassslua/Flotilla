@@ -15,23 +15,27 @@ final class TerminalManager {
     private var optionAsMetaKey = true
     private var scrollSensitivity = 1.0
     private var gpuRendering = false
+    private var backgroundOpacity = 0.42
 
     func applyPreferences(
         fontSize: Double,
         optionAsMetaKey: Bool,
         scrollSensitivity: Double,
-        gpuRendering: Bool = false
+        gpuRendering: Bool = false,
+        backgroundOpacity: Double = 0.42
     ) {
         self.fontSize = fontSize
         self.optionAsMetaKey = optionAsMetaKey
         self.scrollSensitivity = scrollSensitivity
         self.gpuRendering = gpuRendering
+        self.backgroundOpacity = backgroundOpacity
         for controller in controllers.values {
             controller.applyPreferences(
                 fontSize: fontSize,
                 optionAsMetaKey: optionAsMetaKey,
                 scrollSensitivity: scrollSensitivity,
-                gpuRendering: gpuRendering
+                gpuRendering: gpuRendering,
+                backgroundOpacity: backgroundOpacity
             )
         }
     }
@@ -90,7 +94,8 @@ final class TerminalManager {
             fontSize: fontSize,
             optionAsMetaKey: optionAsMetaKey,
             scrollSensitivity: scrollSensitivity,
-            gpuRendering: gpuRendering
+            gpuRendering: gpuRendering,
+            backgroundOpacity: backgroundOpacity
         )
         controllers[session.id] = controller
         return controller

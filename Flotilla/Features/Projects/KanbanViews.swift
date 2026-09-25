@@ -31,7 +31,7 @@ struct KanbanTabView: View {
                 )
             }
         }
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
     }
 }
 
@@ -123,7 +123,7 @@ struct KanbanBoardView: View {
             }
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         }
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .accessibilityIdentifier("KanbanBoard")
     }
 }

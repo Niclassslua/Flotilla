@@ -68,7 +68,7 @@ struct StreamProjectWorkspace: View {
                     contextColumn
                         .frame(width: contextWidth, alignment: .top)
                         .frame(maxHeight: .infinity, alignment: .top)
-                        .background(FlotillaColors.sidebar)
+                        .flotillaInspectorSurface()
                 }
             } else {
                 VStack(spacing: 0) {
@@ -80,7 +80,7 @@ struct StreamProjectWorkspace: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .onChange(of: context.sessions, initial: true) { _, sessions in
             viewModel.sessions = sessions
         }
@@ -282,10 +282,12 @@ struct StreamProjectWorkspace: View {
                 }
                 Text(title).font(.system(size: 12, weight: .medium))
             }
-            .foregroundStyle(FlotillaColors.textSecondary)
+            .foregroundStyle(FlotillaColors.textPrimary)
             .padding(.horizontal, FlotillaSpacing.small)
             .padding(.vertical, 5)
-            .background(FlotillaColors.surfaceElevated, in: Capsule())
+            .flotillaChromeCapsule(
+                fallback: FlotillaColors.surfaceElevated
+            )
             .overlay {
                 Capsule().strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
             }
@@ -331,7 +333,6 @@ struct StreamProjectWorkspace: View {
                 thisWeekBlock
             }
         }
-        .background(FlotillaColors.sidebar)
         .accessibilityIdentifier(AXID.projectWorktreesSection.rawValue)
         .confirmationDialog(
             worktreePendingDeletion.map { "Delete the worktree on “\(BranchNaming.displayName(for: $0.branch))”?" } ?? "",
@@ -726,7 +727,8 @@ struct StreamProjectWorkspace: View {
             .padding(.top, isFirst ? 0 : FlotillaSpacing.large)
             .padding(.bottom, FlotillaSpacing.small)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(FlotillaColors.canvas)
+            // No liquid strip here — a zero-radius glass band under section
+            // labels reads as a broken square bar across the feed.
     }
 
     private func timelineRow(_ entry: StreamEntry, isLast: Bool) -> some View {
@@ -825,7 +827,7 @@ struct StreamProjectWorkspace: View {
                 StatusBadge(session.status, waitingReason: session.waitingReason, size: .micro)
                 Text(session.agent.displayName)
                     .font(.system(size: 11))
-                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .foregroundStyle(FlotillaColors.textSecondary)
             }
 
             if isLive {

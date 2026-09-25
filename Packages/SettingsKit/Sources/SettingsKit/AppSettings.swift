@@ -272,23 +272,28 @@ public struct TerminalPreferences: Codable, Equatable, Sendable {
     public var scrollSpeed: Double
     public var gpuRendering: Bool
     public var editorFontSize: Double
+    /// Opacity of the terminal's default cells. Explicit ANSI backgrounds,
+    /// selections, and the caret remain fully opaque.
+    public var backgroundOpacity: Double
 
     public init(
         fontSize: Double = 14,
         optionActsAsMeta: Bool = true,
         scrollSpeed: Double = 1,
         gpuRendering: Bool = false,
-        editorFontSize: Double = 13
+        editorFontSize: Double = 13,
+        backgroundOpacity: Double = 0.42
     ) {
         self.fontSize = fontSize
         self.optionActsAsMeta = optionActsAsMeta
         self.scrollSpeed = scrollSpeed
         self.gpuRendering = gpuRendering
         self.editorFontSize = editorFontSize
+        self.backgroundOpacity = backgroundOpacity
     }
 
     private enum CodingKeys: String, CodingKey {
-        case fontSize, optionActsAsMeta, scrollSpeed, gpuRendering, editorFontSize
+        case fontSize, optionActsAsMeta, scrollSpeed, gpuRendering, editorFontSize, backgroundOpacity
     }
 
     // Hand-written rather than synthesized: `SettingsStoring` decodes the
@@ -306,6 +311,7 @@ public struct TerminalPreferences: Codable, Equatable, Sendable {
         scrollSpeed = try container.decodeIfPresent(Double.self, forKey: .scrollSpeed) ?? 1
         gpuRendering = try container.decodeIfPresent(Bool.self, forKey: .gpuRendering) ?? false
         editorFontSize = try container.decodeIfPresent(Double.self, forKey: .editorFontSize) ?? 13
+        backgroundOpacity = try container.decodeIfPresent(Double.self, forKey: .backgroundOpacity) ?? 0.42
     }
 }
 
@@ -633,6 +639,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var openCodeSubscription: OpenCodeSubscription
     public var worktreeBaseDirectory: String
     public var appearance: AppearanceMode
+    /// Uses macOS's translucent, refractive surfaces across the workspace.
+    /// Defaults on so existing installs adopt the new visual language.
+    public var liquidGlassEnabled: Bool
     public var accentColor: String
     public var workspace: WorkspacePreferences
     public var sessionDefaults: SessionDefaults
@@ -683,6 +692,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
         appearance: AppearanceMode = .system,
+        liquidGlassEnabled: Bool = true,
         accentColor: String = "original",
         workspace: WorkspacePreferences = WorkspacePreferences(),
         sessionDefaults: SessionDefaults = SessionDefaults(),
@@ -694,6 +704,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.openCodeSubscription = openCodeSubscription
         self.worktreeBaseDirectory = worktreeBaseDirectory
         self.appearance = appearance
+        self.liquidGlassEnabled = liquidGlassEnabled
         self.accentColor = accentColor
         self.workspace = workspace
         self.sessionDefaults = sessionDefaults
@@ -708,6 +719,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
         appearance: AppearanceMode = .system,
+        liquidGlassEnabled: Bool = true,
         accentColor: String = "original",
         workspace: WorkspacePreferences = WorkspacePreferences(),
         sessionDefaults: SessionDefaults = SessionDefaults(),
@@ -733,6 +745,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.openCodeSubscription = openCodeSubscription
         self.worktreeBaseDirectory = worktreeBaseDirectory
         self.appearance = appearance
+        self.liquidGlassEnabled = liquidGlassEnabled
         self.accentColor = accentColor
         self.workspace = workspace
         self.sessionDefaults = sessionDefaults
@@ -748,6 +761,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case openCodeSubscription
         case worktreeBaseDirectory
         case appearance
+        case liquidGlassEnabled
         case accentColor
         case workspace
         case sessionDefaults
@@ -780,6 +794,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription = try container.decodeIfPresent(OpenCodeSubscription.self, forKey: .openCodeSubscription) ?? .none
         worktreeBaseDirectory = try container.decodeIfPresent(String.self, forKey: .worktreeBaseDirectory) ?? ""
         appearance = try container.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
+        liquidGlassEnabled = try container.decodeIfPresent(Bool.self, forKey: .liquidGlassEnabled) ?? true
         accentColor = try container.decodeIfPresent(String.self, forKey: .accentColor) ?? "original"
         workspace = try container.decodeIfPresent(WorkspacePreferences.self, forKey: .workspace) ?? WorkspacePreferences()
         sessionDefaults = try container.decodeIfPresent(SessionDefaults.self, forKey: .sessionDefaults) ?? SessionDefaults()
@@ -819,6 +834,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try container.encode(openCodeSubscription, forKey: .openCodeSubscription)
         try container.encode(worktreeBaseDirectory, forKey: .worktreeBaseDirectory)
         try container.encode(appearance, forKey: .appearance)
+        try container.encode(liquidGlassEnabled, forKey: .liquidGlassEnabled)
         try container.encode(accentColor, forKey: .accentColor)
         try container.encode(workspace, forKey: .workspace)
         try container.encode(sessionDefaults, forKey: .sessionDefaults)

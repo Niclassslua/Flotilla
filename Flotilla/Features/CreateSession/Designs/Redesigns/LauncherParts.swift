@@ -6,10 +6,8 @@ import DesignSystem
 
 private struct LauncherSurface: ViewModifier {
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: FlotillaRadius.modal, style: .continuous)
         content
-            .glassEffect(.regular, in: shape)
-            .overlay { shape.strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline) }
+            .flotillaFloatingCard()
             .flotillaShadow(.level3)
     }
 }

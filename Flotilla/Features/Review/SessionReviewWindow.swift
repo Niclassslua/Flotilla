@@ -38,7 +38,7 @@ struct SessionReviewWindow: View {
             }
         }
         .frame(minWidth: 1_000, minHeight: 560)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .accessibilityIdentifier(AXID.reviewWindow.rawValue)
         .task(id: sessionID) {
             guard viewModel == nil, let session else { return }
@@ -273,7 +273,7 @@ struct ReviewHeaderBar: View {
         }
         .padding(.horizontal, FlotillaSpacing.large)
         .padding(.vertical, FlotillaSpacing.small)
-        .background(FlotillaColors.sidebar)
+        .flotillaLiquidSurface(FlotillaColors.sidebar, glassTintOpacity: FlotillaGlassTint.sidebar)
         .overlay(alignment: .bottom) {
             if viewModel.files.count > 0 {
                 ReviewViewedProgressBar(viewed: viewModel.viewedCount, total: viewModel.files.count)

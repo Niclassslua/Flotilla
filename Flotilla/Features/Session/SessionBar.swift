@@ -77,6 +77,7 @@ struct SessionBar: View {
     /// stale title after the agent renames the session underneath it.
     @State private var draftTitle: String?
     @State private var isAgentChipHovered = false
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     @FocusState private var isEditingTitle: Bool
 
     // MARK: - Derived identity
@@ -131,31 +132,42 @@ struct SessionBar: View {
         // the two combined to a 24pt minimum, a quarter of a four-column
         // tile's bar spent on nothing while the branch and worktree beside it
         // truncated to stubs.
+        glassGroupedBar
+            .padding(.leading, variant == .focus ? FlotillaSpacing.medium : FlotillaSpacing.small)
+            // The action chips carry their own padding around the glyph, so the
+            // trailing inset is smaller than the leading one to land the icons
+            // the same optical distance from the edge as the status badge.
+            .padding(.trailing, variant.trailingInset)
+            .frame(height: variant.height)
+            // In glass mode the bar is part of the header rather than a strip
+            // laid across it: the focus bar sits on the detail column's glass,
+            // continuous with the toolbar above, and a tile's on the tile's own.
+            .background(liquidGlassEnabled ? Color.clear : FlotillaColors.surface)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(AXID.sessionBar(session.title))
+            // `SessionDiffStatView` only renders in `.tile`, but `isReviewable`
+            // needs a live diff stat in both variants — so the bar watches
+            // directly rather than depending on that view existing alongside it.
+            .onAppear {
+                store.diffStatStore.watch(sessionID: session.id, repoPath: repoPath)
+            }
+            .onChange(of: repoPath) { _, newPath in
+                store.diffStatStore.setRepoPath(newPath, sessionID: session.id)
+            }
+            .onDisappear {
+                store.diffStatStore.unwatch(sessionID: session.id)
+            }
+    }
+
+    /// Groups glass action chips so they can blend. The agent chip stays
+    /// outside — putting it in the same container washed its brand stroke
+    /// into the action capsule and muddied the label.
+    @ViewBuilder
+    private var glassGroupedBar: some View {
         HStack(spacing: 0) {
             identityLockup
             Spacer(minLength: FlotillaSpacing.medium)
             trailingActions
-        }
-        .padding(.leading, variant == .focus ? FlotillaSpacing.medium : FlotillaSpacing.small)
-        // The action chips carry their own padding around the glyph, so the
-        // trailing inset is smaller than the leading one to land the icons
-        // the same optical distance from the edge as the status badge.
-        .padding(.trailing, variant.trailingInset)
-        .frame(height: variant.height)
-        .background(FlotillaColors.surface)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AXID.sessionBar(session.title))
-        // `SessionDiffStatView` only renders in `.tile`, but `isReviewable`
-        // needs a live diff stat in both variants — so the bar watches
-        // directly rather than depending on that view existing alongside it.
-        .onAppear {
-            store.diffStatStore.watch(sessionID: session.id, repoPath: repoPath)
-        }
-        .onChange(of: repoPath) { _, newPath in
-            store.diffStatStore.setRepoPath(newPath, sessionID: session.id)
-        }
-        .onDisappear {
-            store.diffStatStore.unwatch(sessionID: session.id)
         }
     }
 
@@ -316,7 +328,7 @@ struct SessionBar: View {
             //
             // The sidebar toggle sits last, against the bar's trailing edge,
             // because that is the edge the sidebar itself opens from.
-            HStack(spacing: 2) {
+            focusActionCluster {
                 if actions.hasScreenshots {
                     barButton(
                         "photo",
@@ -363,6 +375,27 @@ struct SessionBar: View {
                 .accessibilityIdentifier(AXID.sessionBarGitSidebarToggle.rawValue)
             }
         }
+    }
+
+    /// In glass mode the icons share one capsule, matching the window toolbar's
+    /// grouped actions. Refractive glass alone washes SF Symbols into the
+    /// material, so the fill stays elevated/opaque enough for the glyphs to
+    /// read as controls — brand recognition lives on the stroke, not the blur.
+    @ViewBuilder
+    private func focusActionCluster(@ViewBuilder content: () -> some View) -> some View {
+        HStack(spacing: 2, content: content)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 2)
+            .background {
+                if liquidGlassEnabled, #available(macOS 26.0, *) {
+                    Capsule()
+                        .fill(FlotillaColors.surfaceElevated.opacity(0.88))
+                        .overlay {
+                            Capsule()
+                                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+                        }
+                }
+            }
     }
 
     /// Which agent is driving this session, and the way to change it.
@@ -445,9 +478,11 @@ struct SessionBar: View {
 
     private var isHandingOff: Bool { session.pendingHandoff != nil }
 
-    /// The brand mark carries the recognition, so the tint is the agent's own
-    /// colour at low opacity rather than the app accent — two sessions on
-    /// different agents should be tellable apart from across the room.
+    /// The brand mark carries the recognition. On Liquid Glass we keep the
+    /// capsule *untinted* — tinting `.glassEffect` with the agent colour
+    /// turns the chip into a muddy wash that greys out the logo and label.
+    /// Brand colour lives on the stroke instead, the same way the opaque
+    /// fallback uses a soft accent fill.
     private var agentChipLabel: some View {
         let accent = AgentBrand.accentColor(for: session.agent)
         return HStack(spacing: 5) {
@@ -462,19 +497,27 @@ struct SessionBar: View {
 
             Image(systemName: "chevron.down")
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(FlotillaColors.textTertiary)
+                .foregroundStyle(FlotillaColors.textSecondary)
         }
         .padding(.leading, 6)
         .padding(.trailing, 5)
         .padding(.vertical, 3)
-        .background(
+        .background {
+            if liquidGlassEnabled, #available(macOS 26.0, *) {
+                Color.clear
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            } else {
+                Capsule(style: .continuous)
+                    .fill(accent.opacity(isAgentChipHovered ? 0.20 : 0.12))
+            }
+        }
+        .overlay {
             Capsule(style: .continuous)
-                .fill(accent.opacity(isAgentChipHovered ? 0.20 : 0.12))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(accent.opacity(0.28), lineWidth: 1)
-        )
+                .strokeBorder(
+                    accent.opacity(isAgentChipHovered ? 0.50 : 0.34),
+                    lineWidth: 1
+                )
+        }
         .contentShape(Capsule(style: .continuous))
         .onHover { isAgentChipHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isAgentChipHovered)
@@ -541,13 +584,18 @@ private struct SessionBarIconButton: View {
     /// `.disabled(true)` — the focus bar's git-sidebar toggle — reaches the
     /// chip's own colours instead of only greying the label.
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     @State private var isHovering = false
 
     private static let side: CGFloat = 22
 
     private var foreground: Color {
         guard isEnabled else { return FlotillaColors.textTertiary }
-        return isHovering ? FlotillaColors.textPrimary : FlotillaColors.textSecondary
+        // Full primary — glass/frosted capsules already mute contrast; any
+        // extra opacity here made Review / Folder / Git look disabled.
+        return isHovering ? FlotillaColors.textPrimary : (
+            liquidGlassEnabled ? FlotillaColors.textPrimary : FlotillaColors.textSecondary
+        )
     }
 
     var body: some View {
@@ -557,7 +605,8 @@ private struct SessionBarIconButton: View {
                     GitBranchIcon(size: 11)
                 } else if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 11, weight: .semibold))
+                        .symbolRenderingMode(.monochrome)
                 }
             }
             .foregroundStyle(foreground)

@@ -315,8 +315,34 @@ private struct AppearanceSettingsPane: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("Settings.AppearancePicker")
+                Toggle("Liquid Glass", isOn: $viewModel.settings.liquidGlassEnabled)
+                    .toggleStyle(.switch)
+                    .accessibilityIdentifier("Settings.LiquidGlassToggle")
+                Text("Use translucent workspace, navigation rail, and panel surfaces. Turn this off to restore the opaque appearance.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } header: {
                 SettingsSectionHeader("Appearance", systemImage: "circle.lefthalf.filled")
+            }
+
+            Section {
+                LabeledContent("Terminal opacity") {
+                    HStack(spacing: 12) {
+                        Slider(value: $viewModel.settings.terminal.backgroundOpacity, in: 0.05...0.9, step: 0.01)
+                            .frame(width: 180)
+                            .accessibilityIdentifier("Settings.TerminalBackgroundOpacity")
+                        Text(viewModel.settings.terminal.backgroundOpacity, format: .percent.precision(.fractionLength(0)))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 42, alignment: .trailing)
+                    }
+                }
+                .disabled(!viewModel.settings.liquidGlassEnabled)
+                Text("Controls how much of the desktop shows through the terminal when Liquid Glass is on.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                SettingsSectionHeader("Terminal Transparency", systemImage: "terminal")
             }
 
             Section {

@@ -467,8 +467,14 @@ Flotilla instance's sockets. The companion permission bridge also holds an
 exclusive lock for its socket path: a second instance refuses to replace a
 live bridge, while a crash-left socket can be reclaimed after the lock drops.
 
-Use `make run-ephemeral` locally. CI uploads the same build as the
-`Flotilla-Ephemeral` artifact for pull requests and `main` pushes.
+Use `make run-ephemeral` locally. When
+`Config/CompanionSigning.local.xcconfig` supplies a development team, that
+Makefile target signs the Ephemeral app with a stable Apple Development
+identity so Handy can remember its local speech approval across rebuilds.
+The Xcode project configuration remains ad-hoc for CI and contributors
+without that local signing file. Override with
+`EPHEMERAL_SIGNING_OVERRIDE=` to force the ad-hoc build. CI uploads the same
+build as the `Flotilla-Ephemeral` artifact for pull requests and `main` pushes.
 
 ### xcodebuild Commands
 
@@ -519,8 +525,9 @@ signing to ad-hoc via `make build SIGNING_OVERRIDE="..."` (see the Makefile);
 pass the same `SIGNING_OVERRIDE` locally if you hit a "No signing certificate"
 error building Debug on a machine without that team.
 
-Release and Ephemeral configs are ad-hoc already (`project.yml`'s base
-`CODE_SIGN_IDENTITY: "-"`), so `make archive` always succeeds without secrets.
+Release and Ephemeral project configs are ad-hoc by default (`project.yml`'s
+base `CODE_SIGN_IDENTITY: "-"`), so `make archive` always succeeds without
+secrets. The local `make build-ephemeral` signing override is described above.
 Producing a genuinely Developer-ID-signed release (`ExportOptions.plist`,
 `method: developer-id`) needs a real certificate, which CI does not have by
 default — the `archive` job falls back to uploading the ad-hoc-signed `.app`

@@ -27,7 +27,7 @@ struct AgentScreenshotPanel: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(FlotillaColors.canvas)
+        .flotillaInspectorSurface()
         .onExitCommand(perform: onClose)
         .sheet(isPresented: $isViewerPresented) {
             if screenshots.indices.contains(index) {
@@ -75,7 +75,7 @@ struct AgentScreenshotPanel: View {
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .frame(height: 38)
-        .background(FlotillaColors.surface)
+        .background(Color.clear)
     }
 
     private var pager: some View {
@@ -211,7 +211,7 @@ struct AgentScreenshotViewerSheet: View {
             }
         }
         .frame(minWidth: 960, idealWidth: 1280, maxWidth: 1920, minHeight: 680, idealHeight: 900, maxHeight: 1280)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .onExitCommand(perform: onClose)
         .onChange(of: screenshot.id) { _, _ in
             resetZoom()

@@ -59,7 +59,7 @@ struct KnowledgeDetailView: View {
                     .frame(maxWidth: FlotillaLayoutWidth.contentMax, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(FlotillaColors.canvas)
+            .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
             .accessibilityIdentifier(AXID.knowledgeDetailReader.rawValue)
         }
     }
@@ -243,7 +243,7 @@ struct KnowledgeNoSelectionView: View {
         // Without an explicit fill the placeholder sizes to its own content and
         // an `HSplitView` pane parks it against the bottom edge.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .accessibilityIdentifier(AXID.knowledgeNoSelection.rawValue)
     }
 }

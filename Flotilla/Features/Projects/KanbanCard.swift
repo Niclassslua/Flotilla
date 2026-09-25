@@ -122,19 +122,18 @@ private struct GlassCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            ZStack {
-                Rectangle().fill(.regularMaterial)
-                // Status colour as light rather than as another line of
-                // text: it reads down a column at a glance and costs no
-                // vertical space.
-                RadialGradient(
-                    colors: [signals.statusColor.opacity(signals.isBlocking ? 0.3 : 0.17), .clear],
-                    center: .topLeading,
-                    startRadius: 0,
-                    endRadius: 220
-                )
-            }
+            RadialGradient(
+                colors: [signals.statusColor.opacity(signals.isBlocking ? 0.3 : 0.17), .clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 220
+            )
         }
+        .flotillaLiquidSurface(
+            FlotillaColors.surface,
+            cornerRadius: FlotillaRadius.panel,
+            glassTintOpacity: FlotillaGlassTint.elevated
+        )
         .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: FlotillaRadius.panel, style: .continuous)

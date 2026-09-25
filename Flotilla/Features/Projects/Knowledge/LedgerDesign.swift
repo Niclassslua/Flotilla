@@ -31,7 +31,7 @@ struct LedgerDesign: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         // Opening onto an empty pane beside truncated rows told the user
         // nothing; the first row is a better default than no row.
         .task(id: items.map(\.id)) {
@@ -60,7 +60,6 @@ struct LedgerDesign: View {
                 isSearching: !viewModel.searchText.trimmingCharacters(in: .whitespaces).isEmpty
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(FlotillaColors.canvas)
         } else {
             rows
         }
@@ -83,7 +82,7 @@ struct LedgerDesign: View {
                         KnowledgeSectionHeader(title: group.scope.label, count: group.items.count)
                             .padding(.horizontal, FlotillaSpacing.medium)
                             .padding(.vertical, FlotillaSpacing.small)
-                            .background(FlotillaColors.surface)
+                            .flotillaLiquidSurface(FlotillaColors.surface, glassTintOpacity: FlotillaGlassTint.elevated)
                             .overlay(alignment: .bottom) {
                                 Divider()
                             }
@@ -92,7 +91,6 @@ struct LedgerDesign: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.canvas)
         .accessibilityIdentifier("Knowledge.Ledger.Table")
         // Arrow keys move the selection without leaving the keyboard; the
         // inspector follows because selection lives on the view model.

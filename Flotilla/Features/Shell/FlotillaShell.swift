@@ -53,6 +53,10 @@ struct FlotillaShell: View {
                 }
             overlayPresentation
         }
+        .environment(\.flotillaLiquidGlassEnabled, settingsViewModel.settings.liquidGlassEnabled)
+        .background {
+            LiquidGlassWindowConfigurator(isEnabled: settingsViewModel.settings.liquidGlassEnabled)
+        }
         .animation(reduceMotion ? nil : FlotillaMotion.snappy.curve, value: navigator.presentedSheet)
         .task {
             await restoreWorkspaceSelection()
@@ -173,6 +177,8 @@ struct FlotillaShell: View {
                 store: store,
                 selection: $navigator.sidebarSelection,
                 searchText: $navigator.searchText,
+                isHomeSelected: navigator.selection == .overview,
+                onSelectHome: { navigator.showHomeDashboard() },
                 onOpenSession: { id in
                     navigator.selection = .session(id)
                     store.selectedSessionID = id
@@ -233,6 +239,13 @@ struct FlotillaShell: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        // In glass mode the toolbar's own opaque band and separator are what
+        // kept its controls from reading as Liquid Glass: they floated over a
+        // flat strip instead of the columns' glass, which now extends under it.
+        .toolbarBackgroundVisibility(
+            settingsViewModel.settings.liquidGlassEnabled ? .hidden : .automatic,
+            for: .windowToolbar
+        )
         .environment(\.workspaceNavigator, navigator)
         .frame(minWidth: FlotillaLayoutWidth.windowMin, minHeight: FlotillaLayoutWidth.windowHeightMin)
         .onChange(of: navigator.sidebarSelection) { _, newSelection in
@@ -443,7 +456,7 @@ struct FlotillaShell: View {
     private func restoreWorkspaceSelection() async {
         // Ensure the app always starts on the Home page.
         navigator.selection = .overview
-        navigator.sidebarSelection = [.overview]
+        navigator.sidebarSelection = []
         store.selectedSessionID = nil
         settingsViewModel.settings.workspace.selectedSessionID = nil
         // The group is what the grid and board are filtered to, so restoring
@@ -472,7 +485,8 @@ struct FlotillaShell: View {
             fontSize: preferences.fontSize,
             optionAsMetaKey: preferences.optionActsAsMeta,
             scrollSensitivity: preferences.scrollSpeed,
-            gpuRendering: preferences.gpuRendering
+            gpuRendering: preferences.gpuRendering,
+            backgroundOpacity: settingsViewModel.settings.liquidGlassEnabled ? preferences.backgroundOpacity : 1
         )
     }
 
@@ -563,6 +577,11 @@ private struct ShellLifecycleModifier: ViewModifier {
                 }
             }
             .onChange(of: settingsViewModel.settings.terminal) {
+                applyTerminalPreferences()
+            }
+            .onChange(of: settingsViewModel.settings.liquidGlassEnabled) {
+                // Disabling glass also returns every active terminal renderer
+                // to an opaque canvas; do not make the user reopen sessions.
                 applyTerminalPreferences()
             }
             // Running agents read their attribution mode, title and prompt at

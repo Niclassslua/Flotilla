@@ -49,6 +49,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     private var optionAsMetaKey = true
     private var scrollSensitivity = 1.0
     private var gpuRendering = false
+    private var backgroundOpacity = 0.42
     private var outputTask: Task<Void, Never>?
     private var accessibilityTask: Task<Void, Never>?
     /// Keyed by presentation rather than single-valued: a grid tile scrolling
@@ -471,14 +472,20 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         fontSize: Double,
         optionAsMetaKey: Bool,
         scrollSensitivity: Double,
-        gpuRendering: Bool = false
+        gpuRendering: Bool = false,
+        backgroundOpacity: Double = 0.42
     ) {
         self.fontSize = fontSize
         self.optionAsMetaKey = optionAsMetaKey
         self.scrollSensitivity = scrollSensitivity
         self.gpuRendering = gpuRendering
+        self.backgroundOpacity = backgroundOpacity
         for view in terminalViews.values {
-            configureXirpAppearance(view, fontSize: CGFloat(fontSize))
+            configureXirpAppearance(
+                view,
+                fontSize: CGFloat(fontSize),
+                backgroundOpacity: CGFloat(backgroundOpacity)
+            )
             view.optionAsMetaKey = optionAsMetaKey
             view.scrollSensitivity = CGFloat(scrollSensitivity)
             view.scrollerStyle = .overlay
@@ -522,7 +529,11 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         view.setAccessibilityElement(true)
         view.setAccessibilityIdentifier(accessibilityIdentifier)
         view.setAccessibilityValue("")
-        configureXirpAppearance(view, fontSize: CGFloat(fontSize))
+        configureXirpAppearance(
+            view,
+            fontSize: CGFloat(fontSize),
+            backgroundOpacity: CGFloat(backgroundOpacity)
+        )
         view.optionAsMetaKey = optionAsMetaKey
         view.scrollSensitivity = CGFloat(scrollSensitivity)
         view.scrollerStyle = .overlay
@@ -532,7 +543,11 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// stack, uses 14 pt by default, and fixes its dark terminal palette even
     /// when the surrounding application follows the system appearance.
     @MainActor
-    private func configureXirpAppearance(_ terminalView: TerminalView, fontSize: CGFloat) {
+    private func configureXirpAppearance(
+        _ terminalView: TerminalView,
+        fontSize: CGFloat,
+        backgroundOpacity: CGFloat
+    ) {
         let preferredFontNames = [
             "JetBrainsMono Nerd Font Mono",
             "MesloLGS Nerd Font Mono",
@@ -552,7 +567,11 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
             srgbRed: 10 / 255,
             green: 10 / 255,
             blue: 12 / 255,
-            alpha: 1
+            // Keep the terminal comfortably dark, but allow the host's glass
+            // surface to read through the default cells. SwiftTerm keeps
+            // selections and explicitly coloured cells opaque, preserving the
+            // contrast needed for dense terminal work.
+            alpha: max(0.05, min(backgroundOpacity, 0.9))
         )
         terminalView.nativeForegroundColor = NSColor(
             srgbRed: 245 / 255,

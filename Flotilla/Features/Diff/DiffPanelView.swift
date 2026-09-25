@@ -234,7 +234,7 @@ struct DiffPanelView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.canvas)
+        .flotillaInspectorSurface()
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .task { await viewModel.monitor() }
     }
@@ -350,7 +350,6 @@ struct DiffPanelView: View {
             ProgressView("Loading changes…")
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(FlotillaColors.canvas)
                 .accessibilityIdentifier("DiffPanel.Loading")
         } else if let errorMessage = viewModel.errorMessage {
             ContentUnavailableView(
@@ -359,7 +358,6 @@ struct DiffPanelView: View {
                 description: Text(errorMessage)
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(FlotillaColors.canvas)
             .accessibilityIdentifier("DiffPanel.Error")
         } else if isClean {
             ContentUnavailableView(
@@ -368,7 +366,6 @@ struct DiffPanelView: View {
                 description: Text("Working tree is clean.")
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(FlotillaColors.canvas)
             .accessibilityIdentifier("DiffPanel.Empty")
         } else {
             changeList
@@ -406,7 +403,6 @@ struct DiffPanelView: View {
             .padding(.bottom, FlotillaSpacing.medium)
         }
         .scrollContentBackground(.hidden)
-        .background(FlotillaColors.canvas)
         .accessibilityIdentifier("DiffPanel.List")
     }
 
@@ -503,7 +499,10 @@ struct DiffPanelView: View {
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .padding(.vertical, FlotillaSpacing.small)
-        .background(.bar)
+        .flotillaLiquidSurface(
+            FlotillaColors.surface,
+            glassTintOpacity: FlotillaGlassTint.elevated
+        )
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(FlotillaColors.separator)

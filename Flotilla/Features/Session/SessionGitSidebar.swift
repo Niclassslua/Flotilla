@@ -33,7 +33,7 @@ struct SessionGitSidebar: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.sidebar)
+        .flotillaInspectorSurface()
         .accessibilityIdentifier("GitSidebar")
         .task(id: viewModel.monitorKey) {
             await viewModel.monitorSelection()

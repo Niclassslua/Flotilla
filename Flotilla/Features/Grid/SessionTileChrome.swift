@@ -70,7 +70,11 @@ struct TileTerminalBody: View {
                         .accessibilityHidden(true)
                 }
             }
-            .background(FlotillaColors.terminalCanvas)
+            .flotillaLiquidSurface(
+                FlotillaColors.terminalCanvas,
+                cornerRadius: 8,
+                glassTintOpacity: FlotillaGlassTint.terminal
+            )
         } else {
             ContentUnavailableView {
                 Label("Agent Stopped", systemImage: "exclamationmark.terminal")
@@ -83,7 +87,10 @@ struct TileTerminalBody: View {
                     .controlSize(.small)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(FlotillaColors.terminalCanvas)
+            .flotillaLiquidSurface(
+                FlotillaColors.terminalCanvas,
+                glassTintOpacity: FlotillaGlassTint.terminal
+            )
         }
     }
 }
@@ -103,6 +110,7 @@ struct TileTerminalBody: View {
 /// spells the status out in words, so the state is carried (and carried
 /// accessibly) without painting a grid of red rectangles.
 struct SessionTileSurface: ViewModifier {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     let session: Session
     let isActive: Bool
     let actions: SessionTileActions
@@ -127,7 +135,11 @@ struct SessionTileSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(FlotillaColors.terminalCanvas)
+            .flotillaLiquidSurface(
+                FlotillaColors.terminalCanvas,
+                cornerRadius: cornerRadius,
+                glassTintOpacity: FlotillaGlassTint.terminal
+            )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

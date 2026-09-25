@@ -263,7 +263,12 @@ Tokens and primitives — `Packages/DesignSystem/`. Refer to these by token name
 | **Typography** | Font ramp, plus `Tracking` and `Weight`. | `FlotillaTypography` |
 | **Motion** | Named curves (e.g. `FlotillaMotion.snappy`). | `FlotillaMotion` |
 | **Elevation / shadow** | `.flotillaShadow(.level3)` and friends. | `FlotillaElevation` |
-| **Panel** | The standard panel surface modifier. | `FlotillaPanel` |
+| **Glass tint** | Named opacities for liquid surfaces (`detail`, `sidebar`, `terminal`, `elevated`, `inspector`). | `FlotillaGlassTint` |
+| **Panel** | Card panel surface: glass when Liquid Glass is on, opaque `surface` when off. | `FlotillaPanel` / `.flotillaPanel()` |
+| **Liquid surface** | Full-height workspace column or large surface: tinted glass or opaque fallback. | `FlotillaLiquidSurface` / `.flotillaLiquidSurface(...)` |
+| **Inspector surface** | Docked inspector column (git sidebar, diff panel, screenshot panel). | `.flotillaInspectorSurface()` |
+| **Floating card** | Elevated overlay card (command palette, launcher, sheets). | `.flotillaFloatingCard()` |
+| **Chrome capsule / circle** | Preference-gated interactive glass chrome for bar chips and FABs. | `.flotillaChromeCapsule()` / `.flotillaChromeCircle()` |
 | **Banner** | The standard inline banner. | `FlotillaBanner`, `FlotillaBannerStyle` |
 | **Marquee text** | Scrolling text for overflowing single lines. | `MarqueeText` |
 

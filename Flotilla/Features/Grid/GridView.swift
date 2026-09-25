@@ -77,7 +77,7 @@ struct GridView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FlotillaColors.canvas)
+        .flotillaLiquidSurface(FlotillaColors.canvas)
         .sheet(item: $pendingDeletion) { session in
             DeleteSessionSheet(
                 session: session,

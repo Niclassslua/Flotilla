@@ -16,18 +16,19 @@ final class WorkspaceNavigator {
             case .allSessions, .smartList, .session:
                 break
             }
-            sidebarSelection = [selection]
+            sidebarSelection = selection == .overview ? [] : [selection]
             recordHistory(from: oldValue)
         }
     }
-    /// Mirrors `selection` for the sidebar `List`'s native multi-select.
+    /// Mirrors visible List rows for native multi-select. Home is a separate
+    /// button above the List, so it has no List selection tag.
     /// A plain click narrows this to one tag and `FlotillaShell` folds that
     /// back into `selection`; ⌘/Shift-click grow it to more than one so rows
     /// can be batch-selected (e.g. for Delete) without changing what's open
     /// in the detail column. Kept in sync whenever `selection` changes
     /// through any other path (keyboard shortcuts, the command palette,
     /// restoring state) via `selection`'s `didSet` above.
-    var sidebarSelection: Set<SidebarItem> = [.overview]
+    var sidebarSelection: Set<SidebarItem> = []
     var presentation: WorkspacePresentation = ProcessInfo.processInfo.environment["UI_TESTING"] == "1" ? .focus : .grid
     /// Which group chip is lit in the session group bar. Kept here rather
     /// than inside Grid or Board so both presentations read one value and

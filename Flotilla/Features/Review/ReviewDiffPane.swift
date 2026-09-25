@@ -57,7 +57,7 @@ struct ReviewDiffPane: View {
                     .padding(Self.outerPadding)
                     .frame(width: geometry.size.width, alignment: .leading)
                 }
-                .background(FlotillaColors.canvas)
+                .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
                 // In All Files the file list scrolls this pane rather than
                 // swapping its contents; in Single File the pane is already
                 // just that file, so the scroll is a no-op and harmless.
