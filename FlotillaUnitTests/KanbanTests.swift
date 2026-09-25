@@ -23,7 +23,7 @@ final class KanbanPersistenceTests: XCTestCase {
         XCTAssertNotNil(loaded)
         XCTAssertEqual(loaded?.name, "Test Board")
         XCTAssertEqual(loaded?.columnMode, .status)
-        XCTAssertEqual(loaded?.customColumns.count, 5)
+        XCTAssertEqual(loaded?.customColumns.count, 4)
     }
 
     func testKanbanBoardWithCustomColumns() throws {
@@ -92,7 +92,7 @@ final class KanbanPersistenceTests: XCTestCase {
         XCTAssertEqual(board.projectID, projectID)
         XCTAssertEqual(board.name, "Project Board")
         XCTAssertEqual(board.columnMode, .status)
-        XCTAssertEqual(board.customColumns.count, 5)
+        XCTAssertEqual(board.customColumns.count, 4)
 
         // Second call should return same board
         let board2 = try repo.getOrCreateDefaultKanbanBoard(forProject: projectID, name: "Project Board")
@@ -103,7 +103,7 @@ final class KanbanPersistenceTests: XCTestCase {
         XCTAssertNil(globalBoard.projectID)
         XCTAssertEqual(globalBoard.name, "All Projects")
         XCTAssertEqual(globalBoard.columnMode, .status)
-        XCTAssertEqual(globalBoard.customColumns.count, 5)
+        XCTAssertEqual(globalBoard.customColumns.count, 4)
     }
 
     func testDeleteKanbanBoard() throws {
@@ -229,14 +229,13 @@ final class KanbanAppStoreTests: XCTestCase {
         let board = try XCTUnwrap(store.selectedKanbanBoard)
 
         let columns = store.getColumnsForBoard(board)
-        XCTAssertEqual(columns.count, 5)
-        XCTAssertEqual(columns[0].title, "Unstarted")
-        XCTAssertNil(columns[0].statusFilter)
-        XCTAssertEqual(columns[1].title, "Working")
-        XCTAssertEqual(columns[1].statusFilter, .working)
-        XCTAssertEqual(columns[3].title, "Ready for Review")
-        XCTAssertEqual(columns[3].statusFilter, .readyForReview)
-        XCTAssertEqual(columns[4].title, "Crashed")
+        XCTAssertEqual(columns.count, 4)
+        XCTAssertEqual(columns[0].title, "Working")
+        XCTAssertEqual(columns[0].statusFilter, .working)
+        XCTAssertEqual(columns[2].title, "Ready for Review")
+        XCTAssertEqual(columns[2].statusFilter, .readyForReview)
+        XCTAssertEqual(columns[3].title, "Crashed")
+        XCTAssertFalse(columns.contains { $0.statusFilter == nil })
     }
 
     func testGetColumnsForBoardAgentsMode() throws {

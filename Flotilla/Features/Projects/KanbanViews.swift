@@ -310,7 +310,6 @@ struct KanbanColumnView: View {
             Circle()
                 .fill(accentColor)
                 .frame(width: 7, height: 7)
-                .opacity(column.statusFilter == nil ? 0.5 : 1)
 
             Text(column.title)
                 .font(.system(size: 12, weight: .semibold))

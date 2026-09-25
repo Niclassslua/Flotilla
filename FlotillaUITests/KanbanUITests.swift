@@ -32,9 +32,9 @@ final class KanbanUITests: XCTestCase {
 
         // All kanban columns are rendered
         // Matches `KanbanColumn.defaultStatusColumns()`. "Idle" and
-        // "Finished" were folded into Unstarted/Ready for Review when
+        // "Finished" were folded into Ready for Review when
         // SessionStatus collapsed to four cases in a5482d3.
-        for title in ["Unstarted", "Working", "Waiting", "Ready for Review", "Crashed"] {
+        for title in ["Working", "Waiting", "Ready for Review", "Crashed"] {
             let columnHeader = element(app, AXID.kanbanColumnHeader(title))
             XCTAssertTrue(columnHeader.waitForExistence(timeout: 3), "missing header for \(title)")
         }

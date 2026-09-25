@@ -224,15 +224,12 @@ public struct KanbanColumn: Codable, Hashable, Sendable, Identifiable {
 
     public static func defaultStatusColumns() -> [KanbanColumn] {
         [
-            // `statusFilter: nil` is the "no status yet" column: created, no
-            // work observed. `getSessionsForColumn` matches on
-            // `column.statusFilter == session.status`, so a nil filter meets a
-            // nil status here and nothing else does.
-            KanbanColumn(id: builtInID(kind: 1, index: 6), title: "Unstarted", order: 0, statusFilter: nil),
-            KanbanColumn(id: builtInID(kind: 1, index: 0), title: "Working", order: 1, statusFilter: .working),
-            KanbanColumn(id: builtInID(kind: 1, index: 1), title: "Waiting", order: 2, statusFilter: .waitingForInput),
-            KanbanColumn(id: builtInID(kind: 1, index: 2), title: "Ready for Review", order: 3, statusFilter: .readyForReview),
-            KanbanColumn(id: builtInID(kind: 1, index: 5), title: "Crashed", order: 4, statusFilter: .crashed),
+            // Sessions with no status yet ("Unstarted") deliberately have no
+            // column: they don't appear on the board.
+            KanbanColumn(id: builtInID(kind: 1, index: 0), title: "Working", order: 0, statusFilter: .working),
+            KanbanColumn(id: builtInID(kind: 1, index: 1), title: "Waiting", order: 1, statusFilter: .waitingForInput),
+            KanbanColumn(id: builtInID(kind: 1, index: 2), title: "Ready for Review", order: 2, statusFilter: .readyForReview),
+            KanbanColumn(id: builtInID(kind: 1, index: 5), title: "Crashed", order: 3, statusFilter: .crashed),
         ]
     }
 
