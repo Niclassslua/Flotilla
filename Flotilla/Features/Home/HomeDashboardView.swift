@@ -18,6 +18,7 @@ struct HomeDashboardView: View {
     let insights: HomeInsights
 
     @State private var presentedSheet: ProjectSheetType?
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     @State private var widgetEditor: HomeWidgetEditor
 
     init(
@@ -64,7 +65,7 @@ struct HomeDashboardView: View {
             .frame(maxWidth: 1_280)
             .frame(maxWidth: .infinity)
         }
-        .background { harborGradient.ignoresSafeArea() }
+        .background { backdrop.ignoresSafeArea() }
         .sheet(item: $presentedSheet) { sheet in
             ProjectPathSheet(importsWorkspace: sheet == .importWorkspace) { paths in
                 for path in paths { store.addProject(at: path) }
@@ -184,7 +185,31 @@ struct HomeDashboardView: View {
 
     // MARK: - Background
 
-    /// The warm wash the old composer floated on — the app icon's accent ramp
+    @ViewBuilder
+    private var backdrop: some View {
+        if liquidGlassEnabled {
+            tideGradient
+        } else {
+            harborGradient
+        }
+    }
+
+    /// Glass on: the accent wash fades into transparency rather than canvas,
+    /// so the window's glass shows through below it and the glass cards have
+    /// light to refract.
+    private var tideGradient: some View {
+        LinearGradient(
+            stops: [
+                .init(color: FlotillaColors.accent.opacity(0.42), location: 0),
+                .init(color: FlotillaColors.accent.opacity(0.16), location: 0.28),
+                .init(color: FlotillaColors.accent.opacity(0), location: 0.55),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// Glass off: the warm wash the old composer floated on — the app icon's accent ramp
     /// fading into the canvas.
     private var harborGradient: some View {
         LinearGradient(
