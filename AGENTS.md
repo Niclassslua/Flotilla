@@ -24,6 +24,7 @@ An iOS companion (`FlotillaCompanion`) lives in the same project: a remote contr
 | `make build-ephemeral` | Full app build with launch-scoped preferences |
 | `make test` | Run unit tests |
 | `make test-ui` | Run UI tests |
+| `make install` | Release build, then replace `/Applications/Flotilla.app` with it |
 | `make archive` | Create xcarchive |
 | `make run` | Build and launch the app |
 | `make run-ephemeral` | Build and launch the full app without saving preferences |
@@ -34,6 +35,10 @@ An iOS companion (`FlotillaCompanion`) lives in the same project: a remote contr
 | `make test-companion` | `CompanionKit` package tests and the iOS unit tests (built outside `~/Documents`, which simulator processes can't read) |
 | `make clean` | Remove build artifacts |
 | `xcodegen generate` | Regenerate `.xcodeproj` from `project.yml` |
+
+### Mandatory reinstall
+
+After every relevant change you commit or push (app code, packages, resources, `project.yml`, anything that alters the built `Flotilla.app`), you **must** run `make install` so `/Applications/Flotilla.app` matches the latest committed state. Docs-only, CI-only, and test-only changes are exempt. Report the reinstall in your final message; if it fails, fix or say so rather than skipping it.
 
 ## Project Structure
 

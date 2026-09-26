@@ -1,4 +1,4 @@
-.PHONY: build build-release build-ephemeral build-companion test test-packages test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo run-companion-device xcodegen
+.PHONY: install build build-release build-ephemeral build-companion test test-packages test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo run-companion-device xcodegen
 
 SCHEME := Flotilla
 EPHEMERAL_SCHEME := Flotilla Ephemeral
@@ -103,6 +103,12 @@ archive: xcodegen
 		-derivedDataPath $(DERIVED_DATA) \
 		-archivePath build/Flotilla.xcarchive \
 		archive
+
+# Release build, then replace /Applications/Flotilla.app with it.
+install: build-release
+	@pgrep -x Flotilla >/dev/null && osascript -e 'tell application id "com.niclassslua.flotilla" to quit' || true
+	rm -rf "/Applications/Flotilla.app"
+	ditto "$(DERIVED_DATA)/Build/Products/Release/Flotilla.app" "/Applications/Flotilla.app"
 
 run: build
 	open $(DERIVED_DATA)/Build/Products/Debug/Flotilla.app
