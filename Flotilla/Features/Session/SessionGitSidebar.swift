@@ -5,6 +5,7 @@ import GitKit
 import DesignSystem
 
 struct SessionGitSidebar: View {
+    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     @Bindable var viewModel: SessionGitSidebarViewModel
     @Bindable var store: AppStore
     let session: Session
@@ -33,7 +34,7 @@ struct SessionGitSidebar: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .flotillaInspectorSurface()
+        .flotillaInspectorSurface(ignoresSafeAreaEdges: .top)
         .accessibilityIdentifier("GitSidebar")
         .task(id: viewModel.monitorKey) {
             await viewModel.monitorSelection()
@@ -57,6 +58,12 @@ struct SessionGitSidebar: View {
                 Text("This branch contains commits not merged into \(viewModel.defaultBranchLabel). Deleting it may make that work difficult to recover.")
             }
         }
+    }
+
+    /// Bars sit on the inspector glass in Liquid Glass mode; an opaque fill
+    /// would cover it and, through the safe area, the band under the toolbar.
+    private var barBackground: Color {
+        liquidGlassEnabled ? .clear : FlotillaColors.surface
     }
 
     private var header: some View {
@@ -88,7 +95,7 @@ struct SessionGitSidebar: View {
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .frame(height: 38)
-        .background(FlotillaColors.surface)
+        .background(barBackground)
     }
 
     private var tabBar: some View {
@@ -126,7 +133,7 @@ struct SessionGitSidebar: View {
             }
         }
         .frame(height: 38)
-        .background(FlotillaColors.surface)
+        .background(barBackground)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Git sidebar tabs")
     }
@@ -229,7 +236,7 @@ struct SessionGitSidebar: View {
             }
         }
         .padding(FlotillaSpacing.medium)
-        .background(FlotillaColors.surface)
+        .background(barBackground)
     }
 
     private var branchesView: some View {
@@ -306,7 +313,7 @@ struct SessionGitSidebar: View {
             .foregroundStyle(FlotillaColors.textSecondary)
             .padding(.horizontal, FlotillaSpacing.medium)
             .frame(height: 38)
-            .background(FlotillaColors.surface)
+            .background(barBackground)
             .accessibilityIdentifier("GitSidebar.Branches.New")
         }
     }
@@ -433,7 +440,7 @@ struct SessionGitSidebar: View {
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .frame(height: 38)
-        .background(FlotillaColors.surface)
+        .background(barBackground)
     }
 
     private func associatedSessions(with branch: String) -> [Session] {

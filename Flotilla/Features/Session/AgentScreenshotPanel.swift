@@ -27,7 +27,7 @@ struct AgentScreenshotPanel: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .flotillaInspectorSurface()
+        .flotillaInspectorSurface(ignoresSafeAreaEdges: .top)
         .onExitCommand(perform: onClose)
         .sheet(isPresented: $isViewerPresented) {
             if screenshots.indices.contains(index) {
