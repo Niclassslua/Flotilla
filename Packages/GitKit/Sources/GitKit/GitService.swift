@@ -473,18 +473,27 @@ public struct GitService: GitServiceProtocol {
     }
 
     public func listWorktrees(at repoPath: URL) async throws -> [GitWorktree] {
+        try await worktreeRecords(at: repoPath).map(\.worktree)
+    }
+
+    /// `git worktree list --porcelain`, keeping the `locked` flag that
+    /// `GitWorktree` doesn't carry — only removal needs it.
+    private func worktreeRecords(at repoPath: URL) async throws -> [(worktree: GitWorktree, isLocked: Bool)] {
         let result = try await run(["worktree", "list", "--porcelain"], at: repoPath)
-        var worktrees: [GitWorktree] = []
+        var records: [(worktree: GitWorktree, isLocked: Bool)] = []
         var currentPath: URL?
         var currentBranch: String?
+        var currentIsLocked = false
 
         func flush() {
             if let path = currentPath {
                 let branch = currentBranch ?? "(detached)"
-                worktrees.append(GitWorktree(branch: branch, path: path, isMainWorktree: worktrees.isEmpty))
+                let worktree = GitWorktree(branch: branch, path: path, isMainWorktree: records.isEmpty)
+                records.append((worktree, currentIsLocked))
             }
             currentPath = nil
             currentBranch = nil
+            currentIsLocked = false
         }
 
         for rawLine in result.stdout.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -496,10 +505,12 @@ public struct GitService: GitServiceProtocol {
             } else if line.hasPrefix("branch ") {
                 let ref = String(line.dropFirst("branch ".count))
                 currentBranch = ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
+            } else if line == "locked" || line.hasPrefix("locked ") {
+                currentIsLocked = true
             }
         }
         flush()
-        return worktrees
+        return records
     }
 
     public func createWorktree(basePath: URL, branch: String, destination: URL) async throws -> GitWorktree {
@@ -525,6 +536,28 @@ public struct GitService: GitServiceProtocol {
         return p
     }
 
+    /// Renames `directory` into a scratch directory on the same volume and
+    /// returns its new location, or `nil` when it can't be moved (e.g. it
+    /// sits on another volume). A rename is O(1) however large the tree is,
+    /// and the system purges that scratch area if the deletion never finishes.
+    private static func moveAside(_ directory: URL) -> URL? {
+        let fileManager = FileManager.default
+        guard let scratch = try? fileManager.url(
+            for: .itemReplacementDirectory,
+            in: .userDomainMask,
+            appropriateFor: directory,
+            create: true
+        ) else { return nil }
+        let destination = scratch.appendingPathComponent(directory.lastPathComponent, isDirectory: true)
+        do {
+            try fileManager.moveItem(at: directory, to: destination)
+            return scratch
+        } catch {
+            try? fileManager.removeItem(at: scratch)
+            return nil
+        }
+    }
+
     public func removeWorktree(at path: URL, in repoPath: URL, branch: String, deleteBranch: Bool) async throws {
         let canonicalPath = path.standardized.resolvingSymlinksInPath()
         let canonicalRepoPath = repoPath.standardized.resolvingSymlinksInPath()
@@ -542,10 +575,11 @@ public struct GitService: GitServiceProtocol {
         }
 
         // 3. Verify against git's registered worktrees
-        let worktrees = try await listWorktrees(at: repoPath)
-        let matchingWorktree = worktrees.first {
-            Self.normalizePathForComparison($0.path) == normPath
+        let records = try await worktreeRecords(at: repoPath)
+        let matchingRecord = records.first {
+            Self.normalizePathForComparison($0.worktree.path) == normPath
         }
+        let matchingWorktree = matchingRecord?.worktree
 
         if let matching = matchingWorktree, matching.isMainWorktree {
             throw GitServiceError.cannotRemoveMainWorktree(path)
@@ -566,13 +600,28 @@ public struct GitService: GitServiceProtocol {
             }
         }
 
-        // 4. It is an owned secondary worktree. Attempt git worktree remove.
+        // 4. A locked worktree is protected from removal; never bypass that.
         let targetPath = matchingWorktree?.path.path ?? path.path
+        if matchingRecord?.isLocked == true {
+            throw GitServiceError.commandFailed(exitCode: 128, stderr: "'\(targetPath)' is a locked working tree")
+        }
+
+        // 5. It is an owned, unlocked secondary worktree. Move it aside and
+        // let git forget it; the files are deleted in the background. Deleting
+        // in place (`git worktree remove --force`) unlinks every file first,
+        // ignored build output included, which takes many seconds.
         var worktreeFailure: GitServiceError?
-        do {
-            _ = try await run(["worktree", "remove", targetPath, "--force"], at: repoPath)
-        } catch let GitServiceError.commandFailed(exitCode, stderr) {
-            worktreeFailure = .commandFailed(exitCode: exitCode, stderr: stderr)
+        if let trashed = Self.moveAside(URL(fileURLWithPath: targetPath)) {
+            _ = try? await run(["worktree", "prune"], at: repoPath)
+            Task.detached(priority: .utility) {
+                try? FileManager.default.removeItem(at: trashed)
+            }
+        } else {
+            do {
+                _ = try await run(["worktree", "remove", targetPath, "--force"], at: repoPath)
+            } catch let GitServiceError.commandFailed(exitCode, stderr) {
+                worktreeFailure = .commandFailed(exitCode: exitCode, stderr: stderr)
+            }
         }
 
         if let failure = worktreeFailure {

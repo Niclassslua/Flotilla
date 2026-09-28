@@ -284,6 +284,45 @@ final class GitServiceRealRepoTests: XCTestCase {
         XCTAssertTrue(branches.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
+    func testRemoveWorktreeRemovesDirtyWorktreeWithIgnoredBuildOutput() async throws {
+        let destination = worktreeBase.appendingPathComponent("dirty")
+        _ = try await service.createWorktree(basePath: repoPath, branch: "dirty", destination: destination)
+        let build = destination.appendingPathComponent("build/DerivedData", isDirectory: true)
+        try FileManager.default.createDirectory(at: build, withIntermediateDirectories: true)
+        for index in 0..<200 {
+            try Data("x".utf8).write(to: build.appendingPathComponent("\(index).o"))
+        }
+        try "build/\n".write(to: destination.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        try "edit\n".write(to: destination.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+
+        try await service.removeWorktree(at: destination, in: repoPath, branch: "dirty", deleteBranch: true)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        let worktrees = try await service.listWorktrees(at: repoPath)
+        XCTAssertEqual(worktrees.count, 1, "the moved-aside worktree must be unregistered from git")
+        let branches = try await git(["branch", "--list", "dirty"])
+        XCTAssertTrue(branches.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    func testRemoveWorktreeRefusesLockedWorktree() async throws {
+        let destination = worktreeBase.appendingPathComponent("locked")
+        _ = try await service.createWorktree(basePath: repoPath, branch: "locked", destination: destination)
+        try await git(["worktree", "lock", "--reason", "in use", destination.path])
+
+        do {
+            try await service.removeWorktree(at: destination, in: repoPath, branch: "locked", deleteBranch: true)
+            XCTFail("Expected a locked worktree to be refused")
+        } catch GitServiceError.commandFailed(_, let stderr) {
+            XCTAssertTrue(stderr.contains("locked"))
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+        let worktrees = try await service.listWorktrees(at: repoPath)
+        XCTAssertEqual(worktrees.count, 2)
+        let branches = try await git(["branch", "--list", "locked"])
+        XCTAssertFalse(branches.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     func testRemoveWorktreeRefusesMainWorktree() async throws {
         do {
             try await service.removeWorktree(at: repoPath, in: repoPath, branch: "main", deleteBranch: false)

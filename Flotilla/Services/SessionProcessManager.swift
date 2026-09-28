@@ -616,6 +616,40 @@ final class SessionProcessManager {
     /// App quit never calls this, so tmux-backed sessions still survive a
     /// relaunch by design.
     func terminate(sessionID: UUID) {
+        stopClient(sessionID: sessionID)
+        // The tmux session outlives its client, and its agent keeps running
+        // detached unless the server-side session is killed explicitly.
+        // This must complete before a restart's `new-session -A` runs, or
+        // the two could race (kill-session landing after the fresh session
+        // was created, killing the new agent too).
+        if let tmuxExecutable = tmuxWrappedSessions[sessionID] {
+            tmuxWrappedSessions[sessionID] = nil
+            tmuxTerminator.killSession(
+                named: TmuxSessionWrapping.sessionName(for: sessionID),
+                tmuxExecutable: tmuxExecutable
+            )
+        }
+    }
+
+    /// Delete's teardown: `terminate` plus `killServerSideSession`, but with
+    /// a single `kill-session` run off the main actor. A deleted session's
+    /// name is never reused, so unlike restart there is no race to wait out,
+    /// and a slow tmux must not freeze the UI.
+    func terminateForDeletion(sessionID: UUID) {
+        stopClient(sessionID: sessionID)
+        tmuxWrappedSessions[sessionID] = nil
+        latestExpectedSizes[sessionID] = nil
+        guard let tmuxExecutable = locator.locate("tmux") else { return }
+        let terminator = tmuxTerminator
+        let name = TmuxSessionWrapping.sessionName(for: sessionID)
+        Task.detached(priority: .utility) {
+            terminator.killSession(named: name, tmuxExecutable: tmuxExecutable)
+        }
+    }
+
+    /// Stops the attached client and drops per-session bookkeeping, leaving
+    /// the server-side tmux session to the caller.
+    private func stopClient(sessionID: UUID) {
         activeSessions[sessionID] = nil
         verifyResizeTasks[sessionID]?.cancel()
         verifyResizeTasks[sessionID] = nil
@@ -628,18 +662,6 @@ final class SessionProcessManager {
             process.terminate()
         } else {
             intentionallyTerminating.remove(sessionID)
-        }
-        // The tmux session outlives its client, and its agent keeps running
-        // detached unless the server-side session is killed explicitly.
-        // This must complete before a restart's `new-session -A` runs, or
-        // the two could race (kill-session landing after the fresh session
-        // was created, killing the new agent too).
-        if let tmuxExecutable = tmuxWrappedSessions[sessionID] {
-            tmuxWrappedSessions[sessionID] = nil
-            tmuxTerminator.killSession(
-                named: TmuxSessionWrapping.sessionName(for: sessionID),
-                tmuxExecutable: tmuxExecutable
-            )
         }
         // Do NOT remove processes[sessionID] here — the process's
         // terminationHandler will clear it once the exit callback fires.

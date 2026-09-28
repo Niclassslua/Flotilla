@@ -1132,28 +1132,10 @@ final class AppStore {
         metadataMonitor.cancel(sessionID)
         scrollbackStore.remove(sessionID)
 
-        processManager.terminate(sessionID: sessionID)
-        processManager.killServerSideSession(sessionID: sessionID)
+        processManager.terminateForDeletion(sessionID: sessionID)
 
-        // Capture patch evidence before removing the worktree or branch.
-        await commitAttribution.ingestPendingEvents(sessionID: sessionID)
-
-        var worktreeCleanupWarning: String?
-        if deleteWorktree, let worktree = session.worktree {
-            do {
-                try await gitService.removeWorktree(
-                    at: worktree.worktreePath,
-                    in: worktree.baseCheckoutPath,
-                    branch: worktree.branchName,
-                    deleteBranch: deleteBranch
-                )
-            } catch {
-                worktreeCleanupWarning = "The session was deleted, but its worktree could not be fully removed: \(error.localizedDescription)"
-            }
-        }
-
-        // Keep the payload available for retry if attribution persistence failed.
-
+        // The session leaves the UI before the git work below, which can
+        // take a while on a large repository.
         do {
             try repository.delete(sessionID: sessionID)
         } catch {
@@ -1169,8 +1151,21 @@ final class AppStore {
         }
         sessions.removeAll { $0.id == sessionID }
 
-        if let worktreeCleanupWarning {
-            lastOperationError = worktreeCleanupWarning
+        // Capture patch evidence before removing the worktree or branch.
+        // Keep the payload available for retry if attribution persistence failed.
+        await commitAttribution.ingestPendingEvents(sessionID: sessionID)
+
+        if deleteWorktree, let worktree = session.worktree {
+            do {
+                try await gitService.removeWorktree(
+                    at: worktree.worktreePath,
+                    in: worktree.baseCheckoutPath,
+                    branch: worktree.branchName,
+                    deleteBranch: deleteBranch
+                )
+            } catch {
+                lastOperationError = "The session was deleted, but its worktree could not be fully removed: \(error.localizedDescription)"
+            }
         }
     }
 
