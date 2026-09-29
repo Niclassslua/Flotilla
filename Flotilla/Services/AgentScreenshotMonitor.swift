@@ -292,6 +292,138 @@ final class AgentScreenshotMonitor {
         return false
     }
 
+    nonisolated private static let assetOrDocDirectoryNames: Set<String> = [
+        "logos", "assets", "icons", "images", "img", "static",
+        "res", "resources", "drawables", "media", "fixtures",
+        "docs", "documentation", "doc", "public"
+    ]
+
+    nonisolated static func isLikelyAgentScreenshot(
+        tool: String?,
+        candidatePaths: [String],
+        filename: String?
+    ) -> Bool {
+        // 1. Explicit user-facing deliveries via SendUserFile are always visual attachments to present.
+        if let tool, tool.caseInsensitiveCompare("SendUserFile") == .orderedSame {
+            return true
+        }
+
+        // 2. Dedicated screenshot or screen capture tools.
+        if let tool, isScreenshotToolName(tool) {
+            return true
+        }
+
+        // 3. Synthetic unit test fixtures with no path or filename metadata are kept for test compatibility.
+        if candidatePaths.isEmpty && filename == nil {
+            return true
+        }
+
+        // 4. Check candidate paths and filename.
+        var allCandidates = candidatePaths
+        if let filename, !allCandidates.contains(filename) {
+            allCandidates.append(filename)
+        }
+
+        for path in allCandidates {
+            if isScreenshotPath(path) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    nonisolated static func isScreenshotPath(_ rawPath: String) -> Bool {
+        var path = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        path = path.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+        if path.hasPrefix("file://") {
+            path = String(path.dropFirst(7))
+        }
+        if let decoded = path.removingPercentEncoding {
+            path = decoded
+        }
+        path = path.replacingOccurrences(of: "\\ ", with: " ")
+        guard !path.isEmpty else { return false }
+
+        let lower = path.lowercased()
+
+        // 1. Temporary, scratch, or capture directories where agents generate images at runtime.
+        if lower.hasPrefix("/tmp/")
+            || lower.hasPrefix("/private/tmp/")
+            || lower.hasPrefix("/var/folders/")
+            || lower.contains("/scratch/")
+            || lower.contains(".scratch")
+            || lower.contains("/tmp/")
+            || lower.contains("/temp/") {
+            return true
+        }
+
+        let tempDir = NSTemporaryDirectory().lowercased()
+        if !tempDir.isEmpty && lower.hasPrefix(tempDir) {
+            return true
+        }
+
+        let url = URL(fileURLWithPath: path)
+        let filename = url.lastPathComponent.lowercased()
+        let nameWithoutExtension = (filename as NSString).deletingPathExtension.lowercased()
+        let pathComponents = Set(url.pathComponents.map { $0.lowercased() })
+
+        // 2. Documentation and logo/icon directories never contain live agent screenshots.
+        if pathComponents.contains("docs") || pathComponents.contains("documentation") || pathComponents.contains("doc") {
+            return false
+        }
+        if pathComponents.contains("logos") || pathComponents.contains("icons") {
+            return false
+        }
+
+        // 3. Explicit screenshot directory (e.g. screenshots/...)
+        if pathComponents.contains("screenshots") || pathComponents.contains("screencaps") {
+            return true
+        }
+
+        // 4. Reject other repository asset/resource directories unless explicitly named as a screenshot.
+        let isAssetDir = !assetOrDocDirectoryNames.isDisjoint(with: pathComponents)
+        if isAssetDir {
+            return nameWithoutExtension.contains("screenshot")
+                || nameWithoutExtension.contains("screencap")
+                || nameWithoutExtension.contains("snapshot")
+        }
+
+        // 5. For any other project or workspace path, check if the filename indicates a screenshot.
+        return isScreenshotNamePattern(nameWithoutExtension)
+    }
+
+    nonisolated private static func isScreenshotNamePattern(_ name: String) -> Bool {
+        if name.contains("screenshot")
+            || name.contains("screen-shot")
+            || name.contains("screen_shot")
+            || name.contains("screencap")
+            || name.contains("screen_cap")
+            || name.contains("snapshot") {
+            return true
+        }
+        if name == "screen"
+            || name.hasPrefix("screen-")
+            || name.hasPrefix("screen_")
+            || name == "preview"
+            || name.hasPrefix("preview-")
+            || name.hasPrefix("preview_")
+            || name == "capture"
+            || name.hasPrefix("capture-")
+            || name.hasPrefix("capture_") {
+            return true
+        }
+        return false
+    }
+
+    nonisolated private static func isScreenshotToolName(_ tool: String) -> Bool {
+        let lower = tool.lowercased()
+        return lower.contains("screenshot")
+            || lower.contains("screencap")
+            || lower.contains("capture_screen")
+            || lower.contains("screen_capture")
+    }
+
     /// Event positions come from the native transcript line and entry numbers,
     /// which remain stable when the companion reader trims its 400-event window.
     nonisolated static func agentImages(in events: [TranscriptEvent], after baseline: EventPosition? = nil) -> [ImageEvent] {
@@ -309,9 +441,11 @@ final class AgentScreenshotMonitor {
         }
 
         var toolUseInputs: [String: [String: String]] = [:]
+        var toolUseNames: [String: String] = [:]
         for event in events {
-            if case let .toolUse(id, _, input, _) = event.content {
+            if case let .toolUse(id, tool, input, _) = event.content {
                 toolUseInputs[id] = input
+                toolUseNames[id] = tool
             }
         }
 
@@ -324,6 +458,15 @@ final class AgentScreenshotMonitor {
 
         for event in events {
             switch event.content {
+            case let .toolUse(id, tool, input, timestamp):
+                toolUseInputs[id] = input
+                toolUseNames[id] = tool
+                if event.id.contains(":") {
+                    let line = event.id.split(separator: ":", maxSplits: 1)[0]
+                    toolUseIDByRecordLine[line] = id
+                }
+                toolUseIDByTimestamp[timestamp] = id
+
             case let .toolResult(toolUseID, _, _, timestamp):
                 lastToolUseID = toolUseID
                 lastToolResultTimestamp = timestamp
@@ -358,23 +501,30 @@ final class AgentScreenshotMonitor {
                   !userRecordIDs.contains(event.id.split(separator: ":", maxSplits: 1)[0]),
                   !userTimestamps.contains(timestamp) else { return nil }
 
-            if let toolUseID = toolUseIDForImage[event.id],
-               let input = toolUseInputs[toolUseID] {
-                let candidatePaths = [
-                    input["file_path"],
-                    input["path"],
-                    input["filePath"],
-                    input["url"]
-                ].compactMap { $0 } + input.values.filter { isImagePath($0) }
+            var candidatePaths: [String] = []
+            var toolName: String?
 
-                let isUserProvided = candidatePaths.contains { path in
-                    isImageReferencedByUser(toolPath: path, filename: filename, in: userTexts)
-                } || isImageReferencedByUser(toolPath: nil, filename: filename, in: userTexts)
-
-                if isUserProvided {
-                    return nil
+            if let toolUseID = toolUseIDForImage[event.id] {
+                toolName = toolUseNames[toolUseID]
+                if let input = toolUseInputs[toolUseID] {
+                    candidatePaths = [
+                        input["file_path"],
+                        input["path"],
+                        input["filePath"],
+                        input["url"]
+                    ].compactMap { $0 } + input.values.filter { isImagePath($0) }
                 }
-            } else if filename != nil && isImageReferencedByUser(toolPath: nil, filename: filename, in: userTexts) {
+            }
+
+            let isUserProvided = candidatePaths.contains { path in
+                isImageReferencedByUser(toolPath: path, filename: filename, in: userTexts)
+            } || (filename != nil && isImageReferencedByUser(toolPath: nil, filename: filename, in: userTexts))
+
+            if isUserProvided {
+                return nil
+            }
+
+            if !isLikelyAgentScreenshot(tool: toolName, candidatePaths: candidatePaths, filename: filename) {
                 return nil
             }
 
@@ -382,7 +532,8 @@ final class AgentScreenshotMonitor {
             let position = EventPosition(line: Int(parts[0]) ?? offset,
                                          entry: parts.count > 1 ? (Int(parts[1]) ?? 0) : 0)
             guard baseline.map({ position > $0 }) ?? true else { return nil }
-            return ImageEvent(id: event.id, position: position, base64: base64, filename: filename, timestamp: timestamp)
+            let resolvedFilename = filename ?? candidatePaths.first.map { ($0 as NSString).lastPathComponent }
+            return ImageEvent(id: event.id, position: position, base64: base64, filename: resolvedFilename, timestamp: timestamp)
         }
     }
 }

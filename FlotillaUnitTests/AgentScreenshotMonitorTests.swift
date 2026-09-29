@@ -132,6 +132,48 @@ final class AgentScreenshotMonitorTests: XCTestCase {
         XCTAssertEqual(found.map(\.base64), ["agent_screenshot_data"])
     }
 
+    func testAgentImagesSkipsImagesReadFromProjectLogoPaths() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let toolTime = Date(timeIntervalSince1970: 200)
+        let events = [
+            TranscriptEvent(id: "1:0", content: .userMessage(text: "Review the header branding", timestamp: userTime)),
+            TranscriptEvent(id: "2:0", content: .toolUse(id: "call_read", tool: "Read", input: ["file_path": "LaunchVideo/public/logos/codex.png"], timestamp: toolTime)),
+            TranscriptEvent(id: "3:0", content: .toolResult(toolUseID: "call_read", output: "", isError: false, timestamp: toolTime)),
+            TranscriptEvent(id: "3:1", content: .image(mimeType: "image/png", base64: "logo_data", filename: nil, timestamp: toolTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertTrue(found.isEmpty, "Reading a project logo like LaunchVideo/public/logos/codex.png must not be treated as an agent screenshot")
+    }
+
+    func testAgentImagesSkipsImagesReadFromDocumentationPaths() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let toolTime = Date(timeIntervalSince1970: 200)
+        let events = [
+            TranscriptEvent(id: "1:0", content: .userMessage(text: "Search for references to the companion fleet", timestamp: userTime)),
+            TranscriptEvent(id: "2:0", content: .toolUse(id: "call_read", tool: "Read", input: ["file_path": "docs/images/ui-vocabulary/companion-fleet.png"], timestamp: toolTime)),
+            TranscriptEvent(id: "3:0", content: .toolResult(toolUseID: "call_read", output: "", isError: false, timestamp: toolTime)),
+            TranscriptEvent(id: "3:1", content: .image(mimeType: "image/png", base64: "doc_image_data", filename: nil, timestamp: toolTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertTrue(found.isEmpty, "Reading a documentation image must not be treated as an agent screenshot")
+    }
+
+    func testAgentImagesRetainsScreenshotsExplicitlyNamedInProjectDirectory() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let toolTime = Date(timeIntervalSince1970: 200)
+        let events = [
+            TranscriptEvent(id: "1:0", content: .userMessage(text: "Inspect the captured screenshot", timestamp: userTime)),
+            TranscriptEvent(id: "2:0", content: .toolUse(id: "call_read", tool: "Read", input: ["file_path": "screenshots/app-preview.png"], timestamp: toolTime)),
+            TranscriptEvent(id: "3:0", content: .toolResult(toolUseID: "call_read", output: "", isError: false, timestamp: toolTime)),
+            TranscriptEvent(id: "3:1", content: .image(mimeType: "image/png", base64: "preview_data", filename: nil, timestamp: toolTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertEqual(found.map(\.base64), ["preview_data"])
+    }
+
     @MainActor
     func testMergingScreenshotsRetainsAnImageTrimmedFromTheTranscriptWindow() {
         let sessionID = UUID()
