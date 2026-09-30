@@ -12,19 +12,29 @@ public struct SessionStatusObservation: Equatable, Sendable {
     /// previous observation) still collapses the same status arriving from a
     /// different marker, exactly as it did before causes existed.
     public let cause: String?
+    /// The screen suggests the agent process itself has exited, not merely
+    /// finished a turn. A hint only — screen text can quote the marker — so
+    /// the app confirms it with tmux before treating the agent as gone.
+    /// Part of `==` so that a live composer's `.readyForReview` followed by
+    /// a dead pane's is still reported.
+    public let suggestsAgentExit: Bool
 
     public init(
         _ status: SessionStatus,
         waitingReason: SessionWaitingReason? = nil,
-        cause: String? = nil
+        cause: String? = nil,
+        suggestsAgentExit: Bool = false
     ) {
         self.status = status
         self.waitingReason = status == .waitingForInput ? waitingReason : nil
         self.cause = cause
+        self.suggestsAgentExit = suggestsAgentExit
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.status == rhs.status && lhs.waitingReason == rhs.waitingReason
+        lhs.status == rhs.status
+            && lhs.waitingReason == rhs.waitingReason
+            && lhs.suggestsAgentExit == rhs.suggestsAgentExit
     }
 
     /// `working (esc to interrupt)` — the compact form used in log lines.

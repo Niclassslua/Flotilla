@@ -58,8 +58,15 @@ enum TmuxSessionWrapping {
         ["history-limit", "50000"],
         ["mouse", "on"],
         ["remain-on-exit", "on"],
-        ["remain-on-exit-format", "\"[Agent exited with status #{pane_dead_status} — click Restart Session to resume]\""],
+        ["remain-on-exit-format", deadPaneBanner],
     ]
+
+    /// The line tmux writes into a pane whose agent has exited. Flotilla
+    /// covers a dead pane with its own exit screen, so this is only read by
+    /// someone who chose to look at the output underneath — and by
+    /// `TerminalScreenHeuristic`, which keys on its "agent exited" prefix.
+    static let deadPaneBanner =
+        "[Agent exited with #{?pane_dead_signal,signal #{pane_dead_signal},status #{pane_dead_status}}]"
 
     /// `set-option -g` needs a server that is already running, and on a cold
     /// socket there is no way to pre-start one to receive the options: a tmux
@@ -73,7 +80,12 @@ enum TmuxSessionWrapping {
     /// calls in `SessionProcessManager.start()` cover that case.
     static func configurationFileContents() -> String {
         globalOptions
-            .map { "set-option -g " + $0.joined(separator: " ") }
+            .map { option in
+                // The config parser splits on spaces; `set-option -g` via
+                // argv does not, and would keep quotes as literal text.
+                let words = option.map { $0.contains(" ") ? "\"\($0)\"" : $0 }
+                return "set-option -g " + words.joined(separator: " ")
+            }
             .joined(separator: "\n") + "\n"
     }
 
@@ -347,6 +359,74 @@ struct ProcessTmuxClientProbe: TmuxClientProbing {
         } catch {
             return
         }
+    }
+}
+
+/// How an agent's tmux pane ended, once it has.
+///
+/// `remain-on-exit` keeps a pane — and the Flotilla client attached to it —
+/// alive after its agent exits, so the client never terminates and the app's
+/// process-exit path never fires. Asking tmux is the only authoritative way
+/// to learn that the agent is gone, and how.
+enum TmuxPaneExit: Equatable, Sendable {
+    case status(Int32)
+    /// tmux reports the signal by name (`kill`) in current releases and by
+    /// number in older ones; either is kept as reported.
+    case signal(String)
+
+    var succeeded: Bool { self == .status(0) }
+
+    /// "exit code 1", "signal SIGKILL" — for the exit screen and the trace.
+    var summary: String {
+        switch self {
+        case .status(let code):
+            return "exit code \(code)"
+        case .signal(let signal):
+            return Int(signal) == nil ? "signal SIG\(signal.uppercased())" : "signal \(signal)"
+        }
+    }
+
+    /// Parses `#{pane_dead} #{pane_dead_status} #{pane_dead_signal}`.
+    /// Returns `nil` for a live pane or output it does not recognise.
+    init?(paneStateLine line: String) {
+        let fields = line.trimmingCharacters(in: .newlines)
+            .split(separator: " ", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard fields.first == "1" else { return nil }
+        let status = fields.count > 1 ? Int32(fields[1]) : nil
+        let signal = fields.count > 2 ? fields[2] : ""
+        if !signal.isEmpty, signal != "0" {
+            self = .signal(signal)
+        } else if let status {
+            self = .status(status)
+        } else {
+            return nil
+        }
+    }
+}
+
+/// Seam for asking tmux whether a session's pane has died.
+protocol TmuxPaneProbing: Sendable {
+    /// Blocks on a tmux subprocess; call off the main actor.
+    func deadPaneExit(sessionNamed name: String, tmuxExecutable: URL) -> TmuxPaneExit?
+}
+
+struct ProcessTmuxPaneProbe: TmuxPaneProbing {
+    func deadPaneExit(sessionNamed name: String, tmuxExecutable: URL) -> TmuxPaneExit? {
+        let process = ChildProcessEnvironment.makeProcess()
+        process.executableURL = tmuxExecutable
+        process.arguments = TmuxSessionWrapping.socketArguments() + [
+            "display-message", "-p", "-t", name,
+            "#{pane_dead} #{pane_dead_status} #{pane_dead_signal}"
+        ]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        return TmuxPaneExit(paneStateLine: String(decoding: data, as: UTF8.self))
     }
 }
 

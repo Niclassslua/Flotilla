@@ -27,6 +27,12 @@ struct SessionStatusOrigin: Sendable {
         Self("process exit code \(code)")
     }
 
+    /// The agent died inside a tmux pane that `remain-on-exit` kept open,
+    /// so the client never exited and `processExit` never fired.
+    static func agentPaneExit(_ exit: TmuxPaneExit) -> Self {
+        Self("agent exited in its tmux pane with \(exit.summary)")
+    }
+
     static let restart = Self("session restarted by user")
     static let resumeRetry = Self("resume failed — relaunched with fresh context")
     static func handoff(from source: AgentKind, to target: AgentKind) -> Self {

@@ -79,6 +79,9 @@ public struct TerminalScreenHeuristic: Sendable {
         "question for you",
     ]
 
+    /// How Flotilla's tmux `remain-on-exit-format` banner begins.
+    static let deadPaneBannerPrefix = "[agent exited"
+
     /// Markers indicating the process or agent exited.
     private static let finishedMarkers = [
         "agent exited",
@@ -109,6 +112,17 @@ public struct TerminalScreenHeuristic: Sendable {
     public func observation(forScreen screen: String) -> SessionStatusObservation? {
         let tail = Self.tail(of: screen)
         let lowered = tail.lowercased()
+
+        // tmux's dead-pane banner is written below everything else, so when
+        // it is the last line nothing above it — a stale permission prompt,
+        // a spinner frame — describes a live agent.
+        if Self.tail(of: screen, maximumLines: 1).lowercased().hasPrefix(Self.deadPaneBannerPrefix) {
+            return SessionStatusObservation(
+                .readyForReview,
+                cause: "screen: tmux dead-pane banner",
+                suggestsAgentExit: true
+            )
+        }
 
         let interactiveTail = Self.tail(of: screen, maximumLines: Self.inspectedInteractiveTailLines)
         let loweredInteractiveTail = interactiveTail.lowercased()
@@ -164,7 +178,8 @@ public struct TerminalScreenHeuristic: Sendable {
         if let marker = Self.finishedMarkers.first(where: lowered.contains) {
             return SessionStatusObservation(
                 .readyForReview,
-                cause: "screen: finished marker \(Self.quoted(marker))"
+                cause: "screen: finished marker \(Self.quoted(marker))",
+                suggestsAgentExit: true
             )
         }
         if let marker = Self.workingMarkers.first(where: lowered.contains) {

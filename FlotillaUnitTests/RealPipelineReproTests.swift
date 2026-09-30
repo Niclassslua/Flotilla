@@ -5,6 +5,7 @@ import AgentKit
 import SettingsKit
 import PersistenceKit
 import GitKit
+import HooksKit
 @testable import Flotilla
 
 /// Reproduction harness: drives the REAL process pipeline (real
@@ -334,6 +335,67 @@ final class RealPipelineReproTests: XCTestCase {
         await store.deleteSession(sessionID: created.id, deleteWorktree: false)
     }
 
+    /// `remain-on-exit` keeps a dead agent's pane — and the client attached
+    /// to it — alive, so the process-exit path never fires. The session must
+    /// still learn the agent is gone and how, or it keeps showing a live
+    /// terminal with a one-line banner and a status that says nothing failed.
+    func testAgentExitInsideTmuxIsConfirmedWithItsExitCodeAndClearedByRestart() async throws {
+        var settings = AppSettings()
+        settings.agentPaths.claudeCodePath = "/bin/sh"
+        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 2; exit 3", "--"]
+        let store = AppStore(
+            repository: try GRDBSessionRepository(),
+            gitService: MockGitService(),
+            processManager: SessionProcessManager(
+                locator: Locator(tmuxURL: URL(fileURLWithPath: "/opt/homebrew/bin/tmux")),
+                processFactory: SystemPTYProcessFactory(),
+                settingsProvider: { settings }
+            ),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+        await store.createSession(
+            title: "Agent exit screen",
+            goal: "",
+            agent: .claudeCode,
+            projectFolder: nil,
+            checkoutMode: .mainCheckout
+        )
+        let created = try XCTUnwrap(store.sessions.first { $0.title == "Agent exit screen" })
+        let sessionName = TmuxSessionWrapping.sessionName(for: created.id)
+        let confirmedWhileRunning = await store.confirmAgentExit(sessionID: created.id)
+        XCTAssertFalse(confirmedWhileRunning, "a live agent must not be reported as exited")
+
+        let banner = try XCTUnwrap(waitForTmuxPaneBanner(sessionName), "tmux must draw its dead-pane banner")
+        XCTAssertEqual(
+            TerminalScreenHeuristic().observation(forScreen: banner)?.suggestsAgentExit,
+            true,
+            "the banner tmux actually draws must be one the screen heuristic recognises"
+        )
+        XCTAssertTrue(store.process(for: created.id)?.isRunning == true, "the client stays attached to the dead pane")
+
+        let confirmed = await store.confirmAgentExit(sessionID: created.id)
+
+        XCTAssertTrue(confirmed)
+        XCTAssertEqual(store.agentExit(for: created.id), .status(3))
+        XCTAssertEqual(store.sessions.first { $0.id == created.id }?.status, .crashed)
+
+        store.restartSession(sessionID: created.id)
+
+        XCTAssertNil(store.agentExit(for: created.id), "a restarted agent must not keep the previous exit screen")
+        await store.deleteSession(sessionID: created.id, deleteWorktree: false)
+    }
+
+    func testPaneStateParsingDistinguishesLiveStatusAndSignalDeaths() {
+        XCTAssertNil(TmuxPaneExit(paneStateLine: "0  \n"))
+        XCTAssertEqual(TmuxPaneExit(paneStateLine: "1 0 \n"), .status(0))
+        XCTAssertEqual(TmuxPaneExit(paneStateLine: "1 3 \n"), .status(3))
+        // tmux 3.7 names the signal and leaves the status empty; older
+        // releases report the number.
+        XCTAssertEqual(TmuxPaneExit(paneStateLine: "1  kill\n"), .signal("kill"))
+        XCTAssertEqual(TmuxPaneExit(paneStateLine: "1  9\n"), .signal("9"))
+        XCTAssertFalse(TmuxPaneExit.signal("kill").succeeded)
+    }
+
     /// Regression for "large prompt instantly crashes the new session": the
     /// goal is delivered as a bare argv element to the agent CLI
     /// (`CLIAgentProvider.launchPlan`), which used to land inline inside
@@ -381,6 +443,24 @@ final class RealPipelineReproTests: XCTestCase {
         let refetched = try XCTUnwrap(store.sessions.first { $0.id == created.id })
         XCTAssertNotEqual(refetched.status, .crashed, "session must not be marked crashed for an oversized goal")
         await store.deleteSession(sessionID: created.id, deleteWorktree: false)
+    }
+
+    private func waitForTmuxPaneBanner(_ name: String, timeout: TimeInterval = 10.0) -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/tmux")
+            process.arguments = TmuxSessionWrapping.socketArguments() + ["capture-pane", "-p", "-t", name]
+            let output = Pipe()
+            process.standardOutput = output
+            process.standardError = FileHandle.nullDevice
+            try? process.run()
+            let screen = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            process.waitUntilExit()
+            if screen.contains("Agent exited") { return screen }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return nil
     }
 
     private func waitForTmuxPanePID(_ name: String, timeout: TimeInterval = 10.0) -> String? {

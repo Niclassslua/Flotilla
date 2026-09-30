@@ -10,6 +10,41 @@ final class RestartSessionUITests: XCTestCase {
         app.descendants(matching: .any)[identifier].firstMatch
     }
 
+    /// The exit screen hides the terminal, so "Show Output" is the only way
+    /// to read why the agent died, and the strip it leaves behind must still
+    /// restart the session.
+    func testAgentExitScreenRevealsOutputThenRestartsFromTheStrip() {
+        let app = XCUIApplication()
+        app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
+        app.launchEnvironment["UI_TESTING"] = "1"
+        app.launchEnvironment["UI_TESTING_SIMULATE_AGENT_EXIT"] = "Fix login bug"
+        app.launch()
+
+        let row = element(app, AXID.sessionRow("Fix login bug"))
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.click()
+
+        let exitScreen = element(app, .agentExitScreen)
+        XCTAssertTrue(exitScreen.waitForExistence(timeout: 3))
+        let screenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        screenshot.name = "AgentExitScreen"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        element(app, .agentExitShowOutput).click()
+        XCTAssertTrue(exitScreen.waitForNonExistence(timeout: 3))
+        let stripRestart = element(app, .agentExitStripRestart)
+        XCTAssertTrue(stripRestart.waitForExistence(timeout: 3))
+        let strip = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        strip.name = "AgentExitStrip"
+        strip.lifetime = .keepAlways
+        add(strip)
+
+        stripRestart.click()
+        XCTAssertTrue(stripRestart.waitForNonExistence(timeout: 3))
+        XCTAssertFalse(exitScreen.exists, "a restarted agent must not show the exit screen again")
+    }
+
     func testRestartCrashedSessionRecoversToWorking() {
         let app = XCUIApplication()
         app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])

@@ -144,6 +144,17 @@ created with, before its process has been observed doing anything.
 | **Cursor Agent** | `postToolUse` / `afterShellExecution`; decision hooks while held cards resolve | Held bridge cards → `permission` / `question` / `planApproval` (phone + Mac) | `sessionEnd` / `stop` | — |
 | **Terminal-screen fallback** (every provider) | an interrupt/cancel hint — `esc to interrupt`, `esc to cancel`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; shows a numbered choice list with a selection caret; matches Antigravity's extended permission-picker signature; or the prompt heuristic reads the prompt as waiting | a composer prompt with transcript above it, or a dead-pane marker (`agent exited`, `pane is dead`, `process finished`). Unremarkable screens yield no observation | — |
 | **Process exit** | — | — | exit status code 0 (also fires `onSessionFinished`) | any non-zero exit code, or a launch/relaunch failure |
+| **Dead tmux pane** | — | — | a dead-pane screen observation that `tmux display-message` confirms with `pane_dead_status` 0 (also fires `onSessionFinished`) | the same, confirmed with a non-zero status or a signal |
+
+tmux runs with `remain-on-exit`, so an agent that exits leaves its pane — and
+Flotilla's client attached to it — alive, and the process-exit row never
+fires for a tmux-wrapped session. Instead, a screen observation flagged
+`suggestsAgentExit` (tmux's `[Agent exited with …]` banner as the last line,
+or any other dead-pane marker) makes `AppStore.confirmAgentExit` ask tmux
+whether the pane really is dead. Confirmed, the session settles from the real
+exit code and the focused terminal shows the exit screen; unconfirmed (the
+banner quoted inside a live transcript), the observation is treated like any
+other.
 
 `SessionStatusMachine` shapes which of these are reachable when:
 
@@ -256,7 +267,7 @@ matched, a process exit and its code, a user dragging a card on the board, and
 the launch/restart/restore paths. So "why is this Ready for Review?" is
 answered by one line — `hook: Stop`, `screen: composer prompt above a
 non-empty transcript`, `screen: finished marker "agent exited"`, or
-`process exit code 0`.
+`process exit code 0`, or `agent exited in its tmux pane with exit code 0`.
 
 Session IDs are abbreviated to their first eight characters; grep for that
 prefix to follow one session end to end.

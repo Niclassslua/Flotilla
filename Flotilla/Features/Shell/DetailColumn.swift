@@ -299,22 +299,139 @@ struct DetailColumn: View {
             )
             .id(session.id)
             .accessibilityIdentifier("TerminalView-\(session.title)")
+            .overlay {
+                agentExitOverlay(for: session)
+                    .flotillaAnimation(.normal, value: store.agentExit(for: session.id))
+                    .flotillaAnimation(.normal, value: store.isAgentExitOutputRevealed(for: session.id))
+            }
         } else {
             terminalUnavailableState(for: session)
         }
     }
 
+    /// tmux keeps a dead agent's pane on screen (`remain-on-exit`), so the
+    /// terminal is still mounted after the agent is gone. The exit screen
+    /// covers it rather than replacing it: the output just before an exit
+    /// is usually the explanation, and "Show Output" hands it back.
+    @ViewBuilder
+    private func agentExitOverlay(for session: Session) -> some View {
+        if let exit = store.agentExit(for: session.id) {
+            if store.isAgentExitOutputRevealed(for: session.id) {
+                agentExitStrip(for: session, exit: exit)
+                    .padding(FlotillaSpacing.large)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                agentExitScreen(for: session, exit: exit)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func agentExitScreen(for session: Session, exit: TmuxPaneExit) -> some View {
+        let agent = session.agent.displayName
+        return agentStateContent(
+            tint: exit.succeeded ? FlotillaColors.statusReady : FlotillaColors.statusCrashed,
+            systemImage: exit.succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+            title: exit.succeeded ? "Agent Exited" : "Agent Crashed",
+            titleIdentifier: AXID.agentExitScreen.rawValue,
+            message: exit.succeeded
+                ? "\(agent) finished and closed. Restart the session to pick the conversation back up."
+                : "\(agent) exited with \(exit.summary). Its last output is still in the terminal behind this screen."
+        ) {
+            Button {
+                store.revealAgentExitOutput(for: session.id)
+            } label: {
+                Label("Show Output", systemImage: "text.alignleft")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier(AXID.agentExitShowOutput.rawValue)
+
+            restartButton(for: session, identifier: AXID.agentExitRestart.rawValue)
+        }
+        .background(FlotillaColors.terminalCanvas.opacity(0.82))
+        .contentShape(Rectangle())
+    }
+
+    /// What stays of the exit screen once the output is revealed: enough to
+    /// know the agent is gone and to restart it without hunting for a menu.
+    private func agentExitStrip(for session: Session, exit: TmuxPaneExit) -> some View {
+        HStack(spacing: FlotillaSpacing.medium) {
+            Image(systemName: exit.succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(exit.succeeded ? FlotillaColors.statusReady : FlotillaColors.statusCrashed)
+                .accessibilityHidden(true)
+            Text(exit.succeeded ? "\(session.agent.displayName) exited" : "\(session.agent.displayName) crashed · \(exit.summary)")
+                .font(FlotillaTypography.body)
+                .foregroundStyle(FlotillaColors.textPrimary)
+            Button("Restart Session") {
+                store.restartSession(sessionID: session.id)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(FlotillaColors.accent)
+            .controlSize(.small)
+            .accessibilityIdentifier(AXID.agentExitStripRestart.rawValue)
+        }
+        .padding(.leading, FlotillaSpacing.large)
+        .padding(.trailing, FlotillaSpacing.small)
+        .padding(.vertical, FlotillaSpacing.small)
+        .flotillaChromeCapsule()
+        .flotillaShadow(.level2)
+    }
+
     private func terminalUnavailableState(for session: Session) -> some View {
         let hasCrashed = session.status == .crashed
-        let tint = hasCrashed ? FlotillaColors.statusCrashed : FlotillaColors.textTertiary
+        return agentStateContent(
+            tint: hasCrashed ? FlotillaColors.statusCrashed : FlotillaColors.textTertiary,
+            systemImage: hasCrashed ? "exclamationmark.triangle.fill" : "terminal.fill",
+            title: hasCrashed ? "Agent Stopped" : "Session Not Running",
+            titleIdentifier: "TerminalPlaceholder",
+            message: hasCrashed
+                ? "The \(session.agent.displayName) process exited unexpectedly. Review its configuration or restart the session."
+                : "No \(session.agent.displayName) process is attached. Check its executable in Settings, then restart the session."
+        ) {
+            Button {
+                openSettings()
+            } label: {
+                Label("Open Settings", systemImage: "gearshape")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("TerminalPlaceholder.OpenSettings")
 
-        return VStack(spacing: FlotillaSpacing.xLarge) {
+            restartButton(for: session, identifier: "Restart Session")
+        }
+        // The detail column supplies the glass backdrop. An opaque terminal
+        // fill here hid it whenever no process was attached.
+        .background(liquidGlassEnabled ? Color.clear : FlotillaColors.terminalCanvas)
+    }
+
+    private func restartButton(for session: Session, identifier: String) -> some View {
+        Button {
+            store.restartSession(sessionID: session.id)
+        } label: {
+            Label("Restart Session", systemImage: "arrow.clockwise")
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(FlotillaColors.accent)
+        .accessibilityIdentifier(identifier)
+    }
+
+    /// The shared layout for "this session has no live agent": a tinted
+    /// symbol, a title, an explanation, and the actions that recover it.
+    private func agentStateContent(
+        tint: Color,
+        systemImage: String,
+        title: String,
+        titleIdentifier: String,
+        message: String,
+        @ViewBuilder actions: () -> some View
+    ) -> some View {
+        VStack(spacing: FlotillaSpacing.xLarge) {
             ZStack {
                 Circle()
                     .fill(tint.opacity(0.10))
                 Circle()
                     .strokeBorder(tint.opacity(0.28), lineWidth: FlotillaBorderWidth.thin)
-                Image(systemName: hasCrashed ? "exclamationmark.triangle.fill" : "terminal.fill")
+                Image(systemName: systemImage)
                     .font(.system(size: FlotillaIconSize.xLarge, weight: .medium))
                     .foregroundStyle(tint)
             }
@@ -322,47 +439,25 @@ struct DetailColumn: View {
             .accessibilityHidden(true)
 
             VStack(spacing: FlotillaSpacing.small) {
-                Text(hasCrashed ? "Agent Stopped" : "Session Not Running")
+                Text(title)
                     .font(FlotillaTypography.title)
                     .foregroundStyle(FlotillaColors.textPrimary)
-                    .accessibilityIdentifier("TerminalPlaceholder")
+                    .accessibilityIdentifier(titleIdentifier)
 
-                Text(
-                    hasCrashed
-                        ? "The \(session.agent.displayName) process exited unexpectedly. Review its configuration or restart the session."
-                        : "No \(session.agent.displayName) process is attached. Check its executable in Settings, then restart the session."
-                )
-                .font(FlotillaTypography.body)
-                .foregroundStyle(FlotillaColors.textSecondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 440)
+                Text(message)
+                    .font(FlotillaTypography.body)
+                    .foregroundStyle(FlotillaColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 440)
             }
 
             HStack(spacing: FlotillaSpacing.small) {
-                Button {
-                    openSettings()
-                } label: {
-                    Label("Open Settings", systemImage: "gearshape")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("TerminalPlaceholder.OpenSettings")
-
-                Button {
-                    store.restartSession(sessionID: session.id)
-                } label: {
-                    Label("Restart Session", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(FlotillaColors.accent)
-                .accessibilityIdentifier("Restart Session")
+                actions()
             }
             .controlSize(.large)
         }
         .padding(FlotillaSpacing.xxLarge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        // The detail column supplies the glass backdrop. An opaque terminal
-        // fill here hid it whenever no process was attached.
-        .background(liquidGlassEnabled ? Color.clear : FlotillaColors.terminalCanvas)
     }
 
     @ViewBuilder

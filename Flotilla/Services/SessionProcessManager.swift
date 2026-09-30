@@ -30,6 +30,7 @@ final class SessionProcessManager {
     private let tmuxGoalDeliverer: any TmuxGoalDelivering
     private let tmuxServerProbe: any TmuxServerProbing
     private let tmuxClientProbe: any TmuxClientProbing
+    private let tmuxPaneProbe: any TmuxPaneProbing
     private let conversationOwnershipChecker: any AgentConversationOwnershipChecking
     private let hookConfigurationWriter: any HookConfiguring
     private let hookSupportDirectory: URL
@@ -86,6 +87,7 @@ final class SessionProcessManager {
         tmuxGoalDeliverer: any TmuxGoalDelivering = ProcessTmuxGoalDeliverer(),
         tmuxServerProbe: any TmuxServerProbing = ProcessTmuxServerProbe(),
         tmuxClientProbe: any TmuxClientProbing = ProcessTmuxClientProbe(),
+        tmuxPaneProbe: any TmuxPaneProbing = ProcessTmuxPaneProbe(),
         conversationOwnershipChecker: any AgentConversationOwnershipChecking = ProcessAgentConversationOwnershipChecker(),
         hookConfigurationWriter: any HookConfiguring = HookConfigurationWriter(),
         hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
@@ -105,6 +107,7 @@ final class SessionProcessManager {
         self.tmuxGoalDeliverer = tmuxGoalDeliverer
         self.tmuxServerProbe = tmuxServerProbe
         self.tmuxClientProbe = tmuxClientProbe
+        self.tmuxPaneProbe = tmuxPaneProbe
         self.conversationOwnershipChecker = conversationOwnershipChecker
         self.hookConfigurationWriter = hookConfigurationWriter
         self.hookSupportDirectory = hookSupportDirectory
@@ -412,6 +415,18 @@ final class SessionProcessManager {
 
     func isTmuxWrapped(sessionID: UUID) -> Bool {
         tmuxWrappedSessions[sessionID] != nil
+    }
+
+    /// How this session's agent exited, if tmux holds its pane open dead.
+    /// `nil` for a live pane and for a session not wrapped in tmux — the
+    /// latter's exit arrives through `terminationHandler` instead.
+    func deadPaneExit(for sessionID: UUID) async -> TmuxPaneExit? {
+        guard let tmuxExecutable = tmuxWrappedSessions[sessionID] else { return nil }
+        let probe = tmuxPaneProbe
+        let name = TmuxSessionWrapping.sessionName(for: sessionID)
+        return await Task.detached(priority: .userInitiated) {
+            probe.deadPaneExit(sessionNamed: name, tmuxExecutable: tmuxExecutable)
+        }.value
     }
 
     /// Sends a message to a running agent so that it is *submitted*, not

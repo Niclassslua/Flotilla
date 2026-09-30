@@ -71,6 +71,16 @@ final class AppStore {
     private var sessionResumeStarts: [UUID: Date] = [:]
     @ObservationIgnored
     private var sessionResumeRetried: Set<UUID> = []
+    /// Agents that exited inside a pane tmux kept open. Tied to the client
+    /// process that was attached at the time, so any relaunch — restart,
+    /// handoff, reattach — retires the entry without explicit bookkeeping.
+    private var agentExits: [UUID: AgentExitRecord] = [:]
+
+    private struct AgentExitRecord {
+        weak var process: (any PTYProcessProtocol)?
+        let exit: TmuxPaneExit
+        var isOutputRevealed = false
+    }
 
     init(
         repository: SessionRepository,
@@ -389,6 +399,51 @@ final class AppStore {
         processManager.process(for: sessionID)
     }
 
+    /// How this session's agent exited, while its dead pane is still what
+    /// the terminal shows. `nil` while the agent is running.
+    func agentExit(for sessionID: UUID) -> TmuxPaneExit? {
+        currentAgentExitRecord(for: sessionID)?.exit
+    }
+
+    /// Whether the user dismissed the exit screen to read the output under it.
+    func isAgentExitOutputRevealed(for sessionID: UUID) -> Bool {
+        currentAgentExitRecord(for: sessionID)?.isOutputRevealed ?? false
+    }
+
+    func revealAgentExitOutput(for sessionID: UUID) {
+        guard currentAgentExitRecord(for: sessionID) != nil else { return }
+        agentExits[sessionID]?.isOutputRevealed = true
+    }
+
+    private func currentAgentExitRecord(for sessionID: UUID) -> AgentExitRecord? {
+        guard let record = agentExits[sessionID],
+              let process = processManager.process(for: sessionID),
+              process === record.process else { return nil }
+        return record
+    }
+
+    /// Checks with tmux whether the agent behind a screen that *looks*
+    /// exited really is, and if so settles the session as its exit code
+    /// says. Returns whether it was confirmed; an unconfirmed hint (the
+    /// banner text quoted in a transcript, a session outside tmux) leaves
+    /// the caller to treat the screen as an ordinary observation.
+    func confirmAgentExit(sessionID: UUID) async -> Bool {
+        guard let process = processManager.process(for: sessionID) else { return false }
+        if currentAgentExitRecord(for: sessionID) != nil { return true }
+        guard let exit = await processManager.deadPaneExit(for: sessionID),
+              processManager.process(for: sessionID) === process else { return false }
+        agentExits[sessionID] = AgentExitRecord(process: process, exit: exit)
+        applyObservedStatus(
+            exit.succeeded ? .readyForReview : .crashed,
+            origin: .agentPaneExit(exit),
+            toSessionID: sessionID
+        )
+        if exit.succeeded, let session = sessions.first(where: { $0.id == sessionID }) {
+            onSessionFinished?(session)
+        }
+        return true
+    }
+
     /// Delivers a message to a running session's agent and returns only after
     /// the reliable tmux submission path succeeds.
     func deliverMessage(_ text: String, to sessionID: UUID) async throws {
@@ -440,6 +495,23 @@ final class AppStore {
         } catch {
             lastOperationError = error.localizedDescription
         }
+    }
+
+    /// Puts a session into the state a real agent exit inside tmux produces —
+    /// the client still attached, the exit recorded against it — without a
+    /// tmux server. Only available under `UI_TESTING=1`.
+    func simulateAgentExitForUITesting(sessionTitle: String) {
+        #if DEBUG
+        let isUITesting = ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
+        #else
+        let isUITesting = false
+        #endif
+        guard isUITesting,
+              let session = sessions.first(where: { $0.title == sessionTitle }),
+              let process = processManager.process(for: session.id) else { return }
+        let exit = TmuxPaneExit.status(1)
+        agentExits[session.id] = AgentExitRecord(process: process, exit: exit)
+        applyObservedStatus(.crashed, origin: .uiTestFixture, toSessionID: session.id)
     }
 
     /// Applies a status observed by `HookCoordinator`, going through

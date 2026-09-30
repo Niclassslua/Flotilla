@@ -231,6 +231,19 @@ final class TerminalScreenHeuristicTests: XCTestCase {
             XCTAssertEqual(heuristic.observation(forScreen: entry.screen), entry.expected, entry.name)
         }
     }
+
+    /// An agent that dies mid-prompt leaves the prompt drawn above tmux's
+    /// banner. Read as waiting, the session would never get its exit screen
+    /// and would sit in Needs You with nobody to answer.
+    func testDeadPaneBannerOutranksAStalePromptAboveIt() {
+        let screen = permissionScreen + "\n\n[Agent exited with status 1]"
+
+        let observation = heuristic.observation(forScreen: screen)
+
+        XCTAssertEqual(observation?.status, .readyForReview)
+        XCTAssertEqual(observation?.suggestsAgentExit, true)
+        XCTAssertEqual(heuristic.observation(forScreen: permissionScreen)?.suggestsAgentExit, false)
+    }
 }
 
 final class SessionScreenMonitorTests: XCTestCase {

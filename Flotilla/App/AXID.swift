@@ -157,6 +157,12 @@ public enum AXID: String, Sendable {
     case gridEmptyState = "GridEmptyState"
     case viewModePicker = "ViewModePicker"
     case restartSessionButton = "Restart Session"
+
+    // MARK: - Agent Exit Screen
+    case agentExitScreen = "AgentExitScreen"
+    case agentExitShowOutput = "AgentExitScreen.ShowOutput"
+    case agentExitRestart = "AgentExitScreen.Restart"
+    case agentExitStripRestart = "AgentExitStrip.Restart"
     case newSessionButton = "NewSessionButton"
     case openSessionButton = "Open Session"
 

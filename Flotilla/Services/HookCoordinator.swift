@@ -191,6 +191,15 @@ final class HookCoordinator {
         sessionID: UUID,
         gate: WaitingNotificationGate
     ) async {
+        // A dead agent's pane stays open under `remain-on-exit`, so its exit
+        // is only visible on screen. Once tmux confirms it, the store has
+        // settled the status from the real exit code and the screen has
+        // nothing further to say.
+        if source == .screen,
+           observation.suggestsAgentExit,
+           await store.confirmAgentExit(sessionID: sessionID) {
+            return
+        }
         var arbiter = arbiters[sessionID] ?? SessionStatusObservationArbiter()
         let accepted = arbiter.accept(observation, from: source)
         let sourceLabel = source == .hook ? "hook" : "screen"
