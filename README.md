@@ -10,6 +10,11 @@
 - **iPhone companion** — an end-to-end encrypted remote control for a running Flotilla, paired over LAN or Tailscale. See [`docs/companion.md`](docs/companion.md).
 - **Hooks** — per-provider hook wiring drives status transitions and notifications as agents move through their lifecycle.
 
+## Showcase
+
+https://github.com/user-attachments/assets/2c9a99b6-196c-42f7-94f4-9de2aa107d46
+
+
 ## Requirements
 
 - macOS 26.0+
