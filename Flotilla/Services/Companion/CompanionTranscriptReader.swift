@@ -13,8 +13,14 @@ actor CompanionTranscriptReader {
         var size: Int
         var parsedSize: Int
         var lineCount: Int
+        /// The last bytes already parsed. Cursor rewrites its transcript (it
+        /// drops the trailing `turn_ended` record when a turn starts), so a
+        /// file that grew may still have changed underneath `parsedSize`.
+        var parsedTail: Data = Data()
         var transcript: SessionTranscript
     }
+
+    private static let parsedTailLength = 512
     private var cache: [UUID: Cached] = [:]
     private var watchers: [UUID: TranscriptFileWatcher] = [:]
     private let changeStream: AsyncStream<Void>
@@ -94,15 +100,19 @@ actor CompanionTranscriptReader {
            var cached = cache[session.id], cached.url == url, size > cached.size,
            let handle = try? FileHandle(forReadingFrom: url) {
             defer { try? handle.close() }
-            if (try? handle.seek(toOffset: UInt64(cached.parsedSize))) != nil,
-               let bytes = try? handle.readToEnd() {
-                let complete = Self.completeRecords(bytes)
+            let tailStart = cached.parsedSize - cached.parsedTail.count
+            if (try? handle.seek(toOffset: UInt64(tailStart))) != nil,
+               let read = try? handle.readToEnd(),
+               read.prefix(cached.parsedTail.count) == cached.parsedTail {
+                let bytes = read.dropFirst(cached.parsedTail.count)
+                let complete = Self.completeRecords(Data(bytes))
                 if !complete.isEmpty {
                     let lines = Self.lines(complete)
                     cached.transcript.events.append(contentsOf: Self.events(in: lines, reader: lineReader, firstLine: cached.lineCount))
                     cached.transcript.events = Array(cached.transcript.events.suffix(CompanionProtocol.transcriptEventLimit))
                     cached.lineCount += lines.count
                     cached.parsedSize += complete.count
+                    cached.parsedTail = Self.parsedTail(of: cached.parsedTail + complete)
                 }
                 cached.size = cached.parsedSize + bytes.count - complete.count
                 cached.modified = modified
@@ -116,7 +126,8 @@ actor CompanionTranscriptReader {
             let (events, lineCount) = Self.tailEvents(in: complete, reader: lineReader)
             let transcript = SessionTranscript(events: events)
             cache[session.id] = Cached(url: url, modified: modified, size: bytes.count,
-                                       parsedSize: complete.count, lineCount: lineCount, transcript: transcript)
+                                       parsedSize: complete.count, lineCount: lineCount,
+                                       parsedTail: Self.parsedTail(of: complete), transcript: transcript)
             return transcript
         }
         guard let entries = try? reader.readNative(at: url) else {
@@ -126,6 +137,10 @@ actor CompanionTranscriptReader {
         cache[session.id] = Cached(url: url, modified: modified, size: size,
                                    parsedSize: size, lineCount: 0, transcript: transcript)
         return transcript
+    }
+
+    private static func parsedTail(of data: Data) -> Data {
+        Data(data.suffix(parsedTailLength))
     }
 
     private static func completeRecords(_ data: Data) -> Data {

@@ -652,12 +652,14 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
                 continue
             }
             // Fast-path: active prompt indicator is ready
-            // Cursor's composer placeholders: a working Cursor pane animates
-            // without pause, so without these a mid-turn message waited out
-            // the full deadline before being typed.
+            // Cursor's composer placeholders and its skip-reason and plan
+            // revision prompts: a working Cursor pane animates without pause,
+            // so without these a message waited out the full deadline.
             if current.contains("❯") || current.contains("> ") || current.contains("cwd:")
                 || current.contains("? for help") || current.contains("What would you like")
-                || current.contains("→ Add a follow-up") || current.contains("→ Plan, search") {
+                || current.contains("→ Add a follow-up") || current.contains("→ Plan, search")
+                || current.contains("→ Tell the agent what to do instead")
+                || current.contains("→ Describe how to revise the plan") {
                 return
             }
             if current == previous {

@@ -114,6 +114,16 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
         let stamp = now()
         for line in lines {
             guard let record = Self.decodeObject(line) else { continue }
+            // Cursor keeps only the latest `turn_ended` and drops it when the
+            // next turn starts, so this note lasts until the user goes on.
+            if record["type"] as? String == "turn_ended", record["status"] as? String == "error" {
+                let reason = record["error"] as? String
+                entries.append(.systemNote(
+                    text: "Cursor stopped with an error" + (reason.map { ": \($0)" } ?? "."),
+                    timestamp: stamp
+                ))
+                continue
+            }
             let role = record["role"] as? String
             let message = record["message"] as? [String: Any] ?? record
             let content = message["content"]
@@ -121,6 +131,8 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
             guard let role, !texts.isEmpty else { continue }
             let text = texts
                 .map(Self.stripHarnessWrappers)
+                // Some models' end-of-sequence token leaks into the reply.
+                .map { $0.replacingOccurrences(of: "<|eos|>", with: "").trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty && $0 != "[REDACTED]" }
                 .joined(separator: "\n")
             guard !text.isEmpty else { continue }

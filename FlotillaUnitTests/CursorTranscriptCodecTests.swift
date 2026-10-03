@@ -69,6 +69,20 @@ final class CursorTranscriptCodecTests: XCTestCase {
         ])
     }
 
+    func testFailedTurnBecomesANoteAndEOSTokensAreDropped() {
+        let codec = CursorTranscriptCodec()
+        let entries = codec.readRecords([
+            #"{"role":"assistant","message":{"content":[{"type":"text","text":"TWO-DONE<|eos|>"}]}}"#,
+            #"{"role":"assistant","message":{"content":[{"type":"text","text":"<|eos|><|eos|>"}]}}"#,
+            #"{"type":"turn_ended","status":"error","error":"WritableIterable is closed"}"#,
+            #"{"type":"turn_ended","status":"success"}"#,
+        ])
+        XCTAssertEqual(entries.count, 2)
+        guard case .assistantMessage("TWO-DONE", _) = entries.first else { return XCTFail("\(entries)") }
+        guard case .systemNote(let text, _) = entries.last else { return XCTFail("expected a note") }
+        XCTAssertEqual(text, "Cursor stopped with an error: WritableIterable is closed")
+    }
+
     func testEmbeddedSessionIDComesFromFilename() throws {
         let url = try writeTranscript([#"{"role":"user","message":{"content":[{"type":"text","text":"x"}]}}"#])
         XCTAssertEqual(try codec.embeddedSessionID(at: url), sessionID)

@@ -319,7 +319,6 @@
 		6406A5EDCFDAB379E4C4B57B /* HomeScreenshotFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D353638D362604EBEEC0C9A /* HomeScreenshotFeed.swift */; };
 		644FCEA7D4BB6A77F34CB0D7 /* AgentManagedWorktreeAndTitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1D5E06B90B0528533B4EC2 /* AgentManagedWorktreeAndTitleTests.swift */; };
 		645343199645216352F7CED9 /* folder-opencode.svg in Resources */ = {isa = PBXBuildFile; fileRef = B4D5179F1C39DC208C2CA0C4 /* folder-opencode.svg */; };
-		64798A9DBB87FD326925708C /* CursorPermissionPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E9A74ACEE24EAB03EBBAFB6 /* CursorPermissionPayload.swift */; };
 		6487C3349D2437B1C79A6820 /* ProjectGitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F37756AA07340F3ED847CB /* ProjectGitView.swift */; };
 		655A0D0BA322AEE4918A52AB /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524067025CC0F020E1592028 /* ProjectDetailView.swift */; };
 		6576D05ABA22589A6C6A3801 /* folder-assets.svg in Resources */ = {isa = PBXBuildFile; fileRef = B59D4859A8BA0601C40B809C /* folder-assets.svg */; };
@@ -747,7 +746,6 @@
 		F0BDBD7905A79F61E9D5185B /* table.svg in Resources */ = {isa = PBXBuildFile; fileRef = 1D3F1C8A7DEA2B2DF648146F /* table.svg */; };
 		F1257E1F80BDAD61D8C58AD5 /* FlotillaShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3624D090F6EF105D88197D68 /* FlotillaShell.swift */; };
 		F26B06A643D7D3CD9069D5EC /* BoardDemoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9A3E0708ED932A88F04F39 /* BoardDemoFixtures.swift */; };
-		F27060202345F102A4E76358 /* CursorPermissionPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E9A74ACEE24EAB03EBBAFB6 /* CursorPermissionPayload.swift */; };
 		F2A772A78CF0606E2397F901 /* swift.svg in Resources */ = {isa = PBXBuildFile; fileRef = 3965DCF54A4BBC6861D34A2C /* swift.svg */; };
 		F2AF44B4710F656682670CEB /* KanbanCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FEA3357E84747D12870D13A /* KanbanCard.swift */; };
 		F2B8B6B43E163595FC0E8DB6 /* graphql.svg in Resources */ = {isa = PBXBuildFile; fileRef = ECBC98B1E339659FBE0A518F /* graphql.svg */; };
@@ -935,7 +933,6 @@
 		2E7DFAC12BBB78D34E52F99A /* SessionReviewViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReviewViewModel.swift; sourceTree = "<group>"; };
 		2E8965FCB665EF0E961B509D /* docker.svg */ = {isa = PBXFileReference; path = docker.svg; sourceTree = "<group>"; };
 		2E8FCB22EE7EA9B8B5D2A170 /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
-		2E9A74ACEE24EAB03EBBAFB6 /* CursorPermissionPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorPermissionPayload.swift; sourceTree = "<group>"; };
 		2F5B48EC4DF04020E549FAE6 /* WorkspaceToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceToolbar.swift; sourceTree = "<group>"; };
 		30D780CFD5DE4C062453F18D /* SessionMetadataMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMetadataMonitor.swift; sourceTree = "<group>"; };
 		313232007FC6C19FA0F56E6C /* key.svg */ = {isa = PBXFileReference; path = key.svg; sourceTree = "<group>"; };
@@ -1738,7 +1735,6 @@
 				230BF08BDD20144090ACF146 /* CompanionSnapshotBuilder.swift */,
 				C79C38472E56265BCF12BA43 /* CompanionTranscriptReader.swift */,
 				1A3C58F96C850B4BD58B3D39 /* CursorCompanionAdapter.swift */,
-				2E9A74ACEE24EAB03EBBAFB6 /* CursorPermissionPayload.swift */,
 				1D144DD3648F458208978127 /* HandySpeechClient.swift */,
 				AA61233CF542DD4926EE5776 /* OpenCodeCompanionAdapter.swift */,
 				450290A29D767A2FE28CAF6E /* PresenceMonitor.swift */,
@@ -2834,7 +2830,6 @@
 				2E0492BBBA4AF7CB46400DC6 /* CompanionTranscriptReader.swift in Sources */,
 				48CC7BC28069DBC744F8FF33 /* CreateSessionView.swift in Sources */,
 				03786A992829AAB575ADB3A4 /* CursorCompanionAdapter.swift in Sources */,
-				F27060202345F102A4E76358 /* CursorPermissionPayload.swift in Sources */,
 				E4092E52E2834F379BA32BB7 /* DeleteSessionSheet.swift in Sources */,
 				CB7EFA01AFB1D62F71CC0812 /* DetailColumn.swift in Sources */,
 				36AFB3FE0B1EC0D582BC710E /* DiffPanelView.swift in Sources */,
@@ -3163,7 +3158,6 @@
 				D38FCEC9159F0A958FEC291F /* CompanionTranscriptReader.swift in Sources */,
 				F57D75C3DE2EE1D3D2852C05 /* CreateSessionView.swift in Sources */,
 				C271092264C77677B32F54DA /* CursorCompanionAdapter.swift in Sources */,
-				64798A9DBB87FD326925708C /* CursorPermissionPayload.swift in Sources */,
 				B8FC98E112507C86DDB6EF77 /* DeleteSessionSheet.swift in Sources */,
 				4B6810F6670AB2FB305F47B7 /* DetailColumn.swift in Sources */,
 				583001C169BABB8C3837EF62 /* DiffPanelView.swift in Sources */,

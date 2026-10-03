@@ -159,9 +159,6 @@ final class CompanionHost {
         bridge.onAllowNote = { [weak self] sessionID, note in
             Task { try? await self?.store.deliverMessage(note, to: sessionID) }
         }
-        bridge.onFollowUpPrompt = { [weak self] sessionID, text in
-            Task { try? await self?.store.deliverMessage(text, to: sessionID) }
-        }
         Task { [weak self] in
             let live = await CompanionSnapshotBuilder.catalog(openCodeSubscription: openCodeSubscription())
             guard let self else { return }

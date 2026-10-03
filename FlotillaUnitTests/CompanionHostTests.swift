@@ -287,6 +287,36 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(opened.events.last?.id, "599:0")
     }
 
+    /// Cursor drops its trailing `turn_ended` record when the next turn
+    /// starts, so the file grows but no longer extends what was parsed.
+    /// Regression: reading on from the old offset landed inside the new user
+    /// record and silently lost it.
+    func testCursorTranscriptRewriteKeepsTheNextUserMessage() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("companion-cursor-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        func record(_ role: String, _ text: String) -> String {
+            #"{"role":""# + role + #"","message":{"content":[{"type":"text","text":""# + text + #""}]}}"# + "\n"
+        }
+        let turnEnded = #"{"type":"turn_ended","status":"success"}"# + "\n"
+        let firstTurn = record("user", "<user_query>\\nfirst\\n</user_query>") + record("assistant", "one")
+        try Data((firstTurn + turnEnded).utf8).write(to: url)
+        var sample = session(status: .working, agent: .cursorAgent)
+        sample.nativeTranscriptPath = url
+        let reader = CompanionTranscriptReader(registry: .default)
+        _ = await reader.read(sample)
+
+        let secondTurn = record("user", "<user_query>\\nsecond\\n</user_query>") + record("assistant", "two")
+        try Data((firstTurn + secondTurn + turnEnded).utf8).write(to: url)
+        let updated = await reader.read(sample)
+
+        let users = updated.events.compactMap { event -> String? in
+            if case .userMessage(let text, _) = event.content { return text }
+            return nil
+        }
+        XCTAssertEqual(users, ["first", "second"])
+        XCTAssertEqual(updated.events.map(\.id), ["0:0", "1:0", "2:0", "3:0"])
+    }
+
     func testBlankNativeRecordDoesNotShiftIDsAfterAppend() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("companion-blank-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -816,66 +846,8 @@ final class CodexAsyncQuestionTests: XCTestCase {
     }
 }
 
-final class CursorPermissionPayloadTests: XCTestCase {
-    private let shell = #"{"flotilla_provider":"cursor","hook_event_name":"preToolUse","request":{"tool_name":"Shell","tool_use_id":"tool_1","tool_input":{"command":"rm -rf build"}}}"#
-
-    func testEnvelopeMapsToCardKind() throws {
-        struct Case {
-            let name: String
-            let payload: String
-            let check: (CursorPermissionPayload.Parsed) throws -> Void
-        }
-        let cases: [Case] = [
-            Case(name: "Shell→permission", payload: shell) { parsed in
-                guard case .permission(let request) = parsed.interaction.kind else { return XCTFail("permission") }
-                XCTAssertEqual(request.summary, "rm -rf build")
-                XCTAssertEqual(parsed.alwaysAllowPattern, "Shell:rm")
-                XCTAssertEqual(parsed.toolUseID, "tool_1")
-            },
-            Case(
-                name: "AskQuestion→question",
-                payload: #"{"flotilla_provider":"cursor","request":{"tool_name":"AskQuestion","tool_input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"A"},{"label":"B"}]}]}}}"#
-            ) { parsed in
-                guard case .question(let steps) = parsed.interaction.kind else { return XCTFail("question") }
-                XCTAssertEqual(steps.first?.prompt, "Which?")
-                XCTAssertEqual(steps.first?.options.map(\.label), ["A", "B"])
-            },
-            Case(
-                name: "CreatePlan→plan",
-                payload: ##"{"flotilla_provider":"cursor","request":{"tool_name":"CreatePlan","tool_input":{"plan":"# Ship it\n\n1. Build"}}}"##
-            ) { parsed in
-                guard case .plan(let plan) = parsed.interaction.kind else { return XCTFail("plan") }
-                XCTAssertEqual(plan.title, "Ship it")
-            },
-        ]
-        for entry in cases {
-            let parsed = try XCTUnwrap(CursorPermissionPayload.parse(Data(entry.payload.utf8)), entry.name)
-            try entry.check(parsed)
-        }
-    }
-
-    func testDecisionsAreAllowOrDenyOnly() throws {
-        let parsed = try XCTUnwrap(CursorPermissionPayload.parse(Data(shell.utf8)))
-        for answer: InteractionAnswer in [.allow, .alwaysAllow, .allowWithNote("go")] {
-            let data = try XCTUnwrap(CursorPermissionPayload.decision(for: answer, parsed: parsed))
-            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-            XCTAssertEqual(body["permission"] as? String, "allow")
-            XCTAssertEqual(body["continue"] as? Bool, true)
-        }
-        let deny = try XCTUnwrap(CursorPermissionPayload.decision(for: .denyWithNote("nope"), parsed: parsed))
-        let denyBody = try XCTUnwrap(JSONSerialization.jsonObject(with: deny) as? [String: Any])
-        XCTAssertEqual(denyBody["permission"] as? String, "deny")
-        XCTAssertEqual(denyBody["user_message"] as? String, "nope")
-    }
-
-    func testIgnoresNonCursorEnvelopes() {
-        XCTAssertNil(CursorPermissionPayload.parse(Data(#"{"tool_name":"Shell"}"#.utf8)))
-        XCTAssertNil(CursorPermissionPayload.parse(Data("not json".utf8)))
-    }
-}
-
-/// Cursor's generated flotilla-cursor.sh against a live bridge socket.
-final class CursorBridgeHookTests: XCTestCase {
+/// Cursor's generated flotilla-cursor.sh: it records, and never decides.
+final class CursorHookTests: XCTestCase {
     private var directory: URL!
     private var worktree: URL!
 
@@ -899,13 +871,10 @@ final class CursorBridgeHookTests: XCTestCase {
         ))
         let script = HookConfigurationWriter.cursorWrapperScriptPath(supportDirectory: directory)
         XCTAssertTrue(FileManager.default.fileExists(atPath: script.path))
-        XCTAssertTrue(FileManager.default.fileExists(
-            atPath: script.deletingLastPathComponent().appendingPathComponent("flotilla-cursor-bridge.py").path
-        ))
         return script
     }
 
-    private nonisolated static func run(script: URL, input: String, eventFile: URL) throws -> (stdout: String, status: Int32) {
+    private static func run(script: URL, input: String, eventFile: URL) throws -> (stdout: String, status: Int32) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [script.path]
@@ -920,159 +889,37 @@ final class CursorBridgeHookTests: XCTestCase {
         return (String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), process.terminationStatus)
     }
 
-    func testWithoutBridgeTheHookAllows() throws {
+    /// A hook `allow` doesn't skip Cursor's own approval dialog, and a held
+    /// hook had nobody on the Mac to answer it — it auto-allowed after the
+    /// bridge gave up, delaying every tool call by seconds.
+    func testHookRecordsWithoutDecidingOrBlocking() throws {
         let script = try installCursorHooks()
         let eventFile = directory.appendingPathComponent("\(UUID().uuidString).jsonl")
+        let started = Date()
         let result = try Self.run(
             script: script,
-            input: #"{"hook_event_name":"preToolUse","tool_name":"Shell","tool_input":{"command":"pwd"}}"#,
+            input: #"{"hook_event_name":"preToolUse","tool_name":"Shell","tool_input":{"command":"rm -rf build"}}"#,
             eventFile: eventFile
         )
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
         XCTAssertEqual(result.status, 0)
-        XCTAssertTrue(result.stdout.contains(#""permission":"allow""#), result.stdout)
-        XCTAssertTrue(try String(contentsOf: eventFile, encoding: .utf8).contains("flotilla_provider"))
+        XCTAssertEqual(result.stdout, "")
+        let recorded = try String(contentsOf: eventFile, encoding: .utf8)
+        XCTAssertTrue(recorded.contains(#""hook_event_name":"preToolUse""#), recorded)
+        XCTAssertTrue(recorded.contains("rm -rf build"), recorded)
     }
 
-    @MainActor
-    func testBridgeClientRoundTripDenyAndAlwaysAllow() async throws {
+    func testHooksJSONHoldsNothing() throws {
         _ = try installCursorHooks()
-        let sessionID = UUID()
-        let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
-        let socket = HookConfigurationWriter.companionSocketPath(supportDirectory: directory)
-        let bridge = ClaudePermissionBridge()
-        XCTAssertTrue(bridge.start(socketURL: socket))
-        defer { bridge.stop() }
-
-        let bridgePy = HookConfigurationWriter.cursorWrapperScriptPath(supportDirectory: directory)
-            .deletingLastPathComponent()
-            .appendingPathComponent("flotilla-cursor-bridge.py")
-
-        func ask(_ envelope: String) async throws -> String {
-            try await withCheckedThrowingContinuation { continuation in
-                DispatchQueue.global().async {
-                    let process = Process()
-                    process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-                    process.arguments = [bridgePy.path, socket.path, eventFile.path]
-                    let stdin = Pipe(), stdout = Pipe()
-                    process.standardInput = stdin
-                    process.standardOutput = stdout
-                    do {
-                        try process.run()
-                        stdin.fileHandleForWriting.write(Data(envelope.utf8))
-                        try stdin.fileHandleForWriting.close()
-                        process.waitUntilExit()
-                        let out = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                        continuation.resume(returning: out)
-                    } catch {
-                        continuation.resume(throwing: error)
-                    }
-                }
+        let data = try Data(contentsOf: worktree.appendingPathComponent(".cursor/hooks.json"))
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: [[String: Any]]])
+        XCTAssertNotNil(hooks["preToolUse"])
+        for (event, entries) in hooks {
+            for entry in entries {
+                XCTAssertNil(entry["failClosed"], event)
+                XCTAssertEqual(entry["timeout"] as? Int, 30, event)
             }
         }
-
-        let envelope = #"{"flotilla_provider":"cursor","hook_event_name":"preToolUse","request":{"tool_name":"Shell","tool_use_id":"t1","tool_input":{"command":"git status"}}}"#
-        let askTask = Task { try await ask(envelope) }
-
-        let deadline = Date().addingTimeInterval(5)
-        while bridge.pending(for: sessionID).isEmpty && Date() < deadline {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        let card = try XCTUnwrap(bridge.pending(for: sessionID).first)
-        XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .alwaysAllow), .accepted)
-        let first = try await askTask.value
-        XCTAssertTrue(first.contains(#""permission":"allow""#), first)
-
-        let second = try await ask(
-            #"{"flotilla_provider":"cursor","hook_event_name":"preToolUse","request":{"tool_name":"Shell","tool_use_id":"t2","tool_input":{"command":"git diff"}}}"#
-        )
-        XCTAssertTrue(second.contains(#""permission":"allow""#), second)
-        XCTAssertTrue(bridge.pending(for: sessionID).isEmpty)
-
-        let denyTask = Task {
-            try await ask(
-                #"{"flotilla_provider":"cursor","hook_event_name":"preToolUse","request":{"tool_name":"Shell","tool_use_id":"t3","tool_input":{"command":"rm -rf /"}}}"#
-            )
-        }
-        let denyDeadline = Date().addingTimeInterval(5)
-        while bridge.pending(for: sessionID).isEmpty && Date() < denyDeadline {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        let denyCard = try XCTUnwrap(bridge.pending(for: sessionID).first)
-        XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: denyCard.id, with: .denyWithNote("nope")), .accepted)
-        let denied = try await denyTask.value
-        XCTAssertTrue(denied.contains(#""permission":"deny""#), denied)
-        XCTAssertTrue(denied.contains("nope"), denied)
-    }
-
-    /// The hook Cursor actually runs, then the fleet snapshot the phone renders.
-    @MainActor
-    func testShellHookBecomesAPhonePermissionCard() async throws {
-        let script = try installCursorHooks()
-        let sessionID = UUID()
-        let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
-        let bridge = ClaudePermissionBridge()
-        XCTAssertTrue(bridge.start(socketURL: HookConfigurationWriter.companionSocketPath(supportDirectory: directory)))
-        defer { bridge.stop() }
-
-        let hook = Task.detached {
-            try Self.run(
-                script: script,
-                input: #"{"hook_event_name":"preToolUse","tool_name":"Shell","tool_use_id":"phone","tool_input":{"command":"rm -rf build"}}"#,
-                eventFile: eventFile
-            )
-        }
-
-        let deadline = Date().addingTimeInterval(8)
-        while bridge.pending(for: sessionID).isEmpty && Date() < deadline {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        let card = try XCTUnwrap(bridge.pending(for: sessionID).first, "the companion bridge never received the Cursor hook")
-
-        let session = Session(
-            id: sessionID,
-            title: "Cursor phone",
-            goal: "check",
-            agent: .cursorAgent,
-            projectID: nil,
-            workingDirectory: worktree,
-            status: .working
-        )
-        let snapshot = CompanionSnapshotBuilder.snapshot(
-            macID: "mac",
-            macName: "Studio",
-            sessions: [session],
-            projects: [],
-            context: { _ in
-                CompanionSnapshotBuilder.SessionContext(
-                    diffStat: nil,
-                    handoffTargets: [],
-                    isProcessLive: true,
-                    answerable: bridge.pending(for: sessionID)
-                )
-            }
-        )
-        let phone = try XCTUnwrap(snapshot.sessions.first)
-        XCTAssertEqual(phone.agent, .cursorAgent)
-        XCTAssertEqual(phone.status, .waitingForInput)
-        XCTAssertEqual(phone.attentionSummary, card.attentionSummary)
-        let pending = try XCTUnwrap(snapshot.pending[sessionID]?.first)
-        guard case .permission = pending.kind else {
-            return XCTFail("phone card was \(pending.kind)")
-        }
-
-        XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .denyWithNote("nope")), .accepted)
-        let result = try await withThrowingTaskGroup(of: (stdout: String, status: Int32).self) { group in
-            group.addTask { try await hook.value }
-            group.addTask {
-                try await Task.sleep(for: .seconds(8))
-                throw CancellationError()
-            }
-            let value = try await group.next()!
-            group.cancelAll()
-            return value
-        }
-        XCTAssertEqual(result.status, 0)
-        XCTAssertTrue(result.stdout.contains(#""permission":"deny""#), result.stdout)
-        XCTAssertTrue(snapshot.catalog.entries[.cursorAgent] != nil)
     }
 }

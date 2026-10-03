@@ -242,12 +242,13 @@ Decisions made without asking, recorded so they can be revisited.
    `UI_TESTING` and in unit tests):
    - **Claude Code**: the blocking `PermissionRequest` hook through a
      fail-open socket shim (verified in `probe-claude-live-bridge.md`).
-   - **Cursor Agent**: interactive `agent` TUI in tmux; project
-     `.cursor/hooks.json` decision hooks (`preToolUse`,
-     `beforeShellExecution`, …) block on the same companion Unix socket
-     until phone or Mac answers (`allow`/`deny` only — never `ask`).
-     Always-allow is Flotilla session memory. Prompts go through tmux
-     `send-keys` (`AppStore.deliverMessage`); Stop is deny-and-Escape. See
+   - **Cursor Agent**: interactive `agent` TUI in tmux. Project
+     `.cursor/hooks.json` hooks only record; the card mirrors the dialog
+     Cursor itself shows (shell, web fetch, "Ready to build?") and the
+     answer is the key a person would press there (`y`, Tab, `n` plus the
+     skip reason, `b`, `p` plus the revision). Always-allow is Cursor's own
+     allowlist. Prompts go through tmux `send-keys`
+     (`AppStore.deliverMessage`). See
      [Cursor companion notes](probe-cursor-companion.md).
    - **Codex**: a wrapper starts `codex app-server --listen unix://…` beside
      the TUI, which attaches with `--remote`; Flotilla is a second JSON-RPC
@@ -277,9 +278,10 @@ Decisions made without asking, recorded so they can be revisited.
    Mac app restarted shows **Needs the terminal** (the hook event file starts
    fresh on reattach). A waiting session without an answerable request shows
    that card too, naming what it waits for.
-10. **Stop** is `turn/interrupt` for Codex and `/abort` for OpenCode; Claude,
-    Cursor, and Antigravity get Escape in the terminal. A pending Claude or
-    Cursor card is denied (Cursor: deny then Escape) instead.
+10. **Stop** is `turn/interrupt` for Codex and `/abort` for OpenCode; Claude
+    and Antigravity get Escape in the terminal, and a pending Claude card is
+    denied instead. Cursor ignores Escape, so it gets one Ctrl-C, only
+    mid-turn, and the prompt Cursor restores to its composer is cleared.
 11. **Prompts go through the adapter**: `turn/start` or `turn/steer` for
     Codex, `prompt_async` for OpenCode, a bracketed paste for Claude and
     Antigravity, tmux `send-keys` for Cursor (Antigravity queues mid-turn prompts for `injectSteps`), and

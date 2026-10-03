@@ -564,41 +564,37 @@ public struct HookConfigurationWriter: HookConfiguring {
 
     /// Writes the stable wrapper and merges Flotilla's Cursor hooks into
     /// `<workingDirectory>/.cursor/hooks.json` without wiping other tools'
-    /// entries (CodeIsland, Xirp, …). Decision events block on the companion
-    /// socket; with no Flotilla session env or no socket they allow through.
+    /// entries (CodeIsland, Xirp, …).
+    ///
+    /// Every hook only records the event; none decides. A hook `allow` does
+    /// not skip Cursor's own approval dialog, and nothing on the Mac answers a
+    /// held hook, so the phone mirrors Cursor's dialog instead
+    /// (`CursorCompanionAdapter`).
     private static func configureCursorHooks(
         workingDirectory: URL,
         supportDirectory: URL
     ) -> Bool {
         let scriptPath = cursorWrapperScriptPath(supportDirectory: supportDirectory)
-        let bridgePyPath = scriptPath.deletingLastPathComponent()
-            .appendingPathComponent("flotilla-cursor-bridge.py", isDirectory: false)
-        let socketPath = companionSocketPath(supportDirectory: supportDirectory)
         do {
             try FileManager.default.createDirectory(
                 at: scriptPath.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try Data(cursorWrapperScriptContents(socketPath: socketPath).utf8)
-                .write(to: scriptPath, options: .atomic)
+            try Data(cursorWrapperScriptContents.utf8).write(to: scriptPath, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
-            try Data(cursorBridgePythonContents.utf8)
-                .write(to: bridgePyPath, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bridgePyPath.path)
+            // The socket client earlier versions wrote beside the wrapper.
+            try? FileManager.default.removeItem(
+                at: scriptPath.deletingLastPathComponent()
+                    .appendingPathComponent("flotilla-cursor-bridge.py", isDirectory: false)
+            )
         } catch {
             return false
         }
 
         let configDirectory = workingDirectory.appendingPathComponent(".cursor", isDirectory: true)
         let configFile = configDirectory.appendingPathComponent("hooks.json", isDirectory: false)
-        let command = quoted(scriptPath.path)
-        let decisionHook: [String: Any] = [
-            "command": command,
-            "timeout": 86_400,
-            "failClosed": true
-        ]
         let observeHook: [String: Any] = [
-            "command": command,
+            "command": quoted(scriptPath.path),
             "timeout": 30
         ]
 
@@ -617,13 +613,9 @@ public struct HookConfigurationWriter: HookConfiguring {
                     return kept + [entry]
                 }
 
-                hooks["preToolUse"] = replaceFlotillaEntries(in: hooks["preToolUse"], with: decisionHook)
-                hooks["beforeShellExecution"] = replaceFlotillaEntries(in: hooks["beforeShellExecution"], with: decisionHook)
-                hooks["beforeMCPExecution"] = replaceFlotillaEntries(in: hooks["beforeMCPExecution"], with: decisionHook)
-                hooks["postToolUse"] = replaceFlotillaEntries(in: hooks["postToolUse"], with: observeHook)
-                hooks["afterShellExecution"] = replaceFlotillaEntries(in: hooks["afterShellExecution"], with: observeHook)
-                hooks["sessionEnd"] = replaceFlotillaEntries(in: hooks["sessionEnd"], with: observeHook)
-                hooks["stop"] = replaceFlotillaEntries(in: hooks["stop"], with: observeHook)
+                for event in cursorHookEvents {
+                    hooks[event] = replaceFlotillaEntries(in: hooks[event], with: observeHook)
+                }
                 root["hooks"] = hooks
                 try writeJSONObject(root, to: configFile, creating: configDirectory)
             }
@@ -633,87 +625,23 @@ public struct HookConfigurationWriter: HookConfiguring {
         }
     }
 
-    /// Cursor hooks receive the event name as `$1` when we invoke
-    /// `script preToolUse` — but Cursor's hooks.json only takes a command
-    /// string, so the script reads `hook_event_name` from stdin when present
-    /// and otherwise treats the first argv token as the event.
-    private static func cursorWrapperScriptContents(socketPath: URL) -> String {
-        let socketQuoted = quoted(socketPath.path)
-        let socketArg = socketPath.path.replacingOccurrences(of: "'", with: "'\\''")
-        // Bridge client lives beside this script as flotilla-cursor-bridge.py
-        // (written by configureCursorHooks). Avoids macOS nc hang-after-reply.
-        return """
-        #!/bin/sh
-        payload="$(cat)"
-        event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"
-        event="$(printf '%s' "$payload" | /usr/bin/python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("hook_event_name") or "")' 2>/dev/null || true)"
-        if [ -z "$event" ]; then event="${1:-unknown}"; fi
-        # Always record when Flotilla owns this process.
-        if [ -n "$event_file" ]; then
-          printf '{"flotilla_provider":"cursor","hook_event_name":"%s","payload":%s}\\n' "$event" "$payload" >> "$event_file"
-        fi
-        case "$event" in
-          preToolUse|beforeShellExecution|beforeMCPExecution)
-            # No Flotilla session → allow (do not brick IDE Cursor).
-            if [ -z "$event_file" ]; then
-              printf '{"continue":true,"permission":"allow"}\\n'
-              exit 0
-            fi
-            # Flotilla session but companion bridge down → allow (Mac TUI stays usable).
-            if [ ! -S \(socketQuoted) ]; then
-              printf '{"continue":true,"permission":"allow"}\\n'
-              exit 0
-            fi
-            bridge_py="$(dirname "$0")/flotilla-cursor-bridge.py"
-            envelope=$(printf '%s' "$payload" | HOOK_EVENT="$event" /usr/bin/python3 -c 'import json,os,sys; p=json.load(sys.stdin); print(json.dumps({"flotilla_provider":"cursor","hook_event_name":os.environ.get("HOOK_EVENT") or p.get("hook_event_name") or "unknown","request":p}))' 2>/dev/null) || envelope=""
-            if [ -z "$envelope" ] || [ ! -f "$bridge_py" ]; then
-              printf '{"continue":true,"permission":"allow"}\\n'
-              exit 0
-            fi
-            decision=$(printf '%s' "$envelope" | /usr/bin/python3 "$bridge_py" '\(socketArg)' "$event_file" 2>/dev/null || true)
-            if [ -n "$decision" ]; then
-              printf '%s\\n' "$decision"
-            else
-              printf '{"continue":true,"permission":"allow"}\\n'
-            fi
-            exit 0
-            ;;
-        esac
-        exit 0
-        """
-    }
+    static let cursorHookEvents = [
+        "preToolUse", "beforeShellExecution", "beforeMCPExecution",
+        "postToolUse", "afterShellExecution", "sessionEnd", "stop",
+    ]
 
-    private static let cursorBridgePythonContents = """
-    #!/usr/bin/env python3
-    import socket
-    import sys
-
-    def main() -> None:
-        if len(sys.argv) < 3:
-            return
-        path, event_file = sys.argv[1], sys.argv[2]
-        envelope = sys.stdin.read()
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(86400)
-        try:
-            sock.connect(path)
-            sock.sendall((event_file + "\\n" + envelope + "\\n").encode())
-            sock.shutdown(socket.SHUT_WR)
-            data = b""
-            while True:
-                chunk = sock.recv(65536)
-                if not chunk:
-                    break
-                data += chunk
-                if b"\\n" in data:
-                    break
-            if data:
-                sys.stdout.write(data.decode().split("\\n", 1)[0])
-        finally:
-            sock.close()
-
-    if __name__ == "__main__":
-        main()
+    /// Cursor hooks.json only takes a command string, so the script reads
+    /// `hook_event_name` from stdin and falls back to the first argv token.
+    /// It prints nothing: an empty answer leaves every decision to Cursor.
+    private static let cursorWrapperScriptContents = """
+    #!/bin/sh
+    payload="$(cat)"
+    event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"
+    [ -n "$event_file" ] || exit 0
+    event="$(printf '%s' "$payload" | /usr/bin/python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("hook_event_name") or "")' 2>/dev/null || true)"
+    if [ -z "$event" ]; then event="${1:-unknown}"; fi
+    printf '{"flotilla_provider":"cursor","hook_event_name":"%s","payload":%s}\\n' "$event" "$payload" >> "$event_file"
+    exit 0
     """
 
     // MARK: - Legacy Claude Cleanup
