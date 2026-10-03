@@ -105,13 +105,28 @@ archive: xcodegen
 		archive
 
 # Release build, then replace /Applications/Flotilla.app with it.
+#
+# Inside a Flotilla session (FLOTILLA_HOST_APP is set) the app is left
+# running: quitting it would end the very session running this target and
+# every other one. The bundle is swapped by rename instead, so the running
+# process keeps its open files, and the app offers a relaunch on its own.
+INSTALLED_APP := /Applications/Flotilla.app
 install: build-release
-	@pgrep -x Flotilla >/dev/null && osascript -e 'tell application id "com.niclassslua.flotilla" to quit' || true
-	rm -rf "/Applications/Flotilla.app"
-	ditto "$(DERIVED_DATA)/Build/Products/Release/Flotilla.app" "/Applications/Flotilla.app"
+	@if [ -n "$$FLOTILLA_HOST_APP" ]; then \
+		echo "Inside a Flotilla session: installing without quitting Flotilla; it will offer to relaunch."; \
+	else \
+		pgrep -x Flotilla >/dev/null && osascript -e 'tell application id "com.niclassslua.flotilla" to quit' || true; \
+	fi
+	rm -rf "$(INSTALLED_APP).new" "$(INSTALLED_APP).old"
+	ditto "$(DERIVED_DATA)/Build/Products/Release/Flotilla.app" "$(INSTALLED_APP).new"
+	if [ -e "$(INSTALLED_APP)" ]; then mv "$(INSTALLED_APP)" "$(INSTALLED_APP).old"; fi
+	mv "$(INSTALLED_APP).new" "$(INSTALLED_APP)"
+	rm -rf "$(INSTALLED_APP).old"
 
+# Debug builds are "Flotilla Dev" (com.niclassslua.flotilla.dev), so they
+# launch alongside the installed app and quitting one never hits the other.
 run: build
-	open $(DERIVED_DATA)/Build/Products/Debug/Flotilla.app
+	open "$(DERIVED_DATA)/Build/Products/Debug/Flotilla Dev.app"
 
 run-ephemeral: build-ephemeral
 	open "$(EPHEMERAL_APP)"

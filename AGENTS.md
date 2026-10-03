@@ -11,7 +11,7 @@ An iOS companion (`FlotillaCompanion`) lives in the same project: a remote contr
 - **Platform:** macOS 26.0+ (companion: iOS 26.0+)
 - **Language:** Swift 6.0 (strict concurrency)
 - **Build system:** XcodeGen (`project.yml` → `Flotilla.xcodeproj`)
-- **Bundle ID:** `com.niclassslua.flotilla`
+- **Bundle ID:** `com.niclassslua.flotilla` (Debug builds: `com.niclassslua.flotilla.dev`, named "Flotilla Dev")
 - **Version:** 0.1.0 (Beta)
 - **Code signing:** Ad-hoc (`CODE_SIGN_IDENTITY: "-"`)
 
@@ -24,9 +24,9 @@ An iOS companion (`FlotillaCompanion`) lives in the same project: a remote contr
 | `make build-ephemeral` | Full app build with launch-scoped preferences |
 | `make test` | Run unit tests |
 | `make test-ui` | Run UI tests |
-| `make install` | Release build, then replace `/Applications/Flotilla.app` with it |
+| `make install` | Release build, then replace `/Applications/Flotilla.app` with it (inside a Flotilla session it does not quit the app) |
 | `make archive` | Create xcarchive |
-| `make run` | Build and launch the app |
+| `make run` | Build and launch the Debug app ("Flotilla Dev"), next to the installed one |
 | `make run-ephemeral` | Build and launch the full app without saving preferences |
 | `make build-companion` | Build the iOS companion for the simulator |
 | `make run-companion` | Build, install, and launch the companion in an iPhone simulator, talking to real Macs (`SIMULATOR="iPhone 17"` picks the device) |
@@ -39,6 +39,14 @@ An iOS companion (`FlotillaCompanion`) lives in the same project: a remote contr
 ### Mandatory reinstall
 
 After every relevant change you commit or push (app code, packages, resources, `project.yml`, anything that alters the built `Flotilla.app`), you **must** run `make install` so `/Applications/Flotilla.app` matches the latest committed state. Docs-only, CI-only, and test-only changes are exempt. Report the reinstall in your final message; if it fails, fix or say so rather than skipping it.
+
+### You are probably running inside Flotilla
+
+Agents working on this repo usually run *inside* the installed Flotilla app, which hosts your terminal and every other agent's session. `FLOTILLA_HOST_APP` is set in your environment when that is the case.
+
+- **Never quit, kill, or restart the installed Flotilla** — no `killall Flotilla`, `pkill Flotilla`, `kill` on its PID, `osascript … quit`, or `open -a Flotilla` relaunch. It ends your own session and everyone else's.
+- `make install` already handles this: inside a session it swaps the bundle without quitting, and the running app shows a "Relaunch" banner so the user restarts it when it suits them. Mention the pending relaunch in your final message.
+- To exercise your change, run the Debug build (`make run`). It is a separate app, "Flotilla Dev" (`com.niclassslua.flotilla.dev`), so it launches next to the installed one and is safe to quit with `killall "Flotilla Dev"`. It shares the installed app's Application Support data (session database, worktrees, tmux server) but not its preferences, so avoid deleting or restarting real sessions from it.
 
 ## Project Structure
 

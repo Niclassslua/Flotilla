@@ -21,7 +21,9 @@ final class SettingsUITests: XCTestCase {
     func testWorktreeBaseDirectorySettingUpdate() {
         let app = launchedApp()
 
-        let appMenuBarItem = app.menuBarItems["Flotilla"]
+        // The app menu, by position: its title is the product name, which
+        // differs per build configuration ("Flotilla Dev" under Debug).
+        let appMenuBarItem = app.menuBarItems.element(boundBy: 1)
         XCTAssertTrue(fastWait(appMenuBarItem, timeout: 8))
         let settingsMenuItem = app.menuItems["Settings…"]
         XCTAssertTrue(fastWait(settingsMenuItem, timeout: 3))

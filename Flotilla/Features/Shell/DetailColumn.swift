@@ -533,6 +533,7 @@ struct DetailColumn: View {
     @ViewBuilder
     private var banners: some View {
         VStack(spacing: 0) {
+            RelaunchToUpdateBanner()
             StartupWarningBanner(
                 missingTools: startupCheck.warningItems,
                 isDismissed: $startupCheck.isDismissed

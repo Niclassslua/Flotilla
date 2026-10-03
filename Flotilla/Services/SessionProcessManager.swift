@@ -243,6 +243,7 @@ final class SessionProcessManager {
         let inheritedEnvironment = environmentProvider()
         let environmentKeysToUnset = ChildProcessEnvironment.blockedVariableNames(in: inheritedEnvironment)
         var baseEnvironment = ChildProcessEnvironment.sanitized(inheritedEnvironment)
+        baseEnvironment[HostAppAwareness.environmentKey] = HostAppAwareness.Host.current.bundleIdentifier
         if hooksConfigured {
             baseEnvironment[HookConfigurationWriter.eventFileEnvironmentKey] =
                 HookConfigurationWriter.eventFilePath(
@@ -290,6 +291,7 @@ final class SessionProcessManager {
                 supportDirectory: hookSupportDirectory
             )
         }
+        plan.arguments += HostAppAwareness.launchArguments(for: session.agent)
         guard var resolvedExecutable = resolveExecutable(plan: plan) else {
             throw LaunchError.executableNotFound(
                 agent: session.agent,

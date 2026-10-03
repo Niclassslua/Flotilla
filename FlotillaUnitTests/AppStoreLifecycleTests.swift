@@ -66,8 +66,12 @@ final class AppStoreLifecycleTests: XCTestCase {
         let goalArg = try XCTUnwrap(startedArguments.dropFirst(2).first)
         XCTAssertTrue(goalArg.contains("Choose a concise 2–5 word noun-phrase title"))
         XCTAssertTrue(goalArg.hasSuffix("Find the race"))
-        XCTAssertEqual(Array(startedArguments.suffix(2).prefix(1)), ["--settings"])
-        XCTAssertTrue((startedArguments.last ?? "").contains("\"hooks\""))
+        let settingsIndex = try XCTUnwrap(startedArguments.firstIndex(of: "--settings"))
+        XCTAssertTrue(startedArguments[settingsIndex + 1].contains("\"hooks\""))
+        XCTAssertEqual(
+            Array(startedArguments.suffix(2)),
+            HostAppAwareness.launchArguments(for: .claudeCode)
+        )
         XCTAssertEqual(
             factory.processes.first?.startedEnvironment[HookConfigurationWriter.eventFileEnvironmentKey],
             HookConfigurationWriter.eventFilePath(
