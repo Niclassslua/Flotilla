@@ -21,6 +21,7 @@ struct SessionBarActions {
     /// Review — reviewing a diff the agent is still writing shows work that
     /// has already moved on.
     var onReview: () -> Void = {}
+    var onShowChecks: () -> Void = {}
 }
 
 /// The bar that states what one session *is*, and what you can do to it.
@@ -205,6 +206,11 @@ struct SessionBar: View {
                 metaBranchLabel(branchName)
                     .accessibilityIdentifier(AXID.sessionBarBranch(session.title))
                     .layoutPriority(-1)
+            }
+
+            if let ciStatus = store.ciStatusStore.status(for: session.id) {
+                CIStatusChip(status: ciStatus, action: actions.onShowChecks)
+                    .fixedSize()
             }
 
             metaLabel(worktreeName, systemImage: "folder")

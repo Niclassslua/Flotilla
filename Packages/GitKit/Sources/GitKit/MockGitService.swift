@@ -236,4 +236,19 @@ public final class MockGhService: GhServiceProtocol, @unchecked Sendable {
         if let errorToThrow { throw errorToThrow }
         return urlToReturn
     }
+
+    public var ciStatusByBranch: [String: CIStatus] = [:]
+    public var ciErrorToThrow: Error?
+    public var failedLogToReturn = ""
+    public private(set) var ciStatusCalls: [String] = []
+
+    public func ciStatus(forBranch branch: String, at repoPath: URL) async throws -> CIStatus? {
+        ciStatusCalls.append(branch)
+        if let ciErrorToThrow { throw ciErrorToThrow }
+        return ciStatusByBranch[branch]
+    }
+
+    public func failedLog(runID: Int, at repoPath: URL) async throws -> String {
+        failedLogToReturn
+    }
 }

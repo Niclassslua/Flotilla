@@ -10,7 +10,7 @@ struct FleetMenuBarLabel: View {
     let store: AppStore
 
     var body: some View {
-        let waitingCount = FleetAttention(sessions: store.sessions).waiting.count
+        let waitingCount = FleetAttention(sessions: store.sessions, ciFailing: store.ciStatusStore.failingSessionIDs).waiting.count
         HStack(spacing: 3) {
             Image(systemName: waitingCount > 0 ? "sailboat.fill" : "sailboat")
             if waitingCount > 0 {
@@ -34,12 +34,12 @@ struct FleetMenuBarMenu: View {
     private static let rowLimit = 8
 
     var body: some View {
-        let attention = FleetAttention(sessions: store.sessions)
+        let attention = FleetAttention(sessions: store.sessions, ciFailing: store.ciStatusStore.failingSessionIDs)
 
         if attention.waiting.isEmpty && attention.readyForReview.isEmpty && attention.crashed.isEmpty {
             Text(attention.working.isEmpty ? "No sessions need you" : "All clear · \(attention.working.count) working")
         }
-        group("Needs You", attention.waiting)
+        group("Needs You", attention.waiting, ciFailing: attention.ciFailing)
         group("Ready for Review", attention.readyForReview)
         group("Crashed", attention.crashed)
         if !attention.working.isEmpty,
@@ -59,7 +59,7 @@ struct FleetMenuBarMenu: View {
     }
 
     @ViewBuilder
-    private func group(_ title: String, _ sessions: [Session]) -> some View {
+    private func group(_ title: String, _ sessions: [Session], ciFailing: Set<UUID> = []) -> some View {
         if !sessions.isEmpty {
             Section(title) {
                 ForEach(sessions.prefix(Self.rowLimit)) { session in
@@ -67,7 +67,11 @@ struct FleetMenuBarMenu: View {
                         showMainWindow()
                         navigator.selection = .session(session.id)
                     } label: {
-                        Label(rowTitle(for: session), systemImage: StatusPresentation.glyph(for: session.status, waitingReason: session.waitingReason))
+                        if ciFailing.contains(session.id), session.status != .waitingForInput {
+                            Label(rowTitle(for: session, ciFailing: true), systemImage: "xmark.seal")
+                        } else {
+                            Label(rowTitle(for: session), systemImage: StatusPresentation.glyph(for: session.status, waitingReason: session.waitingReason))
+                        }
                     }
                 }
                 if sessions.count > Self.rowLimit {
@@ -77,12 +81,15 @@ struct FleetMenuBarMenu: View {
         }
     }
 
-    private func rowTitle(for session: Session) -> String {
+    private func rowTitle(for session: Session, ciFailing: Bool = false) -> String {
         var parts = [session.title]
         if let project = store.project(for: session) {
             parts.append(project.name)
         }
-        if session.status == .waitingForInput {
+        if ciFailing {
+            let check = store.ciStatusStore.status(for: session.id)?.failingChecks.first?.name
+            parts.append(check.map { "CI failing: \($0)" } ?? "CI failing")
+        } else if session.status == .waitingForInput {
             parts.append(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
         }
         return parts.joined(separator: " · ")

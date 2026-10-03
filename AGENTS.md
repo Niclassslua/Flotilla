@@ -149,6 +149,7 @@ collaborators it holds:
 | `SessionMetadataMonitor` | Title-discovery and self-report polling tasks, keyed by session ID, with the generation check that rejects a result from a superseded run |
 | `KanbanStore` | Board configuration and its persistence. Board actions that change a *session* still go back through `AppStore` and its traced status-transition wrapper |
 | `DiffStatStore` | Per-session diff statistics |
+| `CIStatusStore` | GitHub CI per worktree session branch, polled through `gh` (`GhService.ciStatus`): 30 s while checks run, 3 min once settled, stopped after the PR merges, backed off on `gh` errors. Polls every session, not only visible ones, because failing CI joins Needs You (`FleetAttention`, Dock badge, menu bar, Home). Started by `FlotillaApp`, never in tests or UI tests |
 
 `reload()` refreshes the persisted snapshot and nothing else. Restarting
 processes is launch-time recovery (`restoreSessions()`), run once from `init`

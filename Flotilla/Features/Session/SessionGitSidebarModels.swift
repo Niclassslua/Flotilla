@@ -8,6 +8,7 @@ enum SessionGitSidebarTab: String, CaseIterable, Identifiable, Sendable {
     case changes
     case branches
     case log
+    case checks
 
     var id: Self { self }
 
@@ -16,6 +17,7 @@ enum SessionGitSidebarTab: String, CaseIterable, Identifiable, Sendable {
         case .changes: "Changes"
         case .branches: "Branches"
         case .log: "Log"
+        case .checks: "Checks"
         }
     }
 
@@ -24,6 +26,7 @@ enum SessionGitSidebarTab: String, CaseIterable, Identifiable, Sendable {
         case .changes: "arrow.left.arrow.right"
         case .branches: "arrow.triangle.branch"
         case .log: "clock.arrow.circlepath"
+        case .checks: "checklist"
         }
     }
 }

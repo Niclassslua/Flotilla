@@ -229,6 +229,10 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertTrue(prefs.shouldNotifySessionFinished(isActive: false))
 
         prefs.finishedEnabled = false
+        XCTAssertTrue(prefs.isConfiguredToNotify, "CI failures alone still need notification permission")
+        XCTAssertTrue(prefs.shouldNotifyCIFailed(isActive: true))
+
+        prefs.ciFailedEnabled = false
         XCTAssertFalse(prefs.isConfiguredToNotify)
     }
 }

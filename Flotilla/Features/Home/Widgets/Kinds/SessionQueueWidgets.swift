@@ -64,12 +64,16 @@ struct NeedsYouWidgetContent: View {
     }
 
     private func row(_ item: HomeWaitingItem) -> some View {
-        HStack(spacing: FlotillaSpacing.small) {
-            Image(systemName: StatusPresentation.glyph(for: .waitingForInput, waitingReason: item.session.waitingReason))
+        let isCI = item.failingCheck != nil
+        let tint = isCI ? FlotillaColors.danger : FlotillaColors.statusWaitingForInput
+        let reason = item.failingCheck.map { "CI failing: \($0)" }
+            ?? StatusPresentation.label(for: .waitingForInput, waitingReason: item.session.waitingReason)
+        return HStack(spacing: FlotillaSpacing.small) {
+            Image(systemName: isCI ? "xmark.seal" : StatusPresentation.glyph(for: .waitingForInput, waitingReason: item.session.waitingReason))
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(FlotillaColors.statusWaitingForInput)
+                .foregroundStyle(tint)
                 .frame(width: 26, height: 26)
-                .background(FlotillaColors.statusWaitingForInput.opacity(0.14), in: Circle())
+                .background(tint.opacity(0.14), in: Circle())
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.session.title)
                     .font(.system(size: 12, weight: .semibold))
@@ -77,7 +81,7 @@ struct NeedsYouWidgetContent: View {
                     .lineLimit(1)
                 HStack(spacing: 4) {
                     ProviderLogo(agent: item.session.agent).frame(width: 10, height: 10)
-                    Text("\(item.project.name) · \(StatusPresentation.label(for: .waitingForInput, waitingReason: item.session.waitingReason))")
+                    Text("\(item.project.name) · \(reason)")
                         .font(FlotillaTypography.caption2)
                         .foregroundStyle(FlotillaColors.textTertiary)
                         .lineLimit(1)
@@ -86,7 +90,7 @@ struct NeedsYouWidgetContent: View {
             Spacer(minLength: 4)
             Text(HomeTimestamp.compact(item.since))
                 .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundStyle(FlotillaColors.statusWaitingForInput)
+                .foregroundStyle(tint)
         }
         .contentShape(Rectangle())
     }

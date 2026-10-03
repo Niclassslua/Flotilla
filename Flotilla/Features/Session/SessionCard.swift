@@ -16,6 +16,9 @@ struct SessionCard<Terminal: View>: View {
     let variant: SessionCardVariant
     let diffStatStore: DiffStatStore?
     let activityStore: SessionActivityStore?
+    /// CI for the session's branch, shown in the sidebar row when it is red
+    /// or running. `nil` where CI is not tracked.
+    let ciState: CICheckState?
     let isSelected: Bool
     let isActive: Bool
     let onTap: () -> Void
@@ -31,6 +34,7 @@ struct SessionCard<Terminal: View>: View {
         variant: SessionCardVariant = .row,
         diffStatStore: DiffStatStore? = nil,
         activityStore: SessionActivityStore? = nil,
+        ciState: CICheckState? = nil,
         isSelected: Bool = false,
         isActive: Bool = false,
         onTap: @escaping () -> Void = {},
@@ -45,6 +49,7 @@ struct SessionCard<Terminal: View>: View {
         self.variant = variant
         self.diffStatStore = diffStatStore
         self.activityStore = activityStore
+        self.ciState = ciState
         self.isSelected = isSelected
         self.isActive = isActive
         self.onTap = onTap
@@ -125,6 +130,7 @@ struct SessionCard<Terminal: View>: View {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 0)
+                CIStatusGlyph(state: ciState, quiet: true)
                 if let diffStatStore {
                     SessionDiffStatView(session: session, diffStatStore: diffStatStore, style: .plain)
                 }
@@ -451,8 +457,9 @@ struct SessionCard<Terminal: View>: View {
     private var metadataLine: some View {
         HStack(spacing: 5) {
             statusWord
+            Spacer(minLength: 2)
+            CIStatusGlyph(state: ciState, quiet: true)
             if let diffStatStore {
-                Spacer(minLength: 2)
                 SessionDiffStatView(session: session, diffStatStore: diffStatStore, style: .plain)
             }
         }

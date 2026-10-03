@@ -373,6 +373,8 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
     public var delivery: NotificationDelivery
     public var waitingForInputEnabled: Bool
     public var finishedEnabled: Bool
+    /// A session's GitHub CI went from passing or running to failing.
+    public var ciFailedEnabled: Bool
     /// Shows how many sessions are waiting for input as a badge on the Dock
     /// icon. Independent of `delivery`: the badge is ambient state, not an
     /// interruption, so it stays useful with banners turned off.
@@ -384,12 +386,14 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
         delivery: NotificationDelivery = .always,
         waitingForInputEnabled: Bool = true,
         finishedEnabled: Bool = true,
+        ciFailedEnabled: Bool = true,
         dockBadgeEnabled: Bool = true,
         menuBarExtraEnabled: Bool = true
     ) {
         self.delivery = delivery
         self.waitingForInputEnabled = waitingForInputEnabled
         self.finishedEnabled = finishedEnabled
+        self.ciFailedEnabled = ciFailedEnabled
         self.dockBadgeEnabled = dockBadgeEnabled
         self.menuBarExtraEnabled = menuBarExtraEnabled
     }
@@ -398,6 +402,7 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
         case delivery
         case waitingForInputEnabled
         case finishedEnabled
+        case ciFailedEnabled
         case dockBadgeEnabled
         case menuBarExtraEnabled
     }
@@ -407,6 +412,7 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
         delivery = try container.decodeIfPresent(NotificationDelivery.self, forKey: .delivery) ?? .always
         waitingForInputEnabled = try container.decodeIfPresent(Bool.self, forKey: .waitingForInputEnabled) ?? true
         finishedEnabled = try container.decodeIfPresent(Bool.self, forKey: .finishedEnabled) ?? true
+        ciFailedEnabled = try container.decodeIfPresent(Bool.self, forKey: .ciFailedEnabled) ?? true
         dockBadgeEnabled = try container.decodeIfPresent(Bool.self, forKey: .dockBadgeEnabled) ?? true
         menuBarExtraEnabled = try container.decodeIfPresent(Bool.self, forKey: .menuBarExtraEnabled) ?? true
     }
@@ -416,6 +422,7 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
         try container.encode(delivery, forKey: .delivery)
         try container.encode(waitingForInputEnabled, forKey: .waitingForInputEnabled)
         try container.encode(finishedEnabled, forKey: .finishedEnabled)
+        try container.encode(ciFailedEnabled, forKey: .ciFailedEnabled)
         try container.encode(dockBadgeEnabled, forKey: .dockBadgeEnabled)
         try container.encode(menuBarExtraEnabled, forKey: .menuBarExtraEnabled)
     }
@@ -435,12 +442,16 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
         waitingForInputEnabled && shouldDeliver(isActive: isActive)
     }
 
+    public func shouldNotifyCIFailed(isActive: Bool) -> Bool {
+        ciFailedEnabled && shouldDeliver(isActive: isActive)
+    }
+
     public func shouldNotifySessionFinished(isActive: Bool) -> Bool {
         finishedEnabled && shouldDeliver(isActive: isActive)
     }
 
     public var isConfiguredToNotify: Bool {
-        delivery != .never && (waitingForInputEnabled || finishedEnabled)
+        delivery != .never && (waitingForInputEnabled || finishedEnabled || ciFailedEnabled)
     }
 }
 

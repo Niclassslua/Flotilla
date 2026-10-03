@@ -69,7 +69,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .sessions: "session defaults coding agent prompt worktree"
         case .terminal: "terminal font size scroll option meta editor monaco curly braces"
         case .git: "git branch worktree delete lifecycle keep remove session"
-        case .notifications: "notifications waiting input sound privacy never active always delivery dock badge menu bar status item"
+        case .notifications: "notifications waiting input sound privacy never active always delivery dock badge menu bar status item ci checks github actions failed"
         case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices speech dictation audio handy stt transcribe"
         case .agents: "claude codex opencode agy antigravity cursor agent executable arguments authentication developer tools git github gh tmux path"
         }
@@ -616,6 +616,9 @@ private struct NotificationSettingsPane: View {
                     .toggleStyle(.switch)
                     .disabled(viewModel.settings.notifications.delivery == .never)
                 Toggle("Session finished", isOn: $viewModel.settings.notifications.finishedEnabled)
+                    .toggleStyle(.switch)
+                    .disabled(viewModel.settings.notifications.delivery == .never)
+                Toggle("CI failed on a session's branch", isOn: $viewModel.settings.notifications.ciFailedEnabled)
                     .toggleStyle(.switch)
                     .disabled(viewModel.settings.notifications.delivery == .never)
                 Text("The system notification uses the Mac’s current notification sound and Focus settings.")

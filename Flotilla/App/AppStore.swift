@@ -40,6 +40,9 @@ final class AppStore {
     let gitService: GitServiceProtocol
     let ghService: GhServiceProtocol?
     let diffStatStore: DiffStatStore
+    /// GitHub CI for every worktree session's branch. Started by the app, not
+    /// here, so tests and UI-test launches never reach the network.
+    let ciStatusStore: CIStatusStore
     /// Home's permission-ask log. In-memory and thrown away if construction
     /// somehow fails — the widget going blank is a much smaller problem than
     /// a launch-blocking crash over an optional log.
@@ -102,6 +105,7 @@ final class AppStore {
         self.gitService = gitService
         self.ghService = ghService
         self.diffStatStore = DiffStatStore(gitService: gitService)
+        self.ciStatusStore = CIStatusStore(ghService: ghService)
         self.permissionLogStore = permissionLogStore ?? Self.makePermissionLogStore(supportDirectory: supportDirectory)
         self.processManager = processManager
         self.worktreeBaseDirectoryProvider = worktreeBaseDirectoryProvider
@@ -124,6 +128,7 @@ final class AppStore {
         }
         if reload() { restoreSessions() }
         loadKanbanBoards()
+        ciStatusStore.sessions = { [weak self] in self?.sessions ?? [] }
     }
 
     /// Disk-backed under the app's support directory in normal use; an
@@ -898,6 +903,7 @@ final class AppStore {
     /// to guarantee zero terminal history loss on Cmd+Q.
     func shutdown() {
         metadataMonitor.cancelAll()
+        ciStatusStore.stop()
         flushLiveScrollback()
     }
 

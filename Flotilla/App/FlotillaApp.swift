@@ -112,6 +112,7 @@ struct FlotillaApp: App {
         _store = State(initialValue: appStore)
         if Self.isBoardDemo {
             BoardDemoFixtures.seedPermissions(into: appStore.permissionLogStore)
+            BoardDemoFixtures.seedCI(into: appStore.ciStatusStore)
         }
         _startupCheck = State(initialValue: StartupCheckViewModel(
             settings: settingsViewModel.settings,
@@ -172,8 +173,22 @@ struct FlotillaApp: App {
             }
         }
 
+        appStore.ciStatusStore.onFailure = { session, check in
+            let isActive = NSApp?.isActive ?? true
+            guard settingsViewModel.settings.notifications.shouldNotifyCIFailed(isActive: isActive) else { return }
+            Task {
+                await SystemNotificationDispatcher().notifyCIFailed(sessionTitle: session.title, checkName: check.name, sessionID: session.id)
+            }
+        }
+        // Never from a test host: unit tests launch this app around them, and
+        // polling would send real `gh` requests for the user's sessions.
+        if !environment.isUITesting && !Self.isBoardDemo && NSClassFromString("XCTestCase") == nil {
+            appStore.ciStatusStore.start()
+        }
+
         let dockBadge = DockBadgeController(
             sessions: { appStore.sessions },
+            ciFailing: { appStore.ciStatusStore.failingSessionIDs },
             isEnabled: { settingsViewModel.settings.notifications.dockBadgeEnabled }
         )
         dockBadge.start()

@@ -6,20 +6,30 @@ import SessionKit
 /// main window: the Dock badge and the menu bar extra. Pure, so the counting
 /// rule is testable without AppKit.
 struct FleetAttention: Equatable {
-    /// Blocked on the user — the same set Home's Needs you widget lists.
+    /// Blocked on the user — the same set Home's Needs you widget lists —
+    /// plus sessions whose CI is failing, which need the user just as much
+    /// even though the agent itself is not stuck.
     let waiting: [Session]
+    /// The subset of `waiting` that is there because of CI.
+    let ciFailing: Set<UUID>
     let readyForReview: [Session]
     let crashed: [Session]
     let working: [Session]
 
-    init(sessions: [Session]) {
+    init(sessions: [Session], ciFailing: Set<UUID> = []) {
         // Oldest first within a group: the session that has sat longest is
         // the one to deal with next.
         let ordered = sessions.sorted { Self.since($0) < Self.since($1) }
-        waiting = ordered.filter { $0.status == .waitingForInput }
-        readyForReview = ordered.filter { $0.status == .readyForReview }
-        crashed = ordered.filter { $0.status == .crashed }
-        working = ordered.filter { $0.status == .working }
+        // A session appears once, in the most urgent group it qualifies for:
+        // red CI on a session that is also Ready for Review is a reason to
+        // act, not something to review.
+        let needsYou = ordered.filter { $0.status == .waitingForInput || ciFailing.contains($0.id) }
+        let needsYouIDs = Set(needsYou.map(\.id))
+        waiting = needsYou
+        self.ciFailing = ciFailing.intersection(needsYouIDs)
+        readyForReview = ordered.filter { $0.status == .readyForReview && !needsYouIDs.contains($0.id) }
+        crashed = ordered.filter { $0.status == .crashed && !needsYouIDs.contains($0.id) }
+        working = ordered.filter { $0.status == .working && !needsYouIDs.contains($0.id) }
     }
 
     /// Only sessions that are blocked count. Ready and crashed sessions can
@@ -40,16 +50,19 @@ struct FleetAttention: Equatable {
 @MainActor
 final class DockBadgeController {
     private let sessions: @MainActor () -> [Session]
+    private let ciFailing: @MainActor () -> Set<UUID>
     private let isEnabled: @MainActor () -> Bool
     private let apply: @MainActor (String?) -> Void
     private var appliedLabel: String??
 
     init(
         sessions: @escaping @MainActor () -> [Session],
+        ciFailing: @escaping @MainActor () -> Set<UUID> = { [] },
         isEnabled: @escaping @MainActor () -> Bool,
         apply: @escaping @MainActor (String?) -> Void = { NSApp?.dockTile.badgeLabel = $0 }
     ) {
         self.sessions = sessions
+        self.ciFailing = ciFailing
         self.isEnabled = isEnabled
         self.apply = apply
     }
@@ -60,7 +73,7 @@ final class DockBadgeController {
 
     private func update() {
         let label = withObservationTracking {
-            isEnabled() ? FleetAttention(sessions: sessions()).dockBadgeLabel : nil
+            isEnabled() ? FleetAttention(sessions: sessions(), ciFailing: ciFailing()).dockBadgeLabel : nil
         } onChange: { [weak self] in
             Task { @MainActor in self?.update() }
         }

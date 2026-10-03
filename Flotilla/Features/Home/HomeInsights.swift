@@ -220,6 +220,9 @@ struct HomeWaitingItem: Identifiable, Equatable, Sendable {
     /// When it started waiting — `statusChangedAt`, or `lastActiveAt` for a
     /// session that transitioned before that field existed.
     var since: Date
+    /// Set when the session is here because its CI is failing rather than
+    /// because the agent is blocked: the first failing check's name.
+    var failingCheck: String? = nil
 }
 
 /// Home's git-derived data, owned above the dashboard so returning to Home
@@ -364,6 +367,18 @@ final class HomeInsights {
         for session in store.sessions {
             guard !Task.isCancelled else { return }
             guard let project = store.projects.first(where: { $0.id == session.projectID }) else { continue }
+            // Red CI outranks Ready for Review — the same rule `FleetAttention`
+            // applies to the Dock badge and menu bar.
+            if session.status != .waitingForInput,
+               let ci = store.ciStatusStore.status(for: session.id), ci.state == .failing {
+                waiting.append(HomeWaitingItem(
+                    session: session,
+                    project: project,
+                    since: session.statusChangedAt ?? session.lastActiveAt,
+                    failingCheck: ci.failingChecks.first?.name
+                ))
+                continue
+            }
             switch session.status {
             case .readyForReview:
                 guard let base = try? await git.defaultBranch(at: session.workingDirectory),

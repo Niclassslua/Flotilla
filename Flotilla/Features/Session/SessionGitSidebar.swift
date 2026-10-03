@@ -16,6 +16,7 @@ struct SessionGitSidebar: View {
     @State private var isCreatingBranch = false
     @State private var branchDraft = ""
     @State private var pendingDeletion: PendingBranchDeletion?
+    @State private var pendingCIFailure: CICheck?
     @FocusState private var isBranchFieldFocused: Bool
     @FocusState private var isCommitFieldFocused: Bool
 
@@ -38,6 +39,11 @@ struct SessionGitSidebar: View {
         .accessibilityIdentifier("GitSidebar")
         .task(id: viewModel.monitorKey) {
             await viewModel.monitorSelection()
+        }
+        .sheet(item: $pendingCIFailure) { check in
+            CIFailureSendSheet(session: session, check: check, store: store) {
+                pendingCIFailure = nil
+            }
         }
         .confirmationDialog(
             pendingDeletion.map { "Delete \(BranchNaming.displayName(for: $0.branch))?" } ?? "Delete branch?",
@@ -112,6 +118,13 @@ struct SessionGitSidebar: View {
                                 Image(systemName: tab.systemImage)
                             }
                             Text(tab.title)
+                            if tab == .checks, let state = store.ciStatusStore.status(for: session.id)?.state,
+                               state == .failing || state == .pending {
+                                Circle()
+                                    .fill(state.tint)
+                                    .frame(width: 6, height: 6)
+                                    .accessibilityLabel("CI \(state.label)")
+                            }
                         }
                         .font(FlotillaTypography.caption.weight(
                                 viewModel.selectedTab == tab ? .semibold : .regular
@@ -147,6 +160,10 @@ struct SessionGitSidebar: View {
             branchesView
         case .log:
             logView
+        case .checks:
+            SessionChecksView(session: session, store: store) { check in
+                pendingCIFailure = check
+            }
         }
     }
 

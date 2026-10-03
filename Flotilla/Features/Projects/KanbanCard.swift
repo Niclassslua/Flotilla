@@ -11,6 +11,7 @@ struct KanbanCardSignals {
     let session: Session
     let stat: GitDiffStat?
     let lastOutput: String?
+    var ciState: CICheckState? = nil
 
     var statusColor: Color { StatusPresentation.color(for: session.status) }
     var statusLabel: String { StatusPresentation.label(for: session.status, waitingReason: session.waitingReason) }
@@ -42,6 +43,7 @@ struct KanbanCard: View {
     var projectName: String? = nil
     let diffStatStore: DiffStatStore?
     let activityStore: SessionActivityStore?
+    var ciStatusStore: CIStatusStore? = nil
     let onOpen: () -> Void
     let onDelete: () -> Void
     let onRestart: () -> Void
@@ -54,7 +56,8 @@ struct KanbanCard: View {
         KanbanCardSignals(
             session: session,
             stat: diffStatStore?.stat(for: session.id),
-            lastOutput: activityStore?.lastOutputLine(for: session.id)
+            lastOutput: activityStore?.lastOutputLine(for: session.id),
+            ciState: ciStatusStore?.status(for: session.id)?.state
         )
     }
 
@@ -199,6 +202,7 @@ private struct GlassCard: View {
     private var stateRow: some View {
         HStack(spacing: 8) {
             statusChip
+            CIStatusGlyph(state: signals.ciState)
             Spacer(minLength: 8)
             ChurnText(stat: signals.stat)
         }

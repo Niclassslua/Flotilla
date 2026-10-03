@@ -191,7 +191,14 @@ struct DetailColumn: View {
             onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
             handoffTargets: store.handoffTargets(for: session),
             onHandoff: { target in Task { await store.handoffSession(sessionID: session.id, to: target) } },
-            onReview: { openWindow(id: SessionReviewWindow.sceneID, value: session.id) }
+            onReview: { openWindow(id: SessionReviewWindow.sceneID, value: session.id) },
+            onShowChecks: {
+                guard session.projectID != nil else { return }
+                isScreenshotsExplicitlyPresented = false
+                screenshotMonitor.dismiss()
+                navigator.sessionGitSidebarViewModel(for: session, gitService: store.gitService).selectedTab = .checks
+                gitSidebarSessionID = session.id
+            }
         )
     }
 

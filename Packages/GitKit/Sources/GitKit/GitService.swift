@@ -153,6 +153,7 @@ public enum GitServiceError: Error, Equatable, LocalizedError {
     case noRemoteConfigured
     case ghNotFound
     case prCreationFailed(exitCode: Int32, stderr: String)
+    case ghCommandFailed(exitCode: Int32, stderr: String)
     case commitNotFound(String)
     case cannotRemoveMainWorktree(URL)
     case notAWorktree(URL)
@@ -179,6 +180,9 @@ public enum GitServiceError: Error, Equatable, LocalizedError {
         case .prCreationFailed(let exitCode, let stderr):
             let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return detail.isEmpty ? "gh exited with code \(exitCode)" : "gh exited with code \(exitCode): \(detail)"
+        case .ghCommandFailed(let exitCode, let stderr):
+            let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty ? "gh exited with code \(exitCode)" : detail
         case .commitNotFound(let sha):
             return "No commit found for '\(sha)'."
         case .cannotRemoveMainWorktree(let url):

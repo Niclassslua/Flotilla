@@ -11,6 +11,12 @@ public protocol GhServiceProtocol: Sendable {
     /// `base` is the target branch; `nil` lets `gh` use the repository's
     /// default branch.
     func createPullRequest(title: String, body: String, base: String?, at repoPath: URL) async throws -> URL
+    /// What CI says about `branch`: its pull request's checks when it has an
+    /// open or past PR, otherwise the Actions runs on its newest pushed
+    /// commit. `nil` when the branch has neither.
+    func ciStatus(forBranch branch: String, at repoPath: URL) async throws -> CIStatus?
+    /// The failing steps' output of one Actions run (`gh run view --log-failed`).
+    func failedLog(runID: Int, at repoPath: URL) async throws -> String
 }
 
 /// Real `gh` integration. Invoked by absolute path rather than relying on
@@ -41,5 +47,43 @@ public struct GhService: GhServiceProtocol {
             throw GitServiceError.prCreationFailed(exitCode: result.exitCode, stderr: "gh returned an unparseable URL: \(trimmed)")
         }
         return url
+    }
+
+    public func ciStatus(forBranch branch: String, at repoPath: URL) async throws -> CIStatus? {
+        let pr = try await runner.run(
+            ["pr", "view", branch, "--json", "number,url,state,isDraft,reviewDecision,statusCheckRollup"],
+            executable: ghExecutable,
+            workingDirectory: repoPath
+        )
+        if pr.exitCode == 0 {
+            return try GhJSON.pullRequestStatus(from: Data(pr.stdout.utf8))
+        }
+        // Anything other than "this branch has no PR" — auth, network, not a
+        // GitHub repository — is a real failure the caller should see.
+        guard pr.stderr.localizedCaseInsensitiveContains("no pull requests found") else {
+            throw GitServiceError.ghCommandFailed(exitCode: pr.exitCode, stderr: pr.stderr)
+        }
+        let runs = try await runner.run(
+            ["run", "list", "--branch", branch, "--limit", "20", "--json", "databaseId,workflowName,status,conclusion,url,headSha,createdAt,updatedAt"],
+            executable: ghExecutable,
+            workingDirectory: repoPath
+        )
+        guard runs.exitCode == 0 else {
+            throw GitServiceError.ghCommandFailed(exitCode: runs.exitCode, stderr: runs.stderr)
+        }
+        let checks = try GhJSON.workflowRunChecks(from: Data(runs.stdout.utf8))
+        return checks.isEmpty ? nil : CIStatus(checks: checks)
+    }
+
+    public func failedLog(runID: Int, at repoPath: URL) async throws -> String {
+        let result = try await runner.run(
+            ["run", "view", String(runID), "--log-failed"],
+            executable: ghExecutable,
+            workingDirectory: repoPath
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.ghCommandFailed(exitCode: result.exitCode, stderr: result.stderr)
+        }
+        return result.stdout
     }
 }

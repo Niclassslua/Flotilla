@@ -3,6 +3,7 @@ import SessionKit
 import HooksKit
 import ProcessKit
 import PersistenceKit
+import GitKit
 
 /// Seed data for `FLOTILLA_DEMO_DATA=1`: a fleet that covers every
 /// `SessionStatus`, every `SessionWaitingReason`, and every `AgentKind`, so
@@ -378,6 +379,56 @@ enum BoardDemoFixtures {
         }
         let notes = path.appendingPathComponent("NOTES.md")
         try? "# Uncommitted Notes\n- Check sprint deliverables\n".write(to: notes, atomically: true, encoding: .utf8)
+    }
+
+    /// The demo checkouts have no GitHub remote, so CI is seeded rather than
+    /// polled: one red PR, one running, one green and approved — the three
+    /// states the session bar chip and the Checks tab have to render.
+    @MainActor
+    static func seedCI(into store: CIStatusStore) {
+        let now = Date()
+        let repo = "https://github.com/example/flotilla"
+        func check(_ name: String, _ state: CICheckState, run: Int, minutesAgo: Int, took: Int?) -> CICheck {
+            CICheck(
+                name: name,
+                workflowName: "Build",
+                state: state,
+                url: URL(string: "\(repo)/actions/runs/\(run)/job/\(run + 1)"),
+                runID: run,
+                startedAt: now.addingTimeInterval(-Double(minutesAgo) * 60),
+                completedAt: took.map { now.addingTimeInterval(-Double(minutesAgo) * 60 + Double($0)) }
+            )
+        }
+        store.seed([
+            // "Cache provider logos" — the agent thinks it is done; CI disagrees.
+            sessionID(at: 5): CIStatus(
+                pullRequest: GhPullRequest(number: 142, url: URL(string: "\(repo)/pull/142")!, state: .open, reviewDecision: "REVIEW_REQUIRED"),
+                checks: [
+                    check("build (macos-26)", .passing, run: 9101, minutesAgo: 14, took: 412),
+                    check("unit tests", .failing, run: 9102, minutesAgo: 14, took: 268),
+                    check("ui tests", .failing, run: 9103, minutesAgo: 14, took: 531),
+                    check("swiftlint", .passing, run: 9104, minutesAgo: 14, took: 38),
+                ]
+            ),
+            // "Fix login redirect on Safari" — pushed, still running.
+            sessionID(at: 0): CIStatus(
+                pullRequest: GhPullRequest(number: 145, url: URL(string: "\(repo)/pull/145")!, state: .open, isDraft: true),
+                checks: [
+                    check("build (macos-26)", .pending, run: 9201, minutesAgo: 3, took: nil),
+                    check("swiftlint", .passing, run: 9202, minutesAgo: 3, took: 41),
+                ]
+            ),
+            // "Tidy the session status machine" — green and approved.
+            sessionID(at: 6): CIStatus(
+                pullRequest: GhPullRequest(number: 139, url: URL(string: "\(repo)/pull/139")!, state: .open, reviewDecision: "APPROVED"),
+                checks: [
+                    check("build (macos-26)", .passing, run: 9001, minutesAgo: 52, took: 398),
+                    check("unit tests", .passing, run: 9002, minutesAgo: 52, took: 251),
+                    check("ui tests", .passing, run: 9003, minutesAgo: 52, took: 515),
+                    check("swiftlint", .passing, run: 9004, minutesAgo: 52, took: 36),
+                ]
+            ),
+        ])
     }
 
     /// Seeds realistic permission requests for the demo fleet, so Home's Top Permissions

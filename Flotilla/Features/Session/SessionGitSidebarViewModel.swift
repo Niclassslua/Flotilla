@@ -88,6 +88,9 @@ final class SessionGitSidebarViewModel {
                 try await loadBranches()
             case .log:
                 try await loadLog(reset: true)
+            case .checks:
+                // Owned by `CIStatusStore`, which polls on its own schedule.
+                break
             }
             errorMessage = nil
         } catch {

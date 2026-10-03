@@ -184,6 +184,7 @@ struct KanbanColumnView: View {
                                 projectName: projectNames[session.id],
                                 diffStatStore: store.diffStatStore,
                                 activityStore: activityStore,
+                                ciStatusStore: store.ciStatusStore,
                                 onOpen: { openSession(session.id) },
                                 onDelete: {},
                                 onRestart: { store.restartSession(sessionID: session.id) }

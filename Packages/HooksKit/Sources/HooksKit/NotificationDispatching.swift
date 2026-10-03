@@ -45,6 +45,23 @@ public struct SystemNotificationDispatcher: NotificationDispatching {
         return UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
     }
 
+    /// Not part of `NotificationDispatching`: CI is not a hook event, so the
+    /// hook pipeline never sends it — the app's CI poller calls this directly.
+    public func notifyCIFailed(sessionTitle: String, checkName: String, sessionID: UUID) async {
+        let request = Self.ciFailedRequest(sessionTitle: sessionTitle, checkName: checkName, sessionID: sessionID)
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
+    public static func ciFailedRequest(sessionTitle: String, checkName: String, sessionID: UUID) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = "CI Failed"
+        content.body = "\(checkName) failed on \(sessionTitle)."
+        content.sound = .default
+        content.userInfo = ["sessionID": sessionID.uuidString]
+        content.threadIdentifier = sessionID.uuidString
+        return UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+    }
+
     public static func finishedRequest(sessionTitle: String, sessionID: UUID) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         content.title = "Session Finished"

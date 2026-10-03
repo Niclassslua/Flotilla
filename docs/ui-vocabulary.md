@@ -109,6 +109,10 @@ Three ways to render many sessions; Grid and Board are opened from the global ba
 | **Terminal host** | The SwiftUI wrapper around the real terminal renderer. | `TerminalHostView` — `Features/Session/` |
 | **Terminal presentation** | `.session` (focus) vs `.grid` (tile) rendering mode of the terminal. | `TerminalPresentation` (TerminalKit) |
 | **Session git sidebar** | The collapsible right-hand drawer showing working-copy file status, inline diffs, stage/discard, and commit actions for the current session. | `SessionGitSidebar` — `Features/Session/` |
+| **Checks tab** | The session git sidebar's fourth tab: the branch's pull request (state, review decision) and every CI check on its newest commit, failures first. A dot on the tab means CI is failing or running. | `SessionChecksView` — `Features/Session/SessionChecksViews.swift` |
+| **CI chip** | The session bar's one-glance CI answer — `✗ 2/4 failing #142`, `CI running`, `CI passing`. Opens the Checks tab. | `CIStatusChip` |
+| **CI glyph** | CI reduced to one icon on sidebar rows (only when red or running) and board cards (any state). | `CIStatusGlyph` |
+| **Send failure sheet** | Shows the prompt built from a failing check's log, editable, before it goes to the session's agent. | `CIFailureSendSheet` |
 | **Screenshot panel** | The drawer displaying real-time UI previews and visual tool outputs captured by the agent during its task. | `AgentScreenshotPanel` — `Features/Session/` |
 
 ---
