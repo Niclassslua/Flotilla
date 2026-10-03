@@ -1,0 +1,116 @@
+name: Release DMG
+
+# Builds Flotilla.app, wraps it in a .dmg, and attaches that DMG to the
+# GitHub Release that triggered the run. Cut a release (tag + publish) to
+# produce Flotilla-<version>.dmg.
+#
+# Signing matches the main archive job: Developer ID when
+# DEVELOPER_ID_CERTIFICATE_P12 is configured, otherwise the ad-hoc .app from
+# the archive. Notarization is not performed yet — Gatekeeper will still
+# warn on first open until that is added.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    # The `secrets` context isn't allowed in a step's `if:` condition, so
+    # resolve it into a plain env var here that the steps below can branch on.
+    env:
+      HAS_DEVELOPER_ID_CERT: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # See build.yml — actool on GitHub's Xcode 26.6 runners crashes on
+      # Flotilla.icon; use the plain fallback appiconset instead.
+      - name: Use fallback app icon for CI
+        run: |
+          mv Flotilla.icon Flotilla.icon.disabled-for-ci
+          sed -i '' 's/ASSETCATALOG_COMPILER_APPICON_NAME: Flotilla$/ASSETCATALOG_COMPILER_APPICON_NAME: FlotillaFallback/' project.yml
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Archive
+        run: make archive
+
+      - name: Import Developer ID certificate
+        if: env.HAS_DEVELOPER_ID_CERT == 'true'
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo -n "$P12_BASE64" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+      - name: Export (Developer ID)
+        if: env.HAS_DEVELOPER_ID_CERT == 'true'
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/Flotilla.xcarchive \
+            -exportPath build/Export \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Package ad-hoc build (no Developer ID certificate configured)
+        if: env.HAS_DEVELOPER_ID_CERT != 'true'
+        run: |
+          mkdir -p build/Export
+          ditto build/Flotilla.xcarchive/Products/Applications/Flotilla.app build/Export/Flotilla.app
+          echo "::notice::No DEVELOPER_ID_CERTIFICATE_P12 secret configured — packaging the ad-hoc-signed build instead of a Developer ID export. See AGENTS.md's CI/CD section to add real Developer ID signing."
+
+      - name: Create DMG
+        id: dmg
+        run: |
+          # Tag refs are typically v0.1.0; strip a leading v for the filename.
+          RAW_TAG="${GITHUB_REF_NAME}"
+          VERSION="${RAW_TAG#v}"
+          STAGE="build/dmg-stage"
+          DMG="build/Flotilla-${VERSION}.dmg"
+
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          ditto build/Export/Flotilla.app "$STAGE/Flotilla.app"
+          ln -s /Applications "$STAGE/Applications"
+
+          hdiutil create \
+            -volname "Flotilla" \
+            -srcfolder "$STAGE" \
+            -ov -format UDZO \
+            "$DMG"
+
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ls -lh "$DMG"
+
+      - name: Upload DMG to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" "${{ steps.dmg.outputs.path }}" --clobber
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flotilla-DMG
+          path: ${{ steps.dmg.outputs.path }}
+          retention-days: 90

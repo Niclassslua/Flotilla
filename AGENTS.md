@@ -519,6 +519,13 @@ Pipeline at `.github/workflows/build.yml`:
 3. Upload the Debug `.app` artifact
 4. On `main` push: archive and upload a Developer-ID export when signing secrets are configured, otherwise the ad-hoc `.app`
 
+Release DMGs are a separate workflow (`.github/workflows/release-dmg.yml`).
+Publishing a GitHub Release archives the app the same way as the `archive`
+job, wraps `Flotilla.app` plus an Applications symlink in
+`Flotilla-<version>.dmg` via `hdiutil`, and attaches that file to the release
+(also uploaded as the `Flotilla-DMG` artifact). Notarization is not included
+yet — Gatekeeper will still warn on first open until that is added.
+
 The GitHub-hosted workflow deliberately does **not** run `make test` or
 `make test-ui`. App unit-test compilation hits a Swift 6 region-based
 isolation-checker compiler error in GitHub's Xcode 26.6 (`Task.detached` in
@@ -552,9 +559,9 @@ exports, add two repository secrets:
 | `DEVELOPER_ID_CERTIFICATE_P12` | Base64 of a "Developer ID Application" `.p12` export (`base64 -i cert.p12 \| pbcopy`) |
 | `DEVELOPER_ID_CERTIFICATE_PASSWORD` | The password used when exporting that `.p12` |
 
-Once both are set, the `archive` job imports the certificate into a temporary
-keychain and runs the real `-exportArchive` step instead of the ad-hoc
-fallback.
+Once both are set, the `archive` job and the release-DMG workflow import the
+certificate into a temporary keychain and run the real `-exportArchive` step
+instead of the ad-hoc fallback.
 
 `Flotilla.icon` is an Icon Composer bundle using features (`specular-location`,
 `refractivity`) that only Xcode 27 beta's `actool` parses correctly — the
