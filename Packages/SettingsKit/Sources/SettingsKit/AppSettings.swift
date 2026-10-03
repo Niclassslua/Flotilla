@@ -373,21 +373,33 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
     public var delivery: NotificationDelivery
     public var waitingForInputEnabled: Bool
     public var finishedEnabled: Bool
+    /// Shows how many sessions are waiting for input as a badge on the Dock
+    /// icon. Independent of `delivery`: the badge is ambient state, not an
+    /// interruption, so it stays useful with banners turned off.
+    public var dockBadgeEnabled: Bool
+    /// Shows the fleet's attention state as a status item in the menu bar.
+    public var menuBarExtraEnabled: Bool
 
     public init(
         delivery: NotificationDelivery = .always,
         waitingForInputEnabled: Bool = true,
-        finishedEnabled: Bool = true
+        finishedEnabled: Bool = true,
+        dockBadgeEnabled: Bool = true,
+        menuBarExtraEnabled: Bool = true
     ) {
         self.delivery = delivery
         self.waitingForInputEnabled = waitingForInputEnabled
         self.finishedEnabled = finishedEnabled
+        self.dockBadgeEnabled = dockBadgeEnabled
+        self.menuBarExtraEnabled = menuBarExtraEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
         case delivery
         case waitingForInputEnabled
         case finishedEnabled
+        case dockBadgeEnabled
+        case menuBarExtraEnabled
     }
 
     public init(from decoder: any Decoder) throws {
@@ -395,6 +407,8 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
         delivery = try container.decodeIfPresent(NotificationDelivery.self, forKey: .delivery) ?? .always
         waitingForInputEnabled = try container.decodeIfPresent(Bool.self, forKey: .waitingForInputEnabled) ?? true
         finishedEnabled = try container.decodeIfPresent(Bool.self, forKey: .finishedEnabled) ?? true
+        dockBadgeEnabled = try container.decodeIfPresent(Bool.self, forKey: .dockBadgeEnabled) ?? true
+        menuBarExtraEnabled = try container.decodeIfPresent(Bool.self, forKey: .menuBarExtraEnabled) ?? true
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -402,6 +416,8 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
         try container.encode(delivery, forKey: .delivery)
         try container.encode(waitingForInputEnabled, forKey: .waitingForInputEnabled)
         try container.encode(finishedEnabled, forKey: .finishedEnabled)
+        try container.encode(dockBadgeEnabled, forKey: .dockBadgeEnabled)
+        try container.encode(menuBarExtraEnabled, forKey: .menuBarExtraEnabled)
     }
 
     public func shouldDeliver(isActive: Bool) -> Bool {

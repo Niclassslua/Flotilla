@@ -91,6 +91,15 @@ final class SettingsKitTests: XCTestCase {
                 XCTAssertTrue(decoded.git.deleteBranchWithWorktree)
             },
             Case(
+                name: "pre-dock badge and menu bar extra",
+                json: #"{"worktreeBaseDirectory":"/tmp/worktrees","notifications":{"delivery":"never","waitingForInputEnabled":false,"finishedEnabled":true}}"#
+            ) { decoded in
+                XCTAssertTrue(decoded.notifications.dockBadgeEnabled, "existing installs get the badge on")
+                XCTAssertTrue(decoded.notifications.menuBarExtraEnabled, "existing installs get the menu bar item on")
+                XCTAssertEqual(decoded.notifications.delivery, .never, "the existing choice must survive")
+                XCTAssertFalse(decoded.notifications.waitingForInputEnabled)
+            },
+            Case(
                 name: "pre-later sessionDefaults keys",
                 json: #"{"worktreeBaseDirectory":"/tmp/worktrees","sessionDefaults":{"createWorktreeByDefault":false}}"#
             ) { decoded in

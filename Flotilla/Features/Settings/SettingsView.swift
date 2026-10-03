@@ -69,7 +69,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .sessions: "session defaults coding agent prompt worktree"
         case .terminal: "terminal font size scroll option meta editor monaco curly braces"
         case .git: "git branch worktree delete lifecycle keep remove session"
-        case .notifications: "notifications waiting input sound privacy never active always delivery"
+        case .notifications: "notifications waiting input sound privacy never active always delivery dock badge menu bar status item"
         case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices speech dictation audio handy stt transcribe"
         case .agents: "claude codex opencode agy antigravity cursor agent executable arguments authentication developer tools git github gh tmux path"
         }
@@ -625,6 +625,17 @@ private struct NotificationSettingsPane: View {
                 SettingsSectionHeader("Session Events", systemImage: "bell")
             } footer: {
                 Text("Notifications observe terminal output and process state. They never approve agent prompts.")
+            }
+
+            Section {
+                Toggle("Show waiting count on Dock icon", isOn: $viewModel.settings.notifications.dockBadgeEnabled)
+                    .toggleStyle(.switch)
+                Toggle("Show Flotilla in menu bar", isOn: $viewModel.settings.notifications.menuBarExtraEnabled)
+                    .toggleStyle(.switch)
+            } header: {
+                SettingsSectionHeader("At a Glance", systemImage: "menubar.rectangle")
+            } footer: {
+                Text("Both count sessions waiting for your input. The menu bar item also lists sessions ready for review and crashed sessions, and opens any of them directly.")
             }
         }
         .flotillaSettingsFormLayout()

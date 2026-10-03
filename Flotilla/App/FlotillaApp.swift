@@ -19,6 +19,7 @@ struct FlotillaApp: App {
     @State private var navigator: WorkspaceNavigator
     @State private var notificationDelegate: FlotillaNotificationDelegate
     @State private var companionHost: CompanionHost
+    @State private var dockBadge: DockBadgeController
     @Environment(\.openWindow) private var openWindow
 
     /// Held so the review scene — which is not a descendant of the shell and
@@ -26,6 +27,13 @@ struct FlotillaApp: App {
     private let gitService: any GitServiceProtocol
     private let sessionRepository: any SessionRepository
     private let foregroundNotificationGate: OSAllocatedUnfairLock<Bool>
+    /// UI tests query the app's own windows and menus; a status item would be
+    /// extra system-wide chrome they neither need nor control.
+    private let showsMenuBarExtra: Bool
+
+    /// Named so surfaces outside the window — the menu bar extra — can reopen
+    /// the workspace after it has been closed.
+    static let mainWindowSceneID = "main"
 
     private static let isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
 
@@ -164,6 +172,14 @@ struct FlotillaApp: App {
             }
         }
 
+        let dockBadge = DockBadgeController(
+            sessions: { appStore.sessions },
+            isEnabled: { settingsViewModel.settings.notifications.dockBadgeEnabled }
+        )
+        dockBadge.start()
+        _dockBadge = State(initialValue: dockBadge)
+        showsMenuBarExtra = !environment.isUITesting
+
         // No-op unless FLOTILLA_PERF=1 — see PerfLog.
         MainThreadStallMonitor.shared.start()
 
@@ -198,7 +214,7 @@ struct FlotillaApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: Self.mainWindowSceneID) {
             FlotillaShell(
                 store: store,
                 terminalManager: terminalManager,
@@ -363,6 +379,13 @@ struct FlotillaApp: App {
         .restorationBehavior(.disabled)
 #endif
 
+        MenuBarExtra(isInserted: menuBarExtraInserted) {
+            FleetMenuBarMenu(store: store, navigator: navigator)
+        } label: {
+            FleetMenuBarLabel(store: store)
+        }
+        .menuBarExtraStyle(.menu)
+
         Settings {
             SettingsView(viewModel: settingsViewModel)
                 .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
@@ -374,6 +397,20 @@ struct FlotillaApp: App {
 #if FLOTILLA_EPHEMERAL
         .restorationBehavior(.disabled)
 #endif
+    }
+}
+
+extension FlotillaApp {
+    /// Written back into the setting so that if the system removes the item,
+    /// Settings shows it as off rather than disagreeing with the menu bar.
+    private var menuBarExtraInserted: Binding<Bool> {
+        Binding(
+            get: { showsMenuBarExtra && settingsViewModel.settings.notifications.menuBarExtraEnabled },
+            set: { newValue in
+                guard showsMenuBarExtra else { return }
+                settingsViewModel.settings.notifications.menuBarExtraEnabled = newValue
+            }
+        )
     }
 }
 
