@@ -76,10 +76,19 @@ final class SettingsKitTests: XCTestCase {
                 json: #"{"worktreeBaseDirectory":"/tmp/worktrees","appearance":"dark","git":{"deleteBranchWithWorktree":false,"fetchBeforeCreatingWorktree":true}}"#
             ) { decoded in
                 XCTAssertTrue(decoded.git.highlightUnseenCommits, "a new preference defaults to on")
+                XCTAssertEqual(decoded.git.worktreeOnSessionDelete, .keep, "a new preference defaults to keep")
                 XCTAssertFalse(decoded.git.deleteBranchWithWorktree, "the existing choice must survive")
                 XCTAssertTrue(decoded.git.fetchBeforeCreatingWorktree)
                 XCTAssertEqual(decoded.appearance, .dark)
                 XCTAssertEqual(decoded.worktreeBaseDirectory, "/tmp/worktrees")
+            },
+            Case(
+                name: "worktreeOnSessionDelete remove survives",
+                json: #"{"worktreeBaseDirectory":"/tmp/worktrees","git":{"deleteBranchWithWorktree":true,"worktreeOnSessionDelete":"remove"}}"#
+            ) { decoded in
+                XCTAssertEqual(decoded.git.worktreeOnSessionDelete, .remove)
+                XCTAssertTrue(decoded.git.worktreeOnSessionDelete.deletesWorktree)
+                XCTAssertTrue(decoded.git.deleteBranchWithWorktree)
             },
             Case(
                 name: "pre-later sessionDefaults keys",

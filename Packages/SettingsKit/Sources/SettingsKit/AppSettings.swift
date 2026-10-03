@@ -191,6 +191,29 @@ public enum CommitAttributionMode: String, Codable, CaseIterable, Sendable, Iden
     }
 }
 
+/// Pre-selected worktree choice when confirming a session delete.
+///
+/// The delete sheet still asks every time; this only picks which option is
+/// selected when it opens. The main checkout is never deleted either way.
+public enum WorktreeOnSessionDelete: String, Codable, CaseIterable, Sendable, Identifiable {
+    case keep
+    case remove
+
+    public var id: Self { self }
+
+    public var displayName: String {
+        switch self {
+        case .keep: "Keep worktree"
+        case .remove: "Remove worktree"
+        }
+    }
+
+    /// Value handed to `deleteSession(deleteWorktree:)`.
+    public var deletesWorktree: Bool {
+        self == .remove
+    }
+}
+
 public struct SessionDefaults: Codable, Equatable, Sendable {
     public var createWorktreeByDefault: Bool
     public var defaultAgentRawValue: String = "claudeCode"
@@ -407,6 +430,8 @@ public struct NotificationPreferences: Codable, Equatable, Sendable {
 
 public struct GitPreferences: Codable, Equatable, Sendable {
     public var deleteBranchWithWorktree: Bool
+    /// Which worktree option is pre-selected in the delete-session sheet.
+    public var worktreeOnSessionDelete: WorktreeOnSessionDelete
     public var fetchBeforeCreatingWorktree: Bool
     /// Flags commits that landed since the last time a project's History view
     /// was opened. Off means the timeline treats every commit the same.
@@ -420,12 +445,14 @@ public struct GitPreferences: Codable, Equatable, Sendable {
 
     public init(
         deleteBranchWithWorktree: Bool = true,
+        worktreeOnSessionDelete: WorktreeOnSessionDelete = .keep,
         fetchBeforeCreatingWorktree: Bool = false,
         highlightUnseenCommits: Bool = true,
         defaultCommitAttribution: CommitAttributionMode = .local,
         projectCommitAttribution: [String: CommitAttributionMode] = [:]
     ) {
         self.deleteBranchWithWorktree = deleteBranchWithWorktree
+        self.worktreeOnSessionDelete = worktreeOnSessionDelete
         self.fetchBeforeCreatingWorktree = fetchBeforeCreatingWorktree
         self.highlightUnseenCommits = highlightUnseenCommits
         self.defaultCommitAttribution = defaultCommitAttribution
@@ -442,6 +469,7 @@ public struct GitPreferences: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case deleteBranchWithWorktree
+        case worktreeOnSessionDelete
         case fetchBeforeCreatingWorktree
         case highlightUnseenCommits
         case defaultCommitAttribution
@@ -470,6 +498,7 @@ public struct GitPreferences: Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         deleteBranchWithWorktree = try container.decodeIfPresent(Bool.self, forKey: .deleteBranchWithWorktree) ?? true
+        worktreeOnSessionDelete = try container.decodeIfPresent(WorktreeOnSessionDelete.self, forKey: .worktreeOnSessionDelete) ?? .keep
         fetchBeforeCreatingWorktree = try container.decodeIfPresent(Bool.self, forKey: .fetchBeforeCreatingWorktree) ?? false
         highlightUnseenCommits = try container.decodeIfPresent(Bool.self, forKey: .highlightUnseenCommits) ?? true
         if let mode = try? container.decodeIfPresent(CommitAttributionMode.self, forKey: .defaultCommitAttribution) {

@@ -435,6 +435,7 @@ struct FlotillaShell: View {
                 DeleteSessionSheet(
                     session: session,
                     isRunning: store.process(for: sessionID) != nil,
+                    defaultDeleteWorktree: settingsViewModel.settings.git.worktreeOnSessionDelete.deletesWorktree,
                     onCancel: { navigator.presentedSheet = nil },
                     onDelete: { deleteWorktree in
                         navigator.presentedSheet = nil

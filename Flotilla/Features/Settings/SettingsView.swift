@@ -68,7 +68,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .permissions: "permissions screen recording capture privacy security"
         case .sessions: "session defaults coding agent prompt worktree"
         case .terminal: "terminal font size scroll option meta editor monaco curly braces"
-        case .git: "git branch worktree delete lifecycle"
+        case .git: "git branch worktree delete lifecycle keep remove session"
         case .notifications: "notifications waiting input sound privacy never active always delivery"
         case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices speech dictation audio handy stt transcribe"
         case .agents: "claude codex opencode agy antigravity cursor agent executable arguments authentication developer tools git github gh tmux path"
@@ -516,9 +516,19 @@ private struct GitSettingsPane: View {
     var body: some View {
         Form {
             Section {
+                Picker("When deleting a session", selection: $viewModel.settings.git.worktreeOnSessionDelete) {
+                    ForEach(WorktreeOnSessionDelete.allCases) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .accessibilityIdentifier("Settings.WorktreeOnSessionDelete")
+                Text("Pre-selects Keep or Remove in the delete confirmation. You can still change it each time. The main checkout is never deleted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Delete branch when deleting its worktree", isOn: $viewModel.settings.git.deleteBranchWithWorktree)
                     .toggleStyle(.switch)
-                Text("Deleting a session always asks before removing an isolated checkout. The main checkout is never deleted.")
+                Text("Applies when the delete confirmation chooses Remove worktree.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

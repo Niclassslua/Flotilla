@@ -81,6 +81,7 @@ struct GridView: View {
         .sheet(item: $pendingDeletion) { session in
             DeleteSessionSheet(
                 session: session,
+                defaultDeleteWorktree: settingsViewModel.settings.git.worktreeOnSessionDelete.deletesWorktree,
                 onCancel: { pendingDeletion = nil },
                 onDelete: { deleteWorktree in
                     pendingDeletion = nil

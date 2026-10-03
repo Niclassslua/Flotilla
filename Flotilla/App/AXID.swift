@@ -134,6 +134,7 @@ public enum AXID: String, Sendable {
     case settingsGitTab = "Settings.GitTab"
     case settingsAdvancedTab = "Settings.AdvancedTab"
     case settingsWorktreeBaseDirectory = "Settings.WorktreeBaseDirectory"
+    case settingsWorktreeOnSessionDelete = "Settings.WorktreeOnSessionDelete"
     case settingsScreenRecordingPermissionRow = "Settings.ScreenRecordingPermissionRow"
     case settingsGrantScreenRecordingPermission = "Settings.GrantScreenRecordingPermission"
     case settingsOpenScreenRecordingSettings = "Settings.OpenScreenRecordingSettings"

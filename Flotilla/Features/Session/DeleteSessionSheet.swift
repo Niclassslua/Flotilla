@@ -8,10 +8,28 @@ struct DeleteSessionSheet: View {
     /// mid-work, which nothing here can undo, so it is called out rather than
     /// left for the user to remember.
     var isRunning: Bool = false
+    /// Pre-selected worktree choice from Settings ▸ Git & Worktrees. The sheet
+    /// still always confirms; this only seeds the initial selection.
+    var defaultDeleteWorktree: Bool = false
     let onCancel: () -> Void
     let onDelete: (Bool) -> Void
 
-    @State private var deleteWorktree = false
+    @State private var deleteWorktree: Bool
+
+    init(
+        session: Session,
+        isRunning: Bool = false,
+        defaultDeleteWorktree: Bool = false,
+        onCancel: @escaping () -> Void,
+        onDelete: @escaping (Bool) -> Void
+    ) {
+        self.session = session
+        self.isRunning = isRunning
+        self.defaultDeleteWorktree = defaultDeleteWorktree
+        self.onCancel = onCancel
+        self.onDelete = onDelete
+        _deleteWorktree = State(initialValue: defaultDeleteWorktree)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: FlotillaSpacing.xLarge) {
