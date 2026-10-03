@@ -541,8 +541,11 @@ final class MacConnection {
             }
             return nil
         }
+        // The Mac trims a prompt before delivering it, so a trailing space or
+        // newline from the keyboard or dictation must not keep it "queued".
         queued.removeAll { prompt in
-            delivered.contains { $0.0.trimmingCharacters(in: .whitespacesAndNewlines) == prompt.text && $0.1 >= prompt.sentAt.addingTimeInterval(-5) }
+            let text = prompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return delivered.contains { $0.0.trimmingCharacters(in: .whitespacesAndNewlines) == text && $0.1 >= prompt.sentAt.addingTimeInterval(-5) }
         }
         queuedPrompts[sessionID] = queued
     }

@@ -70,13 +70,26 @@ final class CursorCompanionAdapter: CompanionSessionAdapter {
                 || current.contains("Allow") && current.contains("Reject")
                 || current.contains("Esc to cancel")
             if blocked { throw ProviderConnectionError.rejected("Answer the terminal dialog first.") }
+            // Cursor has no draft stash (Ctrl-S types a literal "s"), and
+            // anything already in the composer would be sent glued to the
+            // phone's prompt.
+            if Self.composerDraft(in: current) != nil {
+                throw ProviderConnectionError.rejected("Send or clear the unsent text in the Mac terminal first.")
+            }
         }
-        // Ctrl-S stashes a genuine Mac draft; Cursor ignores it for a dim
-        // suggestion. A lone control byte is a real keystroke, unlike a bulk
-        // write. The prompt itself goes through tmux send-keys so it is
-        // submitted, not merely typed into the composer.
-        send(Data([0x13]))
         try await deliver(text)
+    }
+
+    /// The text typed into Cursor's composer — the last `→` line on screen —
+    /// or `nil` when it only shows its placeholder.
+    static func composerDraft(in screen: String) -> String? {
+        guard let line = screen.split(separator: "\n").last(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("→ ")
+        }) else { return nil }
+        let text = line.trimmingCharacters(in: .whitespaces).dropFirst(2)
+            .trimmingCharacters(in: .whitespaces)
+        let placeholders = ["Add a follow-up", "Plan, search, build anything"]
+        return text.isEmpty || placeholders.contains(where: text.hasPrefix) ? nil : text
     }
 
     func stop() async throws {

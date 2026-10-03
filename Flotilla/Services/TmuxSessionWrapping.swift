@@ -601,8 +601,16 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
             // its own distinct injection — is what actually submits it.
             try runSendKeys(["-t", name, "-l", goal], tmuxExecutable: tmuxExecutable)
         }
+        // When Enter lands right behind the text, Cursor Agent submits it but
+        // leaves the same text in its composer, so the next message is
+        // appended to it and both go out as one prompt. A short gap lets the
+        // composer take the text first (measured: back-to-back leaves it
+        // behind, 50 ms and up clears it); the other agents don't mind it.
+        Thread.sleep(forTimeInterval: Self.submitSettleDelay)
         try runSendKeys(["-t", name, "Enter"], tmuxExecutable: tmuxExecutable)
     }
+
+    static let submitSettleDelay: TimeInterval = 0.25
 
     private func pasteGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) throws {
         let bufferName = "flotilla-paste-\(UUID().uuidString)"
@@ -644,8 +652,12 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
                 continue
             }
             // Fast-path: active prompt indicator is ready
+            // Cursor's composer placeholders: a working Cursor pane animates
+            // without pause, so without these a mid-turn message waited out
+            // the full deadline before being typed.
             if current.contains("❯") || current.contains("> ") || current.contains("cwd:")
-                || current.contains("? for help") || current.contains("What would you like") {
+                || current.contains("? for help") || current.contains("What would you like")
+                || current.contains("→ Add a follow-up") || current.contains("→ Plan, search") {
                 return
             }
             if current == previous {

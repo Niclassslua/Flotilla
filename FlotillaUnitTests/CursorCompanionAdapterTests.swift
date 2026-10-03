@@ -35,9 +35,41 @@ final class CursorCompanionAdapterTests: XCTestCase {
         try await adapter.sendPrompt("Fix the flaky test")
 
         XCTAssertEqual(delivered, ["Fix the flaky test"])
-        // The raw channel carries only the draft-stash keystroke, never the
-        // prompt text.
-        XCTAssertEqual(sentBytes, [Data([0x13])])
+        // Nothing goes over the raw channel: Cursor types Ctrl-S as a literal
+        // "s", which used to prefix phone prompts ("sCommit this to main").
+        XCTAssertEqual(sentBytes, [])
+    }
+
+    /// Text already in Cursor's composer would be sent glued to the phone's
+    /// prompt as one message, so the prompt is rejected instead.
+    func testSendPromptRejectedWhileComposerHoldsDraft() async {
+        var delivered: [String] = []
+        let adapter = CursorCompanionAdapter(
+            session: makeSession(),
+            bridge: ClaudePermissionBridge(),
+            support: FileManager.default.temporaryDirectory,
+            screen: { _ in "  OK\n  → half-typed thought\n  Auto · 5.8%" },
+            send: { _ in },
+            deliver: { delivered.append($0) }
+        )
+
+        do {
+            try await adapter.sendPrompt("Go ahead")
+            XCTFail("The prompt should have been rejected while the composer holds a draft.")
+        } catch {
+            // Expected: rejected.
+        }
+        XCTAssertTrue(delivered.isEmpty)
+    }
+
+    func testComposerDraftIgnoresPlaceholders() {
+        XCTAssertNil(CursorCompanionAdapter.composerDraft(in: "  → Plan, search, build anything\n  Auto"))
+        XCTAssertNil(CursorCompanionAdapter.composerDraft(in: "  → Add a follow-up              ctrl+c to stop\n  Auto"))
+        XCTAssertNil(CursorCompanionAdapter.composerDraft(in: "❯ "))
+        XCTAssertEqual(
+            CursorCompanionAdapter.composerDraft(in: "  A → B in the reply\n  → draft text here\n  Auto"),
+            "draft text here"
+        )
     }
 
     /// A terminal-local dialog (Run/Skip) must reject the phone prompt so it

@@ -33,7 +33,14 @@ Matches the summary bar the other four hit (see
 - Approve / deny; always allow (**this session**); deny with note; deny and stop
 - Questions / plan when tool names map (`AskQuestion`, `CreatePlan`, …); else
   permission card or “Needs the terminal”
-- Prompt idle/busy + Mac draft (Ctrl-S stash + bracketed paste); interrupt Esc
+- Prompt idle/busy through tmux `send-keys` (text, then Enter 250 ms later);
+  interrupt Esc. Cursor has no draft stash — Ctrl-S types a literal `s` — so a
+  phone prompt is refused while the Mac composer holds unsent text. Enter sent
+  back-to-back with the text submits it but leaves it in the composer, where
+  the next prompt is appended and both go out as one follow-up.
+- Mid-turn prompts queue as Cursor follow-ups; the transcript JSONL records a
+  follow-up only when it starts, and assistant text only once that step's tool
+  calls finish (`afterAgentResponse` fires even later, at turn end)
 - Create / reattach; errors on phone; first-answer-wins on Mac + phone while the
   hook holds
 
