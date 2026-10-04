@@ -446,15 +446,4 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         }
         XCTAssertEqual(images.count, 1)
     }
-
-    func testReadsRealPlanningSessionTranscript() throws {
-        let realURL = URL(fileURLWithPath: "/Users/dev/.claude/projects/-Users-dev-.flotilla-general-session/3378ed5a-d8b8-4ea7-9b93-8b503b811df7.jsonl")
-        guard FileManager.default.fileExists(atPath: realURL.path) else { return }
-        let entries = try codec.readNative(at: realURL)
-        let images = entries.filter {
-            if case .image = $0 { return true }
-            return false
-        }
-        XCTAssertGreaterThanOrEqual(images.count, 4)
-    }
 }
