@@ -24,7 +24,9 @@ struct TilesDesign: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            LauncherGoalField(draft: draft, actions: actions, fontSize: 20, lines: 2...6)
+            // The reserved second line keeps an empty launcher roomy; once
+            // thumbnails sit below the goal they fill that space instead.
+            LauncherGoalField(draft: draft, actions: actions, fontSize: 20, lines: draft.attachments.isEmpty ? 2...6 : 1...6)
                 .padding(.horizontal, FlotillaSpacing.xLarge)
                 .padding(.top, FlotillaSpacing.xLarge)
                 .padding(.bottom, FlotillaSpacing.small)
