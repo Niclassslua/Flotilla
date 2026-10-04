@@ -203,6 +203,9 @@ struct DeleteSessionSheet: View {
             .contentShape(RoundedRectangle(cornerRadius: FlotillaRadius.card))
         }
         .buttonStyle(.plain)
+        // The card's own border already shows the selection; the system focus
+        // ring on the first card reads as a second, competing selection.
+        .focusEffectDisabled()
         .accessibilityLabel("\(title). \(detail)")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityIdentifier(axID)
