@@ -63,3 +63,5 @@ Flotilla is early (v0.1.0, beta) and built primarily for its own author's workfl
 ## License
 
 [MIT](LICENSE)
+
+The Claude, Codex, Cursor, OpenCode, and Antigravity logos are trademarks of their respective owners. They are included only to identify each provider and are not covered by the MIT license.
