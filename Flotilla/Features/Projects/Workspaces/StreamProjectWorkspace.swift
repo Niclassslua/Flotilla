@@ -102,14 +102,16 @@ struct StreamProjectWorkspace: View {
 
     // MARK: - Masthead
 
+    private static let mastheadMarkSize: CGFloat = 34
+
     private var masthead: some View {
-        VStack(spacing: FlotillaSpacing.large) {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.large) {
             HStack(alignment: .center, spacing: FlotillaSpacing.medium) {
                 Button {
                     isShowingIconPicker = true
                 } label: {
                     ZStack(alignment: .bottomTrailing) {
-                        ProjectMark(project: project, size: 34)
+                        ProjectMark(project: project, size: Self.mastheadMarkSize)
                         Circle()
                             .fill(FlotillaColors.surface)
                             .frame(width: 14, height: 14)
@@ -171,10 +173,15 @@ struct StreamProjectWorkspace: View {
 
                 Spacer(minLength: FlotillaSpacing.medium)
 
+                // The links keep their full labels; the path truncates
+                // instead, since it already middle-truncates gracefully.
                 surfaceNav
+                    .fixedSize()
             }
 
+            // Sits under the name/path column rather than under the icon.
             instrumentRow
+                .padding(.leading, Self.mastheadMarkSize + FlotillaSpacing.medium)
         }
         .padding(.horizontal, FlotillaSpacing.xLarge)
         .padding(.top, FlotillaSpacing.xLarge)
