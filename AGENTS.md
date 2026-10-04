@@ -40,6 +40,10 @@ An iOS companion (`FlotillaCompanion`) lives in the same project: a remote contr
 
 After every relevant change you commit or push (app code, packages, resources, `project.yml`, anything that alters the built `Flotilla.app`), you **must** run `make install` so `/Applications/Flotilla.app` matches the latest committed state. Docs-only, CI-only, and test-only changes are exempt. Report the reinstall in your final message; if it fails, fix or say so rather than skipping it.
 
+### Branches
+
+Don't create new branches, locally or on the remote, unless the user explicitly asks for one. Commit to the branch you are on, and when asked to land work, put it on `main` directly instead of pushing a feature branch.
+
 ### You are probably running inside Flotilla
 
 Agents working on this repo usually run *inside* the installed Flotilla app, which hosts your terminal and every other agent's session. `FLOTILLA_HOST_APP` is set in your environment when that is the case.
