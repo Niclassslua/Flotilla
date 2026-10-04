@@ -208,6 +208,18 @@ struct SessionBar: View {
                     .layoutPriority(-1)
             }
 
+            if let issue = session.linkedIssue {
+                Link(destination: issue.url) {
+                    Label("\(issue.number)", systemImage: "number")
+                        .labelStyle(.titleAndIcon)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                }
+                .help("GitHub issue #\(issue.number): \(issue.title)")
+                .fixedSize()
+                .accessibilityIdentifier("SessionBar.LinkedIssue")
+            }
+
             if let ciStatus = store.ciStatusStore.status(for: session.id) {
                 CIStatusChip(status: ciStatus, action: actions.onShowChecks)
                     .fixedSize()

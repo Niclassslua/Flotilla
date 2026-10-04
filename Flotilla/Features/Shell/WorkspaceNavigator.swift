@@ -367,7 +367,10 @@ enum WorkspacePresentation: String, CaseIterable, Identifiable, Codable, Sendabl
 }
 
 enum WorkspaceSheet: Identifiable, Equatable, Codable, Sendable {
-    case createSession(initialGoal: String? = nil, projectID: UUID? = nil)
+    /// `opensIssuePicker` opens the launcher with its issue picker showing;
+    /// `issueNumber` opens it with that issue already linked. Optional so
+    /// sheets encoded before they existed still decode.
+    case createSession(initialGoal: String? = nil, projectID: UUID? = nil, opensIssuePicker: Bool? = nil, issueNumber: Int? = nil)
     case commandPalette
     case shortcuts
     case restore
@@ -377,8 +380,8 @@ enum WorkspaceSheet: Identifiable, Equatable, Codable, Sendable {
 
     var id: String {
         switch self {
-        case .createSession(let goal, let projectID):
-            "create-session-\(goal ?? "")-\(projectID?.uuidString ?? "")"
+        case .createSession(let goal, let projectID, let opensIssuePicker, let issueNumber):
+            "create-session-\(goal ?? "")-\(projectID?.uuidString ?? "")-\(opensIssuePicker == true ? "issue" : "")-\(issueNumber.map(String.init) ?? "")"
         case .commandPalette: "command-palette"
         case .shortcuts: "shortcuts"
         case .restore: "restore"

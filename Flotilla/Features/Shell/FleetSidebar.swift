@@ -18,6 +18,8 @@ struct SessionsSidebar: View {
     let onOpenSession: (UUID) -> Void
     let onRequestDelete: (UUID) -> Void
     let onCreateSession: () -> Void
+    /// `nil` hides "New Session from Issue…" — no `gh` to list issues with.
+    var onCreateSessionFromIssue: ((UUID) -> Void)? = nil
     /// Whether the grid is the current presentation, which is the only context
     /// where a row's grid-membership control means anything. It no longer
     /// changes what *clicking* a row does — see `SessionSidebarRow`.
@@ -93,6 +95,7 @@ struct SessionsSidebar: View {
                 searchText: searchText,
                 onOpenSession: onOpenSession,
                 onRequestDelete: onRequestDelete,
+                onCreateSessionFromIssue: onCreateSessionFromIssue,
                 gridMembership: gridMembership,
                 collapsedProjects: $collapsedProjects
             )
@@ -166,6 +169,7 @@ struct FleetSessionList: View {
     /// delete anything itself — the sheet is owned by `FlotillaShell`, so
     /// every entry point into deletion shares one confirmation flow.
     let onRequestDelete: (UUID) -> Void
+    var onCreateSessionFromIssue: ((UUID) -> Void)? = nil
     /// Non-nil while the grid is the current presentation, enabling each row's
     /// explicit membership control. It no longer changes what clicking a row
     /// does: a click opens a session in every presentation.
@@ -208,6 +212,12 @@ struct FleetSessionList: View {
                     .background(ListSelectionHighlightSuppressor(isSuppressed: liquidGlassEnabled))
                     .accessibilityIdentifier(AXID.sidebarProjectRow.rawValue + project.name)
                     .contextMenu {
+                        if let onCreateSessionFromIssue {
+                            Button("New Session from Issue…") {
+                                onCreateSessionFromIssue(project.id)
+                            }
+                            Divider()
+                        }
                         Button("Change Icon & Color…") {
                             editingIconProject = project
                         }

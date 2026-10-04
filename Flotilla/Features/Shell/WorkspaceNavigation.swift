@@ -22,6 +22,7 @@ enum WorkspaceDestination: Hashable {
 
 enum WorkspaceCommand: String, CaseIterable, Identifiable {
     case newSession
+    case newSessionFromIssue
     case showHome
     case showSessions
     case showGrid
@@ -41,7 +42,7 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     /// `WorkspaceCommandTests.testNoTwoCommandsShareADestination`.
     var destination: WorkspaceDestination? {
         switch self {
-        case .newSession, .restoreSessions, .showSettings, .showShortcuts: nil
+        case .newSession, .newSessionFromIssue, .restoreSessions, .showSettings, .showShortcuts: nil
         case .showHome: .home
         case .showSessions: .sessions(.focus)
         case .showGrid: .sessions(.grid)
@@ -56,6 +57,7 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .newSession: "New session"
+        case .newSessionFromIssue: "New session from issue"
         case .showHome: "Go to Home"
         case .showSessions: "Go to Sessions"
         case .showGrid: "Show session grid"
@@ -73,6 +75,7 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .newSession: "Launch an agent in a checkout or worktree"
+        case .newSessionFromIssue: "Start from one of the project's open GitHub issues"
         case .showHome: "Attention, activity and projects"
         case .showSessions: "Every running agent"
         case .showGrid: "Tile every live terminal"
@@ -90,6 +93,7 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .newSession: "plus"
+        case .newSessionFromIssue: "number"
         case .showHome: "house"
         case .showSessions: "square.stack.3d.up"
         case .showGrid: "square.grid.2x2"

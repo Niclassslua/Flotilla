@@ -260,6 +260,7 @@ struct StreamProjectWorkspace: View {
     private var surfaceNav: some View {
         HStack(spacing: FlotillaSpacing.medium) {
             surfaceLink(.git, "Git", "arrow.triangle.branch")
+            surfaceLink(.issues, "Issues", "number")
             surfaceLink(.files, "Files", "folder")
             surfaceLink(.skills, "Skills", "sparkles")
             surfaceLink(.rules, "Rules", "doc.badge.gearshape")

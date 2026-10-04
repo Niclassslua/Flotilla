@@ -17,6 +17,11 @@ public protocol GhServiceProtocol: Sendable {
     func ciStatus(forBranch branch: String, at repoPath: URL) async throws -> CIStatus?
     /// The failing steps' output of one Actions run (`gh run view --log-failed`).
     func failedLog(runID: Int, at repoPath: URL) async throws -> String
+    /// Open issues, most recently updated first, optionally narrowed by
+    /// GitHub's own search syntax (`gh issue list --search`).
+    func openIssues(search: String, limit: Int, at repoPath: URL) async throws -> [GhIssue]
+    /// One issue including its body.
+    func issue(number: Int, at repoPath: URL) async throws -> GhIssue
 }
 
 /// Real `gh` integration. Invoked by absolute path rather than relying on
@@ -73,6 +78,34 @@ public struct GhService: GhServiceProtocol {
         }
         let checks = try GhJSON.workflowRunChecks(from: Data(runs.stdout.utf8))
         return checks.isEmpty ? nil : CIStatus(checks: checks)
+    }
+
+    public func openIssues(search: String, limit: Int, at repoPath: URL) async throws -> [GhIssue] {
+        var arguments = ["issue", "list", "--state", "open", "--limit", String(limit), "--json", "number,title,url,labels,updatedAt"]
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            arguments += ["--search", query]
+        }
+        let result = try await runner.run(arguments, executable: ghExecutable, workingDirectory: repoPath)
+        guard result.exitCode == 0 else {
+            throw GitServiceError.ghCommandFailed(exitCode: result.exitCode, stderr: result.stderr)
+        }
+        return try GhJSON.issues(from: Data(result.stdout.utf8))
+    }
+
+    public func issue(number: Int, at repoPath: URL) async throws -> GhIssue {
+        let result = try await runner.run(
+            ["issue", "view", String(number), "--json", "number,title,url,labels,updatedAt,body"],
+            executable: ghExecutable,
+            workingDirectory: repoPath
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.ghCommandFailed(exitCode: result.exitCode, stderr: result.stderr)
+        }
+        guard let issue = try GhJSON.issues(from: Data(result.stdout.utf8)).first else {
+            throw GitServiceError.ghCommandFailed(exitCode: 0, stderr: "gh returned no issue #\(number)")
+        }
+        return issue
     }
 
     public func failedLog(runID: Int, at repoPath: URL) async throws -> String {

@@ -4,6 +4,7 @@ import AppKit
 import SessionKit
 import AgentKit
 import SettingsKit
+import GitKit
 
 /// The session being configured, shared by all four designs.
 ///
@@ -15,7 +16,21 @@ import SettingsKit
 @MainActor
 final class SessionDraft {
     var goal: String
-    var projectChoice: ProjectChoice
+    var projectChoice: ProjectChoice {
+        // An issue belongs to one repository; carrying it to another project
+        // would launch with a goal and branch named for the wrong codebase.
+        didSet {
+            if linkedIssue != nil, projectChoice.folder != oldValue.folder {
+                clearIssue()
+            }
+        }
+    }
+    /// The GitHub issue the goal was filled from. Survives edits to the goal —
+    /// adding a note to an issue's text is still working on that issue.
+    private(set) var linkedIssue: IssueLink?
+    /// What the user had typed before choosing an issue, so unlinking gives it
+    /// back instead of leaving the issue text behind.
+    private var goalBeforeIssue: String?
     var agent: AgentKind
     var model = ""
     var effort: AgentEffort = .medium
@@ -91,8 +106,42 @@ final class SessionDraft {
             createWorktree: createWorktree && supportsWorktree,
             namingSource: store.namingSource,
             worktreeBaseDirectory: store.worktreeBaseDirectory,
-            generalSessionDirectory: store.generalSessionDirectory
+            generalSessionDirectory: store.generalSessionDirectory,
+            linkedIssue: linkedIssue
         )
+    }
+
+    // MARK: - Issues
+
+    /// The repository issues are listed from; `nil` for a general session.
+    var issueRepository: URL? { projectChoice.folder }
+
+    /// Fills the goal from `issue` (which should carry its body) and links it,
+    /// so the session is titled `#<n> <title>` and branched `issue-<n>-…`.
+    func apply(issue: GhIssue) {
+        if linkedIssue == nil {
+            goalBeforeIssue = goal
+        }
+        linkedIssue = IssueLink(number: issue.number, title: issue.title, url: issue.url)
+        goal = Self.goal(for: issue)
+    }
+
+    func clearIssue() {
+        guard linkedIssue != nil else { return }
+        linkedIssue = nil
+        goal = goalBeforeIssue ?? ""
+        goalBeforeIssue = nil
+    }
+
+    /// The issue's own words, framed so the agent links its work back to it.
+    static func goal(for issue: GhIssue) -> String {
+        var text = "#\(issue.number) \(issue.title)"
+        let body = issue.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !body.isEmpty {
+            text += "\n\n\(body)"
+        }
+        text += "\n\nThis is GitHub issue #\(issue.number) (\(issue.url.absoluteString)). Reference it in the pull request (\"Closes #\(issue.number)\")."
+        return text
     }
 
     /// Known projects newest-first, with the general option pinned at the top
@@ -183,7 +232,8 @@ final class SessionDraft {
             checkoutMode: effectiveCheckoutMode,
             deliverGoal: !normalizedGoal.isEmpty,
             fetchBeforeCreatingWorktree: fetchBeforeCreatingWorktree,
-            selectAfterCreating: opensSession
+            selectAfterCreating: opensSession,
+            linkedIssue: linkedIssue
         )
     }
 
@@ -205,6 +255,8 @@ final class SessionDraft {
     func clearGoal() {
         goal = ""
         initialMode = .act
+        linkedIssue = nil
+        goalBeforeIssue = nil
     }
 
     // MARK: - Folder panel

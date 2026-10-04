@@ -251,4 +251,22 @@ public final class MockGhService: GhServiceProtocol, @unchecked Sendable {
     public func failedLog(runID: Int, at repoPath: URL) async throws -> String {
         failedLogToReturn
     }
+
+    public var issuesToReturn: [GhIssue] = []
+    public var issueErrorToThrow: Error?
+    public private(set) var issueSearches: [String] = []
+
+    public func openIssues(search: String, limit: Int, at repoPath: URL) async throws -> [GhIssue] {
+        issueSearches.append(search)
+        if let issueErrorToThrow { throw issueErrorToThrow }
+        return Array(issuesToReturn.prefix(limit))
+    }
+
+    public func issue(number: Int, at repoPath: URL) async throws -> GhIssue {
+        if let issueErrorToThrow { throw issueErrorToThrow }
+        guard let issue = issuesToReturn.first(where: { $0.number == number }) else {
+            throw GitServiceError.ghCommandFailed(exitCode: 1, stderr: "no issue #\(number)")
+        }
+        return issue
+    }
 }

@@ -185,6 +185,7 @@ struct FlotillaShell: View {
                 },
                 onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
                 onCreateSession: { presentCreateSession() },
+                onCreateSessionFromIssue: store.ghService == nil ? nil : { presentCreateSessionFromIssue(projectID: $0) },
                 gridMembership: gridMembership
             )
             .navigationSplitViewColumnWidth(
@@ -278,6 +279,14 @@ struct FlotillaShell: View {
     private func presentCreateSession() {
         createSessionProgress = reduceMotion ? 1 : 0
         navigator.presentedSheet = .createSession
+    }
+
+    /// The launcher with its issue picker open, for `projectID` — or, from the
+    /// palette, the project in view or the selected session's project.
+    private func presentCreateSessionFromIssue(projectID: UUID?) {
+        createSessionProgress = reduceMotion ? 1 : 0
+        let target = projectID ?? navigator.selectedProjectID ?? store.selectedSession?.projectID
+        navigator.presentedSheet = .createSession(projectID: target, opensIssuePicker: true)
     }
 
     private func scheduleCreateSessionEntrance(after delay: Duration) {
@@ -393,7 +402,7 @@ struct FlotillaShell: View {
     @ViewBuilder
     private func sheetContent(_ sheet: WorkspaceSheet) -> some View {
         switch sheet {
-        case .createSession(let initialGoal, let projectID):
+        case .createSession(let initialGoal, let projectID, let opensIssuePicker, let issueNumber):
             let targetProjectID = projectID ?? navigator.selectedProjectID
             CreateSessionView(
                 store: store,
@@ -407,6 +416,8 @@ struct FlotillaShell: View {
                 },
                 openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
                 defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode,
+                opensIssuePicker: opensIssuePicker == true,
+                initialIssueNumber: issueNumber,
                 onDismiss: { dismissOverlay() }
             )
         case .commandPalette:
@@ -495,6 +506,8 @@ struct FlotillaShell: View {
         switch command {
         case .newSession:
             presentCreateSession()
+        case .newSessionFromIssue:
+            presentCreateSessionFromIssue(projectID: nil)
         case .showHome:
             navigator.restoreHomeSelection()
         case .showSessions:

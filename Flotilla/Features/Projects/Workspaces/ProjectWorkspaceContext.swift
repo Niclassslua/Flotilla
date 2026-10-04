@@ -42,6 +42,9 @@ struct ProjectSurfaceHost: View {
                 highlightUnseenCommits: context.highlightUnseenCommits
             )
             .id(context.project.id)
+        case .issues:
+            ProjectIssuesView(project: context.project, store: context.store, openSession: context.openSession)
+                .id(context.project.id)
         case .files:
             FileBrowserView(viewModel: navigator.fileBrowserViewModel(for: context.project.rootPath))
         case .skills:

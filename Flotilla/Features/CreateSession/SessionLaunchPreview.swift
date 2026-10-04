@@ -50,9 +50,12 @@ struct SessionLaunchPreview: Equatable {
         createWorktree: Bool,
         namingSource: SessionNamingSource = .promptDerived,
         worktreeBaseDirectory: URL,
-        generalSessionDirectory: URL
+        generalSessionDirectory: URL,
+        linkedIssue: IssueLink? = nil
     ) -> SessionLaunchPreview {
-        let title = derivedTitle(goal: goal, projectChoice: projectChoice)
+        let title = linkedIssue?.sessionTitle ?? derivedTitle(goal: goal, projectChoice: projectChoice)
+        // An issue names the session itself, exactly as `createSession` does.
+        let namingSource = linkedIssue == nil ? namingSource : .promptDerived
 
         var branchSlug: String?
         var workingDirectory = generalSessionDirectory
@@ -71,7 +74,7 @@ struct SessionLaunchPreview: Equatable {
                 useNewWorktree: createWorktree,
                 projectRoot: folder,
                 worktreeBaseDirectory: worktreeBaseDirectory,
-                branchName: BranchNaming.generate(from: title, uuid: Self.previewUUID)
+                branchName: linkedIssue?.branchName(uuid: Self.previewUUID) ?? BranchNaming.generate(from: title, uuid: Self.previewUUID)
             )
             switch decision {
             case .useExistingCheckout(let path):

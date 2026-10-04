@@ -126,6 +126,9 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
     var createdAt: Date
     var lastActiveAt: Date
     var statusChangedAt: Date?
+    var linkedIssueNumber: Int?
+    var linkedIssueTitle: String?
+    var linkedIssueURL: String?
 
     init(session: Session) {
         id = session.id.uuidString
@@ -156,6 +159,9 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
         createdAt = session.createdAt
         lastActiveAt = session.lastActiveAt
         statusChangedAt = session.statusChangedAt
+        linkedIssueNumber = session.linkedIssue?.number
+        linkedIssueTitle = session.linkedIssue?.title
+        linkedIssueURL = session.linkedIssue?.url.absoluteString
     }
 
     func toDomain() throws -> Session {
@@ -269,6 +275,11 @@ struct SessionRecord: Codable, FetchableRecord, PersistableRecord {
             agentSessionID: agentSessionID,
             nativeTranscriptPath: nativeTranscriptPath.map { URL(fileURLWithPath: $0) },
             pendingHandoff: pending,
+            // All three or none, like the pending handoff above.
+            linkedIssue: linkedIssueNumber.flatMap { number in
+                guard let linkedIssueTitle, let url = linkedIssueURL.flatMap(URL.init(string:)) else { return nil }
+                return IssueLink(number: number, title: linkedIssueTitle, url: url)
+            },
             terminalScrollback: terminalScrollback,
             createdAt: createdAt,
             lastActiveAt: lastActiveAt

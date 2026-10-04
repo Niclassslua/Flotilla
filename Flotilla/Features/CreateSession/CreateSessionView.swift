@@ -28,6 +28,8 @@ struct CreateSessionView: View {
 
     @State private var draft: SessionDraft
     @State private var isTargetedForDrop = false
+    private let opensIssuePicker: Bool
+    private let initialIssueNumber: Int?
     init(
         store: AppStore,
         createWorktreeByDefault: Bool = true,
@@ -37,9 +39,13 @@ struct CreateSessionView: View {
         didCreateSession: @escaping (UUID) -> Void = { _ in },
         openCodeSubscription: OpenCodeSubscription = .none,
         defaultAgent: AgentKind = .claudeCode,
+        opensIssuePicker: Bool = false,
+        initialIssueNumber: Int? = nil,
         onDismiss: (() -> Void)? = nil
     ) {
         self.store = store
+        self.opensIssuePicker = opensIssuePicker
+        self.initialIssueNumber = initialIssueNumber
         self.didCreateSession = didCreateSession
         self.onDismiss = onDismiss
         _draft = State(initialValue: SessionDraft(
@@ -62,7 +68,7 @@ struct CreateSessionView: View {
         // behind the glass card was visible as a "box" peeking past the
         // card's rounded corners. The design's own `.glassEffect` shape is
         // the entire visible surface now.
-        TilesDesign(draft: draft, store: store, actions: actions)
+        TilesDesign(draft: draft, store: store, actions: actions, opensIssuePicker: opensIssuePicker, initialIssueNumber: initialIssueNumber)
             .frame(width: 740)
             .overlay { dropHighlight }
         .dropDestination(for: URL.self) { urls, _ in

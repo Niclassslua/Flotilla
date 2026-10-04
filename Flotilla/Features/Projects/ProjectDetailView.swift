@@ -9,7 +9,7 @@ import SettingsKit
 /// draws the whole surface (activity feed + context column, with Git / Files /
 /// Skills / Rules routed through underneath).
 ///
-/// `ProjectTab` stays defined here: it is the canonical list of the five
+/// `ProjectTab` stays defined here: it is the canonical list of the
 /// surfaces, shared by `WorkspaceNavigator` and the workspace view.
 struct ProjectDetailView: View {
     let project: Project
@@ -24,9 +24,9 @@ struct ProjectDetailView: View {
     let fetchBeforeCreatingWorktree: Bool
     let defaultAgent: AgentKind
 
-    /// The five surfaces a project workspace provides.
+    /// The surfaces a project workspace provides.
     enum ProjectTab: String, CaseIterable, Identifiable, Codable, Sendable {
-        case overview, git, files, skills, rules
+        case overview, git, issues, files, skills, rules
 
         var id: Self { self }
 
@@ -34,6 +34,7 @@ struct ProjectDetailView: View {
             switch self {
             case .overview: return "Overview"
             case .git:      return "Git"
+            case .issues:   return "Issues"
             case .files:    return "Files"
             case .skills:   return "Skills"
             case .rules:    return "Rules"
@@ -44,6 +45,7 @@ struct ProjectDetailView: View {
             switch self {
             case .overview: return "square.grid.2x2"
             case .git:      return "arrow.triangle.branch"
+            case .issues:   return "number"
             case .files:    return "folder"
             case .skills:   return "sparkles"
             case .rules:    return "doc.badge.gearshape"

@@ -133,6 +133,32 @@ final class MigrationUpgradePathTests: XCTestCase {
         XCTAssertEqual(stepwiseColumns, freshColumns)
     }
 
+    /// Sessions saved before issue links existed must still load, and new ones
+    /// must keep their link across a save and read.
+    func testV17DatabaseUpgradesAndCarriesIssueLinks() throws {
+        let queue = try DatabaseQueue()
+        let migrator = GRDBSessionRepository.migrator
+        try migrator.migrate(queue, upTo: "v17_addProjectAccentColor")
+        let old = Session(title: "Before issues", goal: "", agent: .claudeCode, projectID: nil, workingDirectory: URL(fileURLWithPath: "/tmp"))
+        try queue.write { db in
+            try db.execute(
+                sql: "INSERT INTO session (id, title, goal, agent, workingDirectory, status, terminalScrollback, createdAt, lastActiveAt) VALUES (?, ?, '', 'claudeCode', '/tmp', '', x'', ?, ?)",
+                arguments: [old.id.uuidString, old.title, old.createdAt, old.lastActiveAt]
+            )
+        }
+
+        try migrator.migrate(queue)
+
+        let link = IssueLink(number: 7, title: "Fix it", url: URL(string: "https://github.com/acme/app/issues/7")!)
+        let linked = Session(title: "#7 Fix it", goal: "", agent: .codexCLI, projectID: nil, workingDirectory: URL(fileURLWithPath: "/tmp"), linkedIssue: link)
+        try queue.write { db in try SessionRecord(session: linked).insert(db) }
+
+        let restored = try queue.read { db in try SessionRecord.fetchAll(db).map { try $0.toDomain() } }
+        XCTAssertNil(restored.first { $0.id == old.id }?.linkedIssue)
+        XCTAssertEqual(restored.first { $0.id == old.id }?.title, "Before issues")
+        XCTAssertEqual(restored.first { $0.id == linked.id }?.linkedIssue, link)
+    }
+
     /// The failure as the user met it: saving a session against a database that
     /// only reached v8 must work once it is migrated forward.
     func testSavingASessionSucceedsAfterUpgradingFromV8() throws {

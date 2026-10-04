@@ -357,6 +357,31 @@ public struct PendingHandoff: Codable, Hashable, Sendable {
     }
 }
 
+/// The GitHub issue a session was started from. Enough to show and link it;
+/// the issue's body was delivered once, as the goal.
+public struct IssueLink: Codable, Hashable, Sendable {
+    public var number: Int
+    public var title: String
+    public var url: URL
+
+    public init(number: Int, title: String, url: URL) {
+        self.number = number
+        self.title = title
+        self.url = url
+    }
+
+    /// "#123 Fix login crash" — the session title an issue session starts with.
+    public var sessionTitle: String {
+        "#\(number) \(title)"
+    }
+
+    /// `flotilla/issue-123-fix-login-crash-<8hex>`: the issue number survives
+    /// the slug's truncation, so the branch still names the issue it fixes.
+    public func branchName(uuid: UUID = UUID()) -> String {
+        BranchNaming.generate(from: "issue \(number) \(title)", uuid: uuid)
+    }
+}
+
 public struct Session: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
     public var title: String
@@ -401,6 +426,8 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
     public var nativeTranscriptPath: URL?
     /// Set while a handoff is on probation; `nil` at rest.
     public var pendingHandoff: PendingHandoff?
+    /// The GitHub issue this session was started from, if any.
+    public var linkedIssue: IssueLink?
     /// Raw PTY byte stream retained across launches and replayed into
     /// SwiftTerm. Capped by the app before persistence.
     public var terminalScrollback: Data
@@ -426,6 +453,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         agentSessionID: String? = nil,
         nativeTranscriptPath: URL? = nil,
         pendingHandoff: PendingHandoff? = nil,
+        linkedIssue: IssueLink? = nil,
         terminalScrollback: Data = Data(),
         createdAt: Date = Date(),
         lastActiveAt: Date = Date()
@@ -448,6 +476,7 @@ public struct Session: Identifiable, Codable, Hashable, Sendable {
         self.agentSessionID = agentSessionID
         self.nativeTranscriptPath = nativeTranscriptPath
         self.pendingHandoff = pendingHandoff
+        self.linkedIssue = linkedIssue
         self.terminalScrollback = terminalScrollback
         self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt

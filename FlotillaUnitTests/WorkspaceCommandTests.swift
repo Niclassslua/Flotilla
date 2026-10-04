@@ -25,7 +25,7 @@ final class WorkspaceCommandTests: XCTestCase {
     /// not. Without this, a new navigating command could skip `destination`
     /// and silently escape the uniqueness check above.
     func testOnlyActionCommandsHaveNoDestination() {
-        let actions: Set<WorkspaceCommand> = [.newSession, .restoreSessions, .showSettings, .showShortcuts]
+        let actions: Set<WorkspaceCommand> = [.newSession, .newSessionFromIssue, .restoreSessions, .showSettings, .showShortcuts]
         for command in WorkspaceCommand.allCases {
             if actions.contains(command) {
                 XCTAssertNil(command.destination, "\(command) is an action and should not declare a destination")

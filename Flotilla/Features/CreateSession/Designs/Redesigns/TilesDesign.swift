@@ -13,15 +13,24 @@ struct TilesDesign: View {
     @Bindable var draft: SessionDraft
     @Bindable var store: AppStore
     let actions: SessionLauncherActions
+    var opensIssuePicker = false
+    /// Links this issue as soon as its body has loaded — the Issues tab's
+    /// Start Session.
+    var initialIssueNumber: Int? = nil
 
     @State private var coordinator = AntigravityModelEffortCoordinator()
     @State private var isWorkspacePickerPresented = false
+    @State private var isIssuePickerPresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LauncherGoalField(draft: draft, actions: actions, fontSize: 20, lines: 2...6)
                 .padding(.horizontal, FlotillaSpacing.xLarge)
                 .padding(.top, FlotillaSpacing.xLarge)
+                .padding(.bottom, FlotillaSpacing.small)
+
+            LauncherIssueControl(draft: draft, ghService: store.ghService, isPickerPresented: $isIssuePickerPresented)
+                .padding(.horizontal, FlotillaSpacing.xLarge)
                 .padding(.bottom, FlotillaSpacing.large)
 
             HStack(alignment: .top, spacing: FlotillaSpacing.medium) {
@@ -49,6 +58,21 @@ struct TilesDesign: View {
         .launcherSurface()
         .background { LauncherHiddenShortcuts(actions: actions) }
         .task(id: draft.agent) { await coordinator.refresh(for: draft.agent) }
+        .task {
+            if let initialIssueNumber, let ghService = store.ghService, let repository = draft.issueRepository {
+                if let issue = try? await ghService.issue(number: initialIssueNumber, at: repository) {
+                    draft.apply(issue: issue)
+                } else {
+                    store.lastCreationError = "Couldn’t load issue #\(initialIssueNumber) from GitHub."
+                }
+                return
+            }
+            // The launcher animates in; a popover anchored mid-animation
+            // appears detached from its button.
+            guard opensIssuePicker, store.ghService != nil, draft.issueRepository != nil else { return }
+            try? await Task.sleep(for: .milliseconds(350))
+            isIssuePickerPresented = true
+        }
     }
 
     // MARK: - Tiles

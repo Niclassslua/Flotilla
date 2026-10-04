@@ -656,6 +656,8 @@ final class AppStore {
             // A native title discovered later must not clobber them and create
             // a title/worktree mismatch.
             guard settingsProvider().sessionDefaults.namingSource == .promptDerived else { return }
+            // So is an issue's title: the session and its branch are named after it.
+            guard session.linkedIssue == nil else { return }
 
             let discoveredTitle = discovered.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !discoveredTitle.isEmpty else { return }
@@ -1293,7 +1295,8 @@ final class AppStore {
         checkoutMode: CheckoutMode,
         deliverGoal: Bool = true,
         fetchBeforeCreatingWorktree: Bool = false,
-        selectAfterCreating: Bool = true
+        selectAfterCreating: Bool = true,
+        linkedIssue: IssueLink? = nil
     ) async -> UUID? {
         lastCreationError = nil
         var createdWorktree: WorktreeInfo?
@@ -1306,7 +1309,10 @@ final class AppStore {
         // before the worktree exists or the agent is spawned — so the same
         // `resolvedTitle` feeds both the session title and the branch slug
         // below. Only `.agentManaged` defers naming to the agent itself.
-        let namingSource = settings.sessionDefaults.namingSource
+        // A session started from an issue is already named — by the issue —
+        // so it takes the prompt-derived path with the issue's own title and
+        // an `issue-<n>-…` branch, whatever the naming setting says.
+        let namingSource = linkedIssue == nil ? settings.sessionDefaults.namingSource : .promptDerived
         let usesAppleIntelligence = namingSource == .appleIntelligence
         let suggestedName: String?
         if usesAppleIntelligence, let nameGenerator {
@@ -1314,7 +1320,7 @@ final class AppStore {
         } else {
             suggestedName = nil
         }
-        let resolvedTitle = usesAppleIntelligence ? (suggestedName ?? title) : title
+        let resolvedTitle = linkedIssue?.sessionTitle ?? (usesAppleIntelligence ? (suggestedName ?? title) : title)
 
         // Determine whether agent-managed features should activate.
         // Only prompt-derived titles may be replaced by native discovery
@@ -1347,7 +1353,7 @@ final class AppStore {
                         useNewWorktree: checkoutMode == .newWorktree,
                         projectRoot: projectFolder,
                         worktreeBaseDirectory: worktreeBaseDirectoryProvider(),
-                        branchName: BranchNaming.generate(from: resolvedTitle)
+                        branchName: linkedIssue?.branchName() ?? BranchNaming.generate(from: resolvedTitle)
                     )
                     switch decision {
                     case .useExistingCheckout(let path):
@@ -1405,7 +1411,8 @@ final class AppStore {
                 projectID: projectID,
                 workingDirectory: workingDirectory,
                 worktree: worktreeInfo,
-                startingMode: initialMode
+                startingMode: initialMode,
+                linkedIssue: linkedIssue
             )
             try processManager.start(
                 session: session,

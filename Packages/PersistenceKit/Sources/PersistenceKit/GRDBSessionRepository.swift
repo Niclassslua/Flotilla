@@ -285,6 +285,13 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
                 t.add(column: "accentColor", .text)
             }
         }
+        migrator.registerMigration("v18_sessionLinkedIssue") { db in
+            try db.alter(table: "session") { t in
+                t.add(column: "linkedIssueNumber", .integer)
+                t.add(column: "linkedIssueTitle", .text)
+                t.add(column: "linkedIssueURL", .text)
+            }
+        }
         return migrator
     }
 
