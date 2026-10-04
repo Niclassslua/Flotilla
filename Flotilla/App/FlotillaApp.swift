@@ -313,7 +313,13 @@ extension FlotillaApp {
         Binding(
             get: { showsMenuBarExtra && settingsViewModel.settings.notifications.menuBarExtraEnabled },
             set: { newValue in
-                guard showsMenuBarExtra else { return }
+                // SwiftUI's status-item KVO echoes the current value back on
+                // every scene update. An unchanged write still invalidates
+                // `settings` (Observation notifies on any set), which re-runs
+                // the App body, which re-applies the item and echoes again —
+                // an unbounded loop that hangs or overflows the stack at launch.
+                guard showsMenuBarExtra,
+                      settingsViewModel.settings.notifications.menuBarExtraEnabled != newValue else { return }
                 settingsViewModel.settings.notifications.menuBarExtraEnabled = newValue
             }
         )
