@@ -20,7 +20,6 @@ struct FlotillaApp: App {
     @State private var notificationDelegate: FlotillaNotificationDelegate
     @State private var companionHost: CompanionHost
     @State private var dockBadge: DockBadgeController
-    @Environment(\.openWindow) private var openWindow
 
     /// Held so the review scene — which is not a descendant of the shell and
     /// therefore inherits nothing from it — can build its own view model.
@@ -261,115 +260,7 @@ struct FlotillaApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
-            CommandMenu("Workspace") {
-                Button("Back") { navigator.goBack() }
-                    .keyboardShortcut("[", modifiers: .command)
-                    .disabled(!navigator.canGoBack)
-                Button("Forward") { navigator.goForward() }
-                    .keyboardShortcut("]", modifiers: .command)
-                    .disabled(!navigator.canGoForward)
-                Divider()
-                Button("Home") {
-                    navigator.restoreHomeSelection()
-                }
-                .keyboardShortcut("1", modifiers: .command)
-                Button("All Sessions") {
-                    navigator.selection = .allSessions
-                    navigator.presentation = .focus
-                }
-                .keyboardShortcut("2", modifiers: .command)
-                Divider()
-                ForEach(FleetSmartList.allCases) { list in
-                    Button(list.title) {
-                        navigator.selection = .smartList(list)
-                    }
-                }
-                Divider()
-                Button("Focus Layout") {
-                    navigator.selection = .allSessions
-                    navigator.presentation = .focus
-                }
-                .keyboardShortcut("1", modifiers: [.command, .control])
-                Button("Grid Layout") {
-                    navigator.selection = .allSessions
-                    navigator.presentation = .grid
-                }
-                .keyboardShortcut("2", modifiers: [.command, .control])
-                Button("Board Layout") {
-                    navigator.selection = .allSessions
-                    navigator.presentation = .board
-                }
-                .keyboardShortcut("3", modifiers: [.command, .control])
-                Divider()
-                Button("Review\u{2026}") {
-                    if let session = store.selectedSession {
-                        openWindow(id: SessionReviewWindow.sceneID, value: session.id)
-                    }
-                }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(store.selectedSession?.status != .readyForReview)
-                Button("Changes") {
-                    navigator.openProjectPanel(.git, scopedTo: store.selectedSession)
-                }
-                .keyboardShortcut("g", modifiers: [.command, .shift])
-                Button("Files") {
-                    navigator.openProjectPanel(.files, scopedTo: store.selectedSession)
-                }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
-                Button("Instructions") {
-                    navigator.openProjectPanel(.rules, scopedTo: store.selectedSession)
-                }
-                .keyboardShortcut("i", modifiers: [.command, .shift])
-                Divider()
-                Button("Previous Session") {
-                    let sorted = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt })
-                    guard !sorted.isEmpty else { return }
-                    if let currentID = store.selectedSessionID,
-                       let index = sorted.firstIndex(where: { $0.id == currentID }) {
-                        let prevIndex = (index - 1 + sorted.count) % sorted.count
-                        let target = sorted[prevIndex]
-                        navigator.selection = .session(target.id)
-                        store.selectedSessionID = target.id
-                    } else if let first = sorted.first {
-                        navigator.selection = .session(first.id)
-                        store.selectedSessionID = first.id
-                    }
-                }
-                .keyboardShortcut("[", modifiers: [.command, .option])
-                Button("Next Session") {
-                    let sorted = store.sessions.sorted(by: { $0.lastActiveAt > $1.lastActiveAt })
-                    guard !sorted.isEmpty else { return }
-                    if let currentID = store.selectedSessionID,
-                       let index = sorted.firstIndex(where: { $0.id == currentID }) {
-                        let nextIndex = (index + 1) % sorted.count
-                        let target = sorted[nextIndex]
-                        navigator.selection = .session(target.id)
-                        store.selectedSessionID = target.id
-                    } else if let first = sorted.first {
-                        navigator.selection = .session(first.id)
-                        store.selectedSessionID = first.id
-                    }
-                }
-                .keyboardShortcut("]", modifiers: [.command, .option])
-                Divider()
-                Button("Restart Session") {
-                    if let session = store.selectedSession {
-                        store.restartSession(sessionID: session.id)
-                    }
-                }
-                .keyboardShortcut("r", modifiers: .command)
-                Button("Delete Session…") {
-                    if let session = store.selectedSession {
-                        navigator.presentedSheet = .deleteSession(session.id)
-                    }
-                }
-                .keyboardShortcut(.delete, modifiers: .command)
-                Divider()
-                Button("Command Palette…") {
-                    navigator.presentedSheet = .commandPalette
-                }
-                .keyboardShortcut("k", modifiers: .command)
-            }
+            WorkspaceMenuCommands(store: store, navigator: navigator)
         }
         .defaultSize(width: 1_280, height: 820)
         .windowResizability(.contentMinSize)
