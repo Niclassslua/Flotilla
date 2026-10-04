@@ -17,10 +17,9 @@ Hand a live conversation from one agent to another, review their diffs, and appr
 
 https://github.com/user-attachments/assets/2c9a99b6-196c-42f7-94f4-9de2aa107d46
 
-## Get the beta
+## Companion beta
 
-- **Mac:** [Download Flotilla 0.1.0](https://github.com/Niclassslua/Flotilla/releases/tag/v0.1.0) (macOS 26+).
-- **iPhone and iPad:** [Flotilla Companion on TestFlight](https://testflight.apple.com/join/mDaW89Bn) (iOS/iPadOS 26+). **Awaiting Apple approval:** the public link will accept testers once Beta App Review approves the build.
+[Flotilla Companion on TestFlight](https://testflight.apple.com/join/mDaW89Bn) for iPhone and iPad (iOS/iPadOS 26+). **Awaiting Apple approval:** the public link will accept testers once Beta App Review approves the build.
 
 To pair, open **Settings → iPhone Companion → Pair iPhone** in Flotilla on your Mac, then scan the QR code in the companion. Keep both devices reachable over LAN or Tailscale.
 
