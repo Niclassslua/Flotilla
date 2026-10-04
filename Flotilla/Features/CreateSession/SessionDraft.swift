@@ -36,6 +36,8 @@ final class SessionDraft {
     var effort: AgentEffort = .medium
     var initialMode: SessionMode = .act
     var createWorktree: Bool
+    /// Images sent alongside the goal; see `SessionAttachment`.
+    private(set) var attachments: [SessionAttachment] = []
     private(set) var isCreating = false
 
     let openCodeSubscription: OpenCodeSubscription
@@ -80,7 +82,7 @@ final class SessionDraft {
 
     var canLaunch: Bool {
         guard !isCreating else { return false }
-        return requiresGoal ? !effectiveGoal.isEmpty : true
+        return requiresGoal ? !effectiveGoal.isEmpty || !attachments.isEmpty : true
     }
 
     var trimmedGoal: String {
@@ -175,6 +177,16 @@ final class SessionDraft {
         max(0, choices.count - restingLimit)
     }
 
+    // MARK: - Attachments
+
+    func attach(_ newAttachments: [SessionAttachment]) {
+        attachments.append(contentsOf: newAttachments)
+    }
+
+    func removeAttachment(_ id: SessionAttachment.ID) {
+        attachments.removeAll { $0.id == id }
+    }
+
     // MARK: - Mutation
 
     /// Resolves a folder to a known project when one already tracks that path —
@@ -230,10 +242,11 @@ final class SessionDraft {
             initialMode: effectiveMode,
             projectFolder: projectChoice.folder,
             checkoutMode: effectiveCheckoutMode,
-            deliverGoal: !normalizedGoal.isEmpty,
+            deliverGoal: !normalizedGoal.isEmpty || !attachments.isEmpty,
             fetchBeforeCreatingWorktree: fetchBeforeCreatingWorktree,
             selectAfterCreating: opensSession,
-            linkedIssue: linkedIssue
+            linkedIssue: linkedIssue,
+            attachments: attachments
         )
     }
 
@@ -249,11 +262,12 @@ final class SessionDraft {
         return t
     }
 
-    /// Clears the objective while keeping agent, model, effort and workspace.
+    /// Clears the objective and its attachments while keeping agent, model, effort and workspace.
     /// The composer that stays on screen after launching should be ready for
     /// the next task, not reset to factory defaults the user already changed.
     func clearGoal() {
         goal = ""
+        attachments = []
         initialMode = .act
         linkedIssue = nil
         goalBeforeIssue = nil

@@ -29,6 +29,12 @@ struct TilesDesign: View {
                 .padding(.top, FlotillaSpacing.xLarge)
                 .padding(.bottom, FlotillaSpacing.small)
 
+            if !draft.attachments.isEmpty {
+                LauncherAttachmentStrip(draft: draft)
+                    .padding(.horizontal, FlotillaSpacing.xLarge)
+                    .padding(.bottom, FlotillaSpacing.small)
+            }
+
             LauncherIssueControl(draft: draft, ghService: store.ghService, isPickerPresented: $isIssuePickerPresented)
                 .padding(.horizontal, FlotillaSpacing.xLarge)
                 .padding(.bottom, FlotillaSpacing.large)
@@ -46,7 +52,7 @@ struct TilesDesign: View {
                 .padding(.top, FlotillaSpacing.small)
 
             HStack(spacing: FlotillaSpacing.medium) {
-                Text("⌥↩ new line  ·  ⌘↩ launch from any control")
+                Text("⌥↩ new line  ·  ⌘V paste image  ·  ⌘↩ launch from any control")
                     .font(FlotillaTypography.caption2)
                     .foregroundStyle(FlotillaColors.textTertiary)
                 Spacer(minLength: FlotillaSpacing.small)

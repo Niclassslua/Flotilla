@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 
 /// Covers the modal New Session window (`TilesDesign`, opened via ⌘N /
 /// the sidebar button / the command palette). The home dashboard's inline
@@ -138,5 +139,62 @@ final class CreateSessionUITests: XCTestCase {
         // The Session Composer remains open and visible
         XCTAssertTrue(element(app, .createSessionGoalField).exists)
         XCTAssertTrue(element(app, .createSessionBackgroundButton).exists)
+    }
+
+    // MARK: - Pasting images
+
+    /// The goal field's field editor ignores image data, so ⌘V with a
+    /// screenshot on the clipboard only works through `ImagePasteCatcher`'s
+    /// key monitor — wiring that silently breaks if the monitor is removed or
+    /// starts swallowing text pastes.
+    func testCommandVAttachesAClipboardImageButStillPastesText() {
+        let saved = savePasteboard()
+        defer { restorePasteboard(saved) }
+
+        let app = launchedApp()
+        openLauncher(app)
+        element(app, .createSessionGoalField).click()
+
+        setPasteboardImage()
+        element(app, .createSessionGoalField).typeKey("v", modifierFlags: .command)
+        XCTAssertTrue(fastWait(element(app, .createSessionAttachments), timeout: 3))
+        XCTAssertEqual(element(app, .createSessionGoalField).value as? String ?? "", "")
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("Match the screenshot", forType: .string)
+        element(app, .createSessionGoalField).typeKey("v", modifierFlags: .command)
+        let pasted = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "Match the screenshot"),
+            object: element(app, .createSessionGoalField)
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [pasted], timeout: 3), .completed)
+    }
+
+    private func setPasteboardImage() {
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8, bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )!
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(rep.representation(using: .png, properties: [:])!, forType: .png)
+    }
+
+    /// The test writes to the real clipboard; whoever runs it gets theirs back.
+    private func savePasteboard() -> [[NSPasteboard.PasteboardType: Data]] {
+        (NSPasteboard.general.pasteboardItems ?? []).map { item in
+            Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                item.data(forType: type).map { (type, $0) }
+            })
+        }
+    }
+
+    private func restorePasteboard(_ items: [[NSPasteboard.PasteboardType: Data]]) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects(items.map { contents in
+            let item = NSPasteboardItem()
+            for (type, data) in contents { item.setData(data, forType: type) }
+            return item
+        })
     }
 }

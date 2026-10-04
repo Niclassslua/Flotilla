@@ -71,6 +71,7 @@ struct CreateSessionView: View {
         TilesDesign(draft: draft, store: store, actions: actions, opensIssuePicker: opensIssuePicker, initialIssueNumber: initialIssueNumber)
             .frame(width: 740)
             .overlay { dropHighlight }
+            .background { ImagePasteCatcher { draft.attach($0) } }
         .dropDestination(for: URL.self) { urls, _ in
             receiveDrop(urls)
         } isTargeted: { targeted in
@@ -96,16 +97,19 @@ struct CreateSessionView: View {
             .accessibilityHidden(true)
     }
 
-    /// Only directories are meaningful here — a dropped file would resolve to a
-    /// working directory the agent cannot run in.
+    /// A dropped folder becomes the workspace and dropped images are attached
+    /// to the goal. Any other file is refused — it would resolve to a working
+    /// directory the agent cannot run in.
     private func receiveDrop(_ urls: [URL]) -> Bool {
-        guard let folder = urls.first(where: { url in
+        let folder = urls.first(where: { url in
             var isDirectory: ObjCBool = false
             let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
             return exists && isDirectory.boolValue
-        }) else { return false }
-        draft.select(folder: folder)
-        return true
+        })
+        let images = urls.compactMap(SessionAttachment.init(fileURL:))
+        if let folder { draft.select(folder: folder) }
+        draft.attach(images)
+        return folder != nil || !images.isEmpty
     }
 
     // MARK: - Launch

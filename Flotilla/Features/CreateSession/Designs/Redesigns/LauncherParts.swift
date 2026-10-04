@@ -118,6 +118,67 @@ struct LauncherGoalField: View {
     }
 }
 
+// MARK: - Attachments
+
+/// Thumbnails of the images pasted or dropped onto the launcher, each with a
+/// remove button.
+struct LauncherAttachmentStrip: View {
+    @Bindable var draft: SessionDraft
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: FlotillaSpacing.small) {
+                ForEach(draft.attachments) { attachment in
+                    LauncherAttachmentThumbnail(attachment: attachment) {
+                        withAnimation(FlotillaMotion.fast.curve) {
+                            draft.removeAttachment(attachment.id)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AXID.createSessionAttachments.rawValue)
+    }
+}
+
+private struct LauncherAttachmentThumbnail: View {
+    let attachment: SessionAttachment
+    let onRemove: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Image(nsImage: attachment.thumbnail)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: 72, height: 48)
+            .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
+                    .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
+            }
+            .overlay(alignment: .topTrailing) {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .black.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .padding(3)
+                .opacity(isHovering ? 1 : 0)
+                .help("Remove image")
+                .accessibilityLabel("Remove image")
+                .accessibilityIdentifier(AXID.createSessionAttachmentRemove.rawValue)
+            }
+            .onHover { isHovering = $0 }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Attached image")
+    }
+}
+
 // MARK: - Agent
 
 /// All four agents visible at once, each with its name — the current bar's

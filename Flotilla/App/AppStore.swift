@@ -1225,6 +1225,7 @@ final class AppStore {
 
         let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         try? FileManager.default.removeItem(at: eventFile)
+        try? FileManager.default.removeItem(at: SessionAttachment.directory(for: sessionID, supportDirectory: supportDirectory))
 
         if selectedSessionID == sessionID {
             selectedSessionID = nil
@@ -1296,7 +1297,8 @@ final class AppStore {
         deliverGoal: Bool = true,
         fetchBeforeCreatingWorktree: Bool = false,
         selectAfterCreating: Bool = true,
-        linkedIssue: IssueLink? = nil
+        linkedIssue: IssueLink? = nil,
+        attachments: [SessionAttachment] = []
     ) async -> UUID? {
         lastCreationError = nil
         var createdWorktree: WorktreeInfo?
@@ -1379,6 +1381,14 @@ final class AppStore {
             // deterministic before the Session struct exists.
             let sessionID = UUID()
             let supportDirectory = self.supportDirectory
+            // Appended only now, after naming: the image paths are for the
+            // agent, not for the title or branch derived from the goal.
+            let goalWithAttachments = try SessionAttachment.goal(
+                goal,
+                attaching: attachments,
+                sessionID: sessionID,
+                supportDirectory: supportDirectory
+            )
 
             // Build self-report instructions + descriptor path when either
             // agent-managed feature is active.
@@ -1404,7 +1414,7 @@ final class AppStore {
             var session = Session(
                 id: sessionID,
                 title: resolvedTitle,
-                goal: goal,
+                goal: goalWithAttachments,
                 agent: agent,
                 model: model,
                 effort: effort,

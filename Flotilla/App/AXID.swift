@@ -96,6 +96,8 @@ public enum AXID: String, Sendable {
     case createSessionCheckoutWorktree = "CreateSession.Checkout.Worktree"
     case createSessionModelField = "CreateSession.ModelField"
     case createSessionLaunchSummary = "CreateSession.LaunchSummary"
+    case createSessionAttachments = "CreateSession.Attachments"
+    case createSessionAttachmentRemove = "CreateSession.Attachment.Remove"
 
     // MARK: - Grid View
     case gridView = "GridView"
