@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/2c9a99b6-196c-42f7-94f4-9de2aa107d46
 
 ## Companion beta
 
-[Flotilla Companion on TestFlight](https://testflight.apple.com/join/mDaW89Bn) for iPhone and iPad (iOS/iPadOS 26+). **Awaiting Apple approval:** the public link will accept testers once Beta App Review approves the build.
+**[Join the Flotilla Companion beta on TestFlight](https://testflight.apple.com/join/mDaW89Bn)** for iPhone and iPad (iOS/iPadOS 26+). Install TestFlight, open the link on your device, and tap **Accept**.
 
 To pair, open **Settings → iPhone Companion → Pair iPhone** in Flotilla on your Mac, then scan the QR code in the companion. Keep both devices reachable over LAN or Tailscale.
 
