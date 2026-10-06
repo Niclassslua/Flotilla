@@ -53,6 +53,65 @@
       "capturedOn": "2026-09-11",
       "cliVersion": null,
       "expect": null
+    },
+    {
+      "file": "hooks/pre-invocation.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.3.0",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/pre-tool-use-run-command-1-3-0.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.3.0",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/stop-no-tool-call-1-3-0.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.3.0",
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "screens/permission-picker.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.3.0",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      },
+      "note": "Only visible with toolPermission request-review; no hook reports it, and a PreToolUse allow does not skip it."
+    },
+    {
+      "file": "screens/interrupted.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.3.0",
+      "expect": {
+        "status": "readyForReview"
+      },
+      "note": "Esc mid-turn fires no Stop; the marker carries endsTurn so it ends PreInvocation's working."
+    },
+    {
+      "file": "screens/trust-prompt.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.3.0",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      },
+      "note": "Normally pre-empted by AntigravityWorkspaceTrust."
     }
   ]
 }

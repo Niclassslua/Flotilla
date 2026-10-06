@@ -19,7 +19,8 @@ public struct SessionStatusObservation: Equatable, Sendable {
     /// a dead pane's is still reported.
     public let suggestsAgentExit: Bool
     /// The screen shows the provider's own statement that the turn was cut
-    /// short (Claude's "Interrupted · What should Claude do instead?"). An
+    /// short ("Interrupted · What should Claude do instead?", and the same
+    /// line from Antigravity CLI). An
     /// interrupt fires no hook at all, so this is the one screen signal
     /// allowed to end a hook-held working or waiting episode. Part of `==`
     /// for the same reason as `suggestsAgentExit`.

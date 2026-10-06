@@ -219,6 +219,7 @@
 		410AA4AE51FDBB909BE561BF /* CompanionHostStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 081F4CCD57333F5F378F9464 /* CompanionHostStorage.swift */; };
 		41858820CAE816013548FD8D /* ProjectChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FC0F71DF5E99C8384B94842 /* ProjectChoice.swift */; };
 		41EC01D4C6574958E18D2E33 /* SessionMetadataMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D780CFD5DE4C062453F18D /* SessionMetadataMonitor.swift */; };
+		41F0857AE36076814B8D8FCD /* AntigravityCompanionAdapterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04A4765602BCE030C0EA1D8 /* AntigravityCompanionAdapterTests.swift */; };
 		42A1CB806E132321C9E54326 /* FileIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17EDDAD1F3E86B5AB3960D7 /* FileIconHelper.swift */; };
 		42B8EAAFFDEE6F537E6F53A7 /* table.svg in Resources */ = {isa = PBXBuildFile; fileRef = 1D3F1C8A7DEA2B2DF648146F /* table.svg */; };
 		43488E0DF29793784788D992 /* ProjectKnowledgeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A72CBB4D67EA18E82CFAA32 /* ProjectKnowledgeViewModel.swift */; };
@@ -1244,6 +1245,7 @@
 		CE0AD87AB25E974027D293DC /* folder-intellij.svg */ = {isa = PBXFileReference; path = "folder-intellij.svg"; sourceTree = "<group>"; };
 		CE4999D5E0106AF58800F11A /* zig.svg */ = {isa = PBXFileReference; path = zig.svg; sourceTree = "<group>"; };
 		CF217911F49D8B9E7422F635 /* CompanionAdapterRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAdapterRegistry.swift; sourceTree = "<group>"; };
+		D04A4765602BCE030C0EA1D8 /* AntigravityCompanionAdapterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityCompanionAdapterTests.swift; sourceTree = "<group>"; };
 		D1881C81FAA43028675DB07C /* ProjectIssuesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectIssuesView.swift; sourceTree = "<group>"; };
 		D2F4B22AFF8C7B5CB08FEE3C /* folder-claude.svg */ = {isa = PBXFileReference; path = "folder-claude.svg"; sourceTree = "<group>"; };
 		D32EAF18F627D0C7FB28DE2A /* StartupCheckViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupCheckViewModelTests.swift; sourceTree = "<group>"; };
@@ -2156,6 +2158,7 @@
 				277BB213566A0015BB8F8CC9 /* AgentScreenshotMonitorTests.swift */,
 				0E32DCA022EAEDFF38BA2A93 /* AgentSelfReportCoordinatorTests.swift */,
 				581A82A986DD9B62C69E6136 /* AgentSessionProviderTests.swift */,
+				D04A4765602BCE030C0EA1D8 /* AntigravityCompanionAdapterTests.swift */,
 				5064E00751B2DE376AAC4073 /* AntigravityLiveHandoffTests.swift */,
 				7DB98E66F256A7E941840F5A /* AntigravityTranscriptCodecTests.swift */,
 				292E1828057D86EB509D4D57 /* AntigravityWireFormatTests.swift */,
@@ -3065,6 +3068,7 @@
 				C868ADF684CFB8B428FEB613 /* AgentScreenshotMonitorTests.swift in Sources */,
 				111C1B53AC72AD0AE39970BA /* AgentSelfReportCoordinatorTests.swift in Sources */,
 				BCB8240F67061DDC366CED1C /* AgentSessionProviderTests.swift in Sources */,
+				41F0857AE36076814B8D8FCD /* AntigravityCompanionAdapterTests.swift in Sources */,
 				0E84C5BA054EA0CD36CDE911 /* AntigravityLiveHandoffTests.swift in Sources */,
 				DCCFB0962BD377B5C30EE5FF /* AntigravityTranscriptCodecTests.swift in Sources */,
 				80C6269033F3454DC92FA33E /* AntigravityWireFormatTests.swift in Sources */,

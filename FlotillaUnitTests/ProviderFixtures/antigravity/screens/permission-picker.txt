@@ -1,0 +1,13 @@
+> Use run_command to execute: rm probe-d.txt
+● Ran (rm probe-d.txt) (ctrl+o to expand)
+Command
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Requesting permission for:
+   rm probe-d.txt
+Run this command?
+> 1. Yes, run command
+  2. Yes, and always allow in this conversation for commands that start with 'rm probe-d.txt'
+  3. Yes, and always allow for commands that start with 'rm probe-d.txt' (Persist to settings.json)
+  4. No, cancel
+  ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+esc to cancel                                                                                                              accept-edits · Gemini 3.8 Flash · low

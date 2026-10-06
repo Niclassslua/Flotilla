@@ -86,6 +86,7 @@ public struct TerminalScreenHeuristic: Sendable {
     /// fires on an interrupt, so this ends a hook-held episode (`endsTurn`).
     private static let interruptMarkers = [
         "interrupted · what should claude do instead?",
+        "interrupted · what should antigravity cli do instead?",
     ]
 
     /// How Flotilla's tmux `remain-on-exit-format` banner begins.

@@ -254,10 +254,19 @@ public final class HookEventReceiver: @unchecked Sendable {
                     .working,
                     cause: cause("hook: PostToolUse \(Self.toolLabel((payload["toolCall"] as? [String: Any])?["name"] as? String))")
                 )
+            case "PreInvocation":
+                // Before every model call, the first of a turn included —
+                // the turn-start signal for a reply with no tool call.
+                return SessionStatusObservation(
+                    .working,
+                    cause: cause("hook: PreInvocation \((payload["invocationNum"] as? Int).map(String.init) ?? "?")")
+                )
             case "Stop":
-                return (payload["fullyIdle"] as? Bool) == true
-                    ? SessionStatusObservation(.readyForReview, cause: cause("hook: Stop fullyIdle=true"))
-                    : nil
+                // `fullyIdle: false` means async work (a background command)
+                // is still running; the turn is not over yet.
+                guard (payload["fullyIdle"] as? Bool) == true else { return nil }
+                let reason = (payload["terminationReason"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"
+                return SessionStatusObservation(.readyForReview, cause: cause("hook: Stop fullyIdle=true \(reason)"))
             default:
                 return nil
             }
@@ -471,9 +480,10 @@ public final class HookEventReceiver: @unchecked Sendable {
     private static func antigravityPayloadSummary(from object: [String: Any]) -> String? {
         guard let payload = object["payload"] as? [String: Any] else { return nil }
 
-        // Stop events: report fullyIdle.
+        // Stop events: report fullyIdle and, when set, the error.
         if let fullyIdle = payload["fullyIdle"] as? Bool {
-            return "fullyIdle=\(fullyIdle)"
+            let error = (payload["error"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            return "fullyIdle=\(fullyIdle)" + (error.map { ", error=\($0)" } ?? "")
         }
 
         // Tool events: extract args from toolCall.

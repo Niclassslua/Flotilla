@@ -13,7 +13,7 @@ diffing behavior against this baseline instead of rediscovering it.
 | Claude Code | `claude` | [claude-code.md](claude-code.md) | 2.1.291 · 2026-10-06 (full live probe) |
 | Codex CLI | `codex` | [codex-cli.md](codex-cli.md) | hooks 0.125.0–0.155.0 · installed 0.160.1 (not yet re-verified) |
 | OpenCode | `opencode` | [opencode.md](opencode.md) | hooks 2026-08-27 · installed 1.18.34 (not yet re-verified) |
-| Antigravity | `agy` | [antigravity.md](antigravity.md) | hooks 2026-09-11 · installed 1.3.0 (not yet re-verified) |
+| Antigravity | `agy` | [antigravity.md](antigravity.md) | 1.3.0 · 2026-10-06 (full live probe) |
 | Cursor Agent | `agent` | [cursor-agent.md](cursor-agent.md) | 2026.10.01-e373342 · 2026-10-06 |
 
 Cross-cutting references:
@@ -35,9 +35,9 @@ Cross-cutting references:
 
 | Technique | Claude Code | Codex CLI | OpenCode | Antigravity | Cursor Agent |
 | --- | --- | --- | --- | --- | --- |
-| Hook install | `--settings <json>` per process | `--config hooks.*` per process | project plugin `.opencode/plugins/flotilla-status.js` | project `.agents/hooks.json` | project `.cursor/hooks.json` |
+| Hook install | `--settings <json>` per process | `--config hooks.*` per process | project plugin `.opencode/plugins/flotilla-status.js` | user-level `~/.gemini/config/hooks.json` (env-gated) | project `.cursor/hooks.json` |
 | Hook transport | stdin JSON → event file | stdin JSON → event file | plugin → `{"event":…}` | wrapper → `{"event","payload"}` | wrapper → `{"flotilla_provider","hook_event_name","payload"}` |
-| Hook decides anything? | Yes — `PermissionRequest` via companion socket | Yes — `PermissionRequest` via companion socket (local TUI only) | No | Yes — always `{"decision":"allow"}` on `PreToolUse` | No |
+| Hook decides anything? | Yes — `PermissionRequest` via companion socket | Yes — `PermissionRequest` via companion socket (local TUI only) | No | No (a hook can only deny in 1.3.0) | No |
 | Status from screen | trust dialog and interrupt only | fallback | fallback | fallback; **only** source for approval dialogs | fallback |
 | Dialog source for the phone | hook (`PermissionRequest`) | app-server JSON-RPC | HTTP API + SSE | hook payload + `--log-file` + screen | screen only |
 | Answering a dialog | hook stdout | JSON-RPC reply | HTTP `POST …/reply` | keystrokes | keystrokes |

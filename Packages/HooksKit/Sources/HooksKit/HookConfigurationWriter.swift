@@ -47,17 +47,32 @@ public protocol HookConfiguring: Sendable {
 /// impossible instead of merely mitigated.
 ///
 /// Antigravity has no `--settings`-equivalent per-invocation flag, so its
-/// stable wrapper is registered in shared `<workingDirectory>/.agents/hooks.json`.
-/// The wrapper routes through the per-process event-file value, eliminating
-/// sibling-session cross-firing without needing a conversation ID. It still
-/// emits Antigravity's required allow response for `PreToolUse`.
+/// hook group lives once in the user-level `~/.gemini/config/hooks.json`,
+/// never in a project. The group's commands are constant and do nothing
+/// without `FLOTILLA_HOOK_EVENT_FILE`, so every agy process outside Flotilla
+/// runs them as no-ops and every Flotilla process routes to its own session.
 ///
 /// OpenCode uses one stable project plugin (`flotilla-status.js`). Multiple
 /// plugin files all receive the same process event stream, so per-session
 /// plugin files would cross-contaminate siblings; environment-based routing
 /// keeps the shared plugin constant and every write session-specific.
 public struct HookConfigurationWriter: HookConfiguring {
-    public init() {}
+    /// Antigravity's user-level hooks file, which every agy process reads.
+    /// Injectable so tests never touch the real one.
+    public let antigravityGlobalHooksFile: URL
+
+    public init(antigravityGlobalHooksFile: URL = HookConfigurationWriter.defaultAntigravityGlobalHooksFile) {
+        self.antigravityGlobalHooksFile = antigravityGlobalHooksFile
+    }
+
+    /// `~/.gemini/config/hooks.json` — verified to be read by agy 1.3.0.
+    public static var defaultAntigravityGlobalHooksFile: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".gemini/config/hooks.json", isDirectory: false)
+    }
+
+    /// The key Flotilla owns in an Antigravity hooks file.
+    static let antigravityHookGroupKey = "flotilla-status"
 
     /// Scoped to the launched provider process. Shared project hook files
     /// read this value to route an event to the correct Flotilla session.
@@ -159,7 +174,8 @@ public struct HookConfigurationWriter: HookConfiguring {
         case .antigravity:
             return Self.configureAntigravityHooks(
                 workingDirectory: workingDirectory,
-                supportDirectory: supportDirectory
+                supportDirectory: supportDirectory,
+                globalHooksFile: antigravityGlobalHooksFile
             )
         case .codexCLI:
             return Self.configureCodexHooks(supportDirectory: supportDirectory)
@@ -324,43 +340,28 @@ public struct HookConfigurationWriter: HookConfiguring {
     // MARK: - Antigravity
 
     /// Writes the stable wrapper script and replaces Flotilla's hook group in
-    /// `<workingDirectory>/.agents/hooks.json`.
+    /// Antigravity's user-level hooks file; removes the group older releases
+    /// wrote into `<workingDirectory>/.agents/hooks.json`.
     ///
-    /// Two things Antigravity needs that Claude Code doesn't, both handled
-    /// by the wrapper script rather than a bare `cat >>` one-liner:
+    /// Antigravity's payload names no event (2026-09 and 1.3.0), so each
+    /// command passes it as `<wrapper> <EventName>` and the wrapper writes a
+    /// self-describing `{"event","payload"}` line. The wrapper prints
+    /// nothing for `PreToolUse`: agy 1.3.0 treats a silent hook exactly like
+    /// no hook, and probes showed an `allow` (even with `permissionOverrides`)
+    /// never skips its own confirmation picker — only `deny` takes effect —
+    /// so a hook cannot answer approvals and must not pretend to decide.
     ///
-    /// 1. Antigravity's hook payload has no `hook_event_name`-equivalent
-    ///    field, so the script is invoked as `<script> <EventName>` (the
-    ///    event name is baked into the `hooks.json` command per-event, not
-    ///    read from stdin) and synthesizes a self-describing JSON line
-    ///    itself before appending it — `HookEventReceiver` can then treat
-    ///    every provider's event file as "one self-describing JSON object
-    ///    per line" uniformly.
-    /// 2. `PreToolUse`'s stdout is interpreted as a live permission
-    ///    decision (unlike Claude Code, where a silent exit 0 is fine) — the
-    ///    script must also print `{"decision":"allow"}` for that event, or
-    ///    Antigravity may hang waiting for a decision that never comes.
-    ///
-    /// `PreToolUse`/`PostToolUse` (matcher `*`, catching every tool call)
-    /// and `Stop` drive status; `PostInvocation` only delivers prompts the
-    /// companion queued mid-turn. `HookEventReceiver` decides `working` vs.
-    /// `waitingForInput` for `PreToolUse` by inspecting the real payload's
-    /// `toolCall.name` (`"ask_question"` is Antigravity's own tool for
-    /// asking the user something, free-text or multi-choice — there is no
-    /// separate permission-prompt event; tool/file approval dialogs are
-    /// confirmed invisible to every hook Antigravity exposes and stay on
-    /// `TerminalScreenHeuristic` permanently for this provider). `Stop` only
-    /// means `ready` when its own `fullyIdle` field is `true` — `false`
-    /// means an async tool call (e.g. a long-running shell command) is
-    /// still outstanding and no status change should happen yet.
-    ///
-    /// A `planFinished`-shaped signal — `PostToolUse` where
-    /// `toolCall.name == "write_to_file"` and
-    /// `args.ArtifactMetadata.RequestFeedback == true` — is classified as a
-    /// plan waiting for approval by `HookEventReceiver`.
+    /// `PreInvocation` marks the turn working and is where prompts the
+    /// companion queued mid-turn are injected (`injectSteps`), before the
+    /// next model call. `PreToolUse`/`PostToolUse` (matcher `*`) and `Stop`
+    /// drive the rest; `HookEventReceiver` reads `toolCall.name`,
+    /// `ArtifactMetadata.RequestFeedback` and `fullyIdle`. Tool and file
+    /// approval dialogs stay invisible to every hook and are read off the
+    /// screen and the `--log-file`.
     private static func configureAntigravityHooks(
         workingDirectory: URL,
-        supportDirectory: URL
+        supportDirectory: URL,
+        globalHooksFile: URL
     ) -> Bool {
         let scriptPath = antigravityWrapperScriptPath(supportDirectory: supportDirectory)
         do {
@@ -368,46 +369,79 @@ public struct HookConfigurationWriter: HookConfiguring {
                 at: scriptPath.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            // The companion queues prompts sent mid-turn next to the event
-            // file; `PostInvocation` hands them to the agent as
-            // `injectSteps`. Moving the file first keeps a prompt queued
-            // during delivery for the next invocation.
-            let contents = wrapperScriptContents(decisionRequiredFor: ["PreToolUse"]) + """
-            \nif [ "$event" = "PostInvocation" ] && [ -n "$event_file" ] && [ -f "$event_file.queue" ]; then
-                queue="$event_file.queue.$$"
-                mv "$event_file.queue" "$queue" 2>/dev/null && cat "$queue" && rm -f "$queue"
-            fi
-            """
-            try Data(contents.utf8).write(to: scriptPath, options: .atomic)
+            try Data(antigravityWrapperScriptContents.utf8).write(to: scriptPath, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
         } catch {
             return false
         }
 
-        let configDirectory = workingDirectory.appendingPathComponent(".agents", isDirectory: true)
-        let configFile = configDirectory.appendingPathComponent("hooks.json", isDirectory: false)
-
         do {
             try withSharedConfigLock(supportDirectory: supportDirectory) {
-                var root = try loadJSONObject(at: configFile)
-                let hookCommand: (String) -> [String: Any] = { event in
-                    [
-                        "type": "command",
-                        "command": "\(Self.quoted(scriptPath.path)) \(event)",
-                        "timeout": 10
-                    ]
-                }
-                root["flotilla-status"] = [
-                    "PreToolUse": [["matcher": "*", "hooks": [hookCommand("PreToolUse")]]],
-                    "PostToolUse": [["matcher": "*", "hooks": [hookCommand("PostToolUse")]]],
-                    "Stop": [hookCommand("Stop")],
-                    "PostInvocation": [hookCommand("PostInvocation")]
-                ]
-                try writeJSONObject(root, to: configFile, creating: configDirectory)
+                var root = try loadJSONObject(at: globalHooksFile)
+                root[antigravityHookGroupKey] = antigravityHookGroup
+                try writeJSONObject(root, to: globalHooksFile, creating: globalHooksFile.deletingLastPathComponent())
             }
-            return true
         } catch {
             return false
+        }
+        // Best-effort: a project file Flotilla can't clean must not stop the
+        // launch. Until it is cleaned, agy runs the old group's commands too,
+        // which only record — the wrapper is the same script.
+        try? withSharedConfigLock(supportDirectory: supportDirectory) {
+            removeLegacyAntigravityProjectHooks(in: workingDirectory)
+        }
+        return true
+    }
+
+    /// One command per event, the same for every session and every Flotilla
+    /// install: it finds the wrapper next to the session's event file, so the
+    /// global file never names a support directory and is inert outside
+    /// Flotilla.
+    static var antigravityHookGroup: [String: Any] {
+        let command: (String) -> [String: Any] = { event in
+            [
+                "type": "command",
+                "command": #"event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; wrapper="$(dirname "$event_file")/flotilla-antigravity.sh"; [ -x "$wrapper" ] || exit 0; exec "$wrapper" "# + event,
+                "timeout": 10
+            ]
+        }
+        return [
+            "PreToolUse": [["matcher": "*", "hooks": [command("PreToolUse")]]],
+            "PostToolUse": [["matcher": "*", "hooks": [command("PostToolUse")]]],
+            "PreInvocation": [command("PreInvocation")],
+            "Stop": [command("Stop")]
+        ]
+    }
+
+    /// Records the event; on `PreInvocation`, hands over prompts the
+    /// companion queued next to the event file. Moving the queue first keeps
+    /// a prompt queued during delivery for the next invocation.
+    static let antigravityWrapperScriptContents = """
+    #!/bin/sh
+    event="$1"
+    payload="$(cat)"
+    event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"
+    [ -n "$event_file" ] || exit 0
+    printf '{"event":"%s","payload":%s}\\n' "$event" "$payload" >> "$event_file"
+    if [ "$event" = "PreInvocation" ] && [ -f "$event_file.queue" ]; then
+        queue="$event_file.queue.$$"
+        mv "$event_file.queue" "$queue" 2>/dev/null && cat "$queue" && rm -f "$queue"
+    fi
+    exit 0
+    """
+
+    /// Drops the `flotilla-status` group from a project's `.agents/hooks.json`
+    /// (written there before the hooks moved to the user-level file), and
+    /// the file itself when that group was all it held. Malformed or
+    /// unfamiliar JSON is left byte-for-byte untouched.
+    static func removeLegacyAntigravityProjectHooks(in workingDirectory: URL) {
+        let configFile = workingDirectory.appendingPathComponent(".agents/hooks.json", isDirectory: false)
+        guard var root = try? loadJSONObject(at: configFile),
+              root.removeValue(forKey: antigravityHookGroupKey) != nil else { return }
+        if root.isEmpty {
+            try? FileManager.default.removeItem(at: configFile)
+        } else {
+            try? writeJSONObject(root, to: configFile, creating: configFile.deletingLastPathComponent())
         }
     }
 
@@ -475,38 +509,6 @@ public struct HookConfigurationWriter: HookConfiguring {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: file, options: .atomic)
-    }
-
-    /// Shared by every provider whose payload doesn't self-describe its own
-    /// event name: the script is invoked as `<script> <EventName>` (baked
-    /// into the config's command per-event, not read from stdin) and
-    /// synthesizes a self-describing JSON line before appending it, so
-    /// `HookEventReceiver` can treat every such provider's event file
-    /// uniformly as "one self-describing JSON object per line".
-    ///
-    /// `decisionRequiredFor` names the events whose stdout the launching
-    /// CLI reads as a live allow/deny decision rather than ignoring —
-    /// getting this wrong (omitting an event that needs it) risks hanging
-    /// or silently blocking the CLI, so it's only ever populated for events
-    /// this has actually been confirmed to require it for (see call sites).
-    private static func wrapperScriptContents(decisionRequiredFor: Set<String>) -> String {
-        var script = """
-        #!/bin/sh
-        event="$1"
-        payload="$(cat)"
-        event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"
-        if [ -n "$event_file" ]; then
-            printf '{"event":"%s","payload":%s}\\n' "$event" "$payload" >> "$event_file"
-        fi
-        """
-        for event in decisionRequiredFor.sorted() {
-            script += """
-            \nif [ "$event" = "\(event)" ]; then
-                printf '{"decision":"allow"}\\n'
-            fi
-            """
-        }
-        return script
     }
 
     // MARK: - Codex CLI

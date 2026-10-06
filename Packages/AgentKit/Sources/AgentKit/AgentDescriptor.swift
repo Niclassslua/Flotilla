@@ -284,11 +284,13 @@ public enum AgentCatalog {
         binaryName: "agy",
         settingsKey: "antigravity",
         modelFlag: .separateTokens("--model"),
-        // No `--effort` flag: the model slug already bakes in the reasoning
-        // level (e.g. "gemini-3.7-flash-high"), so a second, independently
-        // chosen `--effort` would be redundant at best and conflicting at
-        // worst. `effortLevels` stays non-empty so the effort picker still
-        // renders — see `AntigravityModelGroup` and
+        // No `--effort`: the model slug already bakes in the reasoning level
+        // (e.g. "gemini-3.7-flash-high"). agy 1.3.0 does have `--effort`, but
+        // only alongside a bare family name (`--model gemini-3.8-flash
+        // --effort high` resolves to the same "Gemini 3.8 Flash (High)"); with
+        // an effort slug it refuses ("conflicts with --effort"), and models
+        // without levels reject it outright. `effortLevels` stays non-empty
+        // so the effort picker still renders — see `AntigravityModelGroup` and
         // `AntigravityModelEffortCoordinator`, which resolve a chosen level
         // into the right slug instead of a CLI flag.
         effortFlag: nil,

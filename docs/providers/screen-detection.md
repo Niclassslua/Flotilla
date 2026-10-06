@@ -34,7 +34,7 @@ substring matching on the bottom 8 non-empty lines, unless noted.
 | 5 | question marker | ` unanswered)`, `waiting for your answer`, `answer the question`, `provide your answer`, `question for you` | `waitingForInput` / `question` | Claude `AskUserQuestion` |
 | 6 | numbered choice list with caret | `❯ 1. Yes` / `2. No` / `> 1)` …, ≥ 2 options, one with a caret | `waitingForInput` / `question` | Claude, Codex pickers |
 | 7 | `SessionStatusHeuristic` | the rule 4 list plus `continue?` | `waitingForInput` (no reason) | generic |
-| 8a | interrupt marker | `interrupted · what should claude do instead?` | `readyForReview` with **`endsTurn`**: the only screen observation the arbiter lets end a hook-held episode (an interrupt fires no hook) | Claude Code |
+| 8a | interrupt marker | `interrupted · what should claude do instead?`, `interrupted · what should antigravity cli do instead?` | `readyForReview` with **`endsTurn`**: the only screen observation the arbiter lets end a hook-held episode (an interrupt fires no hook) | Claude Code, Antigravity |
 | 8 | finished marker | `agent exited`, `pane is dead`, `process finished` | `readyForReview`, `suggestsAgentExit` | all (tmux) |
 | 9 | working marker | `esc to interrupt`, `escape to interrupt`, `esc to cancel`, `escape to cancel`, `ctrl+c to interrupt`, `ctrl-c to interrupt`, `ctrl+c to stop` | `working` | Claude (pre-2.1.291), Codex, Cursor (`ctrl+c to stop`) |
 | 10 | composer above transcript, 24-line window | a line starting (after `│┃║`) with `❯`, `> ` or `› `, with a non-decoration line above it | `readyForReview` | Claude (`❯`), Codex (`›`) |

@@ -14,6 +14,7 @@ final class AntigravityCompanionAdapter: CompanionSessionAdapter {
     private let send: (Data) -> Void
     private var requests: [UUID: Request] = [:]
     private var order: [UUID] = []
+    private var reportedStops: Set<String> = []
     private struct Request {
         var conversation: String
         var step: Int
@@ -81,6 +82,10 @@ final class AntigravityCompanionAdapter: CompanionSessionAdapter {
 
         let events = readRecentEvents()
         for line in events.split(separator: "\n") {
+            if line.contains(#""event":"Stop""#) {
+                noteFailedTurn(line)
+                continue
+            }
             // Fast reject lines that cannot contain an interactive prompt or plan
             guard line.contains("PreToolUse") || (line.contains("PostToolUse") && line.contains("write_to_file")) else { continue }
             if !hasSurfacing && line.contains("PreToolUse") { continue }
@@ -106,7 +111,7 @@ final class AntigravityCompanionAdapter: CompanionSessionAdapter {
                             let value = option as? [String: Any] ?? [:]
                             return .init(label: value["label"] as? String ?? value["text"] as? String ?? "", description: value["description"] as? String)
                         }
-                        return .init(id: String(index), header: question["header"] as? String ?? "Question", prompt: question["question"] as? String ?? question["prompt"] as? String ?? "Question", options: options, allowsMultiple: question["multiple"] as? Bool ?? question["multiSelect"] as? Bool ?? false)
+                        return .init(id: String(index), header: question["header"] as? String ?? "Question", prompt: question["question"] as? String ?? question["prompt"] as? String ?? "Question", options: options, allowsMultiple: question["is_multi_select"] as? Bool ?? question["multiple"] as? Bool ?? question["multiSelect"] as? Bool ?? false)
                     })
                 } else {
                     kind = .permission(.init(tool: tool, summary: args["CommandLine"] as? String ?? args["TargetFile"] as? String ?? tool, detail: args["CodeContent"] as? String))
@@ -135,6 +140,29 @@ final class AntigravityCompanionAdapter: CompanionSessionAdapter {
                 transcript.retryAttempt = retry.split(whereSeparator: { !$0.isNumber }).last.flatMap { Int($0) }
             }
         }
+    }
+
+    /// A `Stop` that carries an `error` (or ended on a step limit) becomes a
+    /// failed-turn note, once: the event tail is re-read on every refresh.
+    private func noteFailedTurn(_ line: Substring) {
+        guard !reportedStops.contains(String(line)),
+              let event = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+              let payload = event["payload"] as? [String: Any],
+              let message = Self.failureMessage(payload) else { return }
+        reportedStops.insert(String(line))
+        transcript.append(.turnFailed(message: message))
+    }
+
+    /// `Stop.error` is the failure; a `terminationReason` naming a step limit
+    /// ends the turn without one. `NO_TOOL_CALL` is the ordinary end.
+    nonisolated static func failureMessage(_ payload: [String: Any]) -> String? {
+        let error = (payload["error"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let reason = (payload["terminationReason"] as? String) ?? ""
+        if let error { return "Antigravity stopped: \(error)" }
+        if reason.localizedCaseInsensitiveContains("max_steps") {
+            return "Antigravity stopped: it reached its step limit."
+        }
+        return nil
     }
 
     /// Parse displayed option numbers; command and file confirmations have

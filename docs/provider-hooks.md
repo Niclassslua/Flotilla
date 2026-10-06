@@ -78,9 +78,9 @@ created and deleted.
 | OpenCode | Stable `.opencode/plugins/flotilla-status.js` | `tool.execute.after` | `working` | Legacy per-session Flotilla plugins are removed on configuration. |
 | OpenCode | Stable project plugin | `permission.asked`, `question.asked` | `waitingForInput` (`permission` / `question`) | The event handler is observational and supplies no decision. |
 | OpenCode | Stable project plugin | `session.idle` | `readyForReview` | OpenCode's `idle` means the turn ended and the composer is available. |
-| Antigravity | Stable `.agents/hooks.json` `flotilla-status` group | `PreToolUse` | `working` | `ask_question` maps to `waitingForInput` (`question`) instead. |
-| Antigravity | Stable shared hook group | `PostToolUse` | `working`, or `waitingForInput` (`planApproval`) when an artifact requests plan feedback | Wrapper adds the event name because the provider payload omits it. |
-| Antigravity | Stable shared hook group | `Stop` with `fullyIdle: true` | `readyForReview` | `fullyIdle: false` is ignored while asynchronous work remains. |
+| Antigravity | User-level `~/.gemini/config/hooks.json` `flotilla-status` group (env-gated; old project `.agents/hooks.json` groups are removed) | `PreInvocation` | `working` | Before every model call; also delivers phone prompts queued mid-turn (`injectSteps`). |
+| Antigravity | Same | `PreToolUse` / `PostToolUse` | `working`; `ask_question` → `waitingForInput` (`question`); `write_to_file` with `RequestFeedback` → `planApproval` | The wrapper prints nothing: a 1.3.0 hook can deny but never approve, so the picker stays agy's. |
+| Antigravity | Same | `Stop` with `fullyIdle: true` | `readyForReview` | `fullyIdle: false` is ignored while asynchronous work remains; an `error` becomes a companion note. |
 | Cursor Agent | Project `.cursor/hooks.json` + support `flotilla-cursor.sh` | `beforeSubmitPrompt` / `preToolUse` / `beforeShellExecution` / `beforeMCPExecution` | observational `working` | Hooks only record; the phone mirrors Cursor's own dialog (`CursorCompanionAdapter`). No `FLOTILLA_HOOK_EVENT_FILE` → exit 0 (fail-open for IDE Cursor). |
 | Cursor Agent | Same | `postToolUse` / `afterShellExecution` / `afterFileEdit` | `working` | Observational only. |
 | Cursor Agent | Same | `afterAgentResponse` / `stop` / `sessionEnd` | `readyForReview` | Interactive CLI fires `afterAgentResponse` then `stop` when the turn ends; `sessionEnd` is teardown. Waiting comes from mirrored dialog cards, not hook decisions. |
@@ -101,10 +101,11 @@ action shown in the UI: `permission` → **Needs Permission**, `question` →
 persisted with the session and cleared whenever the session leaves
 `waitingForInput`.
 
-Antigravity interprets `PreToolUse` stdout as a live decision. Every generated
-wrapper therefore returns `{"decision":"allow"}` for that event after
-recording it. Tool and file approval dialogs are not visible to Antigravity's
-hook surface and continue to depend on `TerminalScreenHeuristic`.
+Antigravity reads `PreToolUse` stdout as a decision, but in 1.3.0 a silent hook
+behaves exactly like no hook and only `deny` takes effect (`allow` never skips
+agy's picker), so the wrapper prints nothing. Tool and file approval dialogs
+are not visible to Antigravity's hook surface and continue to depend on
+`TerminalScreenHeuristic`.
 
 Codex's lifecycle schema and the no-output success behavior are documented in
 the official [Codex Hooks guide](https://developers.openai.com/codex/hooks) and
@@ -146,7 +147,7 @@ created with, before its process has been observed doing anything.
 | **Claude Code** | `UserPromptSubmit`; `PostToolUse` / `PostToolUseFailure` / `PermissionDenied`; `PreCompact`; `PostCompact` (auto); `SubagentStart`; `PreToolUse` for any tool other than `AskUserQuestion` / `ExitPlanMode` (not registered); `Notification` `elicitation_complete`/`elicitation_response`/`quota_auto_resume_fired`. Events from Claude's background helpers (`agent_id` without `agent_type`) are ignored | `PreToolUse` or `PermissionRequest` for `AskUserQuestion` → `question`, for `ExitPlanMode` → `planApproval`; any other `PermissionRequest` → `permission`; `Notification`/`permission_prompt` → `permission` (`planApproval` if the message mentions a plan); `Notification` `elicitation_dialog`/`elicitation_url_dialog`/`agent_needs_input` → `question` | `Stop`; `StopFailure`; `Notification`/`idle_prompt`; `PostCompact` (manual); `PostToolUseFailure` with `is_interrupt` | — |
 | **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — |
 | **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — |
-| **Antigravity** | `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval` | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation) | — |
+| **Antigravity** | `PreInvocation`; `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval`; approval pickers only from the screen | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation); an interrupt only from the screen | — |
 | **Cursor Agent** | `beforeSubmitPrompt` / `postToolUse` / `afterShellExecution` / `afterFileEdit` | Mirrored TUI dialogs → `permission` / `planApproval` (phone + Mac) | `afterAgentResponse` / `stop` / `sessionEnd` | — |
 | **Terminal-screen fallback** (every provider) | an interrupt/cancel hint — `esc to interrupt`, `esc to cancel`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; shows a numbered choice list with a selection caret; matches Antigravity's extended permission-picker signature; or the prompt heuristic reads the prompt as waiting | a composer prompt with transcript above it, or a dead-pane marker (`agent exited`, `pane is dead`, `process finished`). Unremarkable screens yield no observation | — |
 | **Process exit** | — | — | exit status code 0 (also fires `onSessionFinished`) | any non-zero exit code, or a launch/relaunch failure |
@@ -211,7 +212,7 @@ Generated files are:
 <support>/hooks/flotilla-codex.sh
 <support>/hooks/flotilla-cursor.sh
 <support>/hooks/shared-config.lock
-<working directory>/.agents/hooks.json
+~/.gemini/config/hooks.json   (Antigravity, user-level, env-gated)
 <working directory>/.cursor/hooks.json
 <working directory>/.opencode/plugins/flotilla-status.js
 ```
