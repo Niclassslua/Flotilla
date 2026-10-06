@@ -64,7 +64,7 @@ final class SessionLaunchPreviewTests: XCTestCase {
 
     func testTitleDerivation() {
         let long = resolve(goal: String(repeating: "a", count: 120), choice: .general, createWorktree: false)
-        XCTAssertEqual(long.title.count, 60)
+        XCTAssertLessThanOrEqual(long.title.count, 40)
 
         let multiline = resolve(
             goal: "First line of objective\nSecond line with details\nThird line",
@@ -72,6 +72,23 @@ final class SessionLaunchPreviewTests: XCTestCase {
             createWorktree: false
         )
         XCTAssertEqual(multiline.title, "First line of objective")
+
+        // Conversational asks must not land as sidebar titles when AI naming
+        // falls back to the prompt — strip the preamble and clip to a phrase.
+        XCTAssertEqual(
+            resolve(
+                goal: "I would like to build a comprehensive documentation of hooks",
+                choice: .general,
+                createWorktree: false
+            ).title,
+            "Build a comprehensive documentation"
+        )
+        XCTAssertEqual(
+            SessionLaunchPreview.clipPromptTitle(
+                "I would like to build a comprehensive documentation of hooks"
+            ),
+            "Build a comprehensive documentation"
+        )
 
         XCTAssertEqual(
             resolve(goal: "   ", choice: .known(project(named: "Atlas")), createWorktree: false).title,

@@ -98,21 +98,75 @@ struct SessionLaunchPreview: Equatable {
         )
     }
 
-    /// Matches the rule the old `CreateSessionView.sessionTitle` used, so
-    /// existing sessions and new ones are named the same way.
+    /// Prompt-derived titles are the synchronous fallback when Apple Intelligence
+    /// is off or returns nothing usable. They must stay sidebar-sized: strip the
+    /// conversational ask, then clip to a short phrase — never paste the first
+    /// 60 characters of the goal (that produced titles like "I would like to
+    /// build a comprehensive documentation of hooks").
     static func derivedTitle(goal: String, projectChoice: ProjectChoice) -> String {
         let firstLine = goal
             .components(separatedBy: .newlines)
             .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
             .trimmingCharacters(in: .whitespaces) ?? ""
         if !firstLine.isEmpty {
-            return String(firstLine.prefix(60))
+            return clipPromptTitle(firstLine)
         }
         switch projectChoice {
         case .general: return "General session"
         case .known(let project): return project.name
         case .custom(let url): return url.lastPathComponent
         }
+    }
+
+    /// Shared clip used by prompt-derived naming and by the Apple Intelligence
+    /// salvage path when the model returns a long or request-shaped phrase.
+    static func clipPromptTitle(_ line: String) -> String {
+        var text = stripRequestPreamble(line)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Drop trailing sentence punctuation the goal often carries.
+        while let last = text.last, ".,:;!?".contains(last) {
+            text = String(text.dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+        guard !text.isEmpty else { return line.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        var words = Array(text.split(whereSeparator: \.isWhitespace).prefix(Self.maxDerivedWords).map(String.init))
+        while words.count > 2, Self.trailingFillers.contains(words[words.count - 1].lowercased()) {
+            words.removeLast()
+        }
+        var clipped = words.joined(separator: " ")
+        if clipped.count > Self.maxDerivedCharacters {
+            clipped = truncateAtWordBoundary(clipped, limit: Self.maxDerivedCharacters)
+        }
+        return AppleIntelligenceSessionNameGenerator.applySentenceCaseIfNeeded(clipped)
+    }
+
+    private static let maxDerivedWords = 5
+    private static let maxDerivedCharacters = 40
+    private static let trailingFillers: Set<String> = [
+        "a", "an", "the", "of", "to", "for", "and", "or", "in", "on", "with", "from",
+    ]
+
+    /// Leading politeness / intent wrappers that turn a subject into a request.
+    private static let requestPreamblePattern = #"(?i)^(i would like to|i'd like to|i want to|i need to|i'm trying to|i am trying to|i'm going to|i am going to|please|can you|could you|would you|help me(?: to)?)\b[\s,]*"#
+
+    private static func stripRequestPreamble(_ line: String) -> String {
+        var text = line
+        // Apply once — nested wrappers ("Please can you…") are rare and a single
+        // pass keeps the heuristic predictable.
+        if let range = text.range(of: requestPreamblePattern, options: .regularExpression) {
+            text = String(text[range.upperBound...])
+        }
+        return text
+    }
+
+    private static func truncateAtWordBoundary(_ text: String, limit: Int) -> String {
+        guard text.count > limit else { return text }
+        let end = text.index(text.startIndex, offsetBy: limit)
+        let head = text[..<end]
+        if let lastSpace = head.lastIndex(where: \.isWhitespace), lastSpace > head.startIndex {
+            return String(head[..<lastSpace]).trimmingCharacters(in: .whitespaces)
+        }
+        return String(head).trimmingCharacters(in: .whitespaces)
     }
 
     /// The argv the CLI will receive, built from the same descriptor flag specs

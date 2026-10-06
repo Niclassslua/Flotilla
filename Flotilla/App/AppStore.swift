@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import SessionKit
 import GitKit
 import ProcessKit
@@ -1338,7 +1339,14 @@ final class AppStore {
         } else {
             suggestedName = nil
         }
+        // Apple Intelligence logs its own accept/reject lines under
+        // `SessionNaming`; this only records the creation-time fallback so a
+        // prompt-derived sidebar title can be tied back to a failed generation.
         let resolvedTitle = linkedIssue?.sessionTitle ?? (usesAppleIntelligence ? (suggestedName ?? title) : title)
+        if usesAppleIntelligence, suggestedName == nil, linkedIssue == nil {
+            Logger(subsystem: "com.niclassslua.flotilla", category: "SessionNaming")
+                .notice("createSession falling back to prompt-derived \"\(resolvedTitle, privacy: .public)\"")
+        }
 
         // Determine whether agent-managed features should activate.
         // Only prompt-derived titles may be replaced by native discovery
