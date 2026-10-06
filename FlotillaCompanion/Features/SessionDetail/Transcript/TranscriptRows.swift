@@ -255,7 +255,7 @@ struct ImageRow: View {
                     .font(.footnote)
                     .foregroundStyle(FlotillaColors.textTertiary)
             } else {
-                ProgressView().frame(maxWidth: .infinity)
+                ProgressView().frame(maxWidth: .infinity, minHeight: Self.maxThumbnailHeight)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

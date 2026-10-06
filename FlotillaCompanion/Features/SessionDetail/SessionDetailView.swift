@@ -27,6 +27,9 @@ struct SessionDetailView: View {
     @State private var currentMatchIndex = 0
     @State private var scrollProxy: ScrollViewProxy?
     @State private var visibleItemCount: Int = 40
+    /// True while a finger is on the transcript or it's coasting; programmatic
+    /// follow-scrolls must not fight the reader.
+    @State private var isUserScrolling = false
 
     var body: some View {
         if let session = store.session(sessionID), let macID = store.mac(forSession: sessionID)?.id {
@@ -77,6 +80,10 @@ struct SessionDetailView: View {
                     }
                 }
             }
+            .onScrollPhaseChange { _, phase in
+                let scrolling = phase == .interacting || phase == .decelerating
+                if isUserScrolling != scrolling { isUserScrolling = scrolling }
+            }
             .onChange(of: transcript.events.count) { _, _ in handleNewContent(proxy) }
             .onChange(of: transcript.queuedPrompts.count) { _, _ in handleNewContent(proxy) }
             .onChange(of: transcript.streamingText) { _, _ in handleStreamingContent(proxy) }
@@ -91,11 +98,14 @@ struct SessionDetailView: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                if hasNewOutputWhileScrolledUp {
-                    newOutputButton(proxy)
+                Group {
+                    if hasNewOutputWhileScrolledUp {
+                        newOutputButton(proxy)
+                    }
                 }
+                // Scoped to the pill so the toggle can't animate transcript layout.
+                .animation(reduceMotion ? nil : .snappy, value: hasNewOutputWhileScrolledUp)
             }
-            .animation(reduceMotion ? nil : .snappy, value: hasNewOutputWhileScrolledUp)
         }
         .scrollDismissesKeyboard(.interactively)
         .background(FlotillaColors.canvas)
@@ -197,7 +207,7 @@ struct SessionDetailView: View {
     /// New output only pulls the reader along when they're already at the
     /// tail; otherwise it's flagged for the "New output" jump instead.
     private func handleNewContent(_ proxy: ScrollViewProxy, animated: Bool = true) {
-        if isNearBottom {
+        if isNearBottom && !isUserScrolling {
             scrollToBottom(proxy, animated: animated)
         } else {
             hasNewOutputWhileScrolledUp = true
@@ -209,7 +219,7 @@ struct SessionDetailView: View {
     /// token), so they must not each increment the new-output count. The
     /// completed transcript event is counted separately by `handleNewContent`.
     private func handleStreamingContent(_ proxy: ScrollViewProxy) {
-        if isNearBottom {
+        if isNearBottom && !isUserScrolling {
             scrollToBottom(proxy, animated: false)
         } else {
             hasNewOutputWhileScrolledUp = true
@@ -270,6 +280,20 @@ struct SessionDetailView: View {
         }
     }
 
+    /// Reveals older items without moving what the reader is looking at: the
+    /// current first row is re-pinned to the top once the new rows are laid out.
+    private func revealEarlier(_ count: Int, anchoredTo firstID: String?, total: Int) {
+        visibleItemCount = min(total, visibleItemCount + count)
+        guard let firstID, let scrollProxy else { return }
+        Task { @MainActor in
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                scrollProxy.scrollTo(firstID, anchor: .top)
+            }
+        }
+    }
+
     private func closeSearch() {
         isSearching = false
         searchQuery = ""
@@ -289,7 +313,9 @@ struct SessionDetailView: View {
         // A group whose last tool waits on an answer is still being worked through.
         let isInProgress = isWorking || session.status == .waitingForInput
 
-        return LazyVStack(alignment: .leading, spacing: 14) {
+        // Not lazy: lazily-measured rows swap estimated heights for real ones
+        // above the viewport and make the scroll jump. The window caps the count.
+        return VStack(alignment: .leading, spacing: 14) {
             if let reason = transcript.unavailableReason {
                 Label(reason, systemImage: "text.bubble.badge.clock")
                     .font(.footnote)
@@ -302,9 +328,7 @@ struct SessionDetailView: View {
             if !isSearching && hiddenCount > 0 {
                 HStack(spacing: 8) {
                     Button {
-                        withAnimation(.snappy) {
-                            visibleItemCount = min(totalItemCount, visibleItemCount + 50)
-                        }
+                        revealEarlier(50, anchoredTo: items.first?.id, total: totalItemCount)
                     } label: {
                         Label("Load earlier (\(min(50, hiddenCount)))", systemImage: "clock.arrow.circlepath")
                             .font(.caption.weight(.medium))
@@ -315,9 +339,7 @@ struct SessionDetailView: View {
 
                     if hiddenCount > 50 {
                         Button {
-                            withAnimation(.snappy) {
-                                visibleItemCount = totalItemCount
-                            }
+                            revealEarlier(totalItemCount, anchoredTo: items.first?.id, total: totalItemCount)
                         } label: {
                             Text("Load all (\(hiddenCount))")
                                 .font(.caption.weight(.medium))
