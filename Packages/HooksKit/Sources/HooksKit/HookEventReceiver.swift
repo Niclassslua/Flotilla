@@ -266,6 +266,9 @@ public final class HookEventReceiver: @unchecked Sendable {
             guard let eventName = object["hook_event_name"] as? String else { return nil }
             let payload = object["payload"] as? [String: Any] ?? object
             switch eventName {
+            case "beforeSubmitPrompt":
+                // Turn accepted — Cursor is busy before any tool hook fires.
+                return SessionStatusObservation(.working, cause: cause("hook: \(eventName)"))
             case "preToolUse", "beforeShellExecution", "beforeMCPExecution":
                 let tool = (payload["tool_name"] as? String) ?? (payload["toolName"] as? String)
                 let lowered = tool?.lowercased()
@@ -281,7 +284,10 @@ public final class HookEventReceiver: @unchecked Sendable {
                 return SessionStatusObservation(.working, cause: cause("hook: \(eventName) \(Self.toolLabel(tool))"))
             case "postToolUse", "afterShellExecution", "afterFileEdit":
                 return SessionStatusObservation(.working, cause: cause("hook: \(eventName)"))
-            case "sessionEnd", "stop":
+            case "afterAgentResponse", "sessionEnd", "stop":
+                // Interactive CLI fires `afterAgentResponse` then `stop` when
+                // the turn ends and the follow-up composer returns. `sessionEnd`
+                // is session teardown (also ready — the pane is done).
                 return SessionStatusObservation(.readyForReview, cause: cause("hook: \(eventName)"))
             default:
                 return nil
@@ -437,6 +443,12 @@ public final class HookEventReceiver: @unchecked Sendable {
         }
         if let tool = payload["tool_name"] as? String {
             return "tool=\(tool)"
+        }
+        if let status = payload["status"] as? String, !status.isEmpty {
+            return "status=\(status)"
+        }
+        if let text = payload["text"] as? String, !text.isEmpty {
+            return "text=\(text)"
         }
         return nil
     }

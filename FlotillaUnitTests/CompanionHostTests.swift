@@ -1011,6 +1011,9 @@ final class CursorHookTests: XCTestCase {
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let hooks = try XCTUnwrap(root["hooks"] as? [String: [[String: Any]]])
         XCTAssertNotNil(hooks["preToolUse"])
+        for event in ["beforeSubmitPrompt", "afterAgentResponse", "stop", "sessionEnd"] {
+            XCTAssertNotNil(hooks[event], "missing \(event)")
+        }
         for (event, entries) in hooks {
             for entry in entries {
                 XCTAssertNil(entry["failClosed"], event)

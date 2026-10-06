@@ -75,9 +75,9 @@ created and deleted.
 | Antigravity | Stable `.agents/hooks.json` `flotilla-status` group | `PreToolUse` | `working` | `ask_question` maps to `waitingForInput` (`question`) instead. |
 | Antigravity | Stable shared hook group | `PostToolUse` | `working`, or `waitingForInput` (`planApproval`) when an artifact requests plan feedback | Wrapper adds the event name because the provider payload omits it. |
 | Antigravity | Stable shared hook group | `Stop` with `fullyIdle: true` | `readyForReview` | `fullyIdle: false` is ignored while asynchronous work remains. |
-| Cursor Agent | Project `.cursor/hooks.json` + support `flotilla-cursor.sh` | `preToolUse` / `beforeShellExecution` / `beforeMCPExecution` | observational `working` | Decision hooks block on the companion Unix socket (`failClosed`, timeout 86400). No bridge / no `FLOTILLA_HOOK_EVENT_FILE` → allow (fail-open for IDE Cursor). |
-| Cursor Agent | Same | `postToolUse` / `afterShellExecution` | `working` | Observational only. |
-| Cursor Agent | Same | `sessionEnd` / `stop` | `readyForReview` | Waiting comes from held permission cards on the phone/Mac bridge, not from returning `ask` on `preToolUse` (Cursor treats `ask` as allow). |
+| Cursor Agent | Project `.cursor/hooks.json` + support `flotilla-cursor.sh` | `beforeSubmitPrompt` / `preToolUse` / `beforeShellExecution` / `beforeMCPExecution` | observational `working` | Hooks only record; the phone mirrors Cursor's own dialog (`CursorCompanionAdapter`). No `FLOTILLA_HOOK_EVENT_FILE` → exit 0 (fail-open for IDE Cursor). |
+| Cursor Agent | Same | `postToolUse` / `afterShellExecution` / `afterFileEdit` | `working` | Observational only. |
+| Cursor Agent | Same | `afterAgentResponse` / `stop` / `sessionEnd` | `readyForReview` | Interactive CLI fires `afterAgentResponse` then `stop` when the turn ends; `sessionEnd` is teardown. Waiting comes from mirrored dialog cards, not hook decisions. |
 
 `SessionStatus` is the broad board/filter state and has four values:
 `working`, `waitingForInput`, `readyForReview`, and `crashed`. A session
@@ -141,7 +141,7 @@ created with, before its process has been observed doing anything.
 | **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — |
 | **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — |
 | **Antigravity** | `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval` | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation) | — |
-| **Cursor Agent** | `postToolUse` / `afterShellExecution`; decision hooks while held cards resolve | Held bridge cards → `permission` / `question` / `planApproval` (phone + Mac) | `sessionEnd` / `stop` | — |
+| **Cursor Agent** | `beforeSubmitPrompt` / `postToolUse` / `afterShellExecution` / `afterFileEdit` | Mirrored TUI dialogs → `permission` / `planApproval` (phone + Mac) | `afterAgentResponse` / `stop` / `sessionEnd` | — |
 | **Terminal-screen fallback** (every provider) | an interrupt/cancel hint — `esc to interrupt`, `esc to cancel`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; shows a numbered choice list with a selection caret; matches Antigravity's extended permission-picker signature; or the prompt heuristic reads the prompt as waiting | a composer prompt with transcript above it, or a dead-pane marker (`agent exited`, `pane is dead`, `process finished`). Unremarkable screens yield no observation | — |
 | **Process exit** | — | — | exit status code 0 (also fires `onSessionFinished`) | any non-zero exit code, or a launch/relaunch failure |
 | **Dead tmux pane** | — | — | a dead-pane screen observation that `tmux display-message` confirms with `pane_dead_status` 0 (also fires `onSessionFinished`) | the same, confirmed with a non-zero status or a signal |

@@ -38,7 +38,8 @@ socket until someone answered. Measured end to end, that did not work:
 | Enter right behind typed text | Submits, but leaves the text in the composer; the next prompt is appended and both go out as one. 50 ms or more between them clears it |
 | `beforeSubmitPrompt` | Fires with the exact prompt and its own `generation_id` the moment Cursor accepts it, also for a queued follow-up |
 | Transcript JSONL | Under `~/.cursor/projects/…/agent-transcripts/<id>/`. A user record is written when its turn starts; assistant text only once that step's tool calls finish. The trailing `turn_ended` record is removed when the next turn starts (the file is rewritten). A follow-up steered into a running turn is sometimes never written |
-| `afterAgentResponse` | Fires at turn end with the whole reply — no earlier than the JSONL |
+| `afterAgentResponse` | Fires at turn end with the whole reply — no earlier than the JSONL. Flotilla maps this (and `stop`) to Ready for Review |
+| `stop` | Fires right after `afterAgentResponse` on a completed interactive turn (`status: completed`) |
 | Backend errors | `WritableIterable is closed` ends turns intermittently; `stop` reports `status: error` |
 | Resume memory lives in `~/.cursor/chats/<md5(cwd)>/<id>/store.db` | Opaque blob DAG; handoff destination seeds via `agent --print --resume` preamble |
 | Release source | Delete chat dir + transcript folder (no delete CLI) |

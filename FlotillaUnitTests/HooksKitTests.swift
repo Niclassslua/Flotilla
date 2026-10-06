@@ -643,6 +643,42 @@ final class HookEventReceiverTests: XCTestCase {
             SessionStatusObservation(.readyForReview),
         ])
     }
+
+    /// Cursor's interactive CLI ends a turn with `afterAgentResponse` then
+    /// `stop` (verified against agent 2026.10.01). Either must land Ready
+    /// for Review; `beforeSubmitPrompt` starts the next working turn.
+    func testCursorMapsTurnLifecycleToReadyForReview() async throws {
+        let file = tempFile()
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try append(
+            #"{"flotilla_provider":"cursor","hook_event_name":"beforeSubmitPrompt","payload":{"prompt":"hi"}}"#,
+            to: file
+        )
+        try append(
+            #"{"flotilla_provider":"cursor","hook_event_name":"preToolUse","payload":{"tool_name":"Shell"}}"#,
+            to: file
+        )
+        try append(
+            #"{"flotilla_provider":"cursor","hook_event_name":"afterAgentResponse","payload":{"text":"done","status":null}}"#,
+            to: file
+        )
+        try append(
+            #"{"flotilla_provider":"cursor","hook_event_name":"stop","payload":{"status":"completed","loop_count":0}}"#,
+            to: file
+        )
+
+        let receiver = HookEventReceiver(filePath: file, agent: .cursorAgent, pollInterval: .milliseconds(30))
+        let observed = await collect(from: receiver, settling: .milliseconds(200))
+
+        XCTAssertEqual(observed, [
+            SessionStatusObservation(.working),
+            SessionStatusObservation(.working),
+            SessionStatusObservation(.readyForReview),
+            SessionStatusObservation(.readyForReview),
+        ])
+    }
 }
 
 final class SessionStatusObservationArbiterTests: XCTestCase {

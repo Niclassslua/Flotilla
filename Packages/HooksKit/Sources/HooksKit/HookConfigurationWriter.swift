@@ -626,8 +626,10 @@ public struct HookConfigurationWriter: HookConfiguring {
     }
 
     static let cursorHookEvents = [
+        "beforeSubmitPrompt",
         "preToolUse", "beforeShellExecution", "beforeMCPExecution",
-        "postToolUse", "afterShellExecution", "sessionEnd", "stop",
+        "postToolUse", "afterShellExecution", "afterFileEdit",
+        "afterAgentResponse", "sessionEnd", "stop",
     ]
 
     /// Cursor hooks.json only takes a command string, so the script reads
