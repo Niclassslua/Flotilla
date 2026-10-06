@@ -1,0 +1,5 @@
+{
+  "event": "session.status",
+  "status": "retry",
+  "attempt": 2
+}

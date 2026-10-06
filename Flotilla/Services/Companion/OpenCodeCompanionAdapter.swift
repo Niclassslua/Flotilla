@@ -66,6 +66,10 @@ final class OpenCodeCompanionAdapter: CompanionSessionAdapter {
         let permissions = try await request("GET", "permission") as? [[String: Any]] ?? []
         let questions = try await request("GET", "question") as? [[String: Any]] ?? []
         reconcile(permissions: permissions.filter { related.contains($0["sessionID"] as? String ?? "") }, questions: questions.filter { related.contains($0["sessionID"] as? String ?? "") })
+        // The private server scopes this exact status feed to the TUI Flotilla
+        // launched. It recovers retry state if an SSE event was missed.
+        let statuses = try await request("GET", "session/status") as? [String: [String: Any]] ?? [:]
+        transcript.retryAttempt = (statuses[nativeID]?["attempt"] as? Int)
         // SSE supplies live text; fetching and decoding the entire conversation
         // every second is unnecessary. Poll occasionally to recover missed
         // events and on completion to replace the partial with native records.
@@ -125,13 +129,14 @@ final class OpenCodeCompanionAdapter: CompanionSessionAdapter {
         try await prompt(text)
     }
 
-    private func prompt(_ text: String, agent: String? = nil) async throws {
+    private func prompt(_ text: String) async throws {
         try await refresh()
         guard let nativeID else { throw ProviderConnectionError.rejected("OpenCode is still starting.") }
-        var body: [String: Any] = ["parts": [["type": "text", "text": text]]]
-        if let agent { body["agent"] = agent }
-        if let model = session.model, let slash = model.firstIndex(of: "/") { body["model"] = ["providerID": String(model[..<slash]), "modelID": String(model[model.index(after: slash)...])] }
-        _ = try await request("POST", "session/\(nativeID)/prompt_async", body: body)
+        // Each Flotilla OpenCode process has a private server and an attached
+        // TUI, so using its TUI composer APIs delivers to precisely this
+        // session without synthetic keypresses or a second prompt path.
+        _ = try await request("POST", "tui/append-prompt", body: ["text": text])
+        _ = try await request("POST", "tui/submit-prompt")
     }
 
     func stop() async throws {

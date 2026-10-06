@@ -45,8 +45,9 @@ buffered until their terminating newline arrives.
 
 Project-local hook configuration is shared by every provider process launched
 from the same working directory. A hook entry per session therefore does not
-provide isolation: each process runs every entry, and each OpenCode process
-loads every project plugin.
+provide isolation: each process runs every entry, and each OpenCode TUI loads
+all configured plugins. Flotilla uses one global plugin that routes through the
+launch process's event-file environment value.
 
 Flotilla instead installs one stable shared hook per provider and exports this
 process-scoped value:
@@ -75,9 +76,9 @@ created and deleted.
 | Codex CLI | Per-process inline `--config` hooks | `PostToolUse` | `working` | The stable support wrapper copies Codex's self-describing JSON stdin; no project file is changed. |
 | Codex CLI | Per-process inline `--config` hooks | `PermissionRequest` | `waitingForInput` (`permission`) | Wrapper exits 0 with no stdout, so the normal approval UI remains authoritative. |
 | Codex CLI | Per-process inline `--config` hooks | `Stop` | `readyForReview`, or `waitingForInput` (`planApproval`) when Plan mode reports a null normal assistant message | Hook execution is enabled for the launch with `features.hooks=true`. |
-| OpenCode | Stable `.opencode/plugins/flotilla-status.js` | `tool.execute.after` | `working` | Legacy per-session Flotilla plugins are removed on configuration. |
-| OpenCode | Stable project plugin | `permission.asked`, `question.asked` | `waitingForInput` (`permission` / `question`) | The event handler is observational and supplies no decision. |
-| OpenCode | Stable project plugin | `session.idle` | `readyForReview` | OpenCode's `idle` means the turn ended and the composer is available. |
+| OpenCode | User-level `~/.config/opencode/plugins/flotilla-status.js` | `tool.execute.before/after`, `session.status` | `working` / retry; `readyForReview` on idle/error | Environment-gated, validated on 1.18.34. |
+| OpenCode | User-level plugin | `permission.asked`, `question.asked` | `waitingForInput` (`permission` / `question`) | The hook is observational; companion answers through the private server. |
+| OpenCode | User-level plugin | `session.idle` | `readyForReview` | OpenCode's `idle` means the turn ended and the composer is available. |
 | Antigravity | User-level `~/.gemini/config/hooks.json` `flotilla-status` group (env-gated; old project `.agents/hooks.json` groups are removed) | `PreInvocation` | `working` | Before every model call; also delivers phone prompts queued mid-turn (`injectSteps`). |
 | Antigravity | Same | `PreToolUse` / `PostToolUse` | `working`; `ask_question` → `waitingForInput` (`question`); `write_to_file` with `RequestFeedback` → `planApproval` | The wrapper prints nothing: a 1.3.0 hook can deny but never approve, so the picker stays agy's. |
 | Antigravity | Same | `Stop` with `fullyIdle: true` | `readyForReview` | `fullyIdle: false` is ignored while asynchronous work remains; an `error` becomes a companion note. |
@@ -214,11 +215,11 @@ Generated files are:
 <support>/hooks/shared-config.lock
 ~/.gemini/config/hooks.json   (Antigravity, user-level, env-gated)
 ~/.cursor/hooks.json          (Cursor Agent, user-level, env-gated)
-<working directory>/.opencode/plugins/flotilla-status.js
+~/.config/opencode/plugins/flotilla-status.js (OpenCode, user-level, env-gated)
 ```
 
-The project-local files remain safe after Flotilla exits because their hooks
-do nothing without `FLOTILLA_HOOK_EVENT_FILE`.
+The shared user-level hooks and plugins remain safe after Flotilla exits
+because their handlers do nothing without `FLOTILLA_HOOK_EVENT_FILE`.
 
 ### `HookEventReceiver`
 

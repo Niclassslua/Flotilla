@@ -65,12 +65,26 @@ public struct HookConfigurationWriter: HookConfiguring {
     /// Injectable so tests never touch the real one.
     public let cursorGlobalHooksFile: URL
 
+    /// OpenCode's user-level plugin directory, loaded by every TUI.
+    /// Injectable so tests never touch the real one.
+    public let openCodeGlobalPluginsDirectory: URL
+
     public init(
         antigravityGlobalHooksFile: URL = HookConfigurationWriter.defaultAntigravityGlobalHooksFile,
-        cursorGlobalHooksFile: URL = HookConfigurationWriter.defaultCursorGlobalHooksFile
+        cursorGlobalHooksFile: URL = HookConfigurationWriter.defaultCursorGlobalHooksFile,
+        openCodeGlobalPluginsDirectory: URL = HookConfigurationWriter.defaultOpenCodeGlobalPluginsDirectory
     ) {
         self.antigravityGlobalHooksFile = antigravityGlobalHooksFile
         self.cursorGlobalHooksFile = cursorGlobalHooksFile
+        self.openCodeGlobalPluginsDirectory = openCodeGlobalPluginsDirectory
+    }
+
+    /// `$XDG_CONFIG_HOME/opencode/plugins`, defaulting to
+    /// `~/.config/opencode/plugins` — where OpenCode looks (verified 1.18.34).
+    public static var defaultOpenCodeGlobalPluginsDirectory: URL {
+        let configHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config", isDirectory: true)
+        return configHome.appendingPathComponent("opencode/plugins", isDirectory: true)
     }
 
     /// `~/.cursor/hooks.json` — verified to be read by Cursor Agent
@@ -194,7 +208,8 @@ public struct HookConfigurationWriter: HookConfiguring {
             return Self.configureCodexHooks(supportDirectory: supportDirectory)
         case .openCode:
             return Self.configureOpenCodeHooks(
-                workingDirectory: workingDirectory
+                workingDirectory: workingDirectory,
+                pluginsDirectory: openCodeGlobalPluginsDirectory
             )
         case .cursorAgent:
             return Self.configureCursorHooks(
@@ -557,64 +572,95 @@ public struct HookConfigurationWriter: HookConfiguring {
 
     // MARK: - OpenCode
 
-    /// The stable project plugin. Its destination comes from the launched
-    /// process environment, not from project-shared source code.
-    private static func openCodePluginPath(workingDirectory: URL) -> URL {
-        workingDirectory
-            .appendingPathComponent(".opencode/plugins", isDirectory: true)
-            .appendingPathComponent("flotilla-status.js", isDirectory: false)
-    }
-
-    /// Writes (fully overwrites — no merge, no lock) the stable plugin file.
-    /// `tool.execute.after` → working
-    /// and `session.idle` → ready are live-verified; `permission.asked`/
-    /// `question.asked` → waitingForInput with distinct reasons are wired on
-    /// the strength of
-    /// every other event name from the same source checking out live, not
-    /// directly observed themselves.
+    /// Writes the stable plugin into OpenCode's user-level plugin directory
+    /// and removes the project copies older releases wrote. OpenCode loads
+    /// every file in `~/.config/opencode/plugins/` into every TUI (verified
+    /// 1.18.34); the plugin does nothing unless the process was launched by
+    /// Flotilla, so it is safe there.
+    ///
+    /// Forwarded (all verified live on 1.18.34 unless noted): tool starts and
+    /// ends, `session.status` (busy / retry / idle), `session.idle`,
+    /// `session.created` (the session id, for identity), `session.error`,
+    /// `permission.asked`/`replied`, `question.asked`/`replied`/`rejected`
+    /// (and their `.v2` forms from the API schema), `session.compacted`.
+    /// Sub-agent sessions are skipped: their idle is not the turn's.
     private static func configureOpenCodeHooks(
-        workingDirectory: URL
+        workingDirectory: URL,
+        pluginsDirectory: URL
     ) -> Bool {
-        let pluginPath = openCodePluginPath(workingDirectory: workingDirectory)
+        let pluginPath = pluginsDirectory.appendingPathComponent("flotilla-status.js", isDirectory: false)
         do {
-            try FileManager.default.createDirectory(
-                at: pluginPath.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try Data(openCodePluginContents().utf8).write(to: pluginPath, options: .atomic)
-            try removeLegacyOpenCodePlugins(in: pluginPath.deletingLastPathComponent())
-            return true
+            try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+            try Data(openCodePluginContents.utf8).write(to: pluginPath, options: .atomic)
         } catch {
             return false
         }
+        removeLegacyOpenCodeProjectPlugins(in: workingDirectory)
+        return true
     }
 
-    private static func openCodePluginContents() -> String {
-        return """
-        import fs from "node:fs";
-        const eventFile = process.env.FLOTILLA_HOOK_EVENT_FILE;
-        function append(event) {
-          if (!eventFile) return;
-          try { fs.appendFileSync(eventFile, JSON.stringify({ event }) + "\\n"); } catch {}
-        }
-        export const FlotillaStatus = async () => {
-          return {
-            "tool.execute.after": async () => { append("tool.execute.after"); },
-            event: async ({ event }) => {
-              if (event.type === "session.idle" || event.type === "permission.asked" || event.type === "question.asked") {
-                append(event.type);
-              }
-            },
-          };
-        };
-        """
+    static let openCodePluginContents = """
+    import fs from "node:fs";
+    // Written by Flotilla. Records this OpenCode process's status for the
+    // Flotilla session that launched it; does nothing anywhere else.
+    const eventFile = process.env.FLOTILLA_HOOK_EVENT_FILE;
+    const subagentSessions = new Set();
+    function append(event, fields) {
+      try { fs.appendFileSync(eventFile, JSON.stringify({ event, ...fields }) + "\\n"); } catch {}
     }
+    export const FlotillaStatus = async () => {
+      if (!eventFile) return {};
+      return {
+        "tool.execute.before": async (input) => { append("tool.execute.before", { sessionID: input.sessionID, tool: input.tool }); },
+        "tool.execute.after": async (input) => { append("tool.execute.after", { sessionID: input.sessionID, tool: input.tool }); },
+        event: async ({ event }) => {
+          const p = event.properties || {};
+          switch (event.type) {
+            case "session.created":
+              if (p.info && p.info.parentID) { subagentSessions.add(p.info.id); return; }
+              append(event.type, { sessionID: p.sessionID || (p.info && p.info.id) });
+              return;
+            case "session.status":
+              if (subagentSessions.has(p.sessionID)) return;
+              append(event.type, { sessionID: p.sessionID, status: p.status && p.status.type, attempt: p.status && p.status.attempt });
+              return;
+            case "session.idle":
+            case "session.compacted":
+              if (subagentSessions.has(p.sessionID)) return;
+              append(event.type, { sessionID: p.sessionID });
+              return;
+            case "session.error":
+              if (subagentSessions.has(p.sessionID)) return;
+              append(event.type, { sessionID: p.sessionID, message: p.error && ((p.error.data && p.error.data.message) || p.error.name) });
+              return;
+            case "permission.asked":
+            case "permission.v2.asked":
+              append(event.type, { sessionID: p.sessionID, permission: p.permission || p.action, patterns: p.patterns || p.resources });
+              return;
+            case "permission.replied":
+            case "permission.v2.replied":
+            case "question.asked":
+            case "question.v2.asked":
+            case "question.replied":
+            case "question.v2.replied":
+            case "question.rejected":
+            case "question.v2.rejected":
+              append(event.type, { sessionID: p.sessionID });
+              return;
+          }
+        },
+      };
+    };
+    """
 
-    private static func removeLegacyOpenCodePlugins(in directory: URL) throws {
-        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
-        for name in names where name.hasPrefix("flotilla-status-") && name.hasSuffix(".js") {
-            // Concurrent launches can both discover the same legacy file.
-            // Whichever removes it first wins; absence is already success.
+    /// `<project>/.opencode/plugins/flotilla-status.js` (and the per-session
+    /// `flotilla-status-*.js` before it) — superseded by the user-level copy,
+    /// and loaded *in addition* to it if left behind.
+    static func removeLegacyOpenCodeProjectPlugins(in workingDirectory: URL) {
+        let directory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        for name in names where name == "flotilla-status.js" || (name.hasPrefix("flotilla-status-") && name.hasSuffix(".js")) {
+            // Concurrent launches can both find the same file; absence is success.
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
         }
     }

@@ -218,7 +218,7 @@ would append to the same history and fork it.
 | Codex CLI | yes | yes | rollout file; no catalog row required |
 | Antigravity | yes | yes | reverse-engineered conversation DB; see `FORMAT.md` |
 | Cursor Agent | yes | yes | JSONL display transcript + `agent --print` store seed; release by deleting chat dir |
-| OpenCode | **no** | yes | no supported way to release a session |
+| OpenCode | yes | yes | `opencode export` reads; `opencode session delete` releases |
 
 These differences are expressed **only** by which protocol each codec conforms
 to. `TranscriptCodecRegistry.handoffTargets(from:)` derives the destination list
@@ -439,15 +439,13 @@ output text, which is where a real tool puts it too.
 
 ## OpenCode
 
-**Destination only.** OpenCode keeps conversations in a SQLite database
-(`~/.local/share/opencode/opencode.db`, tables `session` / `message` / `part`)
-held open by a running server, so there is no transcript file to read or delete.
-Its CLI offers `export` and `import` but **no way to remove a session**, which
-means a move *out of* OpenCode could not release OpenCode's copy and two agents
-would claim one conversation. Rather than write into a live server's database
-behind its back, the codec only ever adds.
+OpenCode keeps conversations in its server database, but its CLI provides
+supported `export`, `import`, and `session delete` commands (verified on
+1.18.34). The source export is staged privately for the handoff transaction;
+Flotilla deletes the source session only after the destination survives
+probation. A rollback therefore leaves the original OpenCode session intact.
 
-**Written through the CLI.** `writeNative` prepares an export file and hands it
+**Written through the CLI.** `writeNative` prepares an import file and hands it
 to `opencode import <file>` via an injected closure
 (`OpenCodeTranscriptCodec.SessionImporting`), supplied in the app layer by a
 `ProcessKit` command runner. The session is therefore created by OpenCode

@@ -75,8 +75,6 @@ actor CompanionTranscriptReader {
         watchers.removeAll()
     }
 
-    static let openCodeUnavailable = "OpenCode doesn't expose its transcript, so messages for this session are only visible in the terminal on your Mac."
-
     /// `nil` when nothing has changed since the last call for this session.
     func transcript(for session: Session, ifChangedSince previous: SessionTranscript?) -> SessionTranscript? {
         let result = read(session)
@@ -84,8 +82,13 @@ actor CompanionTranscriptReader {
     }
 
     func read(_ session: Session) -> SessionTranscript {
+        // OpenCode's companion adapter reads its live conversation through the
+        // authenticated private server. Running `opencode export` here would
+        // spawn a CLI process on every transcript refresh; reserve that export
+        // for the explicit handoff path.
+        if session.agent == .openCode { return SessionTranscript() }
         guard let reader = registry.reader(for: session.agent) else {
-            return SessionTranscript(unavailableReason: session.agent == .openCode ? Self.openCodeUnavailable : "No transcript is available for this session.")
+            return SessionTranscript(unavailableReason: "No transcript is available for this session.")
         }
         guard let url = locate(session, reader: reader) else {
             return SessionTranscript()

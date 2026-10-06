@@ -1,21 +1,11 @@
 import Foundation
 import SessionKit
 
-/// Writes a session into OpenCode through its own `opencode import` command.
-///
-/// **Destination only.** OpenCode keeps conversations in a SQLite database
-/// (`session` / `message` / `part`) held open by a running server, so there is
-/// no transcript file to read or delete. Its CLI offers `export` and `import`
-/// but no way to *remove* a session — which means a move *out of* OpenCode
-/// could not relinquish OpenCode's copy, and two agents would end up believing
-/// they own the same conversation. Rather than write into a live server's
-/// database behind its back, this codec only ever adds.
-///
-/// This is why ``TranscriptReading`` and ``TranscriptWriting`` are separate
-/// protocols: this codec is a target and never a source. (``AntigravityTranscriptCodec``
-/// used to be the mirror image — source-only — until its write path was
-/// reverse-engineered too; see `FORMAT.md` alongside it.)
-public struct OpenCodeTranscriptCodec: TranscriptWriting {
+/// Reads and writes OpenCode sessions through its supported `export`,
+/// `import`, and `session delete` commands. Exported source transcripts are
+/// staged in Flotilla's temporary directory; deleting a source session is an
+/// explicit part of completing a handoff.
+public struct OpenCodeTranscriptCodec: TranscriptReading, TranscriptWriting {
     public let agent: AgentKind = .openCode
 
     /// Hands a prepared export file to `opencode import`.
@@ -25,6 +15,8 @@ public struct OpenCodeTranscriptCodec: TranscriptWriting {
     /// recorder. It also means the transcript is written by OpenCode itself
     /// through a supported interface, not by us reaching into its database.
     public typealias SessionImporting = @Sendable (URL) async throws -> Void
+    public typealias SessionExporting = @Sendable (String, URL, URL) throws -> URL?
+    public typealias SessionDeleting = @Sendable (String, URL) throws -> Void
 
     private let stagingDirectory: URL
     private let importSession: SessionImporting
@@ -33,6 +25,8 @@ public struct OpenCodeTranscriptCodec: TranscriptWriting {
     private let agentMode: String
     private let openCodeVersion: String
     private let now: @Sendable () -> Date
+    private let exportSession: SessionExporting?
+    private let deleteSession: SessionDeleting?
 
     public init(
         stagingDirectory: URL = FileManager.default.temporaryDirectory
@@ -40,8 +34,10 @@ public struct OpenCodeTranscriptCodec: TranscriptWriting {
         providerID: String = "opencode",
         modelID: String = "big-pickle",
         agentMode: String = "build",
-        openCodeVersion: String = "1.18.25",
+        openCodeVersion: String = "1.18.34",
         now: @escaping @Sendable () -> Date = { Date() },
+        exportSession: SessionExporting? = nil,
+        deleteSession: SessionDeleting? = nil,
         importSession: @escaping SessionImporting
     ) {
         self.stagingDirectory = stagingDirectory
@@ -50,7 +46,51 @@ public struct OpenCodeTranscriptCodec: TranscriptWriting {
         self.agentMode = agentMode
         self.openCodeVersion = openCodeVersion
         self.now = now
+        self.exportSession = exportSession
+        self.deleteSession = deleteSession
         self.importSession = importSession
+    }
+
+    // MARK: - TranscriptReading
+
+    public func transcriptURL(sessionID: String, workingDirectory: URL) throws -> URL? {
+        guard let exportSession else { return nil }
+        try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        return try exportSession(sessionID, workingDirectory, stagingDirectory.appendingPathComponent("source-\(sessionID).json"))
+    }
+
+    public func embeddedSessionID(at url: URL) throws -> String? {
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        return (root?["info"] as? [String: Any])?["id"] as? String
+    }
+
+    public func readNative(at url: URL) throws -> [CanonicalEntry] {
+        guard let root = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any],
+              let messages = root["messages"] as? [[String: Any]] else { return [] }
+        var entries: [CanonicalEntry] = []
+        for message in messages {
+            guard let info = message["info"] as? [String: Any], let role = info["role"] as? String else { continue }
+            let stamp = ((info["time"] as? [String: Any])?["created"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) } ?? .distantPast
+            for part in message["parts"] as? [[String: Any]] ?? [] {
+                if let text = part["text"] as? String, !text.isEmpty {
+                    if role == "user" { entries.append(.userMessage(text: text, timestamp: stamp)) }
+                    else if role == "assistant" { entries.append(.assistantMessage(text: text, timestamp: stamp)) }
+                } else if let tool = part["tool"] as? String {
+                    let state = part["state"] as? [String: Any] ?? [:]
+                    let input = (try? JSONSerialization.data(withJSONObject: state["input"] ?? [:])) ?? Data()
+                    let id = (part["callID"] as? String) ?? (part["id"] as? String) ?? UUID().uuidString
+                    entries.append(.toolUse(id: id, tool: tool, input: input, timestamp: stamp))
+                    if let output = state["output"] as? String { entries.append(.toolResult(toolUseID: id, output: output, isError: state["status"] as? String == "error", timestamp: stamp)) }
+                }
+            }
+        }
+        return entries
+    }
+
+    public func removeNativeState(sessionID: String, workingDirectory: URL) throws {
+        try deleteSession?(sessionID, workingDirectory)
+        try? FileManager.default.removeItem(at: stagingDirectory.appendingPathComponent("source-\(sessionID).json"))
+        try? removeImportedPayload(sessionID: sessionID)
     }
 
     // MARK: - TranscriptWriting
@@ -190,10 +230,8 @@ public struct OpenCodeTranscriptCodec: TranscriptWriting {
         return ResumeHandle(nativeSessionID: openCodeID, transcriptURL: file)
     }
 
-    /// The staging file is ours; the session itself belongs to OpenCode and
-    /// there is no supported way to remove it, which is exactly why a session
-    /// is never handed *away* from OpenCode.
-    public func removeNativeState(sessionID: String, workingDirectory: URL) throws {
+    /// Remove the import payload after OpenCode has accepted it.
+    public func removeImportedPayload(sessionID: String) throws {
         try? FileManager.default.removeItem(
             at: stagingDirectory.appendingPathComponent("\(sessionID).json")
         )

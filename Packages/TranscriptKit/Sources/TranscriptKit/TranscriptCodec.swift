@@ -27,10 +27,7 @@ public struct ResumeHandle: Sendable, Equatable {
 /// Reading an agent's native transcript into ``CanonicalEntry`` values.
 ///
 /// Split from ``TranscriptWriting`` on purpose: an agent can be a handoff
-/// *source* without being a *target*. OpenCode is the standing example — its
-/// session database is held open by a live server with no way to remove a
-/// session, so a move can only ever add to it, never relinquish it (see
-/// `OpenCodeTranscriptCodec`). Conflating the two halves into one protocol
+/// *source* without being a *target*. Conflating the two halves into one protocol
 /// would force a `fatalError`-shaped hole into the codecs that only do one of
 /// them, and would make "which agents can I move this to?" a hardcoded list
 /// instead of a property of the type system.

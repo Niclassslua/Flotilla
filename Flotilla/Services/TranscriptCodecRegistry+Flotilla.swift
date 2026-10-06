@@ -37,12 +37,25 @@ extension TranscriptCodecRegistry {
     /// | Codex CLI | yes | yes |
     /// | Antigravity | yes | yes — via a reverse-engineered format, see `FORMAT.md` |
     /// | Cursor Agent | yes | yes — JSONL + `agent --print` store seed |
-    /// | OpenCode | no — no supported way to release a session | yes |
+    /// | OpenCode | yes — CLI export and session delete | yes |
     static func flotilla(
         commandRunner: any CommandRunning = ProcessCommandRunner(),
         locator: any ExecutableLocating = PATHExecutableLocator()
     ) -> TranscriptCodecRegistry {
-        let openCode = OpenCodeTranscriptCodec { file in
+        let openCode = OpenCodeTranscriptCodec(
+            exportSession: { sessionID, workingDirectory, destination in
+                guard let executable = locator.locate("opencode") else { throw CodecSetupError.openCodeNotInstalled }
+                let result = try Self.runOpenCode(executable: executable, arguments: ["export", sessionID], workingDirectory: workingDirectory)
+                guard result.status == 0 else { throw CodecSetupError.importFailed(result.stderr) }
+                try result.stdout.write(to: destination, options: .atomic)
+                return destination
+            },
+            deleteSession: { sessionID, workingDirectory in
+                guard let executable = locator.locate("opencode") else { throw CodecSetupError.openCodeNotInstalled }
+                let result = try Self.runOpenCode(executable: executable, arguments: ["session", "delete", sessionID], workingDirectory: workingDirectory)
+                guard result.status == 0 else { throw CodecSetupError.importFailed(result.stderr) }
+            },
+            importSession: { file in
             guard let executable = locator.locate("opencode") else {
                 throw CodecSetupError.openCodeNotInstalled
             }
@@ -57,7 +70,7 @@ extension TranscriptCodecRegistry {
                     detail.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
             }
-        }
+        })
 
         let cursor = CursorTranscriptCodec(seedStore: { sessionID, workingDirectory, entries in
             guard let executable = locator.locate("agent") ?? locator.locate("cursor-agent") else {
@@ -109,7 +122,8 @@ extension TranscriptCodecRegistry {
                 ClaudeTranscriptCodec(),
                 CodexTranscriptCodec(),
                 AntigravityTranscriptCodec(),
-                CursorTranscriptCodec()
+                CursorTranscriptCodec(),
+                openCode
             ],
             writers: [
                 ClaudeTranscriptCodec(),
@@ -119,5 +133,20 @@ extension TranscriptCodecRegistry {
                 openCode
             ]
         )
+    }
+
+    private static func runOpenCode(executable: URL, arguments: [String], workingDirectory: URL) throws -> (status: Int32, stdout: Data, stderr: String) {
+        let process = Process()
+        let output = Pipe(), errors = Pipe()
+        process.executableURL = executable
+        process.arguments = arguments
+        process.currentDirectoryURL = workingDirectory
+        process.standardOutput = output
+        process.standardError = errors
+        try process.run()
+        let stdout = output.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = errors.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, stdout, String(decoding: stderrData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }

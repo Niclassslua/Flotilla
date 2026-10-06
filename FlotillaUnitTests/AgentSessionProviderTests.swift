@@ -21,6 +21,12 @@ private struct TestExecutableLocator: ExecutableLocating {
     }
 }
 
+private struct StubCommandRunner: CommandRunning {
+    let result: CommandResult
+    func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult { result }
+    func run(_ arguments: [String], executable: URL, workingDirectory: URL, environment: [String: String]) async throws -> CommandResult { result }
+}
+
 private final class TestProcessFactory: PTYProcessCreating, @unchecked Sendable {
     func makeProcess() -> any PTYProcessProtocol {
         MockPTYProcess()
@@ -281,6 +287,24 @@ final class AgentSessionProviderTests: XCTestCase {
 
     // MARK: - OpenCode Provider Tests
 
+    func testOpenCodeProviderUsesItsJSONSessionList() async throws {
+        let runner = StubCommandRunner(result: CommandResult(
+            exitCode: 0,
+            stdout: #"[{"id":"ses_live","title":"Fix the board","directory":"/Users/test/project","created":1787021948000,"updated":1787021950000}]"#,
+            stderr: ""
+        ))
+        let provider = OpenCodeSessionProvider(
+            databaseURL: tempDir.appendingPathComponent("missing.db"),
+            locator: TestExecutableLocator(),
+            runner: runner
+        )
+
+        let sessions = try await provider.fetchSessions()
+        XCTAssertEqual(sessions.map(\.id), ["ses_live"])
+        XCTAssertEqual(sessions.first?.title, "Fix the board")
+        XCTAssertEqual(sessions.first?.workingDirectory?.path, "/Users/test/project")
+    }
+
     func testOpenCodeProviderExtractsPromptWhenTitleIsDefaultPlaceholder() throws {
         let opencodeDir = tempDir.appendingPathComponent(".local/share/opencode")
         try FileManager.default.createDirectory(at: opencodeDir, withIntermediateDirectories: true)
@@ -315,10 +339,7 @@ final class AgentSessionProviderTests: XCTestCase {
         """
         XCTAssertEqual(sqlite3_exec(db, insertSession, nil, nil, nil), SQLITE_OK)
 
-        let provider = OpenCodeSessionProvider(
-            serverURL: URL(string: "http://127.0.0.1:59999")!, // offline port
-            databaseURL: dbFile
-        )
+        let provider = OpenCodeSessionProvider(databaseURL: dbFile)
 
         let sessions = provider.fetchSessionsViaDatabase()
         XCTAssertEqual(sessions.count, 2)

@@ -1,51 +1,75 @@
 import Foundation
 import SessionKit
 import SQLite3
+import ProcessKit
 
-/// Discovers sessions managed by OpenCode via its local REST server (`:4096`)
-/// with a resilient fallback to the local SQLite database at `~/.local/share/opencode/opencode.db`.
+/// Discovers sessions managed by OpenCode through its own
+/// `opencode session list --format json` (verified 1.18.34), falling back to
+/// reading `~/.local/share/opencode/opencode.db` when the CLI isn't on `PATH`
+/// or fails.
+///
+/// The session a Flotilla launch started is normally already known: the
+/// plugin's `session.created` event pins it (`HookEventReceiver`). This
+/// provider supplies titles, and the id for sessions started before that
+/// event existed.
 public struct OpenCodeSessionProvider: AgentSessionProviding {
     public let agent: AgentKind = .openCode
-    public let serverURL: URL
     public let databaseURL: URL
+    private let locator: ExecutableLocating
+    private let runner: CommandRunning
 
     public init(
-        serverURL: URL = URL(string: "http://127.0.0.1:4096")!,
         databaseURL: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".local/share/opencode/opencode.db")
+            .appendingPathComponent(".local/share/opencode/opencode.db"),
+        locator: ExecutableLocating = PATHExecutableLocator(),
+        runner: CommandRunning = ProcessCommandRunner()
     ) {
-        self.serverURL = serverURL
         self.databaseURL = databaseURL
+        self.locator = locator
+        self.runner = runner
     }
 
-    private struct OpenCodeSessionDTO: Decodable {
+    /// One row of `opencode session list --format json`.
+    private struct ListedSession: Decodable {
         let id: String
         let title: String?
         let directory: String?
-        let time_updated: Double?
-        let updatedAt: Date?
+        let created: Double?
+        let updated: Double?
     }
 
     public func fetchSessions() async throws -> [DiscoveredAgentSession] {
-        // 1. Try local HTTP server first
-        if let httpSessions = await fetchSessionsViaHTTP() {
-            return httpSessions
+        if let listed = await fetchSessionsViaCLI() {
+            // OpenCode's CLI can still list its default "New session - …"
+            // title. Keep the CLI as the discovery source, but use the local
+            // read-only catalog for those rows so Flotilla can synthesize a
+            // useful title from the first user text part.
+            let unresolved = Set(listed.unresolvedTitleIDs)
+            guard !unresolved.isEmpty else { return listed.sessions }
+            let recovered = fetchSessionsViaDatabase().filter { unresolved.contains($0.id) }
+            let recoveredIDs = Set(recovered.map(\.id))
+            return listed.sessions + recovered
+                + listed.unresolvedTitleIDs.filter { !recoveredIDs.contains($0) }.map { id in
+                    DiscoveredAgentSession(
+                        id: id,
+                        title: "OpenCode session",
+                        workingDirectory: nil,
+                        agent: .openCode,
+                        isCustomTitle: false
+                    )
+                }
         }
-
-        // 2. Fall back to local SQLite database if server isn't running
         return fetchSessionsViaDatabase()
     }
 
     public func fetchLatestSession(for workingDirectory: URL, since: Date? = nil) async throws -> DiscoveredAgentSession? {
         let all = try await fetchSessions()
         let targetPath = workingDirectory.standardizedFileURL.path
-
         return all
             .filter { session in
                 guard let dir = session.workingDirectory?.standardizedFileURL.path else { return false }
                 let matchesPath = (dir == targetPath || targetPath.hasPrefix(dir) || dir.hasPrefix(targetPath))
                 guard matchesPath else { return false }
-
                 if let since {
                     return (session.lastActiveAt ?? .distantPast) >= since
                 }
@@ -55,53 +79,44 @@ public struct OpenCodeSessionProvider: AgentSessionProviding {
             .first
     }
 
-    private func fetchSessionsViaHTTP() async -> [DiscoveredAgentSession]? {
-        let endpoint = serverURL.appendingPathComponent("session")
-        var request = URLRequest(url: endpoint)
-        request.timeoutInterval = 1.0
+    private func fetchSessionsViaCLI() async -> (sessions: [DiscoveredAgentSession], unresolvedTitleIDs: [String])? {
+        guard let executable = locator.locate("opencode"),
+              let result = try? await runner.run(
+                  ["session", "list", "--format", "json"],
+                  executable: executable,
+                  workingDirectory: FileManager.default.temporaryDirectory
+              ),
+              result.exitCode == 0,
+              let start = result.stdout.firstIndex(where: { $0 == "[" }),
+              let listed = try? JSONDecoder().decode([ListedSession].self, from: Data(result.stdout[start...].utf8))
+        else { return nil }
+        return (Self.sessions(from: listed), listed.compactMap { row in
+            let title = row.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return title.isEmpty || title.hasPrefix("New session - ") ? row.id : nil
+        })
+    }
 
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            return nil
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard let dtos = try? decoder.decode([OpenCodeSessionDTO].self, from: data) else {
-            return nil
-        }
-
-        return dtos.compactMap { dto in
-            let rawTitle = dto.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let cleanTitle: String
-            let isCustom: Bool
-            if !rawTitle.isEmpty && !rawTitle.hasPrefix("New session - ") && !rawTitle.contains("\n") && rawTitle.count <= 120 {
-                cleanTitle = rawTitle
-                isCustom = true
-            } else if let synthesized = TitleSynthesizer.synthesize(from: rawTitle) {
-                cleanTitle = synthesized
-                isCustom = false
-            } else {
-                return nil
-            }
-
-            let date: Date?
-            if let timeUpdated = dto.time_updated {
-                date = Date(timeIntervalSince1970: timeUpdated > 1_000_000_000_000 ? timeUpdated / 1000 : timeUpdated)
-            } else {
-                date = dto.updatedAt
-            }
-
+    private static func sessions(from listed: [ListedSession]) -> [DiscoveredAgentSession] {
+        listed.compactMap { row in
+            let rawTitle = row.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            // "New session - <ISO date>" is OpenCode's placeholder until it
+            // titles the conversation.
+            guard !rawTitle.isEmpty, !rawTitle.hasPrefix("New session - "),
+                  !rawTitle.contains("\n"), rawTitle.count <= 120 else { return nil }
             return DiscoveredAgentSession(
-                id: dto.id,
-                title: cleanTitle,
-                workingDirectory: dto.directory.map { URL(fileURLWithPath: $0) },
-                lastActiveAt: date,
+                id: row.id,
+                title: rawTitle,
+                workingDirectory: row.directory.map { URL(fileURLWithPath: $0) },
+                createdAt: row.created.map(Self.date(fromTimestamp:)),
+                lastActiveAt: (row.updated ?? row.created).map(Self.date(fromTimestamp:)),
                 agent: .openCode,
-                isCustomTitle: isCustom
+                isCustomTitle: true
             )
         }
+    }
+
+    private static func date(fromTimestamp value: Double) -> Date {
+        Date(timeIntervalSince1970: value > 1_000_000_000_000 ? value / 1000 : value)
     }
 
     public func fetchSessionsViaDatabase() -> [DiscoveredAgentSession] {

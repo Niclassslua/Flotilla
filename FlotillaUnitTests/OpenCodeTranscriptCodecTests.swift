@@ -2,10 +2,8 @@ import XCTest
 import SessionKit
 @testable import TranscriptKit
 
-/// OpenCode is a destination only. It is written by handing a prepared export
-/// file to `opencode import`, so these tests assert the file's shape and that
-/// the CLI is actually invoked — the import itself is verified against the real
-/// binary out of band, not from the unit suite.
+/// OpenCode exports and imports through its CLI. These tests cover both codec
+/// directions while keeping CLI execution behind injected closures.
 final class OpenCodeTranscriptCodecTests: XCTestCase {
     private var staging: URL!
     private var imported: URLBox!
@@ -154,5 +152,26 @@ final class OpenCodeTranscriptCodecTests: XCTestCase {
             OpenCodeTranscriptCodec.openCodeSessionID(from: sessionID),
             OpenCodeTranscriptCodec.openCodeSessionID(from: UUID().uuidString)
         )
+    }
+
+    func testExportedSourceCanBeReadAndDeletedWithoutTouchingItsDatabase() throws {
+        let export = #"{"info":{"id":"ses_source"},"messages":[{"info":{"role":"user","time":{"created":1000}},"parts":[{"type":"text","text":"hello"}]},{"info":{"role":"assistant","time":{"created":2000}},"parts":[{"type":"text","text":"world"}]}]}"#.data(using: .utf8)!
+        final class Deleted: @unchecked Sendable { var ids: [String] = [] }
+        let deleted = Deleted()
+        let codec = OpenCodeTranscriptCodec(stagingDirectory: staging, exportSession: { id, _, destination in
+            XCTAssertEqual(id, "ses_source")
+            try export.write(to: destination)
+            return destination
+        }, deleteSession: { id, _ in deleted.ids.append(id) }) { _ in }
+
+        let url = try XCTUnwrap(codec.transcriptURL(sessionID: "ses_source", workingDirectory: URL(fileURLWithPath: "/tmp/project")))
+        XCTAssertEqual(try codec.embeddedSessionID(at: url), "ses_source")
+        XCTAssertEqual(try codec.readNative(at: url), [
+            .userMessage(text: "hello", timestamp: Date(timeIntervalSince1970: 1)),
+            .assistantMessage(text: "world", timestamp: Date(timeIntervalSince1970: 2))
+        ])
+        try codec.removeNativeState(sessionID: "ses_source", workingDirectory: URL(fileURLWithPath: "/tmp/project"))
+        XCTAssertEqual(deleted.ids, ["ses_source"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 }

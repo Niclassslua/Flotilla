@@ -4,8 +4,8 @@
     {
       "file": "hooks/tool-execute-after.json",
       "source": "hook",
-      "capturedOn": "2026-08-27",
-      "cliVersion": null,
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.18.34",
       "expect": {
         "status": "working"
       }
@@ -13,8 +13,8 @@
     {
       "file": "hooks/permission-asked.json",
       "source": "hook",
-      "capturedOn": "2026-08-27",
-      "cliVersion": null,
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.18.34",
       "expect": {
         "status": "waitingForInput",
         "reason": "permission"
@@ -23,10 +23,29 @@
     {
       "file": "hooks/session-idle.json",
       "source": "hook",
-      "capturedOn": "2026-08-27",
-      "cliVersion": null,
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.18.34",
       "expect": {
         "status": "readyForReview"
+      }
+    },
+    {
+      "file": "hooks/question-asked.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.18.34",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "question"
+      }
+    },
+    {
+      "file": "hooks/session-status-retry.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "1.18.34",
+      "expect": {
+        "status": "working"
       }
     }
   ]

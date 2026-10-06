@@ -312,30 +312,55 @@ public final class HookEventReceiver: @unchecked Sendable {
             default: return nil
             }
         case .openCode:
-            // Written by the generated stable project plugin (see
-            // HookConfigurationWriter.openCodePluginContents) as a flat
-            // {"event": "<name>"} line — no nested payload needed for any
-            // of these mappings. session.idle is a naming trap: it means
-            // "turn ended, composer free" (Flotilla's .readyForReview).
+            // Written by the generated user-level plugin
+            // (`HookConfigurationWriter.openCodePluginContents`) as a flat
+            // `{"event": "<type>", …fields}` line. `session.idle` is a naming
+            // trap: it means "turn ended, composer free" (`.readyForReview`).
             guard let eventName = object["event"] as? String else { return nil }
             switch eventName {
-            case "tool.execute.after":
-                return SessionStatusObservation(.working, cause: "hook: tool.execute.after")
+            case "tool.execute.before", "tool.execute.after":
+                return SessionStatusObservation(
+                    .working,
+                    cause: cause("hook: \(eventName) \(Self.toolLabel(object["tool"] as? String))")
+                )
+            case "session.status":
+                switch object["status"] as? String {
+                case "busy":
+                    return SessionStatusObservation(.working, cause: cause("hook: session.status busy"))
+                case "retry":
+                    let attempt = (object["attempt"] as? Int).map { " attempt=\($0)" } ?? ""
+                    return SessionStatusObservation(.working, cause: cause("hook: session.status retry\(attempt)"))
+                case "idle":
+                    return SessionStatusObservation(.readyForReview, cause: cause("hook: session.status idle"))
+                default:
+                    return nil
+                }
             case "session.idle":
-                return SessionStatusObservation(.readyForReview, cause: "hook: session.idle")
-            case "permission.asked":
+                return SessionStatusObservation(.readyForReview, cause: cause("hook: session.idle"))
+            case "permission.asked", "permission.v2.asked":
                 return SessionStatusObservation(
                     .waitingForInput,
                     waitingReason: .permission,
-                    cause: "hook: permission.asked"
+                    cause: cause("hook: \(eventName)")
                 )
-            case "question.asked":
+            case "question.asked", "question.v2.asked":
                 return SessionStatusObservation(
                     .waitingForInput,
                     waitingReason: .question,
-                    cause: "hook: question.asked"
+                    cause: cause("hook: \(eventName)")
                 )
-            default: return nil
+            case "permission.replied", "permission.v2.replied",
+                 "question.replied", "question.v2.replied",
+                 "question.rejected", "question.v2.rejected":
+                // The dialog closed and the turn carries on.
+                return SessionStatusObservation(.working, cause: cause("hook: \(eventName)"))
+            case "session.error":
+                return SessionStatusObservation(.readyForReview, cause: cause("hook: session.error"))
+            case "session.compacted":
+                return SessionStatusObservation(.working, cause: cause("hook: session.compacted"))
+            default:
+                // `session.created` carries identity, not activity.
+                return nil
             }
         case .cursorAgent:
             guard let eventName = object["hook_event_name"] as? String else { return nil }
@@ -435,8 +460,7 @@ public final class HookEventReceiver: @unchecked Sendable {
         case .codexCLI:
             raw = codexPayloadSummary(from: object)
         case .openCode:
-            // OpenCode's events are flat {event: name} with no payload.
-            raw = nil
+            raw = openCodePayloadSummary(from: object)
         case .cursorAgent:
             raw = cursorPayloadSummary(from: object)
         }
@@ -524,6 +548,20 @@ public final class HookEventReceiver: @unchecked Sendable {
         return nil
     }
 
+    // MARK: OpenCode
+
+    /// The plugin forwards a few flat fields per event; older lines carry
+    /// none.
+    private static func openCodePayloadSummary(from object: [String: Any]) -> String? {
+        if let message = object["message"] as? String { return "error: \(message)" }
+        if let permission = object["permission"] as? String {
+            let patterns = (object["patterns"] as? [String])?.joined(separator: ", ")
+            return patterns.map { "\(permission): \($0)" } ?? permission
+        }
+        if let tool = object["tool"] as? String { return "tool=\(tool)" }
+        return nil
+    }
+
     // MARK: Cursor Agent
 
     private static func cursorPayloadSummary(from object: [String: Any]) -> String? {
@@ -600,18 +638,27 @@ public final class HookEventReceiver: @unchecked Sendable {
     /// Claude's `SessionStart` names the conversation the process is in now.
     /// After `/clear` or a fork that is a new id, and resuming the old one
     /// would bring back the conversation the user just left.
+    ///
+    /// OpenCode's `session.created` (root sessions only — the plugin drops
+    /// sub-agents) is the id of the conversation the TUI just started, the
+    /// first prompt's or a `/new`'s; it replaces discovering it afterwards.
     static func sessionIdentityEvent(forLine line: String, agent: AgentKind) -> HookSessionIdentityEvent? {
-        guard agent == .claudeCode,
-              let data = line.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object["hook_event_name"] as? String == "SessionStart",
-              let nativeSessionID = object["session_id"] as? String,
-              !nativeSessionID.isEmpty else { return nil }
-        return HookSessionIdentityEvent(
-            agent: agent,
-            nativeSessionID: nativeSessionID,
-            source: object["source"] as? String
-        )
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        switch agent {
+        case .claudeCode:
+            guard object["hook_event_name"] as? String == "SessionStart",
+                  let nativeSessionID = object["session_id"] as? String,
+                  !nativeSessionID.isEmpty else { return nil }
+            return HookSessionIdentityEvent(agent: agent, nativeSessionID: nativeSessionID, source: object["source"] as? String)
+        case .openCode:
+            guard object["event"] as? String == "session.created",
+                  let nativeSessionID = object["sessionID"] as? String,
+                  !nativeSessionID.isEmpty else { return nil }
+            return HookSessionIdentityEvent(agent: agent, nativeSessionID: nativeSessionID, source: "created")
+        case .codexCLI, .antigravity, .cursorAgent:
+            return nil
+        }
     }
 
     /// The one argument `PermissionPattern.normalize` needs to build a
