@@ -1,0 +1,58 @@
+{
+  "agent": "antigravity",
+  "fixtures": [
+    {
+      "file": "hooks/pre-tool-use-run-command.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": null,
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/pre-tool-use-ask-question.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": null,
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "question"
+      }
+    },
+    {
+      "file": "hooks/post-tool-use-view-file.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": null,
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/post-tool-use-write-to-file.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": null,
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/stop-fully-idle.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": null,
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "hooks/stop-not-fully-idle.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": null,
+      "expect": null
+    }
+  ]
+}

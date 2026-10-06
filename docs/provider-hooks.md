@@ -8,6 +8,11 @@ states that hooks cannot expose.
 
 This feature supports Claude Code, Codex CLI, OpenCode, Antigravity, and Cursor Agent.
 
+This page describes the pipeline. What each provider actually sends, which
+screen strings Flotilla matches, and the CLI version each behavior was last
+verified against are in [`providers/`](providers/README.md), backed by captured
+fixtures in `FlotillaUnitTests/ProviderFixtures`.
+
 ## Data flow
 
 ```text
@@ -200,8 +205,10 @@ Generated files are:
 <support>/hooks/<session UUID>.jsonl
 <support>/hooks/flotilla-antigravity.sh
 <support>/hooks/flotilla-codex.sh
+<support>/hooks/flotilla-cursor.sh
 <support>/hooks/shared-config.lock
 <working directory>/.agents/hooks.json
+<working directory>/.cursor/hooks.json
 <working directory>/.opencode/plugins/flotilla-status.js
 ```
 

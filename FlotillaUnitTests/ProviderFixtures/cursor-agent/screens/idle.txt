@@ -1,0 +1,10 @@
+  Is the change on main yet?
+  $ git branch -vv && git log -1 --oneline 2.0s
+    … 79 output lines hidden · ctrl+o to expand
+    on origin/main: NO
+  No.
+  It's committed only on this worktree branch. It is not on main yet.
+  Want me to land it on main and push?
+  → Add a follow-up
+  Auto · 44.7%                                                                                                                                         Run Everything
+  ~/Library/Application Support/Flotilla/Worktrees/flotilla/example-session · flotilla/example-session

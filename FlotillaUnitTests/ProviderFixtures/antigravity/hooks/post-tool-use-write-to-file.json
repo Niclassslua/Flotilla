@@ -1,0 +1,25 @@
+{
+  "event": "PostToolUse",
+  "payload": {
+    "artifactDirectoryPath": "/Users/dev/.gemini/antigravity-cli/brain/00000000-0000-4000-8000-000000000025",
+    "conversationId": "00000000-0000-4000-8000-000000000025",
+    "error": "",
+    "modelName": "gemini-3.8-flash-medium",
+    "stepIdx": 2,
+    "toolCall": {
+      "args": {
+        "CodeContent": "# Plan\n\nSteps.",
+        "Description": "Write a file",
+        "Overwrite": true,
+        "TargetFile": "/Users/dev/Library/Application Support/Flotilla/self-report/00000000-0000-4000-8000-000000000026.json",
+        "toolAction": "Writing file",
+        "toolSummary": "Self-report metadata"
+      },
+      "name": "write_to_file"
+    },
+    "transcriptPath": "/Users/dev/.gemini/antigravity-cli/brain/00000000-0000-4000-8000-000000000025/.system_generated/logs/transcript_full.jsonl",
+    "workspacePaths": [
+      "/Users/dev/Projects/Example"
+    ]
+  }
+}

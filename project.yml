@@ -257,6 +257,10 @@ targets:
     platform: macOS
     sources:
       - path: FlotillaUnitTests
+        # Read from the source tree by ProviderFixtureTests; as bundle
+        # resources the repeated names (manifest.json, stop.json) collide.
+        excludes:
+          - "ProviderFixtures/**"
     dependencies:
       - target: Flotilla
       - package: DesignSystem

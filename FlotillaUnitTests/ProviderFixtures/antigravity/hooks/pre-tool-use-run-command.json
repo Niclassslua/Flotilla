@@ -1,0 +1,23 @@
+{
+  "event": "PreToolUse",
+  "payload": {
+    "artifactDirectoryPath": "/Users/dev/.gemini/antigravity-cli/brain/00000000-0000-4000-8000-000000000023",
+    "conversationId": "00000000-0000-4000-8000-000000000023",
+    "modelName": "gemini-3.8-flash-medium",
+    "stepIdx": 92,
+    "toolCall": {
+      "args": {
+        "CommandLine": "<redacted>",
+        "Cwd": "/Users/dev/Projects/Example",
+        "WaitMsBeforeAsync": 10000,
+        "toolAction": "Running unit tests",
+        "toolSummary": "Run unit tests"
+      },
+      "name": "run_command"
+    },
+    "transcriptPath": "/Users/dev/.gemini/antigravity-cli/brain/00000000-0000-4000-8000-000000000023/.system_generated/logs/transcript_full.jsonl",
+    "workspacePaths": [
+      "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/example-session"
+    ]
+  }
+}

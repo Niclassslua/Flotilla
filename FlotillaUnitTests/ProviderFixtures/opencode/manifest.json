@@ -1,0 +1,33 @@
+{
+  "agent": "openCode",
+  "fixtures": [
+    {
+      "file": "hooks/tool-execute-after.json",
+      "source": "hook",
+      "capturedOn": "2026-08-27",
+      "cliVersion": null,
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/permission-asked.json",
+      "source": "hook",
+      "capturedOn": "2026-08-27",
+      "cliVersion": null,
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      }
+    },
+    {
+      "file": "hooks/session-idle.json",
+      "source": "hook",
+      "capturedOn": "2026-08-27",
+      "cliVersion": null,
+      "expect": {
+        "status": "readyForReview"
+      }
+    }
+  ]
+}

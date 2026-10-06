@@ -1,0 +1,34 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000009",
+  "transcript_path": "/Users/dev/.claude/projects/-Users-dev-Library-Application Support-Flotilla-Worktrees-flotilla-example-session/00000000-0000-4000-8000-000000000009.jsonl",
+  "cwd": "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/example-session",
+  "scratchpad_dir": "/private/tmp/claude-501/-Users-dev-Library-Application-Support-Flotilla-Worktrees-flotilla-example-session/00000000-0000-4000-8000-000000000009/scratchpad",
+  "prompt_id": "00000000-0000-4000-8000-000000000010",
+  "permission_mode": "default",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git status --short",
+    "description": "Short description."
+  },
+  "permission_suggestions": [
+    {
+      "type": "addRules",
+      "rules": [
+        {
+          "toolName": "Bash",
+          "ruleContent": "git status --short"
+        },
+        {
+          "toolName": "Bash",
+          "ruleContent": "git status --short"
+        }
+      ],
+      "behavior": "allow",
+      "destination": "localSettings"
+    }
+  ]
+}

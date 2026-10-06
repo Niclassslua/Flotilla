@@ -1,0 +1,98 @@
+{
+  "agent": "cursorAgent",
+  "fixtures": [
+    {
+      "file": "hooks/pre-tool-use-shell.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/before-shell-execution.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/post-tool-use-write.json",
+      "source": "hook",
+      "capturedOn": "2026-10-03",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/after-shell-execution.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/stop-completed.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "hooks/before-submit-prompt.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/after-agent-response.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "screens/idle.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": null,
+      "note": "Cursor's composer is '→ Add a follow-up', which TerminalScreenHeuristic does not treat as a composer, so an idle Cursor pane yields no screen observation; Ready for Review comes from the stop hook."
+    },
+    {
+      "file": "screens/shell-approval.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-01",
+      "cliVersion": "2026.10.01",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      },
+      "currentlyObserved": null,
+      "knownGap": "Cursor's shell approval ('Run this command?' … '(y)' … '(esc or n)') matches no generic permission marker, and no Cursor hook reports an open dialog, so the board keeps showing Working. CursorCompanionAdapter.dialog(in:) recognizes it; TerminalScreenHeuristic does not."
+    },
+    {
+      "file": "screens/web-fetch-approval.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-01",
+      "cliVersion": "2026.10.01",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      }
+    }
+  ]
+}

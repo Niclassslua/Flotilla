@@ -1,0 +1,25 @@
+{
+  "event": "PostToolUse",
+  "payload": {
+    "artifactDirectoryPath": "/Users/dev/.gemini/antigravity-cli/brain/00000000-0000-4000-8000-000000000023",
+    "conversationId": "00000000-0000-4000-8000-000000000023",
+    "error": "",
+    "modelName": "gemini-3.8-flash-medium",
+    "stepIdx": 100,
+    "toolCall": {
+      "args": {
+        "AbsolutePath": "/Users/dev/Projects/Example/Flotilla/Features/Shell/DetailColumn.swift",
+        "ContentOffset": 0,
+        "EndLine": 688,
+        "StartLine": 630,
+        "toolAction": "Viewing end of DetailColumn.swift",
+        "toolSummary": "View end of DetailColumn.swift"
+      },
+      "name": "view_file"
+    },
+    "transcriptPath": "/Users/dev/.gemini/antigravity-cli/brain/00000000-0000-4000-8000-000000000023/.system_generated/logs/transcript_full.jsonl",
+    "workspacePaths": [
+      "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/example-session"
+    ]
+  }
+}

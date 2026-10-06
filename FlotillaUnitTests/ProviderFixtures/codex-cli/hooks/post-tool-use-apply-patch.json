@@ -1,0 +1,15 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000020",
+  "turn_id": "00000000-0000-4000-8000-000000000021",
+  "transcript_path": "/Users/dev/.codex/sessions/2026/09/11/rollout-2026-09-11T22-28-38-00000000-0000-4000-8000-000000000020.jsonl",
+  "cwd": "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/example-session",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-5.6-sol",
+  "permission_mode": "default",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "git status --short"
+  },
+  "tool_response": "<redacted>",
+  "tool_use_id": "00000000-0000-4000-8000-000000000022"
+}

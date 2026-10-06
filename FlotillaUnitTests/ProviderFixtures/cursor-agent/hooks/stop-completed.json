@@ -1,0 +1,23 @@
+{
+  "flotilla_provider": "cursor",
+  "hook_event_name": "stop",
+  "payload": {
+    "conversation_id": "00000000-0000-4000-8000-000000000027",
+    "generation_id": "00000000-0000-4000-8000-000000000028",
+    "model": "default",
+    "status": "completed",
+    "loop_count": 0,
+    "input_tokens": 323948,
+    "output_tokens": 687,
+    "cache_read_tokens": 318528,
+    "cache_write_tokens": 0,
+    "session_id": "00000000-0000-4000-8000-000000000027",
+    "hook_event_name": "stop",
+    "cursor_version": "2026.10.01-e373342",
+    "workspace_roots": [
+      "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/example-session"
+    ],
+    "user_email": "user@example.com",
+    "transcript_path": "/Users/dev/.cursor/projects/Users-dev-Library-Application-Support-Flotilla-Worktrees-flotilla-example-session/agent-transcripts/00000000-0000-4000-8000-000000000027/00000000-0000-4000-8000-000000000027.jsonl"
+  }
+}

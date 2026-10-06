@@ -1,0 +1,48 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000005",
+  "transcript_path": "/Users/dev/.claude/projects/-Users-dev-Library-Application-Support-Flotilla-Worktrees-flotilla-example-session/00000000-0000-4000-8000-000000000005.jsonl",
+  "cwd": "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/example-session",
+  "scratchpad_dir": "/private/tmp/claude-501/-Users-dev-Library-Application-Support-Flotilla-Worktrees-flotilla-example-session/00000000-0000-4000-8000-000000000005/scratchpad",
+  "prompt_id": "00000000-0000-4000-8000-000000000006",
+  "permission_mode": "auto",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "AskUserQuestion",
+  "tool_input": {
+    "questions": [
+      {
+        "question": "Which option should we use?",
+        "header": "Choice",
+        "options": [
+          {
+            "label": "Option A",
+            "description": "Short description."
+          },
+          {
+            "label": "Option A",
+            "description": "Short description."
+          }
+        ],
+        "multiSelect": true
+      },
+      {
+        "question": "Which option should we use?",
+        "header": "Choice",
+        "options": [
+          {
+            "label": "Option A",
+            "description": "Short description."
+          },
+          {
+            "label": "Option A",
+            "description": "Short description."
+          }
+        ],
+        "multiSelect": false
+      }
+    ]
+  },
+  "tool_use_id": "00000000-0000-4000-8000-000000000007"
+}

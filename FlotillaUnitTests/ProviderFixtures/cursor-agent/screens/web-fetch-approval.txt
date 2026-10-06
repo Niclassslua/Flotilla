@@ -1,0 +1,7 @@
+    WebFetch https://example.com
+──────────────────────────────────────────────────────────────────────
+ 🌐 Web Fetch: https://example.com
+ Allow this web fetch?
+  → Fetch (y)
+    Always allow example.com (tab)
+    Skip (esc or n)

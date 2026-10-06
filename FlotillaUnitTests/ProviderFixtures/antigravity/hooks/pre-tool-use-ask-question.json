@@ -1,0 +1,30 @@
+{
+  "event": "PreToolUse",
+  "payload": {
+    "artifactDirectoryPath": "/Users/dev/.gemini/antigravity-cli/brain/00000000-0000-4000-8000-000000000024",
+    "conversationId": "00000000-0000-4000-8000-000000000024",
+    "modelName": "gemini-3.8-flash-medium",
+    "stepIdx": 172,
+    "toolCall": {
+      "args": {
+        "questions": [
+          {
+            "is_multi_select": false,
+            "options": [
+              "Option A",
+              "Option A"
+            ],
+            "question": "Which option should we use?"
+          }
+        ],
+        "toolAction": "Asking user for approval on data cleanup",
+        "toolSummary": "Ask approval for data cleanup"
+      },
+      "name": "ask_question"
+    },
+    "transcriptPath": "/Users/dev/.gemini/antigravity-cli/brain/00000000-0000-4000-8000-000000000024/.system_generated/logs/transcript_full.jsonl",
+    "workspacePaths": [
+      "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/example-session"
+    ]
+  }
+}

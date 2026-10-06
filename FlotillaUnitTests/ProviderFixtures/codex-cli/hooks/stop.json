@@ -1,0 +1,11 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000012",
+  "turn_id": "00000000-0000-4000-8000-000000000013",
+  "transcript_path": "/Users/dev/.codex/sessions/2026/09/11/rollout-2026-09-11T21-12-00-00000000-0000-4000-8000-000000000012.jsonl",
+  "cwd": "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/example-session",
+  "hook_event_name": "Stop",
+  "model": "gpt-6-astra",
+  "permission_mode": "default",
+  "stop_hook_active": false,
+  "last_assistant_message": "Done. Summary of the change."
+}

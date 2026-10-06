@@ -1,0 +1,62 @@
+{
+  "agent": "codexCLI",
+  "fixtures": [
+    {
+      "file": "hooks/pre-tool-use-bash.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": "0.125.0",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/pre-tool-use-request-user-input.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": "0.153.4",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "question"
+      }
+    },
+    {
+      "file": "hooks/permission-request-bash.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": "0.125.0",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      }
+    },
+    {
+      "file": "hooks/permission-request-apply-patch.json",
+      "source": "hook",
+      "capturedOn": "2026-09-08",
+      "cliVersion": "0.153.4",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      }
+    },
+    {
+      "file": "hooks/post-tool-use-apply-patch.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": "0.153.4",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/stop.json",
+      "source": "hook",
+      "capturedOn": "2026-09-11",
+      "cliVersion": "0.125.0",
+      "expect": {
+        "status": "readyForReview"
+      }
+    }
+  ]
+}

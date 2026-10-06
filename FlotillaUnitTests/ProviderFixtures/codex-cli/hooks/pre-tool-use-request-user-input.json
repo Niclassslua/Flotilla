@@ -1,0 +1,45 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000015",
+  "turn_id": "00000000-0000-4000-8000-000000000016",
+  "transcript_path": "/Users/dev/.codex/sessions/2026/09/11/rollout-2026-09-11T14-23-21-00000000-0000-4000-8000-000000000015.jsonl",
+  "cwd": "/Users/dev/Projects/Example",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-6-astra",
+  "permission_mode": "default",
+  "tool_name": "request_user_input",
+  "tool_input": {
+    "questions": [
+      {
+        "id": "<redacted>",
+        "header": "Choice",
+        "question": "Which option should we use?",
+        "options": [
+          {
+            "label": "Option A",
+            "description": "Short description."
+          },
+          {
+            "label": "Option A",
+            "description": "Short description."
+          }
+        ]
+      },
+      {
+        "id": "<redacted>",
+        "header": "Choice",
+        "question": "Which option should we use?",
+        "options": [
+          {
+            "label": "Option A",
+            "description": "Short description."
+          },
+          {
+            "label": "Option A",
+            "description": "Short description."
+          }
+        ]
+      }
+    ]
+  },
+  "tool_use_id": "00000000-0000-4000-8000-000000000017"
+}

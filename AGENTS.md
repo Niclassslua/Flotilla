@@ -96,6 +96,7 @@ Flotilla/
 |------|--------|
 | `docs/ui-vocabulary.md` | Canonical names for every UI region and component — use these terms in prompts, issues, and review comments |
 | `docs/provider-hooks.md` | Per-provider hook wiring and the status-transition matrix |
+| `docs/providers/` | Per-provider reference: every hook, screen string, dialog, storage path and model query Flotilla relies on, with the CLI version it was verified against, captured fixtures (`FlotillaUnitTests/ProviderFixtures`), and an update checklist. Read the provider's page before touching its integration or after it ships a new release |
 | `docs/commit-attribution.md` | Attribution modes, marker protocol, local persistence, rewrite matching, and limitations |
 | `docs/session-handoff.md` | Moving a live session between agents: the codec layer, the transaction, every agent's transcript format, and how to add a fifth agent |
 | `docs/companion.md` | iPhone companion: architecture, pairing handshake, protocol, error surfaces, and the assumptions made building it |

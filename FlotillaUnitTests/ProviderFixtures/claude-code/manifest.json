@@ -1,0 +1,105 @@
+{
+  "agent": "claudeCode",
+  "fixtures": [
+    {
+      "file": "hooks/notification-idle-prompt.json",
+      "source": "hook",
+      "capturedOn": "2026-10-03",
+      "cliVersion": "2.1.288",
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "hooks/notification-permission-prompt.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.290",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      }
+    },
+    {
+      "file": "hooks/pre-tool-use-ask-user-question.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "question"
+      }
+    },
+    {
+      "file": "hooks/pre-tool-use-exit-plan-mode.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.290",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "planApproval"
+      }
+    },
+    {
+      "file": "hooks/permission-request-bash.json",
+      "source": "hook",
+      "capturedOn": "2026-09-09",
+      "cliVersion": "2.1.119",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      }
+    },
+    {
+      "file": "hooks/permission-request-ask-user-question.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "question"
+      }
+    },
+    {
+      "file": "hooks/permission-request-exit-plan-mode.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.290",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "planApproval"
+      }
+    },
+    {
+      "file": "hooks/post-tool-use-bash.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/stop.json",
+      "source": "hook",
+      "capturedOn": "2026-10-03",
+      "cliVersion": "2.1.288",
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "screens/working-thinking.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "working"
+      },
+      "currentlyObserved": {
+        "status": "readyForReview"
+      },
+      "knownGap": "Claude Code 2.1.291 no longer prints an 'esc to interrupt' hint while it works; its spinner line ('✻ <verb>… (<elapsed> · <tokens>)') sits above the ❯ composer, so the screen fallback reads composer-with-transcript (Ready for Review). Hooks normally win via SessionStatusObservationArbiter, but a turn with no tool call has no hook to hold it."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+⏺ I'll check the hook logs next, then write the fixtures.
+
+  Listing 1 directory, running 6 shell commands…
+  ⎿  $ ls ~/Library/Application\ Support/Flotilla/hooks | wc -l
+
+✻ Wibbling… (8m 27s · ↓ 23.4k tokens · thought for 2s)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Est. usage: $3.63
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
