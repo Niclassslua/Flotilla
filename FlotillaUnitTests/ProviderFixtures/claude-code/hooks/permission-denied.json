@@ -1,0 +1,14 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000014",
+  "transcript_path": "/Users/dev/.claude/projects/-Users-dev-Projects-Example/abc123.jsonl",
+  "cwd": "/Users/dev/Projects/Example",
+  "permission_mode": "auto",
+  "hook_event_name": "PermissionDenied",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git status --short",
+    "description": "Short description."
+  },
+  "tool_use_id": "00000000-0000-4000-8000-000000000015",
+  "reason": "[Irreversible Local Destruction]"
+}

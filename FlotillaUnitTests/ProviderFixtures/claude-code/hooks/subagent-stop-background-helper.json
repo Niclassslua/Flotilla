@@ -1,0 +1,18 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/Users/dev/.claude/projects/-Users-dev-Projects-Example/00000000-0000-4000-8000-000000000001.jsonl",
+  "cwd": "/Users/dev/Projects/Example",
+  "scratchpad_dir": "/private/tmp/claude-501/-Users-dev-Projects-Example/00000000-0000-4000-8000-000000000002/scratchpad",
+  "prompt_id": "00000000-0000-4000-8000-000000000003",
+  "permission_mode": "auto",
+  "agent_id": "<redacted>",
+  "agent_type": "",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/Users/dev/.claude/projects/-Users-dev-Projects-Example/00000000-0000-4000-8000-000000000001/subagents/agent-ac0224f286401d9e3.jsonl",
+  "background_tasks": [],
+  "session_crons": []
+}

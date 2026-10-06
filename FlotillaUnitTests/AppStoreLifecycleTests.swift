@@ -172,6 +172,44 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(factory.processes.isEmpty, "A conflicting native resume must not fall back to a fresh conversation")
     }
 
+    /// Claude's `SessionStart` after `/clear` names a new conversation; a
+    /// relaunch must resume it rather than the one the user cleared away.
+    func testAdoptsTheConversationIdTheAgentMovedToButNeverAnotherSessions() throws {
+        let repository = try GRDBSessionRepository()
+        func claudeSession(_ title: String, conversation: String) -> Session {
+            Session(
+                title: title,
+                goal: "Goal",
+                agent: .claudeCode,
+                projectID: nil,
+                workingDirectory: URL(fileURLWithPath: "/tmp"),
+                status: .readyForReview,
+                agentSessionID: conversation
+            )
+        }
+        let cleared = claudeSession("Cleared", conversation: "before-clear")
+        let other = claudeSession("Other", conversation: "owned-elsewhere")
+        try repository.save(cleared)
+        try repository.save(other)
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: RecordingProcessFactory()),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+
+        store.adoptAgentSessionID("after-clear", forSessionID: cleared.id)
+        XCTAssertEqual(store.sessions.first { $0.id == cleared.id }?.agentSessionID, "after-clear")
+        XCTAssertEqual(try repository.loadAll().sessions.first { $0.id == cleared.id }?.agentSessionID, "after-clear", "persisted for the next launch")
+
+        store.adoptAgentSessionID("owned-elsewhere", forSessionID: cleared.id)
+        XCTAssertEqual(
+            store.sessions.first { $0.id == cleared.id }?.agentSessionID,
+            "after-clear",
+            "two sessions must never resume one conversation"
+        )
+    }
+
     func testWorktreeCreationFailureDoesNotCreateSession() async throws {
         let repository = try GRDBSessionRepository()
         let git = MockGitService()

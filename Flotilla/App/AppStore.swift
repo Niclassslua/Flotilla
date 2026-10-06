@@ -667,6 +667,21 @@ final class AppStore {
         }
     }
 
+    /// Follows the agent onto the conversation its process reports being in.
+    ///
+    /// Claude starts a new conversation id on `/clear` and on a fork; a
+    /// relaunch must resume that one, not the conversation the user left.
+    /// Like discovery, an id another session already holds is never taken —
+    /// two sessions resuming one conversation would fork its history.
+    func adoptAgentSessionID(_ nativeSessionID: String, forSessionID sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
+              sessions[index].agentSessionID != nativeSessionID,
+              !sessions.contains(where: { $0.id != sessionID && $0.agentSessionID == nativeSessionID })
+        else { return }
+        sessions[index].agentSessionID = nativeSessionID
+        try? repository.save(mergingLiveScrollback(sessions[index]))
+    }
+
     /// Backwards-compatible forwarder
     func syncAgentTitle(forSessionID sessionID: UUID) async {
         await syncAgentSessionMetadata(forSessionID: sessionID)
@@ -1225,6 +1240,7 @@ final class AppStore {
 
         let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         try? FileManager.default.removeItem(at: eventFile)
+        try? FileManager.default.removeItem(at: HookConfigurationWriter.displayFilePath(for: sessionID, supportDirectory: supportDirectory))
         try? FileManager.default.removeItem(at: SessionAttachment.directory(for: sessionID, supportDirectory: supportDirectory))
 
         if selectedSessionID == sessionID {

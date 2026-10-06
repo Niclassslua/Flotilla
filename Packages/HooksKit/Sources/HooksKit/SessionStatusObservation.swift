@@ -18,23 +18,32 @@ public struct SessionStatusObservation: Equatable, Sendable {
     /// Part of `==` so that a live composer's `.readyForReview` followed by
     /// a dead pane's is still reported.
     public let suggestsAgentExit: Bool
+    /// The screen shows the provider's own statement that the turn was cut
+    /// short (Claude's "Interrupted · What should Claude do instead?"). An
+    /// interrupt fires no hook at all, so this is the one screen signal
+    /// allowed to end a hook-held working or waiting episode. Part of `==`
+    /// for the same reason as `suggestsAgentExit`.
+    public let endsTurn: Bool
 
     public init(
         _ status: SessionStatus,
         waitingReason: SessionWaitingReason? = nil,
         cause: String? = nil,
-        suggestsAgentExit: Bool = false
+        suggestsAgentExit: Bool = false,
+        endsTurn: Bool = false
     ) {
         self.status = status
         self.waitingReason = status == .waitingForInput ? waitingReason : nil
         self.cause = cause
         self.suggestsAgentExit = suggestsAgentExit
+        self.endsTurn = endsTurn
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.status == rhs.status
             && lhs.waitingReason == rhs.waitingReason
             && lhs.suggestsAgentExit == rhs.suggestsAgentExit
+            && lhs.endsTurn == rhs.endsTurn
     }
 
     /// `working (esc to interrupt)` — the compact form used in log lines.
@@ -108,6 +117,12 @@ public struct SessionStatusObservationArbiter: Sendable {
            latestHookObservation?.status != .readyForReview {
             lastRejectionCause = "screen readyForReview held back — session has shown no working or waiting signal yet"
             return nil
+        }
+
+        if observation.endsTurn {
+            // The provider says the turn is over and no hook will follow.
+            latestHookObservation = nil
+            return observation
         }
 
         if let hook = latestHookObservation {

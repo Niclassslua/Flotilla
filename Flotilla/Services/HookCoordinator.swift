@@ -180,6 +180,14 @@ final class HookCoordinator {
                             await self?.recordPermissionRequest(event, sessionID: sessionID)
                         }
                     }
+                    group.addTask {
+                        for await event in hookReceiver.sessionIdentityStream {
+                            await self?.store.adoptAgentSessionID(
+                                event.nativeSessionID,
+                                forSessionID: sessionID
+                            )
+                        }
+                    }
                 }
             }
         }

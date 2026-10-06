@@ -1,7 +1,7 @@
 import XCTest
 import SessionKit
 import ProcessKit
-import HooksKit
+@testable import HooksKit
 
 final class SessionStatusHeuristicTests: XCTestCase {
     private let heuristic = SessionStatusHeuristic()
@@ -985,14 +985,86 @@ final class HookConfigurationWriterTests: XCTestCase {
             JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
         )
         let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
-        for event in ["Notification", "PreToolUse", "PermissionRequest", "Stop", "PostToolUse"] {
+        let events = HookConfigurationWriter.claudeObservedEvents + ["PreToolUse", "PermissionRequest", "MessageDisplay"]
+        XCTAssertEqual(Set(hooks.keys), Set(events))
+        for event in events {
             let groups = try XCTUnwrap(hooks[event] as? [[String: Any]], "\(event) must be present")
-            let commands = try XCTUnwrap(groups.first?["hooks"] as? [[String: Any]])
-            let command = try XCTUnwrap(commands.first?["command"] as? String)
-            XCTAssertTrue(command.contains(HookConfigurationWriter.eventFileEnvironmentKey))
+            let handler = try XCTUnwrap((groups.first?["hooks"] as? [[String: Any]])?.first)
+            let command = try XCTUnwrap(handler["command"] as? String)
+            XCTAssertTrue(command.contains(HookConfigurationWriter.eventFileEnvironmentKey), event)
+            // Only the decision hook may hold Claude up; recording runs in the background.
+            XCTAssertEqual(handler["async"] as? Bool, event == "PermissionRequest" ? nil : true, event)
         }
         let preToolGroups = try XCTUnwrap(hooks["PreToolUse"] as? [[String: Any]])
         XCTAssertEqual(preToolGroups.first?["matcher"] as? String, "AskUserQuestion|ExitPlanMode")
+        XCTAssertNil(hooks["SubagentStop"], "Claude's helpers fire SubagentStop after the turn's Stop")
+    }
+
+    /// Runs the generated commands the way Claude does — JSON on stdin, the
+    /// event file in the environment — and checks where each line lands.
+    func testClaudeHookCommandsRecordStatusAndDisplaySeparately() throws {
+        let arguments = HookConfigurationWriter.launchArguments(for: .claudeCode, supportDirectory: supportDirectory)
+        let settings = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(arguments[1].utf8)) as? [String: Any])
+        let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        func command(_ event: String) throws -> String {
+            let groups = try XCTUnwrap(hooks[event] as? [[String: Any]])
+            return try XCTUnwrap(((groups.first?["hooks"] as? [[String: Any]])?.first)?["command"] as? String)
+        }
+        let sessionID = UUID()
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
+        let displayFile = HookConfigurationWriter.displayFilePath(for: sessionID, supportDirectory: supportDirectory)
+        try FileManager.default.createDirectory(at: eventFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        func run(_ command: String, input: String) throws {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", command]
+            process.environment = [HookConfigurationWriter.eventFileEnvironmentKey: eventFile.path]
+            let stdin = Pipe()
+            process.standardInput = stdin
+            try process.run()
+            stdin.fileHandleForWriting.write(Data(input.utf8))
+            try stdin.fileHandleForWriting.close()
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0)
+        }
+        try run(command("UserPromptSubmit"), input: #"{"hook_event_name":"UserPromptSubmit","prompt":"hi"}"#)
+        try run(command("MessageDisplay"), input: #"{"hook_event_name":"MessageDisplay","message_id":"m","index":0,"final":false,"delta":"He"}"#)
+        try run(command("Stop"), input: #"{"hook_event_name":"Stop"}"#)
+
+        XCTAssertEqual(
+            try String(contentsOf: eventFile, encoding: .utf8),
+            #"{"hook_event_name":"UserPromptSubmit","prompt":"hi"}"# + "\n" + #"{"hook_event_name":"Stop"}"# + "\n"
+        )
+        XCTAssertEqual(
+            try String(contentsOf: displayFile, encoding: .utf8),
+            #"{"hook_event_name":"MessageDisplay","message_id":"m","index":0,"final":false,"delta":"He"}"# + "\n"
+        )
+    }
+
+    func testClaudeSessionStartReportsTheConversationTheProcessIsIn() {
+        let clear = #"{"hook_event_name":"SessionStart","session_id":"bb6257b4","source":"clear"}"#
+        XCTAssertEqual(
+            HookEventReceiver.sessionIdentityEvent(forLine: clear, agent: .claudeCode),
+            HookSessionIdentityEvent(agent: .claudeCode, nativeSessionID: "bb6257b4", source: "clear")
+        )
+        XCTAssertNil(HookEventReceiver.sessionIdentityEvent(forLine: #"{"hook_event_name":"Stop","session_id":"x"}"#, agent: .claudeCode))
+        XCTAssertNil(HookEventReceiver.sessionIdentityEvent(forLine: clear, agent: .codexCLI))
+    }
+
+    func testInterruptOnScreenEndsAHookHeldWorkingEpisode() {
+        var arbiter = SessionStatusObservationArbiter(sessionHasProgressed: true)
+        XCTAssertNotNil(arbiter.accept(SessionStatusObservation(.working, cause: "hook: UserPromptSubmit"), from: .hook))
+        XCTAssertNil(
+            arbiter.accept(SessionStatusObservation(.readyForReview, cause: "screen: composer"), from: .screen),
+            "an ordinary composer redraw must not end the hook's working episode"
+        )
+        let interrupt = SessionStatusObservation(.readyForReview, cause: "screen: interrupt marker", endsTurn: true)
+        XCTAssertEqual(arbiter.accept(interrupt, from: .screen), interrupt)
+        XCTAssertNotNil(
+            arbiter.accept(SessionStatusObservation(.readyForReview, cause: "screen: composer"), from: .screen),
+            "after the interrupt nothing holds the session in Working"
+        )
     }
 
     // OpenCode and Antigravity are hook-capable but their wiring travels through

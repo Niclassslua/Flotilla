@@ -23,6 +23,11 @@ public final class HookEventReceiver: @unchecked Sendable {
     /// "the session is now waiting" and "here's what it asked for").
     private let permissionContinuation: AsyncStream<HookPermissionRequestEvent>.Continuation
     public let permissionRequestStream: AsyncStream<HookPermissionRequestEvent>
+    /// The provider's own id for the conversation the process is in now.
+    /// Separate from status: `/clear` or a fork moves the process to a new
+    /// conversation without changing what it is doing.
+    private let identityContinuation: AsyncStream<HookSessionIdentityEvent>.Continuation
+    public let sessionIdentityStream: AsyncStream<HookSessionIdentityEvent>
     private let taskLock = NSLock()
     private var task: Task<Void, Never>?
 
@@ -36,6 +41,9 @@ public final class HookEventReceiver: @unchecked Sendable {
         var permissionContinuation: AsyncStream<HookPermissionRequestEvent>.Continuation!
         self.permissionRequestStream = AsyncStream { permissionContinuation = $0 }
         self.permissionContinuation = permissionContinuation
+        var identityContinuation: AsyncStream<HookSessionIdentityEvent>.Continuation!
+        self.sessionIdentityStream = AsyncStream { identityContinuation = $0 }
+        self.identityContinuation = identityContinuation
     }
 
     public func start() {
@@ -47,6 +55,7 @@ public final class HookEventReceiver: @unchecked Sendable {
         let pollInterval = self.pollInterval
         let continuation = self.continuation
         let permissionContinuation = self.permissionContinuation
+        let identityContinuation = self.identityContinuation
 
         task = Task {
             var readOffset: UInt64 = 0
@@ -83,6 +92,9 @@ public final class HookEventReceiver: @unchecked Sendable {
                                 if let permission = Self.permissionRequestEvent(forLine: line, agent: agent) {
                                     permissionContinuation.yield(permission)
                                 }
+                                if let identity = Self.sessionIdentityEvent(forLine: line, agent: agent) {
+                                    identityContinuation.yield(identity)
+                                }
                             }
                         }
                     }
@@ -104,6 +116,7 @@ public final class HookEventReceiver: @unchecked Sendable {
         task?.cancel()
         continuation.finish()
         permissionContinuation.finish()
+        identityContinuation.finish()
     }
 
     static func observation(forLine line: String, agent: AgentKind) -> SessionStatusObservation? {
@@ -119,14 +132,26 @@ public final class HookEventReceiver: @unchecked Sendable {
         switch agent {
         case .claudeCode:
             guard let eventName = object["hook_event_name"] as? String else { return nil }
+            // Claude's own background helpers (title, recap, notifications)
+            // run as agents with an `agent_id` but no `agent_type`, and keep
+            // firing tool events after the turn's `Stop`. They say nothing
+            // about the session; a real subagent always names its type.
+            if object["agent_id"] is String,
+               ((object["agent_type"] as? String) ?? "").isEmpty {
+                return nil
+            }
             switch eventName {
             case "Notification":
-                switch (object["notification_type"] as? String)?.lowercased() {
+                let type = (object["notification_type"] as? String)?.lowercased() ?? ""
+                switch type {
                 case "idle_prompt":
                     // Claude emits this after a completed turn. It means the
                     // composer is free, not that Claude is blocked mid-turn.
                     return SessionStatusObservation(.readyForReview, cause: cause("hook: Notification/idle_prompt"))
                 case "permission_prompt":
+                    // 2.1.290 says "Claude needs your permission" for a plan
+                    // too; the plan reason then comes from the
+                    // `ExitPlanMode` hooks, which fire alongside.
                     let message = (object["message"] as? String)?.lowercased() ?? ""
                     let reason: SessionWaitingReason = message.contains("plan") ? .planApproval : .permission
                     return SessionStatusObservation(
@@ -134,15 +159,56 @@ public final class HookEventReceiver: @unchecked Sendable {
                         waitingReason: reason,
                         cause: cause("hook: Notification/permission_prompt")
                     )
-                case "elicitation_dialog":
+                case "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
                     return SessionStatusObservation(
                         .waitingForInput,
                         waitingReason: .question,
-                        cause: cause("hook: Notification/elicitation_dialog")
+                        cause: cause("hook: Notification/\(type)")
                     )
+                case "elicitation_complete", "elicitation_response", "quota_auto_resume_fired":
+                    return SessionStatusObservation(.working, cause: cause("hook: Notification/\(type)"))
                 default:
+                    // `auth_success`, `agent_completed` (a background agent,
+                    // not the turn) and the quota bookkeeping subtypes.
                     return nil
                 }
+            case "UserPromptSubmit":
+                // Fires for typed prompts and for turns Claude starts itself
+                // (a background subagent handing back), before any tool runs —
+                // the only signal for a turn spent thinking or writing.
+                return SessionStatusObservation(.working, cause: cause("hook: UserPromptSubmit"))
+            case "StopFailure":
+                // The turn ended on an API error; `error` is its type.
+                let type = (object["error"] as? String) ?? "unknown"
+                return SessionStatusObservation(.readyForReview, cause: cause("hook: StopFailure \(type)"))
+            case "PostToolUseFailure":
+                if (object["is_interrupt"] as? Bool) == true {
+                    // Esc during a tool ends the turn without a `Stop`.
+                    return SessionStatusObservation(
+                        .readyForReview,
+                        cause: cause("hook: PostToolUseFailure interrupted \(Self.toolLabel(object["tool_name"] as? String))")
+                    )
+                }
+                return SessionStatusObservation(
+                    .working,
+                    cause: cause("hook: PostToolUseFailure \(Self.toolLabel(object["tool_name"] as? String))")
+                )
+            case "PermissionDenied":
+                // Auto mode refused a call; the model carries on without it.
+                return SessionStatusObservation(
+                    .working,
+                    cause: cause("hook: PermissionDenied \(Self.toolLabel(object["tool_name"] as? String))")
+                )
+            case "PreCompact", "SubagentStart":
+                return SessionStatusObservation(.working, cause: cause("hook: \(eventName)"))
+            case "PostCompact":
+                // `/compact` is its own command and ends with the composer
+                // free; an automatic compaction happens inside a turn that
+                // carries on.
+                if (object["trigger"] as? String) == "manual" {
+                    return SessionStatusObservation(.readyForReview, cause: cause("hook: PostCompact manual"))
+                }
+                return SessionStatusObservation(.working, cause: cause("hook: PostCompact auto"))
             case "PreToolUse":
                 let tool = object["tool_name"] as? String
                 return Self.claudeInteractiveObservation(toolName: tool, event: "PreToolUse", cause: cause)
@@ -382,6 +448,12 @@ public final class HookEventReceiver: @unchecked Sendable {
             return message.map { "\(notificationType): \($0)" } ?? notificationType
         }
 
+        // StopFailure: `error` is the type, `error_details` the message.
+        if let details = object["error_details"] as? String {
+            let type = object["error"] as? String
+            return type.map { "\($0): \(details)" } ?? details
+        }
+
         // Tool events: extract from tool_input.
         guard let toolInput = object["tool_input"] as? [String: Any],
               !toolInput.isEmpty else { return nil }
@@ -504,6 +576,23 @@ public final class HookEventReceiver: @unchecked Sendable {
         )
     }
 
+    /// Claude's `SessionStart` names the conversation the process is in now.
+    /// After `/clear` or a fork that is a new id, and resuming the old one
+    /// would bring back the conversation the user just left.
+    static func sessionIdentityEvent(forLine line: String, agent: AgentKind) -> HookSessionIdentityEvent? {
+        guard agent == .claudeCode,
+              let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["hook_event_name"] as? String == "SessionStart",
+              let nativeSessionID = object["session_id"] as? String,
+              !nativeSessionID.isEmpty else { return nil }
+        return HookSessionIdentityEvent(
+            agent: agent,
+            nativeSessionID: nativeSessionID,
+            source: object["source"] as? String
+        )
+    }
+
     /// The one argument `PermissionPattern.normalize` needs to build a
     /// human-readable pattern: a shell command, a file path, or a URL,
     /// whichever this tool's input carries.
@@ -518,6 +607,22 @@ public final class HookEventReceiver: @unchecked Sendable {
         default:
             nil
         }
+    }
+}
+
+/// Which conversation a provider process reports it is in, from a hook event.
+public struct HookSessionIdentityEvent: Sendable, Equatable {
+    public let agent: AgentKind
+    /// The provider's id for the conversation (Claude's `session_id`).
+    public let nativeSessionID: String
+    /// Why the provider (re)started the conversation: `startup`, `resume`,
+    /// `clear`, `compact`, or `fork` for Claude.
+    public let source: String?
+
+    public init(agent: AgentKind, nativeSessionID: String, source: String?) {
+        self.agent = agent
+        self.nativeSessionID = nativeSessionID
+        self.source = source
     }
 }
 

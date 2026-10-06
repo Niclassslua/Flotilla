@@ -99,7 +99,141 @@
       "currentlyObserved": {
         "status": "readyForReview"
       },
-      "knownGap": "Claude Code 2.1.291 no longer prints an 'esc to interrupt' hint while it works; its spinner line ('✻ <verb>… (<elapsed> · <tokens>)') sits above the ❯ composer, so the screen fallback reads composer-with-transcript (Ready for Review). Hooks normally win via SessionStatusObservationArbiter, but a turn with no tool call has no hook to hold it."
+      "knownGap": "Claude Code 2.1.291 no longer prints an 'esc to interrupt' hint while it works; its spinner line ('✻ <verb>… (<elapsed> · <tokens>)') sits above the ❯ composer, so the screen alone reads composer-with-transcript (Ready for Review). Since UserPromptSubmit is registered, the hook's working observation holds the session until Stop; this fixture tracks the screen fallback on its own."
+    },
+    {
+      "file": "hooks/session-start-startup.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": null
+    },
+    {
+      "file": "hooks/user-prompt-submit.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/post-tool-use-failure.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/message-display-final.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": null,
+      "note": "Streamed text goes to the .display sibling file; it never changes status."
+    },
+    {
+      "file": "hooks/subagent-stop-background-helper.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": null,
+      "note": "Claude's own helper fires this after the turn's Stop; not registered, and ignored if it ever arrives."
+    },
+    {
+      "file": "hooks/subagent-start-explore.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/post-tool-use-from-subagent.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/pre-tool-use-background-helper.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": null,
+      "note": "A background helper (agent_id without agent_type) after the final Stop must not flip the session back to Working."
+    },
+    {
+      "file": "hooks/pre-compact-manual.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "working"
+      }
+    },
+    {
+      "file": "hooks/post-compact-manual.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "hooks/session-start-clear.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": null,
+      "note": "No status change; HookEventReceiver.sessionIdentityEvent adopts the new session_id."
+    },
+    {
+      "file": "hooks/stop-failure-rate-limit.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": null,
+      "expect": {
+        "status": "readyForReview"
+      },
+      "note": "Documented: example from the Claude Code hooks reference; not yet captured live."
+    },
+    {
+      "file": "hooks/permission-denied.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": null,
+      "expect": {
+        "status": "working"
+      },
+      "note": "Documented: example from the Claude Code hooks reference; not yet captured live."
+    },
+    {
+      "file": "screens/trust-dialog.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "permission"
+      },
+      "note": "Claude holds back every hook (even --settings) until this is accepted, so the screen is the only source."
+    },
+    {
+      "file": "screens/interrupted.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2.1.291",
+      "expect": {
+        "status": "readyForReview"
+      },
+      "note": "Esc mid-turn fires no hook; this marker carries endsTurn so it may end a hook-held Working."
     }
   ]
 }

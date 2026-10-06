@@ -151,6 +151,10 @@ public struct HookConfigurationWriter: HookConfiguring {
         switch kind {
         case .claudeCode:
             Self.removeLegacyClaudeHookGroups(in: workingDirectory)
+            try? Data().write(
+                to: Self.displayFilePath(for: sessionID, supportDirectory: supportDirectory),
+                options: .atomic
+            )
             return true
         case .antigravity:
             return Self.configureAntigravityHooks(
@@ -199,9 +203,22 @@ public struct HookConfigurationWriter: HookConfiguring {
         switch kind {
         case .claudeCode:
             let command = eventForwardingShellCommand()
+            // Observe-only groups run `async`: Claude starts them in the
+            // background and never waits, so recording an event cannot slow
+            // the turn. Measured on 2.1.291, async lines still land in the
+            // order Claude fired them. `PermissionRequest` alone must stay
+            // synchronous — its stdout is the phone's decision.
             let hookGroup: [String: Any] = [
                 "hooks": [
-                    ["type": "command", "command": command]
+                    ["type": "command", "command": command, "async": true]
+                ]
+            ]
+            // One event per streamed chunk of assistant text, so it goes to a
+            // sibling file instead of the status stream `HookEventReceiver`
+            // tails; only the companion's live transcript reads it.
+            let displayGroup: [String: Any] = [
+                "hooks": [
+                    ["type": "command", "command": eventForwardingShellCommand(suffix: Self.displayFileSuffix), "async": true]
                 ]
             ]
             // The phone answers Claude's dialogs through this hook. The
@@ -219,18 +236,18 @@ public struct HookConfigurationWriter: HookConfiguring {
             let interactiveHookGroup: [String: Any] = [
                 "matcher": "AskUserQuestion|ExitPlanMode",
                 "hooks": [
-                    ["type": "command", "command": command]
+                    ["type": "command", "command": command, "async": true]
                 ]
             ]
-            let settings: [String: Any] = [
-                "hooks": [
-                    "Notification": [hookGroup],
-                    "PreToolUse": [interactiveHookGroup],
-                    "PermissionRequest": [permissionHookGroup],
-                    "Stop": [hookGroup],
-                    "PostToolUse": [hookGroup]
-                ]
+            var hooks: [String: Any] = [
+                "PreToolUse": [interactiveHookGroup],
+                "PermissionRequest": [permissionHookGroup],
+                "MessageDisplay": [displayGroup]
             ]
+            for event in claudeObservedEvents {
+                hooks[event] = [hookGroup]
+            }
+            let settings: [String: Any] = ["hooks": hooks]
             guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]),
                   let json = String(data: data, encoding: .utf8) else {
                 return []
@@ -252,11 +269,37 @@ public struct HookConfigurationWriter: HookConfiguring {
         }
     }
 
+    /// Claude Code events recorded verbatim into the status stream, each by
+    /// an async observe-only hook. `PreToolUse` (matched to the interactive
+    /// tools), `PermissionRequest` (the phone's decision) and
+    /// `MessageDisplay` (the display file) are registered separately.
+    /// `SubagentStop` and `SessionEnd` are left out on purpose: Claude's own
+    /// background helpers emit `SubagentStop` after the turn's `Stop`, and
+    /// neither says anything about the session's status.
+    static let claudeObservedEvents = [
+        "SessionStart", "UserPromptSubmit",
+        "PostToolUse", "PostToolUseFailure", "PermissionDenied",
+        "Notification", "Stop", "StopFailure",
+        "PreCompact", "PostCompact", "SubagentStart",
+    ]
+
+    /// Suffix of the sibling file Claude's `MessageDisplay` deltas go to.
+    public static let displayFileSuffix = ".display"
+
+    /// Where a session's streamed assistant text is recorded, next to its
+    /// event file. Truncated with it on launch and removed with it on delete.
+    public static func displayFilePath(for sessionID: UUID, supportDirectory: URL) -> URL {
+        URL(fileURLWithPath: eventFilePath(for: sessionID, supportDirectory: supportDirectory).path + displayFileSuffix)
+    }
+
     /// Appends self-describing hook stdin JSON verbatim plus a trailing
     /// newline. Claude and Codex send one compact object per invocation with
     /// no terminator, so the newline keeps the file line-delimited.
-    private static func eventForwardingShellCommand() -> String {
-        return #"event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; cat >> "$event_file" && printf '\n' >> "$event_file""#
+    ///
+    /// The JSON and its newline go out in one `printf` so that concurrently
+    /// running async hooks cannot interleave one line's newline into another.
+    private static func eventForwardingShellCommand(suffix: String = "") -> String {
+        return #"event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; input=$(cat); printf '%s\n' "$input" >> "$event_file"# + suffix + #"""#
     }
 
     /// The Unix socket the iPhone companion's permission bridge listens on

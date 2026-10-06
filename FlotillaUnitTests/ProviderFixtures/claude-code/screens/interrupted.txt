@@ -1,0 +1,9 @@
+❯ Run the Bash command sleep 25 now.
+  Ran 2 shell commands
+  ⎿  Interrupted · What should Claude do instead?
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Est. usage: $0.14
+  ⏵⏵ auto mode on · 1 shell · ← for agents

@@ -56,6 +56,7 @@ public struct ClaudeSessionProvider: AgentSessionProviding {
         let matchingFolders = projectFolders.filter { folder in
             let name = folder.lastPathComponent
             return candidateFolderNames.contains(name)
+                || candidateFolderNames.contains { name.hasPrefix($0 + "-") && $0.utf16.count == 200 }
                 || name.hasSuffix(workingDirectory.lastPathComponent)
                 || name.contains(workingDirectory.lastPathComponent)
         }
@@ -96,7 +97,17 @@ public struct ClaudeSessionProvider: AgentSessionProviding {
         let slug2 = slug1.replacingOccurrences(of: ".", with: "-")
         let slug3 = slug1.replacingOccurrences(of: "-.", with: "--")
         let slug4 = path.replacingOccurrences(of: "/.", with: "--").replacingOccurrences(of: "/", with: "-")
-        return [slug1, slug2, slug3, slug4]
+        // Current Claude (2.1.291): every non-alphanumeric UTF-16 unit is a
+        // dash; past 200 units the name is cut there and a hash appended,
+        // which the prefix match above accepts.
+        let sanitized = String(decoding: path.utf16.map { unit -> UInt16 in
+            switch unit {
+            case 0x30...0x39, 0x41...0x5A, 0x61...0x7A: unit
+            default: 0x2D
+            }
+        }, as: UTF16.self)
+        let slug5 = String(decoding: sanitized.utf16.prefix(200), as: UTF16.self)
+        return [slug1, slug2, slug3, slug4, slug5]
     }
 
     public func parseClaudeSessionFile(_ fileURL: URL, overrideWorkingDirectory: URL? = nil) throws -> DiscoveredAgentSession? {

@@ -66,6 +66,7 @@ created and deleted.
 | Provider | Installation | Structured event | Flotilla status | Notes |
 | --- | --- | --- | --- | --- |
 | Claude Code | Per-process `--settings <json>` | `PostToolUse` | `working` | Does not modify `.claude/settings.json`. |
+| Claude Code | Per-process `--settings <json>` | `UserPromptSubmit`, `PostToolUseFailure`, `PermissionDenied`, `StopFailure`, `PreCompact`/`PostCompact`, `SubagentStart`, `SessionStart` | see `docs/providers/claude-code.md` | Observe-only hooks run `async`; `SessionStart` re-pins the session id after `/clear` or a fork. |
 | Claude Code | Per-process `--settings <json>` | `PreToolUse` for `AskUserQuestion` / `ExitPlanMode` | `waitingForInput` (`question` / `planApproval`) | Exact interactive-tool signal. |
 | Claude Code | Per-process `--settings <json>` | `PermissionRequest` | `waitingForInput` (`permission`, or the interactive-tool reason) | Exact approval signal. |
 | Claude Code | Per-process `--settings <json>` | `Notification` | `readyForReview` for `idle_prompt`; waiting for `permission_prompt` / `elicitation_dialog` | Notification subtype is retained instead of treating every notification as blocked. |
@@ -142,7 +143,7 @@ created with, before its process has been observed doing anything.
 
 | Source | Working | Waiting (`waitingForInput`) | Ready for Review | Crashed |
 | --- | --- | --- | --- | --- |
-| **Claude Code** | `PostToolUse`; `PreToolUse` for any tool other than `AskUserQuestion` / `ExitPlanMode` | `PreToolUse` or `PermissionRequest` for `AskUserQuestion` → `question`, for `ExitPlanMode` → `planApproval`; any other `PermissionRequest` → `permission`; `Notification`/`permission_prompt` → `permission` (`planApproval` if the message mentions a plan); `Notification`/`elicitation_dialog` → `question` | `Stop`; `Notification`/`idle_prompt` | — |
+| **Claude Code** | `UserPromptSubmit`; `PostToolUse` / `PostToolUseFailure` / `PermissionDenied`; `PreCompact`; `PostCompact` (auto); `SubagentStart`; `PreToolUse` for any tool other than `AskUserQuestion` / `ExitPlanMode` (not registered); `Notification` `elicitation_complete`/`elicitation_response`/`quota_auto_resume_fired`. Events from Claude's background helpers (`agent_id` without `agent_type`) are ignored | `PreToolUse` or `PermissionRequest` for `AskUserQuestion` → `question`, for `ExitPlanMode` → `planApproval`; any other `PermissionRequest` → `permission`; `Notification`/`permission_prompt` → `permission` (`planApproval` if the message mentions a plan); `Notification` `elicitation_dialog`/`elicitation_url_dialog`/`agent_needs_input` → `question` | `Stop`; `StopFailure`; `Notification`/`idle_prompt`; `PostCompact` (manual); `PostToolUseFailure` with `is_interrupt` | — |
 | **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — |
 | **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — |
 | **Antigravity** | `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval` | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation) | — |
@@ -174,7 +175,10 @@ while the most recent hook observation was `working` or `waitingForInput`, so
 an in-flight tool sequence or recognised Plan Ready / permission event is not
 undone by an intermediate, unrecognised redraw. A provider hook reporting the
 terminal state ends that hold; visible screen work also starts a new episode
-after a prior hook-reported waiting state.
+after a prior hook-reported waiting state. The one screen observation that may
+end a hook-held episode is an explicit interrupt (`endsTurn`, e.g. Claude's
+`Interrupted · What should Claude do instead?`), because an interrupt fires no
+hook.
 
 ## Components
 

@@ -65,6 +65,24 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
                     "-private-tmp-acme-queue-arm1"
                 )
             },
+            // Observed on Claude Code 2.1.291 (`~/.claude/projects`): every
+            // non-alphanumeric becomes a dash — a Flotilla worktree lives under
+            // "Application Support".
+            Case(name: "spaces, dots and symbols become dashes", needsFreshHome: false) {
+                XCTAssertEqual(
+                    ClaudeTranscriptCodec.projectSlug(for: URL(fileURLWithPath: "/Users/dev/Library/Application Support/Flotilla/Worktrees/flotilla/fix.v2_x+y")),
+                    "-Users-dev-Library-Application-Support-Flotilla-Worktrees-flotilla-fix-v2-x-y"
+                )
+            },
+            // The directory Claude 2.1.291 created for this exact path: cut to
+            // 200 characters, then `-` and a hash of the path.
+            Case(name: "long paths are truncated with Claude's hash", needsFreshHome: false) {
+                let path = "/private/tmp/claude-501/-Users-niclasfrey-Library-Application-Support-Flotilla-Worktrees-flotilla-i-would-like-to-build-a-eb29472b/340DF155-33AA-48D5-93BB-0FE0C8A1B104/scratchpad/probe-claude/Slug Test.v2_dir+x"
+                XCTAssertEqual(
+                    ClaudeTranscriptCodec.projectSlug(for: URL(fileURLWithPath: path)),
+                    "-private-tmp-claude-501--Users-niclasfrey-Library-Application-Support-Flotilla-Worktrees-flotilla-i-would-like-to-build-a-eb29472b-340DF155-33AA-48D5-93BB-0FE0C8A1B104-scratchpad-probe-claude-Slug-Tes-5lsqn4"
+                )
+            },
             // `standardizedFileURL` resolves symlinks only for paths that *exist*,
             // so standardizing here would silently relocate a session's transcript
             // the first time its worktree was created — writing it where the agent

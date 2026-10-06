@@ -47,6 +47,9 @@ public struct TerminalScreenHeuristic: Sendable {
     private static let permissionMarkers = [
         "do you want to",
         "do you trust",
+        // Claude Code's workspace-trust dialog (2.1.291). It holds back every
+        // hook until accepted, so the screen is the only thing that can see it.
+        "yes, i trust this folder",
         "permission required",
         "permission requested",
         "requires permission",
@@ -77,6 +80,12 @@ public struct TerminalScreenHeuristic: Sendable {
         "answer the question",
         "provide your answer",
         "question for you",
+    ]
+
+    /// A provider's own statement that the user interrupted the turn. No hook
+    /// fires on an interrupt, so this ends a hook-held episode (`endsTurn`).
+    private static let interruptMarkers = [
+        "interrupted · what should claude do instead?",
     ]
 
     /// How Flotilla's tmux `remain-on-exit-format` banner begins.
@@ -167,6 +176,13 @@ public struct TerminalScreenHeuristic: Sendable {
             return SessionStatusObservation(
                 .waitingForInput,
                 cause: "screen: SessionStatusHeuristic prompt match"
+            )
+        }
+        if let marker = Self.interruptMarkers.first(where: lowered.contains) {
+            return SessionStatusObservation(
+                .readyForReview,
+                cause: "screen: interrupt marker \(Self.quoted(marker))",
+                endsTurn: true
             )
         }
         // A dead pane and a composer with transcript both mean the turn is over

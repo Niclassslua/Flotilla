@@ -59,8 +59,28 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
     /// would write into a directory the agent never reads. The raw path is what
     /// Flotilla also hands the process as its working directory, so deriving
     /// the slug from it keeps the two in step.
+    ///
+    /// Claude's rule, measured on 2.1.291: every UTF-16 code unit outside
+    /// `[A-Za-z0-9]` becomes `-` (older releases kept spaces and dots). A
+    /// result longer than 200 units is cut to 200 and suffixed with `-` and
+    /// the path's 32-bit djb2 hash in base 36 — a `/private/tmp/…/Slug
+    /// Test.v2_dir+x` probe reproduced `…-Slug-Tes-5lsqn4` exactly.
     static func projectSlug(for workingDirectory: URL) -> String {
-        workingDirectory.path.replacingOccurrences(of: "/", with: "-")
+        let path = workingDirectory.path
+        let sanitized = String(decoding: path.utf16.map { unit -> UInt16 in
+            switch unit {
+            case 0x30...0x39, 0x41...0x5A, 0x61...0x7A: unit
+            default: 0x2D
+            }
+        }, as: UTF16.self)
+        let maximumLength = 200
+        guard sanitized.utf16.count > maximumLength else { return sanitized }
+        var hash: Int32 = 0
+        for unit in path.utf16 {
+            hash = (hash &<< 5) &- hash &+ Int32(unit)
+        }
+        let prefix = String(decoding: sanitized.utf16.prefix(maximumLength), as: UTF16.self)
+        return prefix + "-" + String(hash.magnitude, radix: 36)
     }
 
     // MARK: - TranscriptReading
