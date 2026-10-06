@@ -25,6 +25,7 @@ final class HookCoordinator {
     private let hookSupportDirectory: URL
     private var monitors: [UUID: SessionScreenMonitor] = [:]
     private var hookReceivers: [UUID: HookEventReceiver] = [:]
+    private var codexStatusObservers: [UUID: CodexAppServerStatusObserver] = [:]
     private var gates: [UUID: WaitingNotificationGate] = [:]
     private var arbiters: [UUID: SessionStatusObservationArbiter] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
@@ -74,9 +75,11 @@ final class HookCoordinator {
         for sessionID in monitors.keys where !activeIDs.contains(sessionID) || store.process(for: sessionID) == nil {
             monitors[sessionID]?.stop()
             hookReceivers[sessionID]?.stop()
+            codexStatusObservers[sessionID]?.stop()
             tasks[sessionID]?.cancel()
             monitors[sessionID] = nil
             hookReceivers[sessionID] = nil
+            codexStatusObservers[sessionID] = nil
             tasks[sessionID] = nil
             gates[sessionID] = nil
             arbiters[sessionID] = nil
@@ -88,7 +91,8 @@ final class HookCoordinator {
 
     /// Runs `SessionScreenMonitor` for every session, and — for agent kinds
     /// `HookConfigurationWriter` supports — a `HookEventReceiver` alongside
-    /// it, both feeding the same `handle` funnel. This is deliberately
+    /// it. Codex additionally gets a private app-server status observer. All
+    /// feeds enter the same `handle` funnel. This is deliberately
     /// "both, always" rather than "hook primary, screen fallback on
     /// timeout": a broken hook pipe (event-file creation failure, agent
     /// restyle) then degrades to exactly today's screen-only behavior
@@ -115,9 +119,11 @@ final class HookCoordinator {
     func resync(sessionID: UUID) {
         monitors[sessionID]?.stop()
         hookReceivers[sessionID]?.stop()
+        codexStatusObservers[sessionID]?.stop()
         tasks[sessionID]?.cancel()
         monitors[sessionID] = nil
         hookReceivers[sessionID] = nil
+        codexStatusObservers[sessionID] = nil
         tasks[sessionID] = nil
         gates[sessionID] = nil
         arbiters[sessionID] = nil
@@ -154,9 +160,22 @@ final class HookCoordinator {
             hookReceiver = receiver
         }
 
+        var codexObserver: CodexAppServerStatusObserver?
+        if session.agent == .codexCLI,
+           let descriptor = CompanionRuntimeDescriptor.read(sessionID, support: hookSupportDirectory),
+           descriptor.agent == .codexCLI {
+            let observer = CodexAppServerStatusObserver(session: session, endpoint: descriptor.endpoint)
+            observer.onThreadID = { [weak self] id in
+                self?.store.adoptAgentSessionID(id, forSessionID: sessionID)
+            }
+            codexStatusObservers[sessionID] = observer
+            codexObserver = observer
+        }
+
         tasks[sessionID] = Task { [weak self] in
             monitor.start()
             hookReceiver?.start()
+            codexObserver?.start()
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
                     for await observation in monitor.observationStream {
@@ -193,6 +212,18 @@ final class HookCoordinator {
                         }
                     }
                 }
+                if let codexObserver {
+                    group.addTask {
+                        for await observation in codexObserver.observationStream {
+                            await self?.handle(
+                                observation: observation,
+                                source: .appServer,
+                                sessionID: sessionID,
+                                gate: gate
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -214,7 +245,12 @@ final class HookCoordinator {
         }
         var arbiter = arbiters[sessionID] ?? SessionStatusObservationArbiter()
         let accepted = arbiter.accept(observation, from: source)
-        let sourceLabel = source == .hook ? "hook" : "screen"
+        let sourceLabel: String
+        switch source {
+        case .hook: sourceLabel = "hook"
+        case .appServer: sourceLabel = "Codex app-server"
+        case .screen: sourceLabel = "screen"
+        }
         let session = store.sessions.first(where: { $0.id == sessionID })
         let sessionTitle = session?.title ?? "untitled"
         let agentLabel = session?.agent.displayName ?? "unknown"

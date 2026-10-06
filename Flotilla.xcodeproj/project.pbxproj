@@ -355,6 +355,7 @@
 		6AF20742BA9CFFC3F8D59437 /* dart.svg in Resources */ = {isa = PBXBuildFile; fileRef = 20E95D9A65F7BD83A8B08B57 /* dart.svg */; };
 		6B373F47DE80855892A472D1 /* ClaudePermissionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1906AD4C60E7FDA4269B3C9 /* ClaudePermissionBridge.swift */; };
 		6B53DD0E7F2C9F4DB5916056 /* GitIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = E178BD5EBC01AC5A04E68745 /* GitIcon.swift */; };
+		6B676C54D4112E8D710A7494 /* CodexAppServerStatusObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11396C81765213B69BC3CE /* CodexAppServerStatusObserver.swift */; };
 		6E3242E61BE51C1EC49089E5 /* folder-server.svg in Resources */ = {isa = PBXBuildFile; fileRef = FA83C6EA780D98B29510CDE6 /* folder-server.svg */; };
 		6E3915096877CB887D89E2E7 /* ProjectGraphRendering.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6D9DB285AC04C8B673220CB /* ProjectGraphRendering.swift */; };
 		6EB66F8AA646686BF21F626C /* PermissionPattern.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6415EC250034B6947E09FEE5 /* PermissionPattern.swift */; };
@@ -790,6 +791,7 @@
 		F94CA75E3D6A14B0A1013F56 /* AgentScreenshotMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43BA95DBD657A8721E673EC /* AgentScreenshotMonitor.swift */; };
 		F9716C6B9EE443BDA0D361EB /* DiffStatBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7A3A8B4DE935213297C06D /* DiffStatBadge.swift */; };
 		F9942472393515B362E92DF1 /* HomeWidgetGridLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9349C0F0D92D076892BA5524 /* HomeWidgetGridLayout.swift */; };
+		F9ABEE7721592A64C9204B83 /* CodexAppServerStatusObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11396C81765213B69BC3CE /* CodexAppServerStatusObserver.swift */; };
 		F9DD5962F219341EDC60A83F /* git-branch.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5E7CD7C066464B1F9AACF09A /* git-branch.svg */; };
 		FA0AADD91E95FBC3347F792A /* CreateSessionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E9587FC9A7651467ABE1DE /* CreateSessionUITests.swift */; };
 		FA9498E43E869C6DD4D26C75 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = FDDBA462EF2CD6304DD9AA86 /* DesignSystem */; };
@@ -1038,6 +1040,7 @@
 		589058689AD1B6BF2526141C /* folder-scripts.svg */ = {isa = PBXFileReference; path = "folder-scripts.svg"; sourceTree = "<group>"; };
 		58CB61E75868DCFF5116217B /* rust.svg */ = {isa = PBXFileReference; path = rust.svg; sourceTree = "<group>"; };
 		59332161DEB4FD07366F7E02 /* KnowledgeTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeTemplates.swift; sourceTree = "<group>"; };
+		5A11396C81765213B69BC3CE /* CodexAppServerStatusObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexAppServerStatusObserver.swift; sourceTree = "<group>"; };
 		5A15137C679C6CBF7FF6F220 /* KnowledgeChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeChrome.swift; sourceTree = "<group>"; };
 		5A8B0B7570DC782018E724CE /* SessionProcessStarting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionProcessStarting.swift; sourceTree = "<group>"; };
 		5BABD8D796C420F3C0FD4E13 /* CompanionAttentionNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAttentionNotifications.swift; sourceTree = "<group>"; };
@@ -1656,6 +1659,7 @@
 				12C3E4FA609560CB29D08025 /* AgentSelfReportCoordinator.swift */,
 				473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */,
 				FAEF1F1F164CC43EFF1FE78E /* CIStatusStore.swift */,
+				5A11396C81765213B69BC3CE /* CodexAppServerStatusObserver.swift */,
 				5D80A73E251FF9AE065547BC /* CommitAttributionService.swift */,
 				ABF06BC9BDDD6937B87072D7 /* HandoffService.swift */,
 				E560D5E9A15E6BEFD4593C51 /* HookCoordinator.swift */,
@@ -2882,6 +2886,7 @@
 				7BA7E487AD5AE56637FAADA9 /* ChildProcessEnvironment.swift in Sources */,
 				BD7B13FBB9778097E6425B21 /* ClaudeCompanionAdapter.swift in Sources */,
 				15EB3120F6254FF5B394871C /* ClaudePermissionBridge.swift in Sources */,
+				F9ABEE7721592A64C9204B83 /* CodexAppServerStatusObserver.swift in Sources */,
 				CBAAC0E314DF4C3C8BABCDD5 /* CodexCompanionAdapter.swift in Sources */,
 				D9C999843DC08919280DF40D /* CommandPalettePanel.swift in Sources */,
 				EC1A670D2C0912EC139F914C /* CommandPaletteView.swift in Sources */,
@@ -3227,6 +3232,7 @@
 				CCF690FF4035F8CBA5C77280 /* ChildProcessEnvironment.swift in Sources */,
 				4FCC07422567B58E178B2DAD /* ClaudeCompanionAdapter.swift in Sources */,
 				6B373F47DE80855892A472D1 /* ClaudePermissionBridge.swift in Sources */,
+				6B676C54D4112E8D710A7494 /* CodexAppServerStatusObserver.swift in Sources */,
 				3DE46E7413975B13D28818D0 /* CodexCompanionAdapter.swift in Sources */,
 				55AAD1951B5411C0C63CF6FE /* CommandPalettePanel.swift in Sources */,
 				8FB2743FFCFD5F9B3C6F8449 /* CommandPaletteView.swift in Sources */,

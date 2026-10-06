@@ -11,7 +11,7 @@ diffing behavior against this baseline instead of rediscovering it.
 | Provider | Binary | Reference | Valid through |
 | --- | --- | --- | --- |
 | Claude Code | `claude` | [claude-code.md](claude-code.md) | valid through 2.1.291 · 2026-10-06 (full live probe) |
-| Codex CLI | `codex` | [codex-cli.md](codex-cli.md) | valid through 0.160.1 · 2026-10-06 (schema/help inspected; hook probes through 0.155.0) |
+| Codex CLI | `codex` | [codex-cli.md](codex-cli.md) | valid through 0.160.1 · 2026-10-06 (thread/list response probed; hook probes through 0.155.0) |
 | OpenCode | `opencode` | [opencode.md](opencode.md) | valid through 1.18.34 · 2026-10-06 (live probe; snapshot captured 1.18.32) |
 | Antigravity | `agy` | [antigravity.md](antigravity.md) | valid through 1.3.0 · 2026-10-06 (full live probe) |
 | Cursor Agent | `agent` | [cursor-agent.md](cursor-agent.md) | valid through 2026.10.01-e373342 · 2026-10-06 (full live probe) |
@@ -42,10 +42,10 @@ Cross-cutting references:
 | Hook install | `--settings <json>` per process | `--config hooks.*` per process | user-level `~/.config/opencode/plugins/flotilla-status.js` (env-gated) | user-level `~/.gemini/config/hooks.json` (env-gated) | user-level `~/.cursor/hooks.json` (env-gated) |
 | Hook transport | stdin JSON → event file | stdin JSON → event file | global plugin → event file | wrapper → `{"event","payload"}` | wrapper → `{"flotilla_provider","hook_event_name","payload"}` |
 | Hook decides anything? | Yes — `PermissionRequest` via companion socket | Yes — `PermissionRequest` via companion socket (local TUI only) | No | No (a hook can only deny in 1.3.0) | No; `stop` hands queued phone prompts over as `followup_message` |
-| Status from screen | trust dialog and interrupt only | fallback | fallback | fallback; **only** source for approval dialogs | fallback |
+| Status from screen | trust dialog and interrupt only | fallback; app-server status primary | fallback | fallback; **only** source for approval dialogs | fallback |
 | Dialog source for the phone | hook (`PermissionRequest`) | app-server JSON-RPC | private HTTP API + SSE | hook payload + `--log-file` + screen | screen only (`CursorDialog`, also used for board status) |
 | Answering a dialog | hook stdout | JSON-RPC reply | private HTTP `POST …/reply` | keystrokes | keystrokes |
-| Session ID | assigned (`--session-id`) | discovered (SQLite + index) | plugin identity; CLI list fallback | discovered (brain dir + SQLite) | assigned (`--resume <uuid>`) |
+| Session ID | assigned (`--session-id`) | app-server `thread/list` (SQLite + index fallback) | plugin identity; CLI list fallback | discovered (brain dir + SQLite) | assigned (`--resume <uuid>`) |
 | Transcript read | JSONL | rollout JSONL | CLI export (handoff) + private HTTP (companion) | SQLite + protobuf | JSONL |
 | Model list | `claude --print /model` | `codex debug models` | `opencode models <provider>` (with a subscription; else static) | `agy models`, `agy --help` | `agent --list-models` |
 

@@ -60,20 +60,20 @@ public struct SessionStatusObservation: Equatable, Sendable {
     }
 }
 
-/// Structured hook events outrank an ambiguous terminal fallback. This keeps
-/// hook-reported work or waiting from immediately decaying to a bare Ready
-/// for Review merely because a provider briefly redraws without a recognized
-/// status marker. The provider's terminal hook ends that episode explicitly.
+/// Structured provider events outrank an ambiguous terminal fallback. This
+/// keeps hook or app-server-reported work/waiting from decaying to a bare Ready
+/// for Review merely because a provider briefly redraws without a marker.
 public struct SessionStatusObservationArbiter: Sendable {
     public enum Source: Equatable, Sendable {
         case hook
+        case appServer
         case screen
     }
 
-    private var latestHookObservation: SessionStatusObservation?
+    private var latestStructuredObservation: SessionStatusObservation?
 
     /// Whether this session has shown any sign of life yet — any observation,
-    /// from either source, whose status is something other than
+    /// from any source, whose status is something other than
     /// `.readyForReview`.
     ///
     /// A screen showing a composer above some text looks the same whether the
@@ -81,8 +81,8 @@ public struct SessionStatusObservationArbiter: Sendable {
     /// welcome screen, so a screen-derived `.readyForReview` is held back
     /// until we have seen the session actually working (or waiting). Calling
     /// a brand-new session "Ready for Review" is the worse misread, and it is
-    /// the one users notice. Hook events are authoritative and bypass this: a
-    /// hook `Stop` is a direct statement that a turn ended.
+    /// the one users notice. Structured events bypass this gate: they directly
+    /// report that a provider turn ended.
     private var sessionHasProgressed: Bool
 
     /// Why the most recent `accept` returned `nil`, for diagnostics. A
@@ -108,38 +108,38 @@ public struct SessionStatusObservationArbiter: Sendable {
         if observation.status != .readyForReview {
             sessionHasProgressed = true
         }
-        if source == .hook {
-            latestHookObservation = observation
+        if source != .screen {
+            latestStructuredObservation = observation
             return observation
         }
 
         if observation.status == .readyForReview,
            !sessionHasProgressed,
-           latestHookObservation?.status != .readyForReview {
+           latestStructuredObservation?.status != .readyForReview {
             lastRejectionCause = "screen readyForReview held back — session has shown no working or waiting signal yet"
             return nil
         }
 
         if observation.endsTurn {
             // The provider says the turn is over and no hook will follow.
-            latestHookObservation = nil
+            latestStructuredObservation = nil
             return observation
         }
 
-        if let hook = latestHookObservation {
-            if (hook.status == .working || hook.status == .waitingForInput),
+        if let structured = latestStructuredObservation {
+            if (structured.status == .working || structured.status == .waitingForInput),
                observation.status == .readyForReview {
-                lastRejectionCause = "screen readyForReview outranked by pending hook \(hook.status.rawValue)"
-                    + (hook.waitingReason.map { "/\($0.rawValue)" } ?? "")
+                lastRejectionCause = "screen readyForReview outranked by pending structured status \(structured.status.rawValue)"
+                    + (structured.waitingReason.map { "/\($0.rawValue)" } ?? "")
                 return nil
             }
-            if hook.status == .waitingForInput,
+            if structured.status == .waitingForInput,
                observation.status == .waitingForInput,
-               let hookReason = hook.waitingReason,
-               observation.waitingReason != hookReason {
+               let structuredReason = structured.waitingReason,
+               observation.waitingReason != structuredReason {
                 lastRejectionCause = "screen waiting reason "
                     + (observation.waitingReason?.rawValue ?? "none")
-                    + " disagrees with pending hook reason \(hookReason.rawValue)"
+                    + " disagrees with pending structured reason \(structuredReason.rawValue)"
                 return nil
             }
         }
@@ -148,9 +148,9 @@ public struct SessionStatusObservationArbiter: Sendable {
         // hook. A confirming working screen deliberately retains a hook's
         // working hold: transient redraws can hide its marker, and only the
         // provider's terminal hook authoritatively ends that episode.
-        if (observation.status == .working && latestHookObservation?.status != .working) ||
+        if (observation.status == .working && latestStructuredObservation?.status != .working) ||
             observation.status == .crashed {
-            latestHookObservation = nil
+            latestStructuredObservation = nil
         }
         return observation
     }

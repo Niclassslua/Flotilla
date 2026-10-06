@@ -54,8 +54,13 @@ provider page's verified rows and fixtures, then add one dated entry below.
   capture; their payload behavior remains marked unverified.
 - Inspect the generated app-server protocol schema and record available
   status, thread, model, title, and plan APIs in the Codex reference.
-- Track replacement of SQLite/index discovery and the debug model query as
-  follow-up work because those flows do not yet have an app-server lifetime.
+- Subscribe to `thread/status/changed` independently of the phone companion,
+  mapping work, approval, question, idle, and system-error states to the board.
+- Replace launch-time SQLite/index discovery with cwd-filtered,
+  cursor-paginated `thread/list`, retaining the old provider as a compatibility
+  fallback when the private app-server is unavailable.
+- Keep title synchronization and the pre-session `model/list` query as
+  follow-up items because they need separate lifecycle and catalog decisions.
 
 ## OpenCode
 

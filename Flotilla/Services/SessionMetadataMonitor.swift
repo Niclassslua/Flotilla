@@ -30,6 +30,19 @@ final class SessionMetadataMonitor {
 
     struct Dependencies {
         var discover: @MainActor (Session) async -> DiscoveredAgentSession? = { session in
+            if session.agent == .codexCLI,
+               let descriptor = CompanionRuntimeDescriptor.read(
+                session.id,
+                support: TmuxSessionWrapping.defaultSupportDirectory()
+               ),
+               descriptor.agent == .codexCLI,
+               let found = try? await CodexAppServerAccess.latestSession(
+                endpoint: descriptor.endpoint,
+                workingDirectory: session.workingDirectory,
+                since: session.createdAt
+               ) {
+                return found
+            }
             if let found = await AgentSessionProviderRegistry.default.fetchLatestSession(
                 for: session.agent,
                 workingDirectory: session.workingDirectory,
