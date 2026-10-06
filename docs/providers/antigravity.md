@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Binary | `agy` (`AgentCatalog.antigravity`) |
-| Last verified | **1.3.0**, 2026-10-06: live probe of every hook event, the `PreToolUse` decision matrix, the confirmation picker, `PreInvocation` injection, interrupt, `--effort`, the user-level hooks file and the `--log-file` markers. Older payloads 2026-09-11 |
+| Valid through | **1.3.0**, verified 2026-10-06: live probe of every hook event, the `PreToolUse` decision matrix, the confirmation picker, `PreInvocation` injection, interrupt, `--effort`, the user-level hooks file and the `--log-file` markers. Older payloads 2026-09-11 |
 | Primary sources | [Antigravity hooks](https://antigravity.google/docs/hooks/); `agy --help`; captured payloads in `FlotillaUnitTests/ProviderFixtures/antigravity/`; [`Antigravity/FORMAT.md`](../../Packages/TranscriptKit/Sources/TranscriptKit/Codecs/Antigravity/FORMAT.md) |
 | Code | `HookConfigurationWriter.configureAntigravityHooks`, `HookEventReceiver` (`.antigravity`), `TerminalScreenHeuristic` (permission picker, interrupt), `AntigravityCompanionAdapter`, `AntigravityWorkspaceTrust`, `ProcessAgentConversationOwnershipChecker`, `ExperimentalAntigravitySessionProvider`, `AntigravityTranscriptCodec` |
 

@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Binary | `claude` (`AgentCatalog.claudeCode`) |
-| Last verified | **2.1.291**, 2026-10-06: live probe of every registered hook, trust dialog, interrupt, `/compact`, `/clear`, sub-agents, project-directory naming. Older payloads 2.1.119–2.1.290 |
+| Valid through | **2.1.291**, verified 2026-10-06: live probe of every registered hook, trust dialog, interrupt, `/compact`, `/clear`, sub-agents, project-directory naming. Older payloads 2.1.119–2.1.290 |
 | Primary sources | [Claude Code hooks reference](https://code.claude.com/docs/en/hooks); `claude --help`; captured payloads in `FlotillaUnitTests/ProviderFixtures/claude-code/` |
 | Code | `HookConfigurationWriter.launchArguments(.claudeCode)`, `HookEventReceiver` (`.claudeCode`), `ClaudeCompanionAdapter`, `ClaudePermissionBridge`, `ClaudeSessionProvider`, `ClaudeTranscriptCodec` |
 
@@ -23,6 +23,7 @@ workspace-trust dialog and an interrupt.
 | Workspace trust | An untrusted folder (not covered by a trusted parent) shows a trust dialog, and Claude holds back **every** hook, `--settings` included, until it is accepted. Flotilla does **not** pre-trust: Claude rewrites the 1.3 MB `~/.claude.json` from every process with temp-file-and-rename and no lock, so an outside write would race it. The dialog is detected on screen instead (below) | **Verified** 2.1.291: zero events before accepting, `SessionStart` right after |
 | Session identity | first launch `--session-id <uuid>`; resume `--resume <uuid>` (`AgentResumeStrategy.assignable`). `/clear` and forks move the process to a new id, which `SessionStart` reports and `AppStore.adoptAgentSessionID` follows | **Verified** 2.1.291 |
 | Model / effort | `--model <slug>`, `--effort <low…max>` | Help 2.1.291 |
+| Session title | `--name <title>` passes Flotilla's session title into the prompt box and terminal title | **Verified** 2.1.291 |
 | Plan mode | `--permission-mode plan`, fresh conversations only (never alongside `--resume`) | code |
 | Host instructions | `--append-system-prompt <text>` (`HostAppAwareness`) | code |
 | Initial prompt | positional argument (`promptFlag: .bareValue`); later prompts via tmux `send-keys` | **Verified** |

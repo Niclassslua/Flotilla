@@ -1,0 +1,16 @@
+SessionStart
+UserPromptSubmit
+PreToolUse
+PermissionRequest
+PostToolUse
+PostToolUseFailure
+PermissionDenied
+Notification
+Stop
+StopFailure
+PreCompact
+PostCompact
+SubagentStart
+SubagentStop
+SessionEnd
+MessageDisplay

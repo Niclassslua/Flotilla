@@ -4,6 +4,47 @@ Record one entry per provider update that changes a verified integration
 surface. Provider reference pages state the exact version they are valid
 through; captured fixtures remain alongside their provider.
 
+Upstream release notes to check on each version bump:
+
+- Claude Code: [CHANGELOG.md](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)
+- Codex CLI: [GitHub releases](https://github.com/openai/codex/releases)
+- OpenCode: [GitHub releases](https://github.com/anomalyco/opencode/releases)
+- Antigravity: `agy changelog`
+- Cursor Agent: [Cursor changelog](https://cursor.com/changelog)
+
+For every bump, capture the upstream notes and local snapshots, compare the
+provider page's verified rows and fixtures, then add one dated entry below.
+
+## Claude Code
+
+### 2.1.291 — 2026-10-06
+
+- Added turn-start, session identity, compact, subagent, failure, denial,
+  notification, and completion hook coverage; observe-only hooks run async.
+- Replaced most screen-derived status with hook observations while retaining
+  trust and interrupt detection as screen fallbacks.
+- Passed Flotilla's session title at launch and documented versioned fixtures.
+
+## Antigravity
+
+### 1.3.0 — 2026-10-06
+
+- Installed env-gated hooks in the user config and added `PreInvocation` turn
+  start and phone prompt injection.
+- Captured `Stop.terminationReason`, confirmed the decision limitation, and
+  retained screen reading for permission dialogs.
+- Documented versioned CLI behavior and the global hook configuration.
+
+## Cursor Agent
+
+### 2026.10.01-e373342 — 2026-10-06
+
+- Moved hooks to the user config, added failure/interrupt/session lifecycle
+  handling, and used `stop.followup_message` for queued phone prompts.
+- Added live session IDs and title discovery through `agent create-chat` and
+  `agent ls`; screen parsing remains necessary for approval dialogs.
+- Recorded the oversized handoff prompt spill fix and updated fixtures.
+
 ## Codex CLI
 
 ### 0.160.1 — 2026-10-06

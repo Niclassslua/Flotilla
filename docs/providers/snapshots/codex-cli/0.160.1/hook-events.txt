@@ -1,0 +1,12 @@
+PreToolUse
+PermissionRequest
+PostToolUse
+Stop
+UserPromptSubmit
+SessionStart
+Interrupt
+PreCompact
+PostCompact
+SubagentStart
+SubagentStop
+SessionEnd

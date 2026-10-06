@@ -1,0 +1,12 @@
+tool.execute.before
+tool.execute.after
+session.status
+session.idle
+session.error
+session.created
+permission.asked
+permission.replied
+question.asked
+question.replied
+question.rejected
+session.compacted

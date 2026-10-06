@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Binary | `agent` (`AgentCatalog.cursorAgent`; also installed as `cursor-agent`) |
-| Last verified | **2026.10.01-e373342**, 2026-10-06: live probe of every hook event (with `approvalMode: allowlist`), skip/interrupt/follow-up behavior, user-level hooks, `create-chat`, parameterized models |
+| Valid through | **2026.10.01-e373342**, verified 2026-10-06: live probe of every hook event (with `approvalMode: allowlist`), skip/interrupt/follow-up behavior, user-level hooks, `create-chat`, parameterized models |
 | Primary sources | [Cursor hooks](https://cursor.com/docs/agent/hooks), [CLI parameters](https://cursor.com/docs/cli/reference/parameters), [`../probe-cursor-companion.md`](../probe-cursor-companion.md) (keys and dialogs); captured payloads and screens in `FlotillaUnitTests/ProviderFixtures/cursor-agent/` and `CursorCompanionAdapterTests` |
 | Code | `HookConfigurationWriter.configureCursorHooks`, `HookEventReceiver` (`.cursorAgent`), `CursorDialog` (HooksKit), `TerminalScreenHeuristic`, `CursorCompanionAdapter`, `ProcessTmuxGoalDeliverer`, `CursorSessionProvider`, `CursorTranscriptCodec` |
 

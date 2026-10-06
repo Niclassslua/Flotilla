@@ -8,17 +8,19 @@ directory records, per provider, **what Flotilla relies on, how, and against
 which version it was last verified**, so a provider update can be reviewed by
 diffing behavior against this baseline instead of rediscovering it.
 
-| Provider | Binary | Reference | Last verified |
+| Provider | Binary | Reference | Valid through |
 | --- | --- | --- | --- |
-| Claude Code | `claude` | [claude-code.md](claude-code.md) | 2.1.291 · 2026-10-06 (full live probe) |
-| Codex CLI | `codex` | [codex-cli.md](codex-cli.md) | hooks 0.125.0–0.155.0 · installed 0.160.1 (not yet re-verified) |
-| OpenCode | `opencode` | [opencode.md](opencode.md) | 1.18.34 · 2026-10-06 (live probe) |
-| Antigravity | `agy` | [antigravity.md](antigravity.md) | 1.3.0 · 2026-10-06 (full live probe) |
-| Cursor Agent | `agent` | [cursor-agent.md](cursor-agent.md) | 2026.10.01-e373342 · 2026-10-06 (full live probe) |
+| Claude Code | `claude` | [claude-code.md](claude-code.md) | valid through 2.1.291 · 2026-10-06 (full live probe) |
+| Codex CLI | `codex` | [codex-cli.md](codex-cli.md) | valid through 0.160.1 · 2026-10-06 (schema/help inspected; hook probes through 0.155.0) |
+| OpenCode | `opencode` | [opencode.md](opencode.md) | valid through 1.18.34 · 2026-10-06 (live probe; snapshot captured 1.18.32) |
+| Antigravity | `agy` | [antigravity.md](antigravity.md) | valid through 1.3.0 · 2026-10-06 (full live probe) |
+| Cursor Agent | `agent` | [cursor-agent.md](cursor-agent.md) | valid through 2026.10.01-e373342 · 2026-10-06 (full live probe) |
 
 Cross-cutting references:
 
 - [CHANGES.md](CHANGES.md) — provider version bumps and integration changes.
+- [`snapshots/`](snapshots/) — CLI help, configured event names, and provider
+  protocol snapshots captured by `Scripts/provider-snapshot.sh`.
 
 - [screen-detection.md](screen-detection.md) — every string Flotilla matches
   on a rendered terminal, in one inventory. Screen text is the most fragile
@@ -106,6 +108,17 @@ object per line, exactly as the provider (or Flotilla's wrapper) wrote it.
 5. Add the file and a manifest entry. Set `expect` to the observation
    Flotilla *should* produce (`null` for none). If that differs from what it
    produces today, add `currentlyObserved` and `knownGap`.
+
+### Capturing a provider release snapshot
+
+Run `Scripts/provider-snapshot.sh` after installing provider updates, or pass
+one provider key (`claude-code`, `codex-cli`, `antigravity`, `opencode`, or
+`cursor-agent`). It stores the CLI version, help output, and Flotilla's
+configured hook event names under `docs/providers/snapshots/<provider>/<version>/`.
+Codex also gets the generated app-server JSON schema. OpenCode starts a local
+`opencode serve` process briefly and saves its `/doc` OpenAPI response. Review
+the resulting diff with the provider page and upstream release notes before
+updating the validity stamp.
 
 ## When a provider updates
 
