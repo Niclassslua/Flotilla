@@ -364,4 +364,49 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
         lines.append("Reply with only: ACK")
         return lines.joined(separator: "\n")
     }
+
+    /// How a Cursor store-seed invocation carries the handoff preamble.
+    ///
+    /// `agent --print` only accepts the prompt as a positional argv element.
+    /// Past a few hundred KB that trips the kernel's `E2BIG` ("Argument list
+    /// too long") and the whole handoff fails before Cursor ever starts. Small
+    /// conversations stay inline; larger ones are written to a file and the
+    /// argv prompt only points at that path so Cursor can Read it.
+    public enum StoreSeedPayload: Equatable, Sendable {
+        case inline(prompt: String)
+        case fileBacked(promptFile: URL, launchPrompt: String)
+    }
+
+    /// Conservative ceiling for an inline argv prompt. macOS `ARG_MAX` is
+    /// shared with the environment and is typically 256 KB–1 MB; staying well
+    /// under that leaves room for Cursor's own flags and inherited env.
+    public static let maxInlinePromptUTF8Bytes = 128_000
+
+    /// Builds the seed payload, writing `promptFile` only when the full
+    /// preamble would be unsafe to place on argv.
+    public static func storeSeedPayload(
+        from entries: [CanonicalEntry],
+        promptFile: URL
+    ) throws -> StoreSeedPayload {
+        let prompt = handoffPrompt(from: entries)
+        if prompt.utf8.count <= maxInlinePromptUTF8Bytes {
+            return .inline(prompt: prompt)
+        }
+        try prompt.write(to: promptFile, atomically: true, encoding: .utf8)
+        return .fileBacked(
+            promptFile: promptFile,
+            launchPrompt: fileBackedLaunchPrompt(pointingTo: promptFile)
+        )
+    }
+
+    /// Short argv prompt used when the full preamble lives on disk.
+    public static func fileBackedLaunchPrompt(pointingTo url: URL) -> String {
+        """
+        [Handoff] Prior conversation for continuity is in the file at the absolute path below.
+        Read that file once with the Read tool. Treat its entire contents as already exchanged.
+        Do not edit the file. Do not use other tools. Reply with only: ACK
+
+        \(url.path)
+        """
+    }
 }

@@ -113,7 +113,7 @@ again to exit"), then clears the restored prompt with `Ctrl-U` + `Backspace`,
 | Transcript semantics | A user record is written when its turn starts; assistant text only after that step's tool calls. A trailing `turn_ended` record is **removed** (the file is rewritten) when the next turn starts. Steered follow-ups are sometimes never written | **Verified** (probe) |
 | Plans | `~/.cursor/plans/<name>.plan.md` | **Verified** |
 | Allowlist | `Tab` adds `Shell(<cmd>)` to the **global** `~/.cursor/cli-config.json` | **Verified** |
-| Handoff | Source: reads the JSONL. Destination: writes JSONL + meta, then seeds `store.db` with `agent --print --resume` | `CursorTranscriptCodec` |
+| Handoff | Source: reads the JSONL. Destination: writes JSONL + meta, then seeds `store.db` with `agent --print --resume`. The preamble is inline on argv when small; past ~128 KB UTF-8 it is written to a temp file and argv only points at that path (avoids `E2BIG`) | `CursorTranscriptCodec` |
 
 ## Models & effort
 

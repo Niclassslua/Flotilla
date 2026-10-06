@@ -17,6 +17,7 @@ final class CursorTranscriptCodecTests: XCTestCase {
         try super.setUpWithError()
         home = FileManager.default.temporaryDirectory
             .appendingPathComponent("CursorTranscriptTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         workingDirectory = URL(fileURLWithPath: "/tmp/cursor-example")
         codec = CursorTranscriptCodec(homeDirectory: home)
     }
@@ -156,5 +157,53 @@ final class CursorTranscriptCodecTests: XCTestCase {
         XCTAssertTrue(prompt.contains("User: token"))
         XCTAssertTrue(prompt.contains("Assistant: ack"))
         XCTAssertTrue(prompt.contains("ACK"))
+    }
+
+    func testStoreSeedPayloadStaysInlineForSmallPrompts() throws {
+        let promptFile = home.appendingPathComponent("unused-handoff.txt")
+        let payload = try CursorTranscriptCodec.storeSeedPayload(
+            from: [
+                .userMessage(text: "token", timestamp: .now),
+                .assistantMessage(text: "ack", timestamp: .now)
+            ],
+            promptFile: promptFile
+        )
+        guard case let .inline(prompt) = payload else {
+            return XCTFail("expected inline payload, got \(payload)")
+        }
+        XCTAssertTrue(prompt.contains("User: token"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: promptFile.path))
+    }
+
+    /// Oversized Claude→Cursor handoffs used to put the whole preamble on
+    /// argv and die with E2BIG. Past the inline ceiling the seed must keep
+    /// argv short and park the body in a file Cursor can Read.
+    func testStoreSeedPayloadUsesFileWhenPromptExceedsArgLimit() throws {
+        let promptFile = home.appendingPathComponent("large-handoff.txt")
+        let oversized = String(
+            repeating: "x",
+            count: CursorTranscriptCodec.maxInlinePromptUTF8Bytes + 1_024
+        )
+        let payload = try CursorTranscriptCodec.storeSeedPayload(
+            from: [
+                .userMessage(text: "remember this", timestamp: .now),
+                .assistantMessage(text: oversized, timestamp: .now)
+            ],
+            promptFile: promptFile
+        )
+        guard case let .fileBacked(file, launchPrompt) = payload else {
+            return XCTFail("expected file-backed payload, got \(payload)")
+        }
+        XCTAssertEqual(file, promptFile)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: promptFile.path))
+        let body = try String(contentsOf: promptFile, encoding: .utf8)
+        XCTAssertTrue(body.contains(oversized))
+        XCTAssertTrue(launchPrompt.contains(promptFile.path))
+        XCTAssertFalse(launchPrompt.contains(oversized), "argv must not carry the preamble body")
+        XCTAssertLessThan(
+            launchPrompt.utf8.count,
+            4_096,
+            "file-backed launch prompt must stay well under ARG_MAX"
+        )
     }
 }

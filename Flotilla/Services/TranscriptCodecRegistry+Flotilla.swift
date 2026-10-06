@@ -63,7 +63,27 @@ extension TranscriptCodecRegistry {
             guard let executable = locator.locate("agent") ?? locator.locate("cursor-agent") else {
                 throw CodecSetupError.cursorAgentNotInstalled
             }
-            let prompt = CursorTranscriptCodec.handoffPrompt(from: entries)
+            // Large handoffs used to put the entire preamble on argv and die
+            // with E2BIG ("Argument list too long"). Overflow goes to a temp
+            // file; argv only carries a short pointer Cursor can Read.
+            let promptFile = FileManager.default.temporaryDirectory
+                .appendingPathComponent("flotilla-cursor-handoff-\(sessionID).txt")
+            let payload = try CursorTranscriptCodec.storeSeedPayload(
+                from: entries,
+                promptFile: promptFile
+            )
+            let prompt: String
+            switch payload {
+            case let .inline(inlinePrompt):
+                prompt = inlinePrompt
+            case let .fileBacked(_, launchPrompt):
+                prompt = launchPrompt
+            }
+            defer {
+                if case .fileBacked = payload {
+                    try? FileManager.default.removeItem(at: promptFile)
+                }
+            }
             let result = try await commandRunner.run(
                 [
                     "--print",
