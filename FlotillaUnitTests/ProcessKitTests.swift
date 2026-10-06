@@ -27,6 +27,32 @@ final class SystemPTYProcessTests: XCTestCase {
         XCTAssertTrue(String(decoding: collected, as: UTF8.self).contains("hello-from-pty"))
     }
 
+    /// A descriptor the parent opened without close-on-exec must not reach
+    /// the child: agents run under a tmux server that outlives Flotilla, and
+    /// a leaked companion-socket lock there disabled the phone bridge.
+    func testChildDoesNotInheritParentDescriptors() async throws {
+        let leaked = open("/dev/null", O_RDONLY)
+        XCTAssertGreaterThan(leaked, STDERR_FILENO)
+        defer { close(leaked) }
+        let process = SystemPTYProcess()
+        try process.start(
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "if [ -e /dev/fd/\(leaked) ]; then echo fd-leaked; else echo fd-closed; fi"],
+            environment: ProcessInfo.processInfo.environment,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+
+        var collected = Data()
+        for await chunk in process.outputStream {
+            collected.append(chunk)
+            let text = String(decoding: collected, as: UTF8.self)
+            if text.contains("fd-leaked") || text.contains("fd-closed") { break }
+        }
+
+        XCTAssertTrue(String(decoding: collected, as: UTF8.self).contains("fd-closed"))
+    }
+
     /// End-to-end regression for the black-and-white terminal bug: GUI-launched
     /// apps (Finder, Xcode's debugger) inherit `TERM=dumb` from launchd, and
     /// left untouched that reaches the agent CLI's real environment, whose

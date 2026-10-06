@@ -132,6 +132,13 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
             Self.freeCStringArray(cEnvp)
             free(cWorkingDirectory)
         }
+        // The child closes every descriptor above stdio before exec. Swift,
+        // Network and Metal open plenty without close-on-exec, and a leaked
+        // one outlives Flotilla inside a long-lived tmux server — a leaked
+        // `flock` there locks every later Flotilla out of the companion
+        // socket. Computed here because `sysconf` isn't async-signal-safe.
+        let openMax = sysconf(_SC_OPEN_MAX)
+        let descriptorLimit = Int32(clamping: openMax > 0 ? min(openMax, 65_536) : 10_240)
 
         var master: Int32 = -1
         var winSize = winsize(
@@ -172,6 +179,11 @@ public final class SystemPTYProcess: PTYProcessProtocol, @unchecked Sendable {
 
             if let cWorkingDirectory {
                 _ = chdir(cWorkingDirectory)
+            }
+            var descriptor: Int32 = STDERR_FILENO + 1
+            while descriptor < descriptorLimit {
+                _ = close(descriptor)
+                descriptor += 1
             }
             _ = execve(cExecutable, cArgv, cEnvp)
             _exit(127) // execve only returns on failure.

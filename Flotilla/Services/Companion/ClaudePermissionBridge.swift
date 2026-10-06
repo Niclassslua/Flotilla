@@ -192,6 +192,8 @@ final class ClaudePermissionBridge {
     }
 
     private var listener: NWListener?
+    /// `nil` until the listener first reports ready or failed.
+    private var listenerIsReady: Bool?
     /// Held for the listener's lifetime. A second process must never unlink
     /// this process's socket just because it was given the same path.
     private var socketLockDescriptor: Int32 = -1
@@ -219,13 +221,19 @@ final class ClaudePermissionBridge {
             return false
         }
         let lockPath = socketURL.path + ".lock"
-        let descriptor = Darwin.open(lockPath, O_CREAT | O_RDWR, 0o600)
-        guard descriptor >= 0 else { return false }
-        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
-            Darwin.close(descriptor)
-            return false
+        var descriptor = Self.lockedDescriptor(at: lockPath)
+        // A lock whose owning app is gone was leaked into some other process
+        // — a tmux server spawned by an older build holds it for as long as
+        // its sessions live. Abandon that inode for a fresh one.
+        if descriptor == nil, Self.lockIsOrphaned(lockPath, socketPath: socketURL.path) {
+            unlink(lockPath)
+            descriptor = Self.lockedDescriptor(at: lockPath)
         }
+        guard let descriptor else { return false }
         socketLockDescriptor = descriptor
+        let owner = Data("\(getpid())\n".utf8)
+        ftruncate(descriptor, 0)
+        _ = owner.withUnsafeBytes { pwrite(descriptor, $0.baseAddress, $0.count, 0) }
         // Only the lock holder may remove a stale socket left by a crash.
         unlink(socketURL.path)
         let parameters = NWParameters.tcp
@@ -238,15 +246,41 @@ final class ClaudePermissionBridge {
         listener.newConnectionHandler = { [weak self] connection in
             Task { @MainActor in self?.accept(connection) }
         }
+        listener.stateUpdateHandler = { [weak self, weak listener] state in
+            let isReady: Bool? = switch state {
+            case .ready: true
+            case .failed, .cancelled: false
+            default: nil
+            }
+            guard let isReady else { return }
+            Task { @MainActor in
+                guard let self, let listener, self.listener === listener else { return }
+                self.listenerIsReady = isReady
+            }
+        }
+        listenerIsReady = nil
         listener.start(queue: queue)
         self.listener = listener
         self.socketURL = socketURL
         return true
     }
 
+    /// Whether a hook could reach this bridge right now. A listener that is
+    /// still coming up counts as serving; one that is up must also answer
+    /// on its socket path, which catches the file being removed under it.
+    var isServing: Bool {
+        guard listener != nil, let socketURL else { return false }
+        switch listenerIsReady {
+        case nil: return true
+        case false?: return false
+        case true?: return Self.acceptsConnections(socketURL.path)
+        }
+    }
+
     func stop() {
         listener?.cancel()
         listener = nil
+        listenerIsReady = nil
         // Leave the socket file behind. The next lock holder can safely clear
         // it, while this process cannot accidentally delete a replacement.
         socketURL = nil
@@ -255,6 +289,46 @@ final class ClaudePermissionBridge {
         held = [:]
         notWaitingSince = [:]
         onChange()
+    }
+
+    /// Close-on-exec: an agent spawned from here must not inherit the lock,
+    /// or its tmux server keeps holding it after Flotilla quits.
+    private static func lockedDescriptor(at path: String) -> Int32? {
+        let descriptor = Darwin.open(path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else { return nil }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            Darwin.close(descriptor)
+            return nil
+        }
+        return descriptor
+    }
+
+    /// The owner records its pid in the lock file. Older builds didn't, so
+    /// an unowned lock is orphaned only when nothing serves the socket.
+    private static func lockIsOrphaned(_ lockPath: String, socketPath: String) -> Bool {
+        let contents = (try? String(contentsOfFile: lockPath, encoding: .utf8)) ?? ""
+        if let owner = pid_t(contents.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return kill(owner, 0) != 0 && errno == ESRCH
+        }
+        return !acceptsConnections(socketPath)
+    }
+
+    private static func acceptsConnections(_ path: String) -> Bool {
+        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { return false }
+        defer { Darwin.close(descriptor) }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let capacity = MemoryLayout.size(ofValue: address.sun_path)
+        guard path.utf8.count < capacity else { return false }
+        withUnsafeMutableBytes(of: &address.sun_path) { buffer in
+            buffer.copyBytes(from: path.utf8)
+        }
+        return withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) == 0
+            }
+        }
     }
 
     private func releaseSocketLock() {
