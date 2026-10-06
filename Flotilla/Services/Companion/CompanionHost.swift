@@ -37,6 +37,9 @@ final class CompanionHost {
     private(set) var tailscaleDNSName: String?
     /// Set when the host couldn't load or create its identity.
     private(set) var setupError: String?
+    /// Set while the permission bridge isn't serving, so dialogs can't
+    /// reach the phone. The publish loop keeps retrying until it is.
+    private(set) var bridgeError: String?
 
     enum HandyStatus: Equatable, Sendable {
         case checking
@@ -89,6 +92,8 @@ final class CompanionHost {
     static let pairingLifetime: TimeInterval = 5 * 60
     /// How many one-second publish ticks between `tailscale status` calls.
     private static let tailscaleRefreshTicks = 15
+    /// How many one-second publish ticks between permission-bridge checks.
+    private static let bridgeCheckTicks = 5
 
     private final class Peer {
         let deviceID: String
@@ -201,9 +206,7 @@ final class CompanionHost {
         }
         guard let identity else { return }
         refreshAddresses()
-        if !bridge.start(socketURL: socketURL) {
-            setupError = "The companion permission bridge couldn't start because its socket is already in use. Another Flotilla instance may be running."
-        }
+        startBridge()
 
         let auth = self.auth
         let macName = self.macName
@@ -230,10 +233,33 @@ final class CompanionHost {
         startPublishing()
     }
 
+    /// (Re)starts the bridge unless it's already serving. A bridge that
+    /// silently isn't running turns every phone-answerable dialog into a
+    /// "needs your Mac" card, so this runs at start and on every check.
+    private func startBridge() {
+        if bridge.isServing {
+            bridgeError = nil
+            return
+        }
+        if bridge.start(socketURL: socketURL) {
+            if bridgeError != nil {
+                Self.syncLog.info("permission bridge recovered")
+            }
+            bridgeError = nil
+        } else {
+            if bridgeError == nil {
+                Self.syncLog.error("permission bridge couldn't start; retrying")
+            }
+            bridgeError = "Dialogs can't be answered from your iPhone: the permission bridge's socket is in use by another Flotilla. Flotilla keeps retrying."
+        }
+        publishFleetIfChanged()
+    }
+
     private func stop() {
         server?.stop()
         server = nil
         bridge.stop()
+        bridgeError = nil
         adapters.close()
         publishTask?.cancel()
         publishTask = nil
@@ -609,6 +635,9 @@ final class CompanionHost {
                 self.bridge.retractResolved { sessionID in
                     self.store.sessions.first { $0.id == sessionID }?.status == .waitingForInput
                 }
+                if tick.isMultiple(of: Self.bridgeCheckTicks) {
+                    self.startBridge()
+                }
                 self.refreshAddresses()
                 if tick.isMultiple(of: Self.tailscaleRefreshTicks) {
                     await self.refreshTailscaleName()
@@ -824,7 +853,8 @@ final class CompanionHost {
                     handoffTargets: store.handoffTargets(for: session),
                     isProcessLive: store.process(for: session.id) != nil && session.status != .crashed,
                     answerable: session.agent == .claudeCode ? bridge.pending(for: session.id) : adapters.pending(session) + bridge.pending(for: session.id),
-                    suppressTerminalFallback: session.agent != .claudeCode && adapters.suppressesTerminalFallback(for: session)
+                    suppressTerminalFallback: session.agent != .claudeCode && adapters.suppressesTerminalFallback(for: session),
+                    relayUnavailable: session.agent == .claudeCode && bridgeError != nil
                 )
             }
         )

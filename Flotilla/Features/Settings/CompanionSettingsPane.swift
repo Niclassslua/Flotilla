@@ -21,6 +21,9 @@ struct CompanionSettingsPane: View {
                 if let error = host.setupError {
                     Text(error).foregroundStyle(FlotillaColors.danger).font(.callout)
                 }
+                if let error = host.bridgeError {
+                    Text(error).foregroundStyle(FlotillaColors.danger).font(.callout)
+                }
             } footer: {
                 Text("While Flotilla runs, paired iPhones can watch and control your sessions over your local network or Tailscale. Everything is end-to-end encrypted.")
             }

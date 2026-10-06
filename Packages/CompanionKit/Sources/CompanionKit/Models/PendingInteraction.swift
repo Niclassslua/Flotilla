@@ -25,13 +25,18 @@ public struct PendingInteraction: Identifiable, Hashable, Codable, Sendable {
     public var subagent: String?
     public var raisedAt: Date
     public var resolution: Resolution?
+    /// Set on a `needsTerminal` card when the dialog would normally reach the
+    /// phone but the Mac's relay for it isn't running. Absent from Macs that
+    /// predate the flag.
+    public var relayUnavailable: Bool?
 
-    public init(id: UUID = UUID(), kind: Kind, subagent: String? = nil, raisedAt: Date = .now, resolution: Resolution? = nil) {
+    public init(id: UUID = UUID(), kind: Kind, subagent: String? = nil, raisedAt: Date = .now, resolution: Resolution? = nil, relayUnavailable: Bool? = nil) {
         self.id = id
         self.kind = kind
         self.subagent = subagent
         self.raisedAt = raisedAt
         self.resolution = resolution
+        self.relayUnavailable = relayUnavailable
     }
 
     /// The one-line summary a fleet row shows.

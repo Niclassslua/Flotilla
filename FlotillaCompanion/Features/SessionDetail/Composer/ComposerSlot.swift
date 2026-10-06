@@ -56,7 +56,7 @@ struct ComposerSlot: View {
         case .plan(let plan):
             PlanCard(context: context, plan: plan)
         case .needsTerminal(let title):
-            NeedsTerminalCard(dialogTitle: title)
+            NeedsTerminalCard(dialogTitle: title, relayUnavailable: interaction.relayUnavailable == true)
         }
     }
 }
@@ -432,16 +432,23 @@ private struct CrashedCard: View {
 
 private struct NeedsTerminalCard: View {
     let dialogTitle: String
+    let relayUnavailable: Bool
 
     /// Designed in for the later terminal fallback; the prototype has no terminal.
     private static let showsOpenTerminal = false
 
     var body: some View {
-        CardContainer(context: nil, title: "Needs your Mac's terminal", systemImage: "desktopcomputer") {
+        CardContainer(
+            context: nil,
+            title: relayUnavailable ? "Your Mac can't forward dialogs" : "Needs your Mac's terminal",
+            systemImage: relayUnavailable ? "exclamationmark.triangle" : "desktopcomputer"
+        ) {
             Text(dialogTitle)
                 .font(.headline)
                 .foregroundStyle(FlotillaColors.textPrimary)
-            Text("This dialog can only be answered in the terminal on your Mac. The session continues once it's answered there.")
+            Text(relayUnavailable
+                 ? "Flotilla's dialog relay on your Mac isn't running, so this can't be answered here. Answer it in the terminal on your Mac; Flotilla keeps trying to restore the relay."
+                 : "This dialog can only be answered in the terminal on your Mac. The session continues once it's answered there.")
                 .font(.footnote)
                 .foregroundStyle(FlotillaColors.textSecondary)
             if Self.showsOpenTerminal {

@@ -20,6 +20,10 @@ enum CompanionSnapshotBuilder {
         /// status has not caught up yet. Do not replace that card with the
         /// generic terminal fallback during this handoff window.
         var suppressTerminalFallback: Bool = false
+        /// The relay that would carry this session's dialogs to the phone
+        /// isn't running, so the fallback card says so instead of implying
+        /// the dialog is terminal-only.
+        var relayUnavailable: Bool = false
     }
 
     static let crashReason = "The agent process exited unexpectedly"
@@ -41,7 +45,8 @@ enum CompanionSnapshotBuilder {
                 let cards = interactions(
                     for: session,
                     answerable: sessionContext.answerable,
-                    suppressTerminalFallback: sessionContext.suppressTerminalFallback
+                    suppressTerminalFallback: sessionContext.suppressTerminalFallback,
+                    relayUnavailable: sessionContext.relayUnavailable
                 )
                 if !cards.isEmpty { pending[session.id] = cards }
                 return companionSession(session, context: sessionContext, cards: cards)
@@ -89,7 +94,8 @@ enum CompanionSnapshotBuilder {
     static func interactions(
         for session: Session,
         answerable: [PendingInteraction],
-        suppressTerminalFallback: Bool = false
+        suppressTerminalFallback: Bool = false,
+        relayUnavailable: Bool = false
     ) -> [PendingInteraction] {
         if !answerable.isEmpty { return answerable }
         guard session.status == .waitingForInput, !suppressTerminalFallback else { return [] }
@@ -102,7 +108,8 @@ enum CompanionSnapshotBuilder {
         return [PendingInteraction(
             id: terminalCardID(for: session),
             kind: .needsTerminal(dialogTitle: title),
-            raisedAt: session.lastActiveAt
+            raisedAt: session.lastActiveAt,
+            relayUnavailable: relayUnavailable ? true : nil
         )]
     }
 

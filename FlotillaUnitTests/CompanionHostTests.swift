@@ -132,6 +132,20 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(CompanionSnapshotBuilder.interactions(for: waiting, answerable: []).first?.id, cards.first?.id)
     }
 
+    func testTerminalCardSaysWhenTheRelayIsDown() {
+        let waiting = session(status: .waitingForInput, reason: .planApproval)
+        var down = context()
+        down.relayUnavailable = true
+
+        let fallback = CompanionSnapshotBuilder.snapshot(macID: "m", macName: "Studio", sessions: [waiting], projects: [], context: { _ in down })
+        XCTAssertEqual(fallback.pending[waiting.id]?.map(\.relayUnavailable), [true])
+        XCTAssertEqual(
+            CompanionSnapshotBuilder.interactions(for: waiting, answerable: []).map(\.relayUnavailable),
+            [nil],
+            "a healthy relay keeps the plain terminal-only card"
+        )
+    }
+
     func testBridgeRequestsReplaceTheTerminalCard() {
         let waiting = session(status: .waitingForInput, reason: .permission)
         let card = PendingInteraction(kind: .permission(PermissionRequest(tool: "Bash", summary: "rm -rf build")))
@@ -629,6 +643,88 @@ final class CompanionBridgeHookTests: XCTestCase {
 
         first.stop()
         XCTAssertTrue(second.start(socketURL: socket), "a stale socket is recoverable once the owner exits")
+    }
+
+    @MainActor
+    func testBridgeRecoversALockLeakedIntoAProcessThatServesNoSocket() async throws {
+        let socket = HookConfigurationWriter.companionSocketPath(supportDirectory: directory)
+        // Stands in for a tmux server that inherited an older build's lock,
+        // which records no owner.
+        let leaked = open(socket.path + ".lock", O_CREAT | O_RDWR, 0o600)
+        XCTAssertEqual(flock(leaked, LOCK_EX | LOCK_NB), 0)
+        defer { close(leaked) }
+        let bridge = ClaudePermissionBridge()
+        defer { bridge.stop() }
+
+        XCTAssertTrue(bridge.start(socketURL: socket))
+
+        // The phone can answer through the recovered bridge again.
+        let sessionID = UUID()
+        let command = try permissionCommand()
+        let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
+        let hook = Task.detached {
+            try Self.run(command, input: ##"{"tool_name":"ExitPlanMode","tool_input":{"plan":"# Plan"}}"##, eventFile: eventFile)
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while bridge.pending(for: sessionID).isEmpty, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let card = try XCTUnwrap(bridge.pending(for: sessionID).first)
+        XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .approvePlan(nil)), .accepted)
+        let result = try await hook.value
+        XCTAssertTrue(result.stdout.contains(#""behavior":"allow""#))
+    }
+
+    @MainActor
+    func testBridgeReportsWhenItsSocketStopsAnsweringAndRestartsCleanly() async throws {
+        let socket = HookConfigurationWriter.companionSocketPath(supportDirectory: directory)
+        let bridge = ClaudePermissionBridge()
+        defer { bridge.stop() }
+        XCTAssertFalse(bridge.isServing, "a bridge that never started serves nothing")
+        XCTAssertTrue(bridge.start(socketURL: socket))
+        let deadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: socket.path), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(bridge.isServing)
+
+        unlink(socket.path)
+        XCTAssertFalse(bridge.isServing, "hooks can't reach a socket whose file is gone")
+
+        XCTAssertTrue(bridge.start(socketURL: socket))
+        let sessionID = UUID()
+        let command = try permissionCommand()
+        let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
+        let hook = Task.detached {
+            try Self.run(command, input: #"{"tool_name":"Bash","tool_input":{"command":"pwd"}}"#, eventFile: eventFile)
+        }
+        let requestDeadline = Date().addingTimeInterval(5)
+        while bridge.pending(for: sessionID).isEmpty, Date() < requestDeadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let card = try XCTUnwrap(bridge.pending(for: sessionID).first)
+        XCTAssertEqual(bridge.answer(sessionID: sessionID, interactionID: card.id, with: .allow), .accepted)
+        let result = try await hook.value
+        XCTAssertTrue(result.stdout.contains(#""behavior":"allow""#))
+        XCTAssertTrue(bridge.isServing)
+    }
+
+    @MainActor
+    func testBridgeRecoversALockWhoseOwnerExited() throws {
+        let socket = HookConfigurationWriter.companionSocketPath(supportDirectory: directory)
+        let exited = Process()
+        exited.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try exited.run()
+        exited.waitUntilExit()
+        let leaked = open(socket.path + ".lock", O_CREAT | O_RDWR, 0o600)
+        XCTAssertEqual(flock(leaked, LOCK_EX | LOCK_NB), 0)
+        defer { close(leaked) }
+        try Data("\(exited.processIdentifier)\n".utf8).write(to: URL(fileURLWithPath: socket.path + ".lock"))
+        let bridge = ClaudePermissionBridge()
+        defer { bridge.stop() }
+
+        XCTAssertTrue(bridge.start(socketURL: socket))
     }
 
     @MainActor
