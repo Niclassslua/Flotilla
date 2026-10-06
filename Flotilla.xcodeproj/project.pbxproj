@@ -3606,16 +3606,13 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Flotilla/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Flotilla Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.flotilla.dev;
-				PRODUCT_MODULE_NAME = Flotilla;
-				PRODUCT_NAME = "Flotilla Dev";
+				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.flotilla;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -4054,7 +4051,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.FlotillaUnitTests;
 				SDKROOT = macosx;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Flotilla Dev.app/Contents/MacOS/Flotilla Dev";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Flotilla.app/Contents/MacOS/Flotilla";
 			};
 			name = Debug;
 		};

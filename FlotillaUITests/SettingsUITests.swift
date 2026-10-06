@@ -22,7 +22,7 @@ final class SettingsUITests: XCTestCase {
         let app = launchedApp()
 
         // The app menu, by position: its title is the product name, which
-        // differs per build configuration ("Flotilla Dev" under Debug).
+        // differs per build configuration ("Flotilla Ephemeral" under Ephemeral).
         let appMenuBarItem = app.menuBarItems.element(boundBy: 1)
         XCTAssertTrue(fastWait(appMenuBarItem, timeout: 8))
         let settingsMenuItem = app.menuItems["Settings…"]

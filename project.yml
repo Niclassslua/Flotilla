@@ -89,13 +89,6 @@ targets:
           # survives an ordinary rebuild.
           CODE_SIGN_IDENTITY: Apple Development
           DEVELOPMENT_TEAM: UWAHVC4JTL
-          # Its own identity, so a debug build launches next to the installed
-          # app instead of activating it, and `killall "Flotilla Dev"` or a
-          # quit by bundle ID never reaches the instance hosting the agents.
-          PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.dev
-          PRODUCT_NAME: Flotilla Dev
-          PRODUCT_MODULE_NAME: Flotilla
-          INFOPLIST_KEY_CFBundleDisplayName: Flotilla Dev
         Ephemeral:
           PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.ephemeral
           PRODUCT_NAME: Flotilla Ephemeral
@@ -286,8 +279,6 @@ targets:
         Debug:
           CODE_SIGN_IDENTITY: Apple Development
           DEVELOPMENT_TEAM: UWAHVC4JTL
-          # XcodeGen derives the host path from the base product name.
-          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Flotilla Dev.app/Contents/MacOS/Flotilla Dev"
 
   FlotillaUITests:
     type: bundle.ui-testing

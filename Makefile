@@ -131,10 +131,8 @@ install: build-release
 	mv "$(INSTALLED_APP).new" "$(INSTALLED_APP)"
 	rm -rf "$(INSTALLED_APP).old"
 
-# Debug builds are "Flotilla Dev" (com.niclassslua.flotilla.dev), so they
-# launch alongside the installed app and quitting one never hits the other.
 run: build
-	open "$(DERIVED_DATA)/Build/Products/Debug/Flotilla Dev.app"
+	open "$(DERIVED_DATA)/Build/Products/Debug/Flotilla.app"
 
 run-ephemeral: build-ephemeral
 	open "$(EPHEMERAL_APP)"
