@@ -83,6 +83,10 @@ struct FleetActivitySnapshot: Equatable {
 /// push token is requested (docs/companion.md decision #6).
 @MainActor
 final class FleetActivityController {
+    /// One per process: every window's `RootView` syncs through it, so iPad
+    /// multitasking can't have two controllers each requesting an activity.
+    static let shared = FleetActivityController()
+
     private var activity: Activity<FleetActivityAttributes>?
     private var hasAdoptedExisting = false
     /// The urgent sessions at the moment the user swiped the activity away.
@@ -153,6 +157,11 @@ final class FleetActivityController {
               dismissedFor != snapshot.urgentSessionIDs,
               ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         dismissedFor = nil
+        // A finished fleet's activity is ended but lingers on the Lock Screen
+        // for `finishedLinger`; a new request alongside it shows two.
+        for lingering in Activity<FleetActivityAttributes>.activities {
+            await lingering.end(nil, dismissalPolicy: .immediate)
+        }
         let attributes = FleetActivityAttributes(macID: snapshot.macID, macName: snapshot.macName)
         activity = try? Activity.request(attributes: attributes, content: content)
     }

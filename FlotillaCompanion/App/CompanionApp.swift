@@ -147,7 +147,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var disconnectTask: Task<Void, Never>?
 #if os(iOS)
-    @State private var fleetActivity = FleetActivityController()
+    private var fleetActivity: FleetActivityController { .shared }
 
     /// Interactive app-switch gestures (home-indicator drag, Control Center,
     /// app-switcher peek) round-trip through `.background` in well under a
