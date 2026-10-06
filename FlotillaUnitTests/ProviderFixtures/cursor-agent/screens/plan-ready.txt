@@ -1,0 +1,12 @@
+ │ # Add English greeting file
+ │
+ │  Saved to Users/dev/.cursor/plans/Add-English-greeting-1a2b.plan.md
+ │ ──────────────────────────────────────────────────────────────────
+ │
+ │ Ready to build?
+ │
+ │  → 1. Yes, build locally (b)
+ │    2. Yes, build in cloud (c)
+ │    3. No, propose changes (p or Esc)
+ │
+ └────────────────────────────────────────────────────────────────────

@@ -354,11 +354,22 @@ public final class HookEventReceiver: @unchecked Sendable {
                         cause: cause("hook: \(eventName) \(Self.toolLabel(tool))")
                     )
                 }
-                // Permission wait is driven by the held companion bridge card;
-                // observationally this is still "working" until answered.
+                // An approval dialog that may follow is read off the screen
+                // (`CursorDialog`); no hook reports it.
                 return SessionStatusObservation(.working, cause: cause("hook: \(eventName) \(Self.toolLabel(tool))"))
-            case "postToolUse", "afterShellExecution", "afterFileEdit":
+            case "postToolUse", "afterShellExecution", "afterFileEdit", "subagentStart", "preCompact":
+                // `afterShellExecution` also closes an approval dialog — a
+                // skipped command arrives as an ordinary, empty run.
                 return SessionStatusObservation(.working, cause: cause("hook: \(eventName)"))
+            case "afterAgentThought":
+                // A turn submitted as a `stop` hook's `followup_message`
+                // fires no `beforeSubmitPrompt`; its thinking is the first sign.
+                return SessionStatusObservation(.working, cause: cause("hook: afterAgentThought"))
+            case "postToolUseFailure":
+                if (payload["is_interrupt"] as? Bool) == true {
+                    return SessionStatusObservation(.readyForReview, cause: cause("hook: postToolUseFailure interrupted"))
+                }
+                return SessionStatusObservation(.working, cause: cause("hook: postToolUseFailure"))
             case "afterAgentResponse", "sessionEnd", "stop":
                 // Interactive CLI fires `afterAgentResponse` then `stop` when
                 // the turn ends and the follow-up composer returns. `sessionEnd`

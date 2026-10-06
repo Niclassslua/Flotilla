@@ -81,9 +81,9 @@ created and deleted.
 | Antigravity | User-level `~/.gemini/config/hooks.json` `flotilla-status` group (env-gated; old project `.agents/hooks.json` groups are removed) | `PreInvocation` | `working` | Before every model call; also delivers phone prompts queued mid-turn (`injectSteps`). |
 | Antigravity | Same | `PreToolUse` / `PostToolUse` | `working`; `ask_question` → `waitingForInput` (`question`); `write_to_file` with `RequestFeedback` → `planApproval` | The wrapper prints nothing: a 1.3.0 hook can deny but never approve, so the picker stays agy's. |
 | Antigravity | Same | `Stop` with `fullyIdle: true` | `readyForReview` | `fullyIdle: false` is ignored while asynchronous work remains; an `error` becomes a companion note. |
-| Cursor Agent | Project `.cursor/hooks.json` + support `flotilla-cursor.sh` | `beforeSubmitPrompt` / `preToolUse` / `beforeShellExecution` / `beforeMCPExecution` | observational `working` | Hooks only record; the phone mirrors Cursor's own dialog (`CursorCompanionAdapter`). No `FLOTILLA_HOOK_EVENT_FILE` → exit 0 (fail-open for IDE Cursor). |
-| Cursor Agent | Same | `postToolUse` / `afterShellExecution` / `afterFileEdit` | `working` | Observational only. |
-| Cursor Agent | Same | `afterAgentResponse` / `stop` / `sessionEnd` | `readyForReview` | Interactive CLI fires `afterAgentResponse` then `stop` when the turn ends; `sessionEnd` is teardown. Waiting comes from mirrored dialog cards, not hook decisions. |
+| Cursor Agent | User-level `~/.cursor/hooks.json` (env-gated; project `.cursor/hooks.json` entries are removed) + support `flotilla-cursor.sh` | `beforeSubmitPrompt` / `afterAgentThought` / `preToolUse` / `beforeShellExecution` / `beforeMCPExecution` / `postToolUse` / `afterShellExecution` / `afterFileEdit` / `subagentStart` / `preCompact` | `working` | Record-only; a hook `allow` does not skip Cursor's dialog. |
+| Cursor Agent | Same | `postToolUseFailure` | `working`, or `readyForReview` when `is_interrupt` | Documented; not observed in 2026.10.01. |
+| Cursor Agent | Same | `afterAgentResponse` / `stop` / `sessionEnd` | `readyForReview` | A completed `stop` hands queued phone prompts to Cursor as `followup_message`. Dialogs come from `CursorDialog` on screen. |
 
 `SessionStatus` is the broad board/filter state and has four values:
 `working`, `waitingForInput`, `readyForReview`, and `crashed`. A session
@@ -148,7 +148,7 @@ created with, before its process has been observed doing anything.
 | **Codex CLI** | `PostToolUse`; `PreToolUse` for any tool other than `request_user_input` / `AskUserQuestion` | `PreToolUse` for `request_user_input` / `AskUserQuestion` → `question`; `PermissionRequest` → `permission`; `Stop` with `last_assistant_message: null` → `planApproval` (Plan mode) | `Stop` with a non-null `last_assistant_message` | — |
 | **OpenCode** | `tool.execute.after` | `permission.asked` → `permission`; `question.asked` → `question` | `session.idle` | — |
 | **Antigravity** | `PreInvocation`; `PostToolUse` with no plan-feedback artifact; `PreToolUse` for any tool other than `ask_question` | `PreToolUse` for `ask_question` → `question`; `PostToolUse` whose `write_to_file` args carry `ArtifactMetadata.RequestFeedback = true` → `planApproval`; approval pickers only from the screen | `Stop` with `fullyIdle: true` (`fullyIdle: false` yields no observation); an interrupt only from the screen | — |
-| **Cursor Agent** | `beforeSubmitPrompt` / `postToolUse` / `afterShellExecution` / `afterFileEdit` | Mirrored TUI dialogs → `permission` / `planApproval` (phone + Mac) | `afterAgentResponse` / `stop` / `sessionEnd` | — |
+| **Cursor Agent** | `beforeSubmitPrompt`; `afterAgentThought`; `preToolUse` / `beforeShellExecution` / `beforeMCPExecution` / `postToolUse` / `afterShellExecution` / `afterFileEdit`; `subagentStart`; `preCompact`; `postToolUseFailure` | approval and plan dialogs from the screen (`CursorDialog`): `permission` / `planApproval` | `afterAgentResponse` / `stop` / `sessionEnd`; `postToolUseFailure` with `is_interrupt` | — |
 | **Terminal-screen fallback** (every provider) | an interrupt/cancel hint — `esc to interrupt`, `esc to cancel`, `ctrl+c to stop`, and close variants — in the inspected tail | the inspected tail matches a plan-approval, permission, or question marker; shows a numbered choice list with a selection caret; matches Antigravity's extended permission-picker signature; or the prompt heuristic reads the prompt as waiting | a composer prompt with transcript above it, or a dead-pane marker (`agent exited`, `pane is dead`, `process finished`). Unremarkable screens yield no observation | — |
 | **Process exit** | — | — | exit status code 0 (also fires `onSessionFinished`) | any non-zero exit code, or a launch/relaunch failure |
 | **Dead tmux pane** | — | — | a dead-pane screen observation that `tmux display-message` confirms with `pane_dead_status` 0 (also fires `onSessionFinished`) | the same, confirmed with a non-zero status or a signal |
@@ -213,7 +213,7 @@ Generated files are:
 <support>/hooks/flotilla-cursor.sh
 <support>/hooks/shared-config.lock
 ~/.gemini/config/hooks.json   (Antigravity, user-level, env-gated)
-<working directory>/.cursor/hooks.json
+~/.cursor/hooks.json          (Cursor Agent, user-level, env-gated)
 <working directory>/.opencode/plugins/flotilla-status.js
 ```
 

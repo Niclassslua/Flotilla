@@ -1,0 +1,21 @@
+{
+  "flotilla_provider": "cursor",
+  "hook_event_name": "afterShellExecution",
+  "payload": {
+    "conversation_id": "00000000-0000-4000-8000-000000000001",
+    "generation_id": "00000000-0000-4000-8000-000000000002",
+    "model": "default",
+    "command": "git status --short",
+    "output": "<redacted>",
+    "duration": 26049.022,
+    "sandbox": false,
+    "session_id": "00000000-0000-4000-8000-000000000001",
+    "hook_event_name": "afterShellExecution",
+    "cursor_version": "2026.10.01-e373342",
+    "workspace_roots": [
+      "/Users/dev/Projects/Example"
+    ],
+    "user_email": "user@example.com",
+    "transcript_path": "/Users/dev/.cursor/projects/private-tmp-claude-501-Users-dev-Library-Application-Support-Flotilla-Worktrees-flotilla-example-session/agent-transcripts/00000000-0000-4000-8000-000000000001/00000000-0000-4000-8000-000000000001.jsonl"
+  }
+}

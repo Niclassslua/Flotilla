@@ -4,7 +4,7 @@ import Network
 import SessionKit
 import TranscriptKit
 import GitKit
-import HooksKit
+@testable import HooksKit
 import CompanionKit
 import PersistenceKit
 import ProcessKit
@@ -942,7 +942,7 @@ final class CodexAsyncQuestionTests: XCTestCase {
     }
 }
 
-/// Cursor's generated flotilla-cursor.sh: it records, and never decides.
+/// Cursor's generated hooks: they record, and decide nothing.
 final class CursorHookTests: XCTestCase {
     private var directory: URL!
     private var worktree: URL!
@@ -957,11 +957,19 @@ final class CursorHookTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private func installCursorHooks() throws -> URL {
-        let writer = HookConfigurationWriter()
+    /// Never the real `~/.cursor/hooks.json`.
+    private var userHooksFile: URL { directory.appendingPathComponent("cursor-home/hooks.json") }
+    private var projectHooksFile: URL { worktree.appendingPathComponent(".cursor/hooks.json") }
+
+    @discardableResult
+    private func installCursorHooks(sessionID: UUID = UUID()) throws -> URL {
+        let writer = HookConfigurationWriter(
+            antigravityGlobalHooksFile: directory.appendingPathComponent("gemini/hooks.json"),
+            cursorGlobalHooksFile: userHooksFile
+        )
         XCTAssertTrue(writer.configureHooks(
             for: .cursorAgent,
-            sessionID: UUID(),
+            sessionID: sessionID,
             workingDirectory: worktree,
             supportDirectory: directory
         ))
@@ -970,11 +978,19 @@ final class CursorHookTests: XCTestCase {
         return script
     }
 
-    private static func run(script: URL, input: String, eventFile: URL) throws -> (stdout: String, status: Int32) {
+    private func userHooks() throws -> [String: [[String: Any]]] {
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: userHooksFile)) as? [String: Any])
+        return try XCTUnwrap(root["hooks"] as? [String: [[String: Any]]])
+    }
+
+    /// Runs the user-level command the way Cursor does: `sh -c`, JSON on stdin.
+    private static func run(command: String, input: String, eventFile: URL?) throws -> (stdout: String, status: Int32) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = [script.path]
-        process.environment = ["FLOTILLA_HOOK_EVENT_FILE": eventFile.path, "PATH": "/usr/bin:/bin:/usr/local/bin"]
+        process.arguments = ["-c", command]
+        var environment = ["PATH": "/usr/bin:/bin:/usr/local/bin"]
+        environment["FLOTILLA_HOOK_EVENT_FILE"] = eventFile?.path
+        process.environment = environment
         let stdin = Pipe(), stdout = Pipe()
         process.standardInput = stdin
         process.standardOutput = stdout
@@ -985,15 +1001,20 @@ final class CursorHookTests: XCTestCase {
         return (String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), process.terminationStatus)
     }
 
+    private func command() throws -> String {
+        try XCTUnwrap(try userHooks()["stop"]?.first?["command"] as? String)
+    }
+
     /// A hook `allow` doesn't skip Cursor's own approval dialog, and a held
     /// hook had nobody on the Mac to answer it — it auto-allowed after the
     /// bridge gave up, delaying every tool call by seconds.
     func testHookRecordsWithoutDecidingOrBlocking() throws {
-        let script = try installCursorHooks()
-        let eventFile = directory.appendingPathComponent("\(UUID().uuidString).jsonl")
+        let sessionID = UUID()
+        try installCursorHooks(sessionID: sessionID)
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: directory)
         let started = Date()
         let result = try Self.run(
-            script: script,
+            command: try command(),
             input: #"{"hook_event_name":"preToolUse","tool_name":"Shell","tool_input":{"command":"rm -rf build"}}"#,
             eventFile: eventFile
         )
@@ -1005,20 +1026,78 @@ final class CursorHookTests: XCTestCase {
         XCTAssertTrue(recorded.contains("rm -rf build"), recorded)
     }
 
-    func testHooksJSONHoldsNothing() throws {
-        _ = try installCursorHooks()
-        let data = try Data(contentsOf: worktree.appendingPathComponent(".cursor/hooks.json"))
-        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let hooks = try XCTUnwrap(root["hooks"] as? [String: [[String: Any]]])
-        XCTAssertNotNil(hooks["preToolUse"])
-        for event in ["beforeSubmitPrompt", "afterAgentResponse", "stop", "sessionEnd"] {
-            XCTAssertNotNil(hooks[event], "missing \(event)")
-        }
+    func testHookIsInertOutsideFlotilla() throws {
+        try installCursorHooks()
+        let result = try Self.run(command: try command(), input: #"{"hook_event_name":"stop","status":"completed"}"#, eventFile: nil)
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.stdout, "")
+    }
+
+    /// Verified on 2026.10.01: Cursor submits a `stop` hook's
+    /// `followup_message` as the next turn.
+    func testCompletedStopHandsQueuedPhonePromptsToCursorOnce() throws {
+        let sessionID = UUID()
+        try installCursorHooks(sessionID: sessionID)
+        let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: directory)
+        let queue = URL(fileURLWithPath: eventFile.path + HookConfigurationWriter.cursorFollowupSuffix)
+        try Data("Also run the tests\n\nThen commit".utf8).write(to: queue)
+
+        let aborted = try Self.run(command: try command(), input: #"{"hook_event_name":"stop","status":"aborted"}"#, eventFile: eventFile)
+        XCTAssertEqual(aborted.stdout, "", "an interrupted turn leaves the queue for the companion to deliver")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: queue.path))
+
+        let completed = try Self.run(command: try command(), input: #"{"hook_event_name":"stop","status":"completed"}"#, eventFile: eventFile)
+        let output = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(completed.stdout.utf8)) as? [String: String])
+        XCTAssertEqual(output, ["followup_message": "Also run the tests\n\nThen commit"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: queue.path))
+
+        let again = try Self.run(command: try command(), input: #"{"hook_event_name":"stop","status":"completed"}"#, eventFile: eventFile)
+        XCTAssertEqual(again.stdout, "", "a delivered prompt is not sent twice")
+    }
+
+    func testUserLevelFileKeepsOtherToolsAndReplacesOnlyFlotillasEntries() throws {
+        try FileManager.default.createDirectory(at: userHooksFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let existing: [String: Any] = ["version": 1, "hooks": [
+            "stop": [["command": "/Users/dev/.codeisland/codeisland-bridge --source cursor"]],
+            "afterAgentThought": [["command": "'/old/support/hooks/flotilla-cursor.sh'"]],
+            "beforeReadFile": [["command": "'/old/support/hooks/flotilla-cursor.sh'"]],
+        ]]
+        try JSONSerialization.data(withJSONObject: existing).write(to: userHooksFile)
+
+        try installCursorHooks()
+        try installCursorHooks()
+
+        let hooks = try userHooks()
+        XCTAssertEqual(Set(hooks.keys), Set(HookConfigurationWriter.cursorHookEvents))
+        let stop = try XCTUnwrap(hooks["stop"])
+        XCTAssertEqual(stop.count, 2, "CodeIsland's entry stays beside exactly one of ours")
+        XCTAssertTrue(stop.contains { ($0["command"] as? String)?.contains("codeisland") == true })
         for (event, entries) in hooks {
-            for entry in entries {
-                XCTAssertNil(entry["failClosed"], event)
-                XCTAssertEqual(entry["timeout"] as? Int, 30, event)
-            }
+            let ours = entries.filter { ($0["command"] as? String)?.contains("flotilla-cursor.sh") == true }
+            XCTAssertEqual(ours.count, 1, event)
+            XCTAssertFalse((ours.first?["command"] as? String ?? "").contains(directory.path), "the shared file must not name one install's support directory")
+            XCTAssertNil(ours.first?["failClosed"], event)
+            XCTAssertEqual(ours.first?["timeout"] as? Int, 30, event)
         }
+        XCTAssertNil(hooks["beforeReadFile"], "a stale Flotilla entry for an unregistered event is removed")
+    }
+
+    func testProjectEntriesFromOlderReleasesAreRemoved() throws {
+        try FileManager.default.createDirectory(at: projectHooksFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let legacy: [String: Any] = ["version": 1, "hooks": [
+            "stop": [["command": "'/old/flotilla-cursor.sh'"], ["command": "echo mine"]],
+            "preToolUse": [["command": "'/old/flotilla-cursor.sh'"]],
+        ]]
+        try JSONSerialization.data(withJSONObject: legacy).write(to: projectHooksFile)
+
+        try installCursorHooks()
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: projectHooksFile)) as? [String: Any])
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: [[String: Any]]])
+        XCTAssertEqual(hooks.count, 1)
+        XCTAssertEqual(hooks["stop"]?.compactMap { $0["command"] as? String }, ["echo mine"])
+
+        try JSONSerialization.data(withJSONObject: ["version": 1, "hooks": ["stop": [["command": "'/old/flotilla-cursor.sh'"]]]]).write(to: projectHooksFile)
+        try installCursorHooks()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: projectHooksFile.path), "a file that held only Flotilla's entries goes away")
     }
 }

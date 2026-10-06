@@ -108,9 +108,14 @@ public struct TerminalScreenHeuristic: Sendable {
     ]
 
     private let promptHeuristic: SessionStatusHeuristic
+    /// The provider drawing this screen, when known. Only Cursor Agent has a
+    /// provider-specific reading: its approval and plan dialogs match no
+    /// generic marker, and no Cursor hook reports them.
+    private let agent: AgentKind?
 
-    public init(promptHeuristic: SessionStatusHeuristic = SessionStatusHeuristic()) {
+    public init(promptHeuristic: SessionStatusHeuristic = SessionStatusHeuristic(), agent: AgentKind? = nil) {
         self.promptHeuristic = promptHeuristic
+        self.agent = agent
     }
 
     /// Classifies the screen. Returns an observation when the screen exhibits
@@ -132,6 +137,26 @@ public struct TerminalScreenHeuristic: Sendable {
                 cause: "screen: tmux dead-pane banner",
                 suggestsAgentExit: true
             )
+        }
+
+        if agent == .cursorAgent, let dialog = CursorDialog.parse(screen) {
+            switch dialog {
+            case .approval(let question, _, _):
+                return SessionStatusObservation(
+                    .waitingForInput,
+                    waitingReason: .permission,
+                    cause: "screen: Cursor approval \(Self.quoted(question))"
+                )
+            case .plan:
+                return SessionStatusObservation(
+                    .waitingForInput,
+                    waitingReason: .planApproval,
+                    cause: "screen: Cursor \"Ready to build?\""
+                )
+            case .typing:
+                // Someone at the Mac is answering; nothing to report.
+                return nil
+            }
         }
 
         let interactiveTail = Self.tail(of: screen, maximumLines: Self.inspectedInteractiveTailLines)

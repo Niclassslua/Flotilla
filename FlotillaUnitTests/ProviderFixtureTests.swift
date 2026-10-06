@@ -93,8 +93,8 @@ final class ProviderFixtureTests: XCTestCase {
     }
 
     func testCapturedScreensClassifyAsDocumented() throws {
-        let heuristic = TerminalScreenHeuristic()
         for (directory, manifest) in try manifests() {
+            let heuristic = TerminalScreenHeuristic(agent: manifest.agent)
             for fixture in manifest.fixtures where fixture.source == .screen {
                 let screen = try String(contentsOf: directory.appendingPathComponent(fixture.file), encoding: .utf8)
                 check(heuristic.observation(forScreen: screen), against: fixture, agent: manifest.agent)

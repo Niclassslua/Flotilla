@@ -1,6 +1,7 @@
 import XCTest
 import SessionKit
 import CompanionKit
+import HooksKit
 @testable import Flotilla
 
 /// Screens are copied from Cursor Agent 2026.10.01 in a tmux pane.
@@ -103,6 +104,7 @@ final class CursorCompanionAdapterTests: XCTestCase {
     private func makeAdapter(_ terminal: Terminal, session: Session? = nil) -> CursorCompanionAdapter {
         CursorCompanionAdapter(
             session: session ?? makeSession(),
+            support: support,
             plans: support.appendingPathComponent("plans"),
             screen: { _ in terminal.screen },
             send: { data in
@@ -290,6 +292,43 @@ final class CursorCompanionAdapterTests: XCTestCase {
         // Nothing goes over the raw channel: Cursor types Ctrl-S as a literal
         // "s", which used to prefix phone prompts ("sCommit this to main").
         XCTAssertTrue(terminal.sent.isEmpty)
+    }
+
+    private func followupQueue(for session: Session) -> URL {
+        URL(fileURLWithPath: HookConfigurationWriter.eventFilePath(for: session.id, supportDirectory: support).path
+            + HookConfigurationWriter.cursorFollowupSuffix)
+    }
+
+    /// Mid-turn, a phone prompt waits for the turn's `stop` hook, which
+    /// hands it to Cursor as `followup_message` — no keys go into a composer
+    /// the person at the Mac may be typing in.
+    func testPromptSentMidTurnWaitsForTheStopHookInsteadOfTyping() async throws {
+        let session = makeSession()
+        let terminal = Terminal(working)
+        let adapter = makeAdapter(terminal, session: session)
+        try await adapter.sendPrompt("Also run the tests")
+        try await adapter.sendPrompt("Then commit")
+
+        XCTAssertTrue(terminal.delivered.isEmpty)
+        XCTAssertTrue(terminal.sent.isEmpty)
+        XCTAssertEqual(try String(contentsOf: followupQueue(for: session), encoding: .utf8), "Also run the tests\n\nThen commit")
+    }
+
+    /// A turn that ended without a completed `stop` (interrupted, failed, or
+    /// just before the prompt was queued) must not strand the prompt.
+    func testQueuedPromptIsTypedOnceThePaneIsIdleWithoutADraft() async throws {
+        let session = makeSession()
+        try Data("Also run the tests".utf8).write(to: followupQueue(for: session))
+        let draft = Terminal("  OK\n  → half-typed thought\n  Auto · 5.8%")
+        try await makeAdapter(draft, session: session).refresh()
+        XCTAssertTrue(draft.delivered.isEmpty, "a Mac draft would be sent glued to the prompt")
+
+        let terminal = Terminal(idle)
+        let adapter = makeAdapter(terminal, session: session)
+        try await adapter.refresh()
+        try await adapter.refresh()
+        XCTAssertEqual(terminal.delivered, ["Also run the tests"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: followupQueue(for: session).path))
     }
 
     func testSendPromptRejectedWhileADialogOrDraftIsOpen() async {

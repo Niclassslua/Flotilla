@@ -61,8 +61,23 @@ public struct HookConfigurationWriter: HookConfiguring {
     /// Injectable so tests never touch the real one.
     public let antigravityGlobalHooksFile: URL
 
-    public init(antigravityGlobalHooksFile: URL = HookConfigurationWriter.defaultAntigravityGlobalHooksFile) {
+    /// Cursor's user-level hooks file, read by the interactive CLI.
+    /// Injectable so tests never touch the real one.
+    public let cursorGlobalHooksFile: URL
+
+    public init(
+        antigravityGlobalHooksFile: URL = HookConfigurationWriter.defaultAntigravityGlobalHooksFile,
+        cursorGlobalHooksFile: URL = HookConfigurationWriter.defaultCursorGlobalHooksFile
+    ) {
         self.antigravityGlobalHooksFile = antigravityGlobalHooksFile
+        self.cursorGlobalHooksFile = cursorGlobalHooksFile
+    }
+
+    /// `~/.cursor/hooks.json` — verified to be read by Cursor Agent
+    /// 2026.10.01 in interactive sessions.
+    public static var defaultCursorGlobalHooksFile: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cursor/hooks.json", isDirectory: false)
     }
 
     /// `~/.gemini/config/hooks.json` — verified to be read by agy 1.3.0.
@@ -93,9 +108,7 @@ public struct HookConfigurationWriter: HookConfiguring {
     /// spin up a `HookEventReceiver`.
     public static func supportsHooks(for kind: AgentKind) -> Bool {
         switch kind {
-        case .claudeCode, .antigravity, .codexCLI, .openCode: return true
-        // Temporary: Cursor hooks land next; keep the coordinator path open.
-        case .cursorAgent: return true
+        case .claudeCode, .antigravity, .codexCLI, .openCode, .cursorAgent: return true
         }
     }
 
@@ -186,7 +199,8 @@ public struct HookConfigurationWriter: HookConfiguring {
         case .cursorAgent:
             return Self.configureCursorHooks(
                 workingDirectory: workingDirectory,
-                supportDirectory: supportDirectory
+                supportDirectory: supportDirectory,
+                globalHooksFile: cursorGlobalHooksFile
             )
         }
     }
@@ -607,17 +621,23 @@ public struct HookConfigurationWriter: HookConfiguring {
 
     // MARK: - Cursor Agent CLI
 
-    /// Writes the stable wrapper and merges Flotilla's Cursor hooks into
-    /// `<workingDirectory>/.cursor/hooks.json` without wiping other tools'
-    /// entries (CodeIsland, Xirp, …).
+    /// Writes the stable wrapper and merges Flotilla's entries into Cursor's
+    /// user-level `~/.cursor/hooks.json`, keeping other tools' entries
+    /// (CodeIsland, …); removes the entries older releases wrote into
+    /// `<workingDirectory>/.cursor/hooks.json`.
     ///
     /// Every hook only records the event; none decides. A hook `allow` does
     /// not skip Cursor's own approval dialog, and nothing on the Mac answers a
     /// held hook, so the phone mirrors Cursor's dialog instead
-    /// (`CursorCompanionAdapter`).
+    /// (`CursorCompanionAdapter`). The one thing the wrapper prints is a
+    /// `followup_message` on `stop`: prompts the phone queued while Cursor
+    /// was working, which Cursor submits as the next turn (verified
+    /// 2026.10.01). User-level hooks run in the interactive CLI, which is the
+    /// only way Flotilla runs Cursor (`--print` runs project hooks only).
     private static func configureCursorHooks(
         workingDirectory: URL,
-        supportDirectory: URL
+        supportDirectory: URL,
+        globalHooksFile: URL
     ) -> Bool {
         let scriptPath = cursorWrapperScriptPath(supportDirectory: supportDirectory)
         do {
@@ -636,58 +656,103 @@ public struct HookConfigurationWriter: HookConfiguring {
             return false
         }
 
-        let configDirectory = workingDirectory.appendingPathComponent(".cursor", isDirectory: true)
-        let configFile = configDirectory.appendingPathComponent("hooks.json", isDirectory: false)
-        let observeHook: [String: Any] = [
-            "command": quoted(scriptPath.path),
-            "timeout": 30
-        ]
-
         do {
             try withSharedConfigLock(supportDirectory: supportDirectory) {
-                var root = try loadJSONObject(at: configFile)
+                var root = try loadJSONObject(at: globalHooksFile)
                 root["version"] = root["version"] ?? 1
-                var hooks = root["hooks"] as? [String: Any] ?? [:]
-
-                func replaceFlotillaEntries(in existing: Any?, with entry: [String: Any]) -> [[String: Any]] {
-                    let list = existing as? [[String: Any]] ?? []
-                    let kept = list.filter { item in
-                        guard let cmd = item["command"] as? String else { return true }
-                        return !cmd.contains("flotilla-cursor.sh")
-                    }
-                    return kept + [entry]
-                }
-
+                var hooks = withoutFlotillaCursorEntries(root["hooks"] as? [String: Any] ?? [:])
                 for event in cursorHookEvents {
-                    hooks[event] = replaceFlotillaEntries(in: hooks[event], with: observeHook)
+                    hooks[event] = (hooks[event] as? [[String: Any]] ?? []) + [cursorHook]
                 }
                 root["hooks"] = hooks
-                try writeJSONObject(root, to: configFile, creating: configDirectory)
+                try writeJSONObject(root, to: globalHooksFile, creating: globalHooksFile.deletingLastPathComponent())
             }
-            return true
         } catch {
             return false
         }
+        try? withSharedConfigLock(supportDirectory: supportDirectory) {
+            removeLegacyCursorProjectHooks(in: workingDirectory)
+        }
+        return true
     }
 
+    /// Recorded for status; `sessionStart` and `subagentStop` are left out on
+    /// purpose — the CLI never fires the former (2026.10.01), and the latter
+    /// says nothing about the main turn.
     static let cursorHookEvents = [
         "beforeSubmitPrompt",
         "preToolUse", "beforeShellExecution", "beforeMCPExecution",
-        "postToolUse", "afterShellExecution", "afterFileEdit",
-        "afterAgentResponse", "sessionEnd", "stop",
+        "postToolUse", "postToolUseFailure", "afterShellExecution", "afterFileEdit",
+        "afterAgentThought", "afterAgentResponse",
+        "subagentStart", "preCompact",
+        "sessionEnd", "stop",
     ]
 
-    /// Cursor hooks.json only takes a command string, so the script reads
-    /// `hook_event_name` from stdin and falls back to the first argv token.
-    /// It prints nothing: an empty answer leaves every decision to Cursor.
+    /// Constant for every session and install: it finds the wrapper next to
+    /// the session's event file, so the user-level file never names a
+    /// support directory and is inert outside Flotilla. The command contains
+    /// `flotilla-cursor.sh`, which is how a rewrite recognises its own entries.
+    static var cursorHook: [String: Any] { [
+        "command": #"event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"; [ -n "$event_file" ] || exit 0; wrapper="$(dirname "$event_file")/flotilla-cursor.sh"; [ -x "$wrapper" ] || exit 0; exec "$wrapper""#,
+        "timeout": 30
+    ] }
+
+    /// Every event's entries minus Flotilla's — including entries for events
+    /// Flotilla no longer registers, which would otherwise stay forever.
+    private static func withoutFlotillaCursorEntries(_ hooks: [String: Any]) -> [String: Any] {
+        var kept: [String: Any] = [:]
+        for (event, value) in hooks {
+            guard let entries = value as? [[String: Any]] else {
+                kept[event] = value
+                continue
+            }
+            let others = entries.filter { !(($0["command"] as? String) ?? "").contains("flotilla-cursor.sh") }
+            if !others.isEmpty { kept[event] = others }
+        }
+        return kept
+    }
+
+    /// Drops Flotilla's entries from a project's `.cursor/hooks.json`, and the
+    /// file itself when nothing else is left in it. Malformed or unfamiliar
+    /// JSON is left byte-for-byte untouched.
+    static func removeLegacyCursorProjectHooks(in workingDirectory: URL) {
+        let configFile = workingDirectory.appendingPathComponent(".cursor/hooks.json", isDirectory: false)
+        guard var root = try? loadJSONObject(at: configFile),
+              let hooks = root["hooks"] as? [String: Any] else { return }
+        let kept = withoutFlotillaCursorEntries(hooks)
+        guard !(kept as NSDictionary).isEqual(to: hooks) else { return }
+        root["hooks"] = kept
+        if kept.isEmpty, Set(root.keys).isSubset(of: ["version", "hooks"]) {
+            try? FileManager.default.removeItem(at: configFile)
+        } else {
+            try? writeJSONObject(root, to: configFile, creating: configFile.deletingLastPathComponent())
+        }
+    }
+
+    /// Suffix of the file `CursorCompanionAdapter` queues mid-turn phone
+    /// prompts in, next to the event file. One prompt per line.
+    public static let cursorFollowupSuffix = ".followup"
+
+    /// Cursor's hooks.json only takes a command string, so the script reads
+    /// `hook_event_name` (and `status`) from stdin, falling back to the first
+    /// argv token. It prints nothing — every decision stays Cursor's — except
+    /// on a completed `stop` with queued phone prompts, which it hands over
+    /// as `followup_message` and consumes.
     private static let cursorWrapperScriptContents = """
     #!/bin/sh
     payload="$(cat)"
     event_file="${FLOTILLA_HOOK_EVENT_FILE:-}"
     [ -n "$event_file" ] || exit 0
-    event="$(printf '%s' "$payload" | /usr/bin/python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("hook_event_name") or "")' 2>/dev/null || true)"
+    fields="$(printf '%s' "$payload" | /usr/bin/python3 -I -c 'import sys,json; d=json.load(sys.stdin); print(d.get("hook_event_name") or "", d.get("status") or "")' 2>/dev/null || true)"
+    event="${fields%% *}"
+    status="${fields#* }"
     if [ -z "$event" ]; then event="${1:-unknown}"; fi
     printf '{"flotilla_provider":"cursor","hook_event_name":"%s","payload":%s}\\n' "$event" "$payload" >> "$event_file"
+    queue="$event_file\(cursorFollowupSuffix)"
+    if [ "$event" = "stop" ] && [ "$status" = "completed" ] && [ -s "$queue" ]; then
+        taken="$queue.$$"
+        mv "$queue" "$taken" 2>/dev/null && /usr/bin/python3 -I -c 'import sys,json; print(json.dumps({"followup_message": open(sys.argv[1]).read().strip()}))' "$taken" && rm -f "$taken"
+    fi
     exit 0
     """
 

@@ -40,6 +40,8 @@ substring matching on the bottom 8 non-empty lines, unless noted.
 | 10 | composer above transcript, 24-line window | a line starting (after `│┃║`) with `❯`, `> ` or `› `, with a non-decoration line above it | `readyForReview` | Claude (`❯`), Codex (`›`) |
 | — | nothing matched | | no observation (the status is left alone) | |
 
+Right after rule 1, for Cursor Agent sessions only (`TerminalScreenHeuristic(agent: .cursorAgent)`), `CursorDialog.parse` checks the bottom 60 lines: an approval → `waitingForInput` / `permission`, `Ready to build?` → `planApproval`, a skip-reason/revision prompt → no observation. See `cursor-agent.md`.
+
 The arbiter drops a screen `readyForReview` while the latest hook observation
 was `working` or `waitingForInput`; see `../provider-hooks.md` → "Reaching each
 status".
@@ -49,7 +51,6 @@ status".
 | Provider | Screen | Should be | Is | Fixture |
 | --- | --- | --- | --- | --- |
 | Claude Code 2.1.291 | working spinner `✻ Wibbling… (8m 27s · ↓ 23.4k tokens …)` above `❯` | `working` | `readyForReview` (rule 10). No `esc to interrupt` hint any more; in practice the `UserPromptSubmit` hook holds *working* | `claude-code/screens/working-thinking.txt` |
-| Cursor Agent 2026.10.01 | `Run this command?` … `(y)` … `(esc or n)` | `waitingForInput` / `permission` | no observation | `cursor-agent/screens/shell-approval.txt` |
 | Cursor Agent 2026.10.01 | idle `→ Add a follow-up` | no observation (by design; `stop` hook reports it) | no observation | `cursor-agent/screens/idle.txt` |
 
 ## Prompt delivery: is the composer ready?

@@ -128,7 +128,11 @@ final class HookCoordinator {
         guard monitors[sessionID] == nil else { return }
         guard let session = store.sessions.first(where: { $0.id == sessionID }) else { return }
 
-        let monitor = SessionScreenMonitor(sessionID: sessionID, reader: screenReader)
+        let monitor = SessionScreenMonitor(
+            sessionID: sessionID,
+            reader: screenReader,
+            heuristic: TerminalScreenHeuristic(agent: session.agent)
+        )
         let gate = WaitingNotificationGate()
         monitors[sessionID] = monitor
         gates[sessionID] = gate

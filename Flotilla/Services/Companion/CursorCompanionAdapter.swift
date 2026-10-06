@@ -1,6 +1,7 @@
 import Foundation
 import SessionKit
 import CompanionKit
+import HooksKit
 
 /// Cursor Agent CLI companion control. The interactive TUI stays in tmux and
 /// owns every decision: the phone mirrors the dialog Cursor itself shows and
@@ -24,8 +25,15 @@ final class CursorCompanionAdapter: CompanionSessionAdapter {
     private(set) var transcript = SessionTranscript()
     var pending: [PendingInteraction] { open.map { [$0.card] } ?? [] }
 
+    /// Phone prompts sent while Cursor works, one per line. The `stop` hook
+    /// hands them to Cursor as `followup_message` (see
+    /// `HookConfigurationWriter`), so nothing is typed into a composer the
+    /// person at the Mac may be using.
+    private let followupQueue: URL
+
     init(
         session: Session,
+        support: URL,
         plans: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cursor/plans", isDirectory: true),
         screen: @escaping (UUID) async -> String?,
@@ -33,6 +41,8 @@ final class CursorCompanionAdapter: CompanionSessionAdapter {
         deliver: @escaping (String) async throws -> Void
     ) {
         self.session = session
+        followupQueue = URL(fileURLWithPath: HookConfigurationWriter.eventFilePath(for: session.id, supportDirectory: support).path
+            + HookConfigurationWriter.cursorFollowupSuffix)
         self.plans = plans
         self.screen = screen
         self.send = send
@@ -41,58 +51,15 @@ final class CursorCompanionAdapter: CompanionSessionAdapter {
 
     // MARK: - Screen
 
-    /// What Cursor is waiting on, read from the bottom of the pane.
-    enum Dialog: Equatable {
-        /// "Run this command?", "Allow this web fetch?": `y` runs, Tab runs
-        /// and allowlists, `n` skips.
-        case approval(question: String, subject: String, canAlwaysAllow: Bool)
-        /// "Ready to build?": `b` builds, `p` asks for a revision.
-        case plan(path: String?)
-        /// Someone at the Mac is typing a skip reason or plan revision.
-        case typing
-    }
+    /// What Cursor is waiting on — shared with the board's status path.
+    typealias Dialog = CursorDialog
 
     nonisolated static func dialog(in screen: String) -> Dialog? {
-        let lines = screen.components(separatedBy: "\n").suffix(60).map {
-            $0.trimmingCharacters(in: CharacterSet(charactersIn: "│┃ "))
-        }
-        if lines.contains(where: {
-            $0.hasPrefix("→ Tell the agent what to do instead") || $0.hasPrefix("→ Describe how to revise the plan")
-        }) {
-            return .typing
-        }
-        if let ask = lines.lastIndex(where: { $0 == "Ready to build?" }),
-           lines[ask...].contains(where: { $0.hasSuffix("(b)") }) {
-            return .plan(path: planPath(in: Array(lines[..<ask])))
-        }
-        guard let yes = lines.lastIndex(where: { $0.hasSuffix("(y)") }),
-              lines[yes...].contains(where: { $0.hasSuffix("(esc or n)") }),
-              let question = lines[..<yes].lastIndex(where: { $0.hasSuffix("?") })
-        else { return nil }
-        let top = lines[..<question].lastIndex(where: { $0.hasPrefix("──") }) ?? question - 1
-        let subject = lines[(top + 1)..<question]
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        return .approval(
-            question: lines[question],
-            subject: subject,
-            canAlwaysAllow: lines[yes...].contains { $0.hasSuffix("(tab)") }
-        )
+        CursorDialog.parse(screen)
     }
 
-    /// `Saved to Users/…/.cursor/plans/Name-1a2b.plan.md`, wrapped over as
-    /// many lines as the pane needs and printed without its leading slash.
     nonisolated static func planPath(in lines: [String]) -> String? {
-        guard let start = lines.lastIndex(where: { $0.hasPrefix("Saved to ") }) else { return nil }
-        var path = String(lines[start].dropFirst("Saved to ".count))
-        var next = start + 1
-        while !path.hasSuffix(".plan.md"), next < lines.count, !lines[next].isEmpty {
-            path += lines[next]
-            next += 1
-        }
-        guard path.hasSuffix(".plan.md") else { return nil }
-        return path.hasPrefix("/") ? path : "/" + path
+        CursorDialog.planPath(in: lines)
     }
 
     /// The composer row — the last `→` line — while no dialog covers it.
@@ -183,6 +150,7 @@ final class CursorCompanionAdapter: CompanionSessionAdapter {
 
     func refresh() async throws {
         guard let current = await screen(session.id) else { return }
+        try await deliverStrandedFollowups(current)
         let dialog = Self.dialog(in: current)
         if let dialog, dialog == open?.dialog {
             // Same dialog still open: keep the card the phone already shows.
@@ -200,6 +168,12 @@ final class CursorCompanionAdapter: CompanionSessionAdapter {
             if Self.dialog(in: current) != nil {
                 throw ProviderConnectionError.rejected("Answer the terminal dialog first.")
             }
+            // Mid-turn the prompt waits for the turn's `stop`, which submits
+            // it as the next turn — no keys, so a Mac draft is never touched.
+            if Self.isWorking(current) {
+                try queueFollowup(text)
+                return
+            }
             // Cursor has no draft stash (Ctrl-S types a literal "s"), and
             // anything already in the composer would be sent glued to the
             // phone's prompt.
@@ -208,6 +182,30 @@ final class CursorCompanionAdapter: CompanionSessionAdapter {
             }
         }
         try await deliver(text)
+    }
+
+    private func queueFollowup(_ text: String) throws {
+        let existing = (try? String(contentsOf: followupQueue, encoding: .utf8)) ?? ""
+        let joined = existing.isEmpty ? text : existing + "\n\n" + text
+        try Data(joined.utf8).write(to: followupQueue, options: .atomic)
+    }
+
+    /// A queued prompt only goes out on a *completed* `stop`. If the turn
+    /// ended another way (aborted, error) or ended just before the prompt
+    /// was queued, it would wait for a turn that never comes — so once the
+    /// pane is idle, with no dialog and no Mac draft, it is typed in instead.
+    private func deliverStrandedFollowups(_ current: String) async throws {
+        guard FileManager.default.fileExists(atPath: followupQueue.path),
+              !Self.isWorking(current),
+              Self.dialog(in: current) == nil,
+              Self.composerDraft(in: current) == nil else { return }
+        let taken = URL(fileURLWithPath: followupQueue.path + ".delivering")
+        // The hook takes the queue with `mv` too; whoever renames it first owns it.
+        guard (try? FileManager.default.moveItem(at: followupQueue, to: taken)) != nil else { return }
+        defer { try? FileManager.default.removeItem(at: taken) }
+        let text = (try? String(contentsOf: taken, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !text.isEmpty { try await deliver(text) }
     }
 
     func stop() async throws {

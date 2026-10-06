@@ -81,8 +81,7 @@
         "status": "waitingForInput",
         "reason": "permission"
       },
-      "currentlyObserved": null,
-      "knownGap": "Cursor's shell approval ('Run this command?' … '(y)' … '(esc or n)') matches no generic permission marker, and no Cursor hook reports an open dialog, so the board keeps showing Working. CursorCompanionAdapter.dialog(in:) recognizes it; TerminalScreenHeuristic does not."
+      "note": "Read by CursorDialog (shared with the companion); no hook reports an open dialog."
     },
     {
       "file": "screens/web-fetch-approval.txt",
@@ -93,6 +92,75 @@
         "status": "waitingForInput",
         "reason": "permission"
       }
+    },
+    {
+      "file": "hooks/after-agent-thought.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "working"
+      },
+      "note": "The first sign of a turn Cursor submitted from a stop hook's followup_message (no beforeSubmitPrompt)."
+    },
+    {
+      "file": "hooks/after-shell-execution-skipped.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "working"
+      },
+      "note": "A skipped approval: exitCode 0, empty output, duration includes the dialog's wait. Indistinguishable from a real empty run."
+    },
+    {
+      "file": "hooks/session-end.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "hooks/stop-aborted.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "readyForReview"
+      },
+      "note": "Ctrl-C mid-turn: stop with status aborted, then a second stop with status error."
+    },
+    {
+      "file": "hooks/stop-error.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "readyForReview"
+      }
+    },
+    {
+      "file": "hooks/stop-after-followup.json",
+      "source": "hook",
+      "capturedOn": "2026-10-06",
+      "cliVersion": "2026.10.01-e373342",
+      "expect": {
+        "status": "readyForReview"
+      },
+      "note": "loop_count 1: the turn a followup_message started."
+    },
+    {
+      "file": "screens/plan-ready.txt",
+      "source": "screen",
+      "capturedOn": "2026-10-01",
+      "cliVersion": "2026.10.01",
+      "expect": {
+        "status": "waitingForInput",
+        "reason": "planApproval"
+      },
+      "note": "Plans fire no hook; CursorDialog reads \"Ready to build?\"."
     }
   ]
 }

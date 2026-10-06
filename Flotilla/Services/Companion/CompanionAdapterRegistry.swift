@@ -32,7 +32,7 @@ final class CompanionAdapterRegistry {
                 // submit a phone prompt; returning nil lets the router fall
                 // back to `AppStore.deliverMessage` directly.
                 guard let deliver else { return nil }
-                adapter = CursorCompanionAdapter(session: session, screen: screen, send: { send(session.id, $0) }, deliver: { try await deliver(session.id, $0) })
+                adapter = CursorCompanionAdapter(session: session, support: support, screen: screen, send: { send(session.id, $0) }, deliver: { try await deliver(session.id, $0) })
             } else {
                 adapter = ClaudeCompanionAdapter(session: session, bridge: bridge, support: support, screen: screen, send: { send(session.id, $0) })
             }
