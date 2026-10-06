@@ -346,3 +346,31 @@ Decisions made without asking, recorded so they can be revisited.
      client, with the Mac pushing state changes) — the properly supported way
      to keep a Live Activity live while the app is suspended, but it's a real
      feature build, not a small patch.
+
+   **Planned approach (decided, not built).** The same work also lets the Mac
+   send alert pushes while the phone is suspended and nobody is at the Mac.
+   - *Why a relay is unavoidable.* Every APNs request must be signed with the
+     team's `.p8` key, and that key can't be limited to one device. Shipping
+     it in the Mac app would let anyone extract it and push to every user.
+     CloudKit (`CKQuerySubscription`) could carry alert pushes without a
+     relay, but ActivityKit updates, push-to-start and broadcast channels all
+     need a provider. A silent push that wakes the app is throttled and is
+     dropped after a force-quit.
+   - *The relay.* A stateless Cloudflare Worker holds the `.p8` as a secret:
+     no database, no accounts. The Mac posts `{push token, payload}` with a
+     per-device secret set up at pairing. The Worker checks it, signs and
+     caches the ES256 provider JWT (reused for under an hour) and forwards to
+     APNs (`apns-push-type: liveactivity`, topic
+     `com.niclassslua.flotilla.companion.push-type.liveactivity`, or alert).
+     The free plan (100k requests/day, 10 ms CPU each) covers it; Workers'
+     `fetch` speaks HTTP/2, and `@fivesheepco/cloudflare-apns2` targets this.
+   - *Phone side.* Request the activity with `pushType: .token` and send
+     `pushTokenUpdates` (plus the push-to-start and alert tokens) to the Mac
+     over the companion link.
+   - *Privacy.* Try putting a ChaChaPoly-sealed blob in `ContentState`, with
+     the widget decrypting it using a key shared through the App Group. If
+     that works, the Worker and Apple see nothing readable. Otherwise session
+     titles and statuses pass through in plaintext, and the README's "no
+     cloud relay" wording and decision #6 need rewording.
+   - *First step.* Prove one Live Activity push from a Worker to a real
+     device before building the Mac sender.
