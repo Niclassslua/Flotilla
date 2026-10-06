@@ -254,7 +254,7 @@ struct SessionDetailView: View {
             .contentTransition(.numericText())
             .animation(reduceMotion ? nil : .bouncy, value: newOutputCount)
         }
-        .buttonStyle(.glassProminent)
+        .companionGlassButtonStyle(prominent: true)
         .tint(FlotillaColors.accent)
         .controlSize(.small)
         .padding(.bottom, 8)

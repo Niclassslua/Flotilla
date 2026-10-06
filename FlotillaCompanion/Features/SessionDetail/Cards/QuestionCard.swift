@@ -86,7 +86,7 @@ struct QuestionCard: View {
                     } label: {
                         Text("Back").frame(maxWidth: .infinity, minHeight: buttonRowHeight)
                     }
-                    .buttonStyle(.glass)
+                    .companionGlassButtonStyle()
                 }
                 if stepIndex < steps.count - 1 {
                     Button {
@@ -94,13 +94,13 @@ struct QuestionCard: View {
                     } label: {
                         Text("Next").frame(maxWidth: .infinity, minHeight: buttonRowHeight)
                     }
-                    .buttonStyle(.glass)
+                    .companionGlassButtonStyle()
                     .disabled(!isAnswered(step))
                 } else {
                     Button(action: submit) {
                         Text("Submit").frame(maxWidth: .infinity, minHeight: buttonRowHeight)
                     }
-                    .buttonStyle(.glassProminent)
+                    .companionGlassButtonStyle(prominent: true)
                     .tint(FlotillaColors.accent)
                     .disabled(!steps.allSatisfy(isAnswered) || isSending)
                     .accessibilityIdentifier("QuestionCard.Submit")

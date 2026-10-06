@@ -107,7 +107,7 @@ struct PairMacView: View {
                     } label: {
                         Label("Scan Code", systemImage: "qrcode.viewfinder").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glassProminent)
+                    .companionGlassButtonStyle(prominent: true)
                     .tint(FlotillaColors.accent)
                     .accessibilityIdentifier("Pairing.Scan")
 
@@ -122,7 +122,7 @@ struct PairMacView: View {
                     } label: {
                         Label("Paste Pairing Link", systemImage: "doc.on.clipboard").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .companionGlassButtonStyle()
                     .accessibilityIdentifier("Pairing.Paste")
                 }
                 .controlSize(.large)
@@ -152,7 +152,7 @@ struct PairMacView: View {
         .ignoresSafeArea(edges: .bottom)
         .overlay(alignment: .bottom) {
             Button("Paste Link Instead") { step = .pasting }
-                .buttonStyle(.glass)
+                .companionGlassButtonStyle()
                 .padding(.bottom, 32)
         }
     }
@@ -217,7 +217,7 @@ struct PairMacView: View {
             } label: {
                 Text("Show Sessions").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glassProminent)
+            .companionGlassButtonStyle(prominent: true)
             .tint(FlotillaColors.accent)
             .controlSize(.large)
             .padding(20)
@@ -355,20 +355,20 @@ struct ConnectionDiagnosisView: View {
                         } label: {
                             Label("Open Settings", systemImage: "gear").frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.glass)
+                        .companionGlassButtonStyle()
                     }
                     if let retry {
                         Button(action: retry) {
                             Text("Try Again").frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.glassProminent)
+                        .companionGlassButtonStyle(prominent: true)
                         .tint(FlotillaColors.accent)
                     }
                     if let startOver {
                         Button(action: startOver) {
                             Text("Scan a New Code").frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.glass)
+                        .companionGlassButtonStyle()
                     }
                 }
                 .controlSize(.large)

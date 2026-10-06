@@ -235,7 +235,7 @@ private struct FileDiffHeader: View {
                 NavigationLink(value: Route.file(sessionID, path: file.path)) {
                     Image(systemName: "doc.text")
                 }
-                .buttonStyle(.glass)
+                .companionGlassButtonStyle()
                 .controlSize(.small)
                 .accessibilityLabel("View File")
             }

@@ -70,13 +70,13 @@ private struct PlanActions: View {
                             revision = ""
                             isRevising = false
                         } label: { Text("Cancel").frame(maxWidth: .infinity) }
-                            .buttonStyle(.glass)
+                            .companionGlassButtonStyle()
                         Button {
                             send(.revisePlan(revision.trimmingCharacters(in: .whitespacesAndNewlines)))
                         } label: {
                             Text("Send Revision").frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.glassProminent)
+                        .companionGlassButtonStyle(prominent: true)
                         .tint(FlotillaColors.accent)
                         .disabled(revision.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
@@ -88,19 +88,19 @@ private struct PlanActions: View {
                         Text("Approve & Auto-Accept Edits")
                             .frame(maxWidth: .infinity, minHeight: 50)
                     }
-                    .buttonStyle(.glassProminent)
+                    .companionGlassButtonStyle(prominent: true)
                     .tint(FlotillaColors.accent)
                     HStack(spacing: 8) {
                         Button { send(.approvePlan(.askForEdits)) } label: {
                             Text("Approve & Ask for Edits")
                                 .frame(maxWidth: .infinity, minHeight: 50)
                         }
-                        .buttonStyle(.glass)
+                        .companionGlassButtonStyle()
                         Button { isRevising = true } label: {
                             Text("Revise")
                                 .frame(maxWidth: .infinity, minHeight: 50)
                         }
-                        .buttonStyle(.glass)
+                        .companionGlassButtonStyle()
                     }
                 }
                 .controlSize(.large)
@@ -108,10 +108,10 @@ private struct PlanActions: View {
             } else {
                 VStack(spacing: 8) {
                     Button { send(.approvePlan(nil)) } label: { Text("Approve").frame(maxWidth: .infinity, minHeight: 50) }
-                        .buttonStyle(.glassProminent)
+                        .companionGlassButtonStyle(prominent: true)
                         .tint(FlotillaColors.accent)
                     Button { isRevising = true } label: { Text("Revise").frame(maxWidth: .infinity, minHeight: 50) }
-                        .buttonStyle(.glass)
+                        .companionGlassButtonStyle()
                 }
                 .controlSize(.large)
                 .disabled(isSending)
@@ -156,7 +156,7 @@ private struct PlanReader: View {
             .safeAreaInset(edge: .bottom) {
                 PlanActions(context: context, isRevising: $isRevising, onAnswered: { dismiss() })
                     .padding(14)
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .companionGlassEffect(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .padding(.horizontal, 12)
                     .disabled(!context.isActionable)
             }

@@ -68,13 +68,13 @@ struct PermissionCard: View {
             Button { denyCount += 1; send(.deny) } label: {
                 Text("Deny").frame(maxWidth: .infinity, minHeight: 50)
             }
-            .buttonStyle(.glass)
+            .companionGlassButtonStyle()
             .accessibilityIdentifier("PermissionCard.Deny")
 
             Button { send(.allow) } label: {
                 Text("Allow").frame(maxWidth: .infinity, minHeight: 50)
             }
-            .buttonStyle(.glassProminent)
+            .companionGlassButtonStyle(prominent: true)
             .tint(FlotillaColors.accent)
             .accessibilityIdentifier("PermissionCard.Allow")
 
@@ -106,7 +106,7 @@ struct PermissionCard: View {
                     minHeight: (expandsToFill || matchesRowHeight) ? 50 : nil
                 )
         }
-        .buttonStyle(.glass)
+        .companionGlassButtonStyle()
         .accessibilityLabel("More")
         .accessibilityIdentifier("PermissionCard.More")
     }
@@ -125,7 +125,7 @@ struct PermissionCard: View {
                 } label: {
                     Text("Cancel").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
+                .companionGlassButtonStyle()
 
                 Button {
                     let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -133,7 +133,7 @@ struct PermissionCard: View {
                 } label: {
                     Text(mode == .allow ? "Allow" : "Deny").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glassProminent)
+                .companionGlassButtonStyle(prominent: true)
                 .tint(mode == .allow ? FlotillaColors.accent : FlotillaColors.textSecondary)
                 .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

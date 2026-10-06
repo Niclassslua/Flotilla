@@ -84,7 +84,7 @@ struct CreateSessionSheet: View {
                     }
                         .accessibilityLabel(isCreating ? "Creating session" : "Create session")
                         .accessibilityIdentifier("CreateSession.CreateButton")
-                        .buttonStyle(.glassProminent)
+                        .companionGlassButtonStyle(prominent: true)
                         .tint(FlotillaColors.accent)
                         .disabled(isCreating || goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.isActionable(macID: macID))
                 }
@@ -201,7 +201,7 @@ struct HandoffSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Hand Off") { isConfirming = true }
-                        .buttonStyle(.glassProminent)
+                        .companionGlassButtonStyle(prominent: true)
                         .tint(FlotillaColors.accent)
                         .disabled(isHandingOff || session.handoffTargets.isEmpty || !store.isActionable(sessionID: session.id))
                 }

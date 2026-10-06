@@ -71,7 +71,7 @@ struct MacsView: View {
                 } label: {
                     Text("Pair a Mac").frame(maxWidth: 240)
                 }
-                .buttonStyle(.glassProminent)
+                .companionGlassButtonStyle(prominent: true)
                 .tint(FlotillaColors.accent)
                 .controlSize(.large)
                 .accessibilityIdentifier("Macs.PairFirst")

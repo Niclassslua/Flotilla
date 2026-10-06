@@ -188,11 +188,11 @@ struct UnreachableBanner: View {
             .minimumScaleFactor(0.85)
             if case .needsRepairing = mac.connection, store.supportsPairing {
                 Button("Pair Again") { isPairing = true }
-                    .buttonStyle(.glass)
+                    .companionGlassButtonStyle()
                     .controlSize(.small)
             } else if case .unreachable = mac.connection {
                 Button("Reconnect Now") { store.reconnect(mac.id) }
-                    .buttonStyle(.glass)
+                    .companionGlassButtonStyle()
                     .controlSize(.small)
                     .accessibilityIdentifier("UnreachableBanner.ReconnectNow")
             }
@@ -201,7 +201,7 @@ struct UnreachableBanner: View {
         .foregroundStyle(FlotillaColors.textPrimary)
         .padding(.vertical, 8)
         .padding(.horizontal, 14)
-        .glassEffect(.regular.tint(tint.opacity(0.25)), in: Capsule())
+        .companionGlassEffect(tint: tint.opacity(0.25), in: Capsule())
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
         .accessibilityIdentifier("UnreachableBanner")

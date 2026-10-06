@@ -8,7 +8,7 @@ Flotilla is a macOS SwiftUI application that serves as a local command center fo
 
 An iOS companion (`FlotillaCompanion`) lives in the same project: a remote control for a running Flotilla, paired over the LAN or Tailscale with an end-to-end encrypted link hosted inside the Mac app (Settings ▸ iPhone Companion). Architecture, protocol, and every assumption are in [`docs/companion.md`](docs/companion.md). The companion shares `SessionKit`, `TranscriptKit`, `DesignSystem`, and `CompanionKit` with the Mac; its demo mode (`-demo`) runs on the fixture fleet.
 
-- **Platform:** macOS 26.0+ (companion: iOS 26.0+)
+- **Platform:** macOS 26.0+ (companion: iOS 18.0+; Liquid Glass on iOS 26, system fallbacks below via `GlassCompatibility.swift`)
 - **Language:** Swift 6.0 (strict concurrency)
 - **Build system:** XcodeGen (`project.yml` → `Flotilla.xcodeproj`)
 - **Bundle ID:** `com.niclassslua.flotilla`

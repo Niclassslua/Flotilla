@@ -106,7 +106,7 @@ struct CardContainer<Content: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .companionGlassEffect(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .disabled(context.map { !$0.isActionable } ?? false)
         .opacity(context.map { $0.isActionable ? 1 : FlotillaStateOpacity.disabled + 0.25 } ?? 1)
     }
@@ -122,7 +122,7 @@ private struct ResolutionNotice: View {
             .foregroundStyle(FlotillaColors.textPrimary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .glassEffect(.regular, in: Capsule())
+            .companionGlassEffect(in: Capsule())
             .sensoryFeedback(.warning, trigger: resolution == .alreadyAnswered)
             .accessibilityIdentifier("ResolutionNotice")
     }
@@ -197,7 +197,7 @@ private struct PromptComposer: View {
                     }
                     .accessibilityLabel("Cancel dictation")
                     .accessibilityIdentifier("Composer.CancelDictation")
-                    .buttonStyle(.glass)
+                    .companionGlassButtonStyle()
                     .buttonBorderShape(.circle)
                     .foregroundStyle(FlotillaColors.textSecondary)
                     .frame(width: 42, height: 42)
@@ -239,7 +239,7 @@ private struct PromptComposer: View {
                         .accessibilityLabel(speech.phase == .recording ? "Finish dictation" : "Dictate")
                         .accessibilityIdentifier("Composer.Dictate")
                         .disabled(speech.phase == .checking || speech.phase == .processing)
-                        .buttonStyle(.glass)
+                        .companionGlassButtonStyle()
                         .foregroundStyle(speech.phase == .recording ? .red : FlotillaColors.textSecondary)
                         .frame(width: 42, height: 42)
                     }
@@ -259,7 +259,7 @@ private struct PromptComposer: View {
                             .accessibilityLabel(isStopping ? "Stopping" : "Stop")
                             .accessibilityIdentifier("Composer.Stop")
                             .disabled(isStopping)
-                            .buttonStyle(.glass)
+                            .companionGlassButtonStyle()
                             .foregroundStyle(FlotillaColors.textPrimary)
                             .frame(width: 42, height: 42)
                         } else {
@@ -282,7 +282,7 @@ private struct PromptComposer: View {
                             .accessibilityLabel("Send")
                             .accessibilityIdentifier("Composer.Send")
                             .disabled(trimmed.isEmpty && speech.phase != .recording || speech.phase == .processing)
-                            .buttonStyle(.glassProminent)
+                            .companionGlassButtonStyle(prominent: true)
                             .tint(FlotillaColors.accent)
                             .frame(width: 42, height: 42)
                         }
@@ -293,7 +293,7 @@ private struct PromptComposer: View {
                 .controlSize(.regular)
                 .padding(.trailing, 4)
             }
-            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .companionGlassEffect(interactive: true, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
         .disabled(!isActionable)
         .onAppear { text = store.promptDraft(for: session.id) }
@@ -422,7 +422,7 @@ private struct CrashedCard: View {
             } label: {
                 Text("Restart").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glassProminent)
+            .companionGlassButtonStyle(prominent: true)
             .tint(FlotillaColors.accent)
             .controlSize(.large)
             .disabled(!isActionable)
@@ -480,11 +480,11 @@ private struct ReviewChangesCard: View {
                 store.acknowledgeReview(sessionID)
                 store.path.append(.diff(sessionID, commitHash: nil, focusPath: nil))
             }
-            .buttonStyle(.glass)
+            .companionGlassButtonStyle()
             .controlSize(.small)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .companionGlassEffect(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }

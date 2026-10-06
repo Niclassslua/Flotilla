@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "CompanionKit",
-    platforms: [.macOS(.v15), .iOS(.v26)],
+    platforms: [.macOS(.v15), .iOS(.v18)],
     products: [
         .library(name: "CompanionKit", targets: ["CompanionKit"])
     ],

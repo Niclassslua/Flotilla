@@ -46,6 +46,7 @@
 		0D7B48590FC30C52A5329E00 /* folder-github.svg in Resources */ = {isa = PBXBuildFile; fileRef = 1B5700FE6569E0924F5F69FA /* folder-github.svg */; };
 		0D8421447F2C66CDE6FFC80B /* CompanionRuntimeLaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6134E93D903DF7A2C70C094C /* CompanionRuntimeLaunch.swift */; };
 		0D8C9E219BA77375C113A81F /* folder-debug.svg in Resources */ = {isa = PBXBuildFile; fileRef = 049E0C337CE5FC398BE3AC76 /* folder-debug.svg */; };
+		0DA4E1892CF16440392F6F1A /* GlassCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C823C7BD8BFB5B06166B1E /* GlassCompatibility.swift */; };
 		0DAC9307B437321A24EDEBC6 /* FleetActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E739EE09A2330ACBCD5A1DC8 /* FleetActivityAttributes.swift */; };
 		0DD425204736A345A97B75FE /* LedgerDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88CCB0EF5E481D579CB0EDB /* LedgerDesign.swift */; };
 		0E7B1EA1BF83E43A9773DAE3 /* PermissionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9553D25883A6FEEC82B6F83 /* PermissionCard.swift */; };
@@ -1218,6 +1219,7 @@
 		BDF3E0DEEB5F96FA1C459ACF /* SessionScrollbackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionScrollbackStore.swift; sourceTree = "<group>"; };
 		BECCD7A6308B107F37525D5D /* TerminalPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPipelineTests.swift; sourceTree = "<group>"; };
 		C038C5B8AB4AE5F31A21ECD0 /* TmuxSessionWrapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TmuxSessionWrapping.swift; sourceTree = "<group>"; };
+		C0C823C7BD8BFB5B06166B1E /* GlassCompatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCompatibility.swift; sourceTree = "<group>"; };
 		C1A53AAFB27915EB20686B84 /* SessionGroupBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGroupBar.swift; sourceTree = "<group>"; };
 		C1C8B09D3B46D48A26D09B62 /* video.svg */ = {isa = PBXFileReference; path = video.svg; sourceTree = "<group>"; };
 		C2EF3700AF5B4EB6E32DE2A9 /* CodexTranscriptCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexTranscriptCodecTests.swift; sourceTree = "<group>"; };
@@ -1625,6 +1627,7 @@
 			children = (
 				26771FCDBA36102292542377 /* AgentModelEffortControls.swift */,
 				FFE0D0792438B8916BAEECBA /* EffortPickerSheet.swift */,
+				C0C823C7BD8BFB5B06166B1E /* GlassCompatibility.swift */,
 				34271E2E4A5D6F47F1DBF87F /* ModelPickerSheet.swift */,
 				49118360E61B462D7B8AF880 /* SessionRowView.swift */,
 			);
@@ -3164,6 +3167,7 @@
 				0DAC9307B437321A24EDEBC6 /* FleetActivityAttributes.swift in Sources */,
 				DA0E9D86C27F33A9378713E3 /* FleetActivityController.swift in Sources */,
 				085170FFEE7C23280AD15430 /* FleetView.swift in Sources */,
+				0DA4E1892CF16440392F6F1A /* GlassCompatibility.swift in Sources */,
 				E0325EA8AD74AB501AA13446 /* LANBrowser.swift in Sources */,
 				6F0853E1B477497AA28CF49E /* MacConnection.swift in Sources */,
 				2C351298C6708F8A1E6D9E43 /* MacHost.swift in Sources */,
@@ -3458,7 +3462,7 @@
 			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -3483,7 +3487,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -3521,7 +3525,7 @@
 			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -3582,7 +3586,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -3672,7 +3676,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
@@ -3735,7 +3739,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -3798,7 +3802,7 @@
 			buildSettings = {
 				INFOPLIST_FILE = FlotillaCompanionWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flotilla;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -3818,7 +3822,7 @@
 			baseConfigurationReference = CD331B3ECC12220D36BF7150 /* CompanionSigning.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -3897,7 +3901,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
@@ -3915,7 +3919,7 @@
 			buildSettings = {
 				INFOPLIST_FILE = FlotillaCompanionWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flotilla;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4002,7 +4006,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
@@ -4061,7 +4065,7 @@
 			buildSettings = {
 				INFOPLIST_FILE = FlotillaCompanionWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flotilla;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
