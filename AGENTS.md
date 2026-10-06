@@ -464,7 +464,7 @@ xcodegen generate
 | `ENABLE_HARDENED_RUNTIME` | YES (app), NO (tests) |
 | `GENERATE_INFOPLIST_FILE` | YES |
 | `MARKETING_VERSION` | 0.1.0 |
-| `CURRENT_PROJECT_VERSION` | 1 |
+| `CURRENT_PROJECT_VERSION` | 2 |
 
 ### Ephemeral Test App
 
