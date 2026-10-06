@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Binary | `codex` (`AgentCatalog.codexCLI`) |
-| Last verified | hook payloads **0.125.0–0.155.0** (2026-09-08 → 2026-09-18). Installed 2026-10-06: **0.160.1**, not yet re-verified end to end |
+| Valid through | **0.160.1**, checked 2026-10-06; hook payloads verified through 0.155.0, 0.160.1 help and app-server schema inspected |
 | Primary sources | [Codex hooks guide](https://developers.openai.com/codex/hooks), [config reference](https://developers.openai.com/codex/config-reference); captured payloads in `FlotillaUnitTests/ProviderFixtures/codex-cli/` |
 | Code | `HookConfigurationWriter` (`configureCodexHooks`, `launchArguments(.codexCLI)`), `HookEventReceiver` (`.codexCLI`), `CompanionRuntimeLaunch` (`.codexCLI`), `CodexCompanionAdapter`, `CodexSessionProvider`, `CodexTranscriptCodec` |
 
@@ -16,7 +16,7 @@ questions, plans and streaming text.
 
 | What | How | Evidence |
 | --- | --- | --- |
-| Hooks | `--config features.hooks=true` plus `--config hooks.{PreToolUse,PermissionRequest,PostToolUse,Stop}=[{matcher="",hooks=[{type="command",command="<support>/hooks/flotilla-codex.sh"}]}]`; `PermissionRequest` runs `… PermissionRequest` with `timeout=86400`. No project file is written | **Verified** (payloads arrive) |
+| Hooks | `--config features.hooks=true` plus per-process groups for `PreToolUse`, `PermissionRequest`, `PostToolUse`, `Stop`, `UserPromptSubmit`, `SessionStart`, `Interrupt`, `PreCompact`, `PostCompact`, `SubagentStart`, `SubagentStop`. `PermissionRequest` uses `timeout=86400`. No project file is written | Existing events **Verified** through 0.155.0; additional event names **Documented** in 0.160.1 schema, not live-probed |
 | Hook feature flag | `features.hooks` reported disabled by default in 0.149.1, so it is enabled per launch | **Documented** + observed 0.149.1 |
 | Hook review | Codex hashes non-managed hook definitions for review. The definition is stable across sessions, so a user approves one shape once (`/hooks` shows it) | **Documented** |
 | Event routing | env `FLOTILLA_HOOK_EVENT_FILE` | **Verified** |
@@ -51,14 +51,17 @@ raw event files.
 | `PostToolUse` | `tool_name` | `working` | **Verified** |
 | `Stop`, `last_assistant_message` is a string | — | `readyForReview` | **Verified** 0.125.0 |
 | `Stop`, `last_assistant_message: null` | — | `waitingForInput` / `planApproval` (a finished Plan-mode turn) | **Assumed** from an earlier live run; no captured fixture |
+| `UserPromptSubmit` | — | `working` | **Documented** in 0.160.1 schema; not live-probed |
+| `Interrupt` | — | `readyForReview` | **Documented** in 0.160.1 schema; not live-probed |
 
 Tool names seen: `Bash`, `apply_patch`, `request_user_input`, `webrun`,
 `mcp__<server>__<tool>`.
 
-Codex 0.160.1's binary also knows `PreCompact`, `PostCompact`,
-`SessionStart`, `SessionEnd`, `UserPromptSubmit`, `SubagentStart`,
-`SubagentStop` and `Interrupt` (from `strings`; **Assumed**). Flotilla
-registers none of them.
+Codex 0.160.1's generated app-server schema includes these lifecycle event
+names, and Flotilla registers all listed above except `SessionEnd` (process
+termination is not a turn status). `UserPromptSubmit` and `Interrupt` have
+direct status mappings; compaction and subagent events are recorded without
+changing the parent status. Payloads and ordering still need live probes.
 
 ## Status: screen
 
@@ -111,6 +114,7 @@ when `availableDecisions` only advertises its TUI's policy choices.*
 | Query | Parsed as | Evidence |
 | --- | --- | --- |
 | `codex debug models` (JSON) | `models[]` with `visibility == "list"`, sorted by `priority`; per-model `supportedReasoningLevels[].effort/description` and `defaultReasoningLevel`; unknown levels dropped | code |
+| App-server `model/list` | Structured catalog candidate for replacing the debug command | **Documented** in the 0.160.1 schema; not wired into the pre-session picker |
 | Fallback | `gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4, gpt-5.4-mini` | static |
 
 ## Fixtures
@@ -149,5 +153,23 @@ message (Plan mode), and any screen.
   `hook_event_name`). The PreToolUse wrapper also prints
   `{"decision":"allow"}`, which Codex may interpret.
 - The `Stop`-null-means-plan rule has no captured fixture.
-- New 0.160.1 hook events (`Interrupt`, `UserPromptSubmit`, `SessionEnd`)
-  could replace screen guessing after an interrupt. Unused.
+- `thread/status/changed` (idle/active/systemError and active flags such as
+  `waitingOnApproval`) is the preferred status feed when app-server is
+  connected. The companion parses turn/dialog notifications but does not yet
+  publish this status directly to the board; wire it before replacing hooks.
+- `thread/list` with cwd filtering and cursor pagination can replace
+  `state_5.sqlite` and `session_index.jsonl`. Launch-time discovery still uses
+  `CodexSessionProvider`; this needs an app-server lifetime outside companion.
+- `thread/name/set` and `thread/name/updated` can provide two-way title sync;
+  currently unused.
+- `turn/completed` carries completed/interrupted/failed, and
+  `turn/plan/updated` carries structured plan changes. Companion handles
+  failures and plan items, but board status and plan updates are not wired.
+- `model/list` is a candidate replacement for `codex debug models`, but the
+  model picker runs before a session app-server exists; compare catalog shape
+  and authentication before switching.
+- `codex queue --thread --message` duplicates delivery through the attached
+  app-server's `turn/start`/`turn/steer`; add only if a concrete use case needs
+  a separate path.
+- `codex archive` is a safer handoff cleanup candidate than deleting the
+  rollout file; source cleanup currently removes transcript files only.

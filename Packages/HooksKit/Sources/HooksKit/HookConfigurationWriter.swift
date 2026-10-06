@@ -302,13 +302,18 @@ public struct HookConfigurationWriter: HookConfiguring {
             let scriptPath = codexWrapperScriptPath(supportDirectory: supportDirectory)
             let commandLiteral = tomlStringLiteral(quoted(scriptPath.path))
             let hookGroup = "[{matcher=\"\",hooks=[{type=\"command\",command=\(commandLiteral)}]}]"
-            return [
+            let observerEvents = ["UserPromptSubmit", "SessionStart", "Interrupt", "PreCompact", "PostCompact", "SubagentStart", "SubagentStop"]
+            var arguments = [
                 "--config", "features.hooks=true",
                 "--config", "hooks.PreToolUse=\(hookGroup)",
                 "--config", "hooks.PermissionRequest=[{matcher=\"\",hooks=[{type=\"command\",command=\(tomlStringLiteral(quoted(scriptPath.path) + " PermissionRequest")),timeout=86400}]}]",
                 "--config", "hooks.PostToolUse=\(hookGroup)",
                 "--config", "hooks.Stop=\(hookGroup)"
             ]
+            for event in observerEvents {
+                arguments += ["--config", "hooks.\(event)=\(hookGroup)"]
+            }
+            return arguments
         case .openCode, .antigravity, .cursorAgent:
             return []
         }

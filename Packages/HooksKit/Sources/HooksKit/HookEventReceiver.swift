@@ -277,6 +277,10 @@ public final class HookEventReceiver: @unchecked Sendable {
             // normal approval prompt intact.
             guard let eventName = object["hook_event_name"] as? String else { return nil }
             switch eventName {
+            case "UserPromptSubmit":
+                return SessionStatusObservation(.working, cause: cause("hook: UserPromptSubmit"))
+            case "Interrupt":
+                return SessionStatusObservation(.readyForReview, cause: cause("hook: Interrupt"))
             case "PreToolUse":
                 let toolName = (object["tool_name"] as? String)?.lowercased()
                 if toolName == "request_user_input" || toolName == "askuserquestion" {
