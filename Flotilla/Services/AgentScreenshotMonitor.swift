@@ -41,11 +41,22 @@ final class AgentScreenshotMonitor {
     /// Highest native transcript position already accounted for per session.
     @ObservationIgnored private var baselines: [UUID: EventPosition] = [:]
     @ObservationIgnored private var dismissedIDs: [UUID: Set<String>] = [:]
+    /// Every screenshot found per session this launch. The reader only
+    /// re-reads a trailing event window, so an image that scrolled out of it
+    /// survives a switch to another session and back only through here.
+    @ObservationIgnored private var history: [UUID: [AgentScreenshot]] = [:]
+    /// Ids already in `store`, per session loaded this launch.
+    @ObservationIgnored private var storedIDs: [UUID: Set<String>] = [:]
+    @ObservationIgnored private let store: AgentScreenshotStore
     @ObservationIgnored private var changesTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
-    init(reader: CompanionTranscriptReader = CompanionTranscriptReader(registry: .flotilla())) {
+    init(
+        reader: CompanionTranscriptReader = CompanionTranscriptReader(registry: .flotilla()),
+        store: AgentScreenshotStore = AgentScreenshotStore()
+    ) {
         self.reader = reader
+        self.store = store
     }
 
     /// Follows the session on screen.
@@ -64,7 +75,7 @@ final class AgentScreenshotMonitor {
         let previous = session
         session = newSession
         pending = []
-        screenshots = []
+        screenshots = newSession.flatMap { history[$0.id] } ?? []
         refreshTask?.cancel()
         Task { [reader] in
             if let previous { await reader.unwatch(previous.id) }
@@ -109,20 +120,29 @@ final class AgentScreenshotMonitor {
 
     private func refresh(debounce: Duration) {
         guard let session else { return }
+        // The first load starts from what was stored on earlier launches and
+        // scans the whole transcript; later ones only need the reader's
+        // window, merged into what is already known.
+        let isFirstLoad = history[session.id] == nil
         refreshTask?.cancel()
-        refreshTask = Task { [weak self, reader] in
+        refreshTask = Task { [weak self, reader, store] in
             if debounce > .zero {
                 try? await Task.sleep(for: debounce)
             }
             guard !Task.isCancelled else { return }
-            let transcript = await reader.read(session)
+            let stored = isFirstLoad ? await store.load(session.id) : []
+            let events = isFirstLoad ? await reader.imageEvents(session) : await reader.read(session).events
             guard !Task.isCancelled else { return }
-            self?.apply(transcript.events, for: session)
+            self?.apply(events, for: session, stored: stored)
         }
     }
 
-    private func apply(_ events: [TranscriptEvent], for session: Session) {
+    private func apply(_ events: [TranscriptEvent], for session: Session, stored: [AgentScreenshotStore.Stored] = []) {
         guard session.id == self.session?.id else { return }
+        if history[session.id] == nil {
+            history[session.id] = stored.compactMap { Self.screenshot(from: $0, for: session) }
+            storedIDs[session.id] = Set(stored.map(\.record.id))
+        }
         let allFound = Self.agentImages(in: events)
         let loadedScreenshots = allFound.compactMap { item -> AgentScreenshot? in
             guard let data = Data(base64Encoded: item.base64),
@@ -141,11 +161,13 @@ final class AgentScreenshotMonitor {
         // `CompanionTranscriptReader` caps its rendered event window at 400
         // entries. Replacing this list with just that window made screenshots
         // disappear after enough later Claude messages arrived. Keep images
-        // already decoded for this focused session, then merge in images that
-        // are still present in the newest window. Native positions are stable
+        // already decoded for this session, then merge in images that are
+        // still present in the newest window. Native positions are stable
         // across the reader's trimming, so they also give the merged list its
         // correct chronological order.
-        self.screenshots = Self.merging(self.screenshots, with: loadedScreenshots)
+        self.screenshots = Self.merging(history[session.id] ?? [], with: loadedScreenshots)
+        history[session.id] = self.screenshots
+        persist(self.screenshots, for: session.id)
 
         let previousBaseline = baselines[session.id]
         if let currentMax = allFound.last?.position {
@@ -172,6 +194,43 @@ final class AgentScreenshotMonitor {
         }
     }
 
+    /// Stores screenshots this launch found that earlier ones didn't, while
+    /// their image is still in hand.
+    private func persist(_ screenshots: [AgentScreenshot], for sessionID: UUID) {
+        let known = storedIDs[sessionID] ?? []
+        let added = screenshots.filter { !known.contains($0.id) }
+        guard !added.isEmpty else { return }
+        storedIDs[sessionID, default: []].formUnion(added.map(\.id))
+        let records = added.map { screenshot in
+            AgentScreenshotStore.Stored(
+                record: .init(
+                    id: screenshot.id,
+                    line: screenshot.position.line,
+                    entry: screenshot.position.entry,
+                    filename: screenshot.filename,
+                    timestamp: screenshot.timestamp,
+                    file: AgentScreenshotStore.fileName(for: screenshot.id)
+                ),
+                data: screenshot.data
+            )
+        }
+        Task { [store] in await store.save(records, for: sessionID) }
+    }
+
+    private static func screenshot(from stored: AgentScreenshotStore.Stored, for session: Session) -> AgentScreenshot? {
+        guard let image = NSImage(data: stored.data) else { return nil }
+        return AgentScreenshot(
+            id: stored.record.id,
+            position: EventPosition(line: stored.record.line, entry: stored.record.entry),
+            sessionID: session.id,
+            agent: session.agent,
+            image: image,
+            data: stored.data,
+            filename: stored.record.filename,
+            timestamp: stored.record.timestamp
+        )
+    }
+
     struct EventPosition: Comparable {
         let line: Int
         let entry: Int
@@ -194,7 +253,10 @@ final class AgentScreenshotMonitor {
         with currentWindow: [AgentScreenshot]
     ) -> [AgentScreenshot] {
         var byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
-        for screenshot in currentWindow {
+        // The first decode wins: a `SendUserFile` image is re-read from its
+        // path on every parse, and an agent often overwrites that path with
+        // a newer capture.
+        for screenshot in currentWindow where byID[screenshot.id] == nil {
             byID[screenshot.id] = screenshot
         }
         return byID.values.sorted { $0.position < $1.position }

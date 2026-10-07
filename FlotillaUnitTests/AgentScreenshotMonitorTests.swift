@@ -1,6 +1,8 @@
 import AppKit
 import XCTest
 import CompanionKit
+import SessionKit
+import TranscriptKit
 @testable import Flotilla
 
 /// The monitor pops the inspector open on its own, so a wrong answer here is
@@ -186,6 +188,98 @@ final class AgentScreenshotMonitorTests: XCTestCase {
 
         XCTAssertEqual(merged.map(\.id), ["20:1", "450:1"])
     }
+
+    /// A screenshot sent early in a long Claude turn, followed by more
+    /// records than the reader's event window holds.
+    private func longClaudeTranscript() throws -> (session: Session, url: URL, imageURL: URL) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("screenshots-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let imageURL = directory.appendingPathComponent("screenshot.png")
+        try Data(base64Encoded: Self.pixelPNG)!.write(to: imageURL)
+        let url = directory.appendingPathComponent("transcript.jsonl")
+        let send: [String: Any] = [
+            "type": "assistant", "timestamp": "2026-01-01T00:00:00Z",
+            "message": ["role": "assistant", "content": [[
+                "type": "tool_use", "id": "toolu_send", "name": "SendUserFile",
+                "input": ["files": [imageURL.path]]
+            ]]]
+        ]
+        var lines = [String(decoding: try JSONSerialization.data(withJSONObject: send), as: UTF8.self)]
+        for index in 0..<(CompanionProtocol.transcriptEventLimit + 50) {
+            lines.append(#"{"type":"assistant","timestamp":"2026-01-01T00:00:01Z","message":{"role":"assistant","content":[{"type":"text","text":"step \#(index)"}]}}"#)
+        }
+        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: url)
+        var session = Session(title: "Shots", goal: "Shots", agent: .claudeCode, projectID: nil,
+                              workingDirectory: directory, status: .working)
+        session.nativeTranscriptPath = url
+        return (session, url, imageURL)
+    }
+
+    func testImageEventsFindAScreenshotThatFellOutOfTheTranscriptWindow() async throws {
+        let (session, url, _) = try longClaudeTranscript()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let reader = CompanionTranscriptReader(registry: .default)
+
+        let window = await reader.read(session).events
+        XCTAssertTrue(AgentScreenshotMonitor.agentImages(in: window).isEmpty)
+
+        let history = await reader.imageEvents(session)
+        XCTAssertEqual(AgentScreenshotMonitor.agentImages(in: history).map(\.id), ["0:1"])
+    }
+
+    @MainActor
+    func testScreenshotSurvivesFocusingAnotherSessionAndComingBack() async throws {
+        let (session, url, imageURL) = try longClaudeTranscript()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let monitor = AgentScreenshotMonitor(
+            reader: CompanionTranscriptReader(registry: .default),
+            store: AgentScreenshotStore(supportDirectory: url.deletingLastPathComponent())
+        )
+
+        monitor.focus(session)
+        try await waitUntil { !monitor.screenshots.isEmpty }
+        XCTAssertEqual(monitor.screenshots.map(\.id), ["0:1"])
+
+        // Agents clean up their scratchpads; the sent image must outlive it.
+        try FileManager.default.removeItem(at: imageURL)
+        monitor.focus(nil)
+        monitor.focus(session)
+        XCTAssertEqual(monitor.screenshots.map(\.id), ["0:1"])
+    }
+
+    @MainActor
+    func testStoredScreenshotSurvivesARelaunchAfterItsFileIsGone() async throws {
+        let (session, url, imageURL) = try longClaudeTranscript()
+        let directory = url.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = AgentScreenshotStore(supportDirectory: directory)
+
+        let first = AgentScreenshotMonitor(reader: CompanionTranscriptReader(registry: .default), store: store)
+        first.focus(session)
+        try await waitUntil { !first.screenshots.isEmpty }
+        var stored: [AgentScreenshotStore.Stored] = []
+        while stored.isEmpty {
+            stored = await store.load(session.id)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        try FileManager.default.removeItem(at: imageURL)
+        let relaunched = AgentScreenshotMonitor(reader: CompanionTranscriptReader(registry: .default), store: store)
+        relaunched.focus(session)
+        try await waitUntil { !relaunched.screenshots.isEmpty }
+        XCTAssertEqual(relaunched.screenshots.map(\.id), ["0:1"])
+    }
+
+    @MainActor
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = Date.now.addingTimeInterval(5)
+        while !condition() {
+            guard Date.now < deadline else { return XCTFail("condition never became true") }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    private static let pixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
 
     @MainActor
     private func screenshot(id: String, line: Int, sessionID: UUID) -> AgentScreenshot {

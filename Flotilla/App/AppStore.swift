@@ -1243,6 +1243,7 @@ final class AppStore {
         try? FileManager.default.removeItem(at: eventFile)
         try? FileManager.default.removeItem(at: HookConfigurationWriter.displayFilePath(for: sessionID, supportDirectory: supportDirectory))
         try? FileManager.default.removeItem(at: SessionAttachment.directory(for: sessionID, supportDirectory: supportDirectory))
+        try? FileManager.default.removeItem(at: AgentScreenshotStore.directory(for: sessionID, supportDirectory: supportDirectory))
 
         if selectedSessionID == sessionID {
             selectedSessionID = nil

@@ -142,6 +142,56 @@ actor CompanionTranscriptReader {
         return transcript
     }
 
+    /// Every event that could be, or explain, an image the agent sent, from
+    /// the whole transcript rather than `read`'s trailing event window. A long
+    /// agent turn easily pushes an earlier screenshot out of that window, so
+    /// the screenshot panel loads a session's history from here once. Event
+    /// ids match `read`'s, so the two can be merged.
+    func imageEvents(_ session: Session) -> [TranscriptEvent] {
+        guard let reader = registry.reader(for: session.agent),
+              let url = locate(session, reader: reader) else { return [] }
+        guard let lineReader = reader as? any TranscriptLineReading else {
+            guard let entries = try? reader.readNative(at: url) else { return [] }
+            return Self.transcript(from: entries, limit: .max).events
+        }
+        guard let bytes = try? Data(contentsOf: url, options: .mappedIfSafe) else { return [] }
+        let complete = Self.completeRecords(bytes)
+        // Decoding every record of a transcript that can run to tens of
+        // megabytes is wasted on lines that never mention an image, so lines
+        // are matched on raw bytes first and only the survivors are parsed.
+        return complete.withUnsafeBytes { raw -> [TranscriptEvent] in
+            guard let base = raw.baseAddress else { return [] }
+            var events: [TranscriptEvent] = []
+            var start = 0
+            var lineIndex = 0
+            while start < raw.count, let newline = memchr(base + start, 0x0A, raw.count - start) {
+                let end = UnsafeRawPointer(newline) - base
+                let line = UnsafeRawBufferPointer(rebasing: raw[start..<end])
+                if Self.imageMarkers.contains(where: { Self.contains($0, in: line) }) {
+                    let text = String(decoding: line, as: UTF8.self)
+                    events += Self.events(in: [text[...]], reader: lineReader, firstLine: lineIndex)
+                }
+                start = end + 1
+                lineIndex += 1
+            }
+            return events
+        }
+    }
+
+    /// Byte patterns present in every record that carries an image (Claude's
+    /// `"type":"image"`, Codex's `input_image`, `SendUserFile`) or names an
+    /// image path the tool call and user-message checks need.
+    private static let imageMarkers: [[UInt8]] = [
+        "image", "SendUserFile", ".png", ".jp", ".gif", ".webp", ".heic", ".tif", ".bmp"
+    ].map { Array($0.utf8) }
+
+    private static func contains(_ pattern: [UInt8], in line: UnsafeRawBufferPointer) -> Bool {
+        guard let base = line.baseAddress else { return false }
+        return pattern.withUnsafeBytes { needle in
+            memmem(base, line.count, needle.baseAddress, needle.count) != nil
+        }
+    }
+
     private static func parsedTail(of data: Data) -> Data {
         Data(data.suffix(parsedTailLength))
     }
