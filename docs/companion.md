@@ -59,7 +59,7 @@ fixture fleet and scenarios, for UI work without a Mac.
    in the `OU=` field of `security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject`.
    Don't set the team in Xcode's Signing tab: `make` regenerates the project
    with XcodeGen and discards it.
-2. Connect the iPhone (iOS 26 or later, Developer Mode on) and run
+2. Connect the iPhone (iOS 18 or later, Developer Mode on) and run
    `make run-companion-device`, or pick the phone in Xcode and press Run.
 3. With a free Personal Team, trust the developer once on the phone under
    Settings ▸ General ▸ VPN & Device Management; the profile expires after 7 days.
