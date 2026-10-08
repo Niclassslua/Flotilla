@@ -1079,6 +1079,15 @@ final class HookConfigurationWriterTests: XCTestCase {
         }
     }
 
+    /// Never the real `~/.config/opencode/plugins`.
+    private var openCodePluginsDirectory: URL {
+        workingDirectory.deletingLastPathComponent().appendingPathComponent("opencode-plugins", isDirectory: true)
+    }
+
+    private var openCodeWriter: HookConfigurationWriter {
+        HookConfigurationWriter(openCodeGlobalPluginsDirectory: openCodePluginsDirectory)
+    }
+
     /// Never the real `~/.gemini/config/hooks.json`.
     private var antigravityHooksFile: URL {
         workingDirectory.deletingLastPathComponent().appendingPathComponent("gemini-config/hooks.json")
@@ -1353,7 +1362,7 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: configFile), existing)
     }
     func testOpenCodeRelaunchOverwritesRatherThanAccumulating() throws {
-        let writer = HookConfigurationWriter()
+        let writer = openCodeWriter
         let sessionID = UUID()
         for _ in 0..<3 {
             _ = writer.configureHooks(
@@ -1364,13 +1373,12 @@ final class HookConfigurationWriterTests: XCTestCase {
             )
         }
 
-        let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
-        let entries = try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path)
+        let entries = try FileManager.default.contentsOfDirectory(atPath: openCodePluginsDirectory.path)
         XCTAssertEqual(entries.count, 1, "relaunching must overwrite, not accumulate, the stable plugin file")
     }
 
     func testOpenCodeTwoSessionsShareOneEnvironmentRoutedPlugin() throws {
-        let writer = HookConfigurationWriter()
+        let writer = openCodeWriter
         _ = writer.configureHooks(
             for: .openCode,
             sessionID: UUID(),
@@ -1384,18 +1392,18 @@ final class HookConfigurationWriterTests: XCTestCase {
             supportDirectory: supportDirectory
         )
 
-        let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
-        let entries = try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path)
+        let entries = try FileManager.default.contentsOfDirectory(atPath: openCodePluginsDirectory.path)
         XCTAssertEqual(entries, ["flotilla-status.js"], "one stable plugin routes each process to its own event file")
     }
 
     func testConcurrentOpenCodeConfigurationKeepsOneStablePlugin() async throws {
         let workingDirectory = try XCTUnwrap(workingDirectory)
         let supportDirectory = try XCTUnwrap(supportDirectory)
+        let pluginsDirectory = openCodePluginsDirectory
         let results = await withTaskGroup(of: Bool.self, returning: [Bool].self) { group in
             for _ in 0..<12 {
                 group.addTask {
-                    HookConfigurationWriter().configureHooks(
+                    HookConfigurationWriter(openCodeGlobalPluginsDirectory: pluginsDirectory).configureHooks(
                         for: .openCode,
                         sessionID: UUID(),
                         workingDirectory: workingDirectory,
@@ -1408,8 +1416,6 @@ final class HookConfigurationWriterTests: XCTestCase {
             return values
         }
         XCTAssertTrue(results.allSatisfy { $0 })
-
-        let pluginsDirectory = workingDirectory.appendingPathComponent(".opencode/plugins", isDirectory: true)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path), ["flotilla-status.js"])
     }
 
@@ -1421,7 +1427,7 @@ final class HookConfigurationWriterTests: XCTestCase {
         try Data().write(to: legacy)
         try Data().write(to: userPlugin)
 
-        XCTAssertTrue(HookConfigurationWriter().configureHooks(
+        XCTAssertTrue(openCodeWriter.configureHooks(
             for: .openCode,
             sessionID: UUID(),
             workingDirectory: workingDirectory,
