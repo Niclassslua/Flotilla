@@ -26,19 +26,11 @@ final class RestartSessionUITests: XCTestCase {
 
         let exitScreen = element(app, .agentExitScreen)
         XCTAssertTrue(exitScreen.waitForExistence(timeout: 3))
-        let screenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
-        screenshot.name = "AgentExitScreen"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
 
         element(app, .agentExitShowOutput).click()
         XCTAssertTrue(exitScreen.waitForNonExistence(timeout: 3))
         let stripRestart = element(app, .agentExitStripRestart)
         XCTAssertTrue(stripRestart.waitForExistence(timeout: 3))
-        let strip = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
-        strip.name = "AgentExitStrip"
-        strip.lifetime = .keepAlways
-        add(strip)
 
         stripRestart.click()
         XCTAssertTrue(stripRestart.waitForNonExistence(timeout: 3))

@@ -213,7 +213,6 @@
 		3F3691E5A9D184DE03C5614C /* WorkspaceFileDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BFFA35FF318BF4E181C0FE /* WorkspaceFileDiscovery.swift */; };
 		3F8C871B8FD16CEA3EE5FC5D /* SessionGitSidebarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F7E6D3E8923F89B47F5C5A4 /* SessionGitSidebarViewModel.swift */; };
 		3FD1D7A44C78DD4C5F14C3A7 /* SessionScrollbackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF3E0DEEB5F96FA1C459ACF /* SessionScrollbackStore.swift */; };
-		3FF408A7A83C6BFB8FF50AC0 /* VocabularyScreenshotUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA3EC024D3B5C2BB547EA212 /* VocabularyScreenshotUITests.swift */; };
 		40D55747F5B1B96029268306 /* ProjectOverviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359C3DC13E13F1E59F8BBC43 /* ProjectOverviewViewModel.swift */; };
 		40E4144C522F51072D9D5345 /* GridLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620CED7B87823AB08CD08B83 /* GridLayoutEngine.swift */; };
 		410AA4AE51FDBB909BE561BF /* CompanionHostStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 081F4CCD57333F5F378F9464 /* CompanionHostStorage.swift */; };
@@ -1333,7 +1332,6 @@
 		F826B96C866E5F1F1BEDB070 /* GridDimensionsPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridDimensionsPicker.swift; sourceTree = "<group>"; };
 		F88CCB0EF5E481D579CB0EDB /* LedgerDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerDesign.swift; sourceTree = "<group>"; };
 		F9F0079146D1AF9E1A0A6F9F /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
-		FA3EC024D3B5C2BB547EA212 /* VocabularyScreenshotUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyScreenshotUITests.swift; sourceTree = "<group>"; };
 		FA83C6EA780D98B29510CDE6 /* folder-server.svg */ = {isa = PBXFileReference; path = "folder-server.svg"; sourceTree = "<group>"; };
 		FAC321D9AF789EF5234D13AB /* FleetActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FleetActivityController.swift; sourceTree = "<group>"; };
 		FAEF1F1F164CC43EFF1FE78E /* CIStatusStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CIStatusStore.swift; sourceTree = "<group>"; };
@@ -1477,7 +1475,6 @@
 				E4A98AEF98A101073B3ECE81 /* SettingsUITests.swift */,
 				8A5491FDE4DC8E390D1F339D /* StartupCheckUITests.swift */,
 				D9A4531D93B3A63280F51879 /* TerminalUITests.swift */,
-				FA3EC024D3B5C2BB547EA212 /* VocabularyScreenshotUITests.swift */,
 			);
 			path = FlotillaUITests;
 			sourceTree = "<group>";
@@ -3451,7 +3448,6 @@
 				65A0C5DF6D0EA6406B9CE77A /* SettingsUITests.swift in Sources */,
 				D65DAD38EB19053828B3A1F6 /* StartupCheckUITests.swift in Sources */,
 				94DB32B0489F507550BE625C /* TerminalUITests.swift in Sources */,
-				3FF408A7A83C6BFB8FF50AC0 /* VocabularyScreenshotUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

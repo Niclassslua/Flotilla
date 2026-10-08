@@ -2,10 +2,9 @@
 import AppKit
 import SwiftUI
 
-/// Keeps screenshot-producing UI tests on the primary display.
+/// Keeps UI-test windows on the primary display, at a known size.
 ///
-/// `XCUIScreenshot` cannot reliably capture windows hosted on a secondary
-/// display. This representable is only mounted when `UI_TESTING=1`, so normal
+/// This representable is only mounted when `UI_TESTING=1`, so normal
 /// app launches retain macOS' standard window placement behavior.
 enum UITestWindowPlacement: Equatable {
     case fillPrimaryDisplay
