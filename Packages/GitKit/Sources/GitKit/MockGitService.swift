@@ -28,25 +28,25 @@ public final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     public var mergedBranchesToReturn: Set<String> = []
     public var errorToThrow: Error?
 
-    public private(set) var createWorktreeCalls: [(basePath: URL, branch: String, destination: URL)] = []
-    public private(set) var removeWorktreeCalls: [(path: URL, repoPath: URL, branch: String, deleteBranch: Bool)] = []
-    public private(set) var stageCalls: [(paths: [String], repoPath: URL)] = []
-    public private(set) var unstageCalls: [(paths: [String], repoPath: URL)] = []
-    public private(set) var discardCalls: [(paths: [String], repoPath: URL)] = []
-    public private(set) var commitCalls: [(message: String, repoPath: URL)] = []
-    public private(set) var pushCalls: [(branch: String, repoPath: URL)] = []
-    public private(set) var fetchCalls: [URL] = []
-    public private(set) var logCalls: [(repoPath: URL, ref: String?, skip: Int, maxCount: Int)] = []
-    public private(set) var logGraphCalls: [(repoPath: URL, maxCount: Int)] = []
-    public private(set) var branchesCalls: [URL] = []
-    public private(set) var commitDetailCalls: [(sha: String, repoPath: URL)] = []
-    public private(set) var commitsOnBranchCalls: [(branch: String, base: String, repoPath: URL)] = []
-    public private(set) var comparisonCalls: [(base: String, repoPath: URL)] = []
-    public private(set) var uncommittedChangeCalls: [URL] = []
-    public private(set) var checkoutCalls: [(branch: String, repoPath: URL)] = []
-    public private(set) var createBranchCalls: [(branch: String, repoPath: URL)] = []
-    public private(set) var deleteBranchCalls: [(branch: String, force: Bool, repoPath: URL)] = []
-    public private(set) var mergedBranchCalls: [(branch: String, base: String, repoPath: URL)] = []
+    @Locked public private(set) var createWorktreeCalls: [(basePath: URL, branch: String, destination: URL)] = []
+    @Locked public private(set) var removeWorktreeCalls: [(path: URL, repoPath: URL, branch: String, deleteBranch: Bool)] = []
+    @Locked public private(set) var stageCalls: [(paths: [String], repoPath: URL)] = []
+    @Locked public private(set) var unstageCalls: [(paths: [String], repoPath: URL)] = []
+    @Locked public private(set) var discardCalls: [(paths: [String], repoPath: URL)] = []
+    @Locked public private(set) var commitCalls: [(message: String, repoPath: URL)] = []
+    @Locked public private(set) var pushCalls: [(branch: String, repoPath: URL)] = []
+    @Locked public private(set) var fetchCalls: [URL] = []
+    @Locked public private(set) var logCalls: [(repoPath: URL, ref: String?, skip: Int, maxCount: Int)] = []
+    @Locked public private(set) var logGraphCalls: [(repoPath: URL, maxCount: Int)] = []
+    @Locked public private(set) var branchesCalls: [URL] = []
+    @Locked public private(set) var commitDetailCalls: [(sha: String, repoPath: URL)] = []
+    @Locked public private(set) var commitsOnBranchCalls: [(branch: String, base: String, repoPath: URL)] = []
+    @Locked public private(set) var comparisonCalls: [(base: String, repoPath: URL)] = []
+    @Locked public private(set) var uncommittedChangeCalls: [URL] = []
+    @Locked public private(set) var checkoutCalls: [(branch: String, repoPath: URL)] = []
+    @Locked public private(set) var createBranchCalls: [(branch: String, repoPath: URL)] = []
+    @Locked public private(set) var deleteBranchCalls: [(branch: String, force: Bool, repoPath: URL)] = []
+    @Locked public private(set) var mergedBranchCalls: [(branch: String, base: String, repoPath: URL)] = []
 
     public init() {}
 
@@ -227,7 +227,7 @@ public final class MockGhService: GhServiceProtocol, @unchecked Sendable {
     public var urlToReturn = URL(string: "https://github.com/example/example/pull/1")!
     public var errorToThrow: Error?
 
-    public private(set) var createPullRequestCalls: [(title: String, body: String, base: String?, repoPath: URL)] = []
+    @Locked public private(set) var createPullRequestCalls: [(title: String, body: String, base: String?, repoPath: URL)] = []
 
     public init() {}
 
@@ -240,7 +240,7 @@ public final class MockGhService: GhServiceProtocol, @unchecked Sendable {
     public var ciStatusByBranch: [String: CIStatus] = [:]
     public var ciErrorToThrow: Error?
     public var failedLogToReturn = ""
-    public private(set) var ciStatusCalls: [String] = []
+    @Locked public private(set) var ciStatusCalls: [String] = []
 
     public func ciStatus(forBranch branch: String, at repoPath: URL) async throws -> CIStatus? {
         ciStatusCalls.append(branch)
@@ -268,5 +268,27 @@ public final class MockGhService: GhServiceProtocol, @unchecked Sendable {
             throw GitServiceError.ghCommandFailed(exitCode: 1, stderr: "no issue #\(number)")
         }
         return issue
+    }
+}
+
+/// Serializes a recorded-call array. The mocks' async methods run on the
+/// cooperative pool, so overlapping calls (e.g. a view model starting a load
+/// per selection change) would otherwise append concurrently and corrupt it.
+@propertyWrapper
+public final class Locked<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    public init(wrappedValue: Value) {
+        value = wrappedValue
+    }
+
+    public var wrappedValue: Value {
+        get { lock.withLock { value } }
+        _modify {
+            lock.lock()
+            defer { lock.unlock() }
+            yield &value
+        }
     }
 }

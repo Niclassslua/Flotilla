@@ -315,7 +315,10 @@ final class RealPipelineReproTests: XCTestCase {
         )
         let created = try XCTUnwrap(store.sessions.first { $0.title == "Agent exit restart" })
         let sessionName = TmuxSessionWrapping.sessionName(for: created.id)
-        let originalPID = try XCTUnwrap(waitForTmuxPanePID(sessionName))
+        let originalPID = try XCTUnwrap(
+            waitForTmuxPanePID(sessionName),
+            "no tmux pane; store error: \(store.lastOperationError ?? "none"), sessions: \(tmuxListSessions())"
+        )
         let process = try XCTUnwrap(store.process(for: created.id))
         XCTAssertTrue(process.isRunning)
 
@@ -454,13 +457,28 @@ final class RealPipelineReproTests: XCTestCase {
             let output = Pipe()
             process.standardOutput = output
             process.standardError = FileHandle.nullDevice
-            try? process.run()
+            // A launch failure leaves our end of the pipe open, so reading to
+            // EOF would block forever.
+            guard (try? process.run()) != nil else { return nil }
             let screen = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             process.waitUntilExit()
             if screen.contains("Agent exited") { return screen }
             Thread.sleep(forTimeInterval: 0.1)
         }
         return nil
+    }
+
+    private func tmuxListSessions() -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/tmux")
+        process.arguments = TmuxSessionWrapping.socketArguments() + ["ls"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+        guard (try? process.run()) != nil else { return "tmux failed to launch" }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return "\(TmuxSessionWrapping.socketArguments()) exit \(process.terminationStatus): \(String(decoding: data, as: UTF8.self))"
     }
 
     private func waitForTmuxPanePID(_ name: String, timeout: TimeInterval = 10.0) -> String? {
@@ -560,7 +578,7 @@ final class RealPipelineReproTests: XCTestCase {
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try? process.run()
+        guard (try? process.run()) != nil else { return nil }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return String(decoding: data, as: UTF8.self)
@@ -573,7 +591,7 @@ final class RealPipelineReproTests: XCTestCase {
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try? process.run()
+        guard (try? process.run()) != nil else { return nil }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         let value = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)

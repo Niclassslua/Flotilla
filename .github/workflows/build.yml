@@ -13,26 +13,26 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
+
+    # Debug signs with the maintainer's team (project.yml), which a runner
+    # doesn't have; the test bundles build ad-hoc instead.
+    env:
+      SIGNING_OVERRIDE: CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      # The real-pipeline tests drive /opt/homebrew/bin/tmux.
+      - name: Install XcodeGen and tmux
+        run: brew install xcodegen tmux
 
-      # Flotilla.icon is an Icon Composer bundle (specular/refractivity
-      # features); actool on GitHub's Xcode 26.6 runners crashes compiling it
-      # (works fine locally on Xcode 27). Move it out of the way — both
-      # targets that reference it mark that source `optional: true` — and
-      # point the macOS app at the plain FlotillaFallback.appiconset instead,
-      # so CI validates a real build without needing Xcode 27.
-      - name: Use fallback app icon for CI
-        run: |
-          mv Flotilla.icon Flotilla.icon.disabled-for-ci
-          sed -i '' 's/ASSETCATALOG_COMPILER_APPICON_NAME: Flotilla$/ASSETCATALOG_COMPILER_APPICON_NAME: FlotillaFallback/' project.yml
+      # SwiftTerm compiles a Metal shader; the xcode-27 image ships without
+      # the Metal toolchain component.
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -43,3 +43,21 @@ jobs:
       # Release only: it's what ships, and Xcode compiles Debug on every Run.
       - name: Build (Release)
         run: make build-release
+
+      - name: Run app unit tests
+        # A hung test fails after 2 minutes instead of eating the job timeout.
+        run: >
+          make test SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
+          TEST_FLAGS="-test-timeouts-enabled YES -maximum-test-execution-time-allowance 120"
+
+      # The log only names failing tests; messages, attachments and test-host
+      # crash reports live in the result bundles.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/DerivedData/Logs/Test/*.xcresult
+            ~/Library/Logs/DiagnosticReports/Flotilla*
+          retention-days: 7
