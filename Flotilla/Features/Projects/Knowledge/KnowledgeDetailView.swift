@@ -180,6 +180,8 @@ struct KnowledgeDetailView: View {
                     )
                     .font(FlotillaTypography.caption2)
                     .foregroundStyle(message.hasPrefix("Saved") ? FlotillaColors.success : FlotillaColors.danger)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(message)
                     .accessibilityIdentifier(AXID.knowledgeSaveStatus.rawValue)
                 }
 
