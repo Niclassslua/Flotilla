@@ -48,7 +48,10 @@ final class SettingsUITests: XCTestCase {
         app.typeKey("k", modifierFlags: .command)
         let search = element(app, "CommandPalette.Search")
         XCTAssertTrue(fastWait(search, timeout: 5))
-        search.typeText("keyboard shortcuts")
+        // Type the way a user does, into whatever the palette focused:
+        // `search.typeText` demands focus on this exact element, which the
+        // SwiftUI field doesn't report even though it holds the caret.
+        app.typeText("keyboard shortcuts")
 
         let shortcutCommand = element(app, "CommandPalette.Row-Keyboard shortcuts")
         XCTAssertTrue(fastWait(shortcutCommand, timeout: 3))
