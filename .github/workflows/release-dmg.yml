@@ -62,6 +62,11 @@ jobs:
           security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security find-identity -p codesigning "$KEYCHAIN_PATH" | grep -q "Developer ID Application" || {
+            echo "::error::The .p12 holds no \"Developer ID Application\" identity:"
+            security find-identity -p codesigning "$KEYCHAIN_PATH"
+            exit 1
+          }
 
       - name: Archive
         run: |
