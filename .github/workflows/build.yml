@@ -53,6 +53,7 @@ jobs:
       # The runner's display is 1024x768, narrower than the main window's
       # minimum width, so controls past x=1024 aren't hittable.
       - name: Enlarge the display for UI tests
+        if: ${{ !cancelled() }}
         continue-on-error: true
         run: |
           brew install displayplacer
@@ -63,5 +64,18 @@ jobs:
 
       # Experiment: hosted runners may not grant UI automation Accessibility.
       - name: Run UI tests
+        if: ${{ !cancelled() }}
         continue-on-error: true
         run: make test-ui SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
+
+      # The log only names failing tests; messages, attachments and test-host
+      # crash reports live in the result bundles.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/DerivedData/Logs/Test/*.xcresult
+            ~/Library/Logs/DiagnosticReports/Flotilla*
+          retention-days: 7
