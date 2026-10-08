@@ -543,12 +543,18 @@ Publishing a GitHub Release archives the app with `make archive`, wraps `Flotill
 (also uploaded as the `Flotilla-DMG` artifact). Notarization is not included
 yet — Gatekeeper will still warn on first open until that is added.
 
-CI does not run `make test-ui` yet. UI automation itself works on the hosted
-runner, but its display boots at 1024x768, narrower than the main window's
-minimum width. Switching it to 1920x1080 (`displayplacer`) still leaves the
-window 692 pt tall, and 11 of 30 UI tests fail on content that doesn't fit.
-Run the targeted `make test-ui` locally before merging changes that affect
-UI/accessibility.
+A parallel `ui-tests` job runs `make test-ui` on its own runner (results in
+the `ui-test-results` artifact). The runner boots at 1024x768, narrower than
+the main window's minimum width, so the job switches the display to 1920x1080
+with `displayplacer` first. XCUITest drags never reach the Home grid's
+`DragGesture`, so widget reordering is tested via the context menu and the
+drag itself stays a manual check.
+
+An `.accessibilityIdentifier` on a plain container is applied to every
+descendant, overriding their own identifiers — UI tests then find the wrong
+element or none. Give identified containers
+`.accessibilityElement(children: .contain)`, and icon+text labels
+`.accessibilityElement(children: .combine)`.
 
 Debug signs with the maintainer's own Apple Development team
 (`DEVELOPMENT_TEAM: UWAHVC4JTL` in `project.yml`) so that Screen Recording

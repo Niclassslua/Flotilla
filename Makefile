@@ -18,7 +18,7 @@ SCENARIO ?=
 # override signing on the command line, e.g.:
 #   make build SIGNING_OVERRIDE="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="
 SIGNING_OVERRIDE ?=
-# Extra xcodebuild flags for `make test`, e.g. CI's per-test timeout.
+# Extra xcodebuild flags for `make test` / `make test-ui`, e.g. CI's per-test timeout.
 TEST_FLAGS ?=
 # A local development team signs Ephemeral and the installed Release build
 # with a stable identity so TCC grants (Documents access, Handy approval)
@@ -105,6 +105,7 @@ test-ui: xcodegen
 		-derivedDataPath $(DERIVED_DATA) \
 		-parallel-testing-enabled NO \
 		$(SIGNING_OVERRIDE) \
+		$(TEST_FLAGS) \
 		test -only-testing:FlotillaUITests
 
 # `make archive DEVELOPER_ID=1` signs for distribution (timestamped, as
