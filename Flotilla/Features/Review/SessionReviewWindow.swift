@@ -39,6 +39,9 @@ struct SessionReviewWindow: View {
         }
         .frame(minWidth: 1_000, minHeight: 560)
         .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
+        // `.contain` on each identified container below: on a plain one,
+        // SwiftUI applies the identifier to every descendant, hiding theirs.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.reviewWindow.rawValue)
         .task(id: sessionID) {
             guard viewModel == nil, let session else { return }

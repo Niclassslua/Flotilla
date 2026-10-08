@@ -89,8 +89,6 @@ UI tests should verify wiring that lower layers cannot establish. Retain a small
 
 Do not combine unrelated journeys merely to reduce app launches: an early failure hides later coverage. Share reliable setup, and combine steps only when they form one meaningful user journey.
 
-`VocabularyScreenshotUITests` is a documentation generator. Keep it in its dedicated Xcode scheme and inspect the produced artifacts; exclude it from the ordinary regression lane. The publisher and required capture manifest must be available and maintained together.
-
 Print-only diagnostics such as `ZZPerfProbeUITests` do not belong in a pass/fail regression suite. Performance checks need a defined workload, a completion condition, a justified threshold or baseline, and output that identifies the regression. Prefer a deterministic work bound where possible; measure wall-clock regressions in a controlled performance lane when machine load affects the verdict.
 
 ## Choosing verification

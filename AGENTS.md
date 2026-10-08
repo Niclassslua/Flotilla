@@ -396,6 +396,8 @@ func testWorktreeCreationFailureDoesNotCreateSession() { ... }
 > - You are explicitly asked to run or verify UI tests
 > For most changes, a Debug build + unit tests is sufficient verification. When running UI tests, prefer the minimal targeted set of test classes over the full suite (`-only-testing:FlotillaUITests/<SpecificClass>`).
 
+**Run them from a normal desktop Space, not while another app is full screen.** The test app's window then opens in a Space that isn't visible: clicks and queries still work, but any `screenshot()` fails with "Image creation failed".
+
 **Scope: only write a UI test for something a human can't easily eyeball, or that's a stable behavioral contract.** Don't write UI tests asserting on visual/styling details — background tints, padding, corner radius, colors, frame sizes chosen for looks. A human glances at a screenshot and knows instantly if those are wrong; a test asserting on them breaks on every intentional visual change and becomes pure maintenance overhead with no signal. Reserve UI tests for things that are easy to silently regress and hard to notice by eye: keyboard-shortcut wiring, focus/dismissal behavior, data flowing correctly into fields, multi-step interaction sequences, accessibility-identifier contracts other tests depend on.
 
 - All UI tests set `UI_TESTING=1` environment variable
@@ -416,25 +418,6 @@ CreateSession.GoalField
 Settings.AppearancePicker
 DeleteSessionDialog.Cancel
 DeleteSessionDialog.DeleteWithWorktree
-```
-
-### UI Vocabulary Screenshot Pipeline
-
-`VocabularyScreenshotUITests` is a documentation generator, not a visual-regression test. Its purpose is to keep the visual appendix in `docs/ui-vocabulary.md` aligned with the app's current UI so contributors can connect canonical vocabulary such as **navigation rail**, **grid presentation**, and **diff panel** to the actual interface. It uses the deterministic `UI_TESTING=1` fixtures and deliberately makes no pixel-level styling assertions.
-
-To refresh the screenshots, open the project in Xcode, select the **UI Vocabulary Screenshots** scheme, and choose **Product → Test**. Run this workflow through Xcode rather than `xcodebuild` in a terminal because macOS UI automation requires Accessibility permission from the process driving the test. The dedicated scheme is declared in `project.yml`, selects only `VocabularyScreenshotUITests`, disables parallel execution, and runs `Scripts/update-ui-vocabulary-screenshots.sh` as its post-test action. Running the screenshot class through another scheme captures raw files but does not publish them.
-
-The pipeline works as follows:
-
-1. The test launches Flotilla with deterministic fixtures, moves capture windows onto the primary display, navigates the documented surfaces, and saves both persistent XCTest attachments and raw Retina PNGs in the UI-test runner's sandbox at `~/Library/Containers/com.niclassslua.FlotillaUITests.xctrunner/Data/Documents/flotilla-vocab-shots/`.
-2. Class teardown writes `manifest.txt`. It contains `COMPLETE  schema=1` only when every image required by the documentation was captured successfully.
-3. The scheme post-action runs `Scripts/update-ui-vocabulary-screenshots.swift`. The publisher validates the completed manifest and all required inputs, derives the documented crops, retains high-resolution output (up to 3,200 px wide for full-window images), and stages the complete 21-image set before writing to `docs/images/ui-vocabulary/`. It then rewrites the visual-reference figures in `docs/ui-vocabulary.md` between the `BEGIN/END GENERATED FIGURES` markers — one image per line, from the same `publications` list — so that section never needs hand-editing and can't drift into multi-column tables. Prose outside the markers is untouched.
-4. If the test is partial, a required capture is missing, or rendering fails, publication stops and the checked-in documentation images and Markdown remain unchanged.
-
-After changing a documented surface, capture name, caption, or visual-reference entry, update these together: `VocabularyScreenshotUITests.requiredCaptureNames` and the `publications` list in `Scripts/update-ui-vocabulary-screenshots.swift` (which carries each figure's `section`, `caption`, `alt`, and crop). The `docs/ui-vocabulary.md` figure blocks are regenerated from that list — don't edit them by hand; edit any surrounding prose directly. Run the dedicated scheme, inspect the refreshed PNGs visually, and commit the image and Markdown changes with the code. To rerun only publication from the most recent complete capture, use:
-
-```bash
-/bin/bash Scripts/update-ui-vocabulary-screenshots.sh
 ```
 
 ### Accessibility
@@ -543,12 +526,18 @@ Publishing a GitHub Release archives the app with `make archive`, wraps `Flotill
 (also uploaded as the `Flotilla-DMG` artifact). Notarization is not included
 yet — Gatekeeper will still warn on first open until that is added.
 
-CI does not run `make test-ui` yet. UI automation itself works on the hosted
-runner, but its display boots at 1024x768, narrower than the main window's
-minimum width. Switching it to 1920x1080 (`displayplacer`) still leaves the
-window 692 pt tall, and 11 of 30 UI tests fail on content that doesn't fit.
-Run the targeted `make test-ui` locally before merging changes that affect
-UI/accessibility.
+A parallel `ui-tests` job runs `make test-ui` on its own runner (results in
+the `ui-test-results` artifact). The runner boots at 1024x768, narrower than
+the main window's minimum width, so the job switches the display to 1920x1080
+with `displayplacer` first. XCUITest drags never reach the Home grid's
+`DragGesture`, so widget reordering is tested via the context menu and the
+drag itself stays a manual check.
+
+An `.accessibilityIdentifier` on a plain container is applied to every
+descendant, overriding their own identifiers — UI tests then find the wrong
+element or none. Give identified containers
+`.accessibilityElement(children: .contain)`, and icon+text labels
+`.accessibilityElement(children: .combine)`.
 
 Debug signs with the maintainer's own Apple Development team
 (`DEVELOPMENT_TEAM: UWAHVC4JTL` in `project.yml`) so that Screen Recording

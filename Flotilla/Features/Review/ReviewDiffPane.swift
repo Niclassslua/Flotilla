@@ -69,6 +69,7 @@ struct ReviewDiffPane: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.reviewDiffPane.rawValue)
     }
 }
@@ -87,6 +88,7 @@ struct ReviewFileSection: View {
         } header: {
             header
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.reviewFileSection(file.path))
     }
 
@@ -223,9 +225,11 @@ struct ReviewFileSection: View {
             switch viewModel.diffMode {
             case .inline:
                 inlineLines(hunk)
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier(AXID.reviewHunkInline.rawValue)
             case .sideBySide:
                 sideBySideRows(hunk)
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier(AXID.reviewHunkSideBySide.rawValue)
             }
         }

@@ -36,6 +36,7 @@ struct SessionGitSidebar: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .flotillaInspectorSurface(ignoresSafeAreaEdges: .top)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("GitSidebar")
         .task(id: viewModel.monitorKey) {
             await viewModel.monitorSelection()

@@ -317,9 +317,7 @@ in the same change.
 
 ## Visual reference
 
-These screenshots are navigation aids for the vocabulary above, not pixel-accuracy specifications. They use Flotilla's deterministic UI-testing fixtures.
-
-<!-- BEGIN GENERATED FIGURES · Scripts/update-ui-vocabulary-screenshots.swift -->
+These screenshots are navigation aids for the vocabulary above, not pixel-accuracy specifications. They were captured from Flotilla's deterministic UI-testing fixtures and are no longer regenerated automatically, so recapture one by hand when its surface changes noticeably.
 
 ### Shell, Home, and Sessions
 
@@ -460,15 +458,3 @@ The iPhone companion app (`FlotillaCompanion`) pairs with Flotilla over encrypte
 **Companion diff inspection view**
 
 ![Companion working changes view with collapsible file diffs and commit header](images/ui-vocabulary/companion-diff.png)
-
-<!-- END GENERATED FIGURES -->
-
-### Refreshing the visual reference
-
-In Xcode, select the **UI Vocabulary Screenshots** scheme and choose **Product → Test**. The scheme runs only `VocabularyScreenshotUITests`; after every complete, successful capture it validates the manifest, crops the documentation variants, retains a high-resolution 2× master, republishes the 30 PNGs in `docs/images/ui-vocabulary/`, and rewrites the figure blocks between the `BEGIN/END GENERATED FIGURES` markers above — one image per line, captions and section headings included. The prose outside those markers is hand-maintained; edit captions, alt text, and section grouping in the `publications` list in `Scripts/update-ui-vocabulary-screenshots.swift`.
-
-Run this workflow from Xcode so the UI-test runner inherits Xcode's Accessibility permission. A failed or partial run leaves the checked-in documentation images and this section unchanged. To retry only the publishing step after a completed run, use:
-
-```bash
-/bin/bash Scripts/update-ui-vocabulary-screenshots.sh
-```

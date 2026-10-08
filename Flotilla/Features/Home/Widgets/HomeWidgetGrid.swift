@@ -61,6 +61,7 @@ struct HomeWidgetGrid: View {
             HomeWidgetGallerySheet(store: store, insights: insights, editor: editor)
         }
         .onAppear { editor.syncFromSettings() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.homeWidgetGrid.rawValue)
     }
 
