@@ -65,11 +65,10 @@ final class CreateSessionUITests: XCTestCase {
         XCTAssertTrue(element(app, .createSessionCreateButton).waitForNonExistence(timeout: 5))
 
         XCTAssertTrue(fastWait(element(app, AXID.sessionRow("Flaky CI")), timeout: 3))
-        // The agent is asserted on the window subtitle rather than the row.
+        // The agent is asserted on the session bar rather than the row.
         // Navigator rows carry status and churn only now — the agent is the
-        // provider tile beside the title, and the branch would repeat what the
-        // subtitle already says once the session is open.
-        assertWindowIdentity(app, contains: "Codex CLI")
+        // provider tile beside the title.
+        assertSessionBar(app, AXID.sessionBarHandoff("Flaky CI"), contains: "Codex CLI")
 
         // MARK: Project session in a new worktree
 
@@ -89,27 +88,25 @@ final class CreateSessionUITests: XCTestCase {
         XCTAssertTrue(element(app, .createSessionCreateButton).waitForNonExistence(timeout: 5))
 
         XCTAssertTrue(fastWait(element(app, AXID.sessionRow("Dark mode")), timeout: 3))
-        assertWindowIdentity(app, contains: "dark-mode")
+        assertSessionBar(app, AXID.sessionBarBranch("Dark mode"), contains: "dark-mode")
     }
 
-    /// The focused session states itself in the window title bar — title, then
-    /// project · agent · model · branch from `DetailColumn.identity`. It is the
-    /// only place that information appears while a terminal fills the screen.
-    private func assertWindowIdentity(
+    /// The focused session states its agent and branch in the session bar;
+    /// the window title carries only the session title (`DetailColumn`).
+    private func assertSessionBar(
         _ app: XCUIApplication,
+        _ identifier: String,
         contains needle: String,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let window = app.windows.firstMatch
-        let matched = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in window.title.contains(needle) },
-            object: nil
-        )
-        XCTAssertEqual(
-            XCTWaiter().wait(for: [matched], timeout: 5),
-            .completed,
-            "window title \"\(window.title)\" should contain \"\(needle)\"",
+        let item = element(app, identifier)
+        func text() -> String { "\(item.title) \(item.label) \(item.value as? String ?? "")" }
+        let deadline = Date().addingTimeInterval(5)
+        while !(item.exists && text().contains(needle)), Date() < deadline { usleep(100_000) }
+        XCTAssertTrue(
+            item.exists && text().contains(needle),
+            "\(identifier) should contain \"\(needle)\": \(item.exists ? item.debugDescription : "missing")",
             file: file,
             line: line
         )

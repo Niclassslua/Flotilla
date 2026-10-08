@@ -210,6 +210,9 @@ struct FleetSessionList: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(liquidGlassEnabled ? Color.clear : FlotillaColors.sidebar)
                     .background(ListSelectionHighlightSuppressor(isSuppressed: liquidGlassEnabled))
+                    // `.contain`, or the identifier lands on the collapse
+                    // chevron too and clicks meant for the row toggle it.
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier(AXID.sidebarProjectRow.rawValue + project.name)
                     .contextMenu {
                         if let onCreateSessionFromIssue {

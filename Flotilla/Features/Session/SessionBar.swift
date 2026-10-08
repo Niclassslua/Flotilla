@@ -299,6 +299,9 @@ struct SessionBar: View {
         .labelStyle(.titleAndIcon)
         .font(.system(size: 10, design: .monospaced))
         .foregroundStyle(FlotillaColors.textSecondary)
+        // One element reading the text, so the caller's identifier names it
+        // rather than landing on the icon too.
+        .accessibilityElement(children: .combine)
     }
 
     private func metaLabel(_ text: String, systemImage: String) -> some View {
@@ -312,6 +315,9 @@ struct SessionBar: View {
         .labelStyle(.titleAndIcon)
         .font(.system(size: 10, design: .monospaced))
         .foregroundStyle(FlotillaColors.textSecondary)
+        // One element reading the text, so the caller's identifier names it
+        // rather than landing on the icon too.
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Trailing

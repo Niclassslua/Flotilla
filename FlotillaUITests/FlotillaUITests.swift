@@ -42,14 +42,15 @@ final class FlotillaUITests: XCTestCase {
         XCTAssertTrue(fastWait(firstRow, timeout: 8))
         firstRow.click()
 
-        // Session identity lives in the window title bar, set via
-        // DetailColumn's navigationTitle/navigationSubtitle. Both halves are
-        // asserted: the subtitle carries the branch and agent, which appear
-        // nowhere else while a session is focused.
+        // The window title carries the session title (DetailColumn's
+        // navigationTitle); the branch lives in the session bar.
         let window = app.windows.firstMatch
         XCTAssertTrue(fastWait(window, timeout: 3))
         XCTAssertTrue(window.title.hasPrefix("Fix login bug"), "unexpected title: \(window.title)")
-        XCTAssertTrue(window.title.contains("flotilla/fix-login-bug"), "branch missing from title: \(window.title)")
+        let branch = element(app, AXID.sessionBarBranch("Fix login bug"))
+        XCTAssertTrue(fastWait(branch, timeout: 3), "session bar should show the branch")
+        // The bar shows `BranchNaming.displayName`, without the `flotilla/` prefix.
+        XCTAssertEqual(branch.value as? String, "fix-login-bug", "unexpected branch: \(branch.debugDescription)")
 
         let secondRow = element(app, AXID.sessionRow("Refactor sidebar"))
         XCTAssertTrue(fastWait(secondRow, timeout: 3))
