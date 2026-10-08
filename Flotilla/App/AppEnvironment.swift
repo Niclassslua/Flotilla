@@ -21,6 +21,7 @@ final class AppEnvironment {
     /// only the app process can.
     static let uiTestFixtureProjectPath = URL(fileURLWithPath: "/tmp/flotilla-uitest-project")
     static let uiTestWorktreeBasePath = URL(fileURLWithPath: "/tmp/flotilla-uitest-worktrees")
+    static let uiTestFixtureWorktreePath = URL(fileURLWithPath: "/tmp/flotilla-fixture-project-worktrees/fix-login-bug")
 
     let sessionRepository: SessionRepository
     let gitService: GitServiceProtocol
@@ -90,8 +91,7 @@ final class AppEnvironment {
 
     private static func resetUITestWorktreeDirectories() {
         let fileManager = FileManager.default
-        let fixtureWorktree = URL(fileURLWithPath: "/tmp/flotilla-fixture-project-worktrees/fix-login-bug")
-        for path in [uiTestWorktreeBasePath, URL(fileURLWithPath: "/tmp/flotilla-custom-worktrees"), fixtureWorktree] {
+        for path in [uiTestWorktreeBasePath, URL(fileURLWithPath: "/tmp/flotilla-custom-worktrees")] {
             try? fileManager.removeItem(at: path)
             try? fileManager.createDirectory(at: path, withIntermediateDirectories: true)
         }
@@ -193,6 +193,11 @@ final class AppEnvironment {
         try "# Fixture Rules\n\nBe concise.\n".write(to: path.appendingPathComponent("CLAUDE.md"), atomically: true, encoding: .utf8)
         try runGit(["add", "README.md", "CLAUDE.md"], at: path)
         try runGit(["-c", "user.name=Flotilla UITests", "-c", "user.email=uitests@example.com", "commit", "-m", "init"], at: path)
+
+        // A real registered worktree, not a bare directory: deleting a session
+        // refuses to remove a folder git doesn't know as a worktree.
+        try? fileManager.removeItem(at: uiTestFixtureWorktreePath)
+        try runGit(["worktree", "add", "-b", "flotilla/fix-login-bug", uiTestFixtureWorktreePath.path], at: path)
     }
 
     private static func runGit(_ arguments: [String], at path: URL) throws {
@@ -245,7 +250,7 @@ final class AppEnvironment {
             workingDirectory: project.rootPath,
             worktree: WorktreeInfo(
                 branchName: "flotilla/fix-login-bug",
-                worktreePath: URL(fileURLWithPath: "/tmp/flotilla-fixture-project-worktrees/fix-login-bug"),
+                worktreePath: uiTestFixtureWorktreePath,
                 baseCheckoutPath: project.rootPath
             ),
             status: .working
