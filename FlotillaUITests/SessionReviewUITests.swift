@@ -76,6 +76,13 @@ final class SessionReviewUITests: XCTestCase {
         let app = launchedApp()
         _ = openReview(app)
 
+        // The diff pane is lazy: on a short display the reviewed file's
+        // section isn't built until it's scrolled to. Select it in the file
+        // list, as a reviewer would, which scrolls the pane there.
+        let fileRow = element(app, AXID.reviewFileRow(Self.reviewedFile))
+        XCTAssertTrue(fastWait(fileRow, timeout: 10), "the changed file should be listed")
+        fileRow.click()
+
         let commentButton = element(app, AXID.reviewCommentOnFile(Self.reviewedFile))
         XCTAssertTrue(fastWait(commentButton, timeout: 10), "the file section should offer a file comment")
         commentButton.click()

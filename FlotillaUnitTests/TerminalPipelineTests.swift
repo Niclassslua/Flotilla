@@ -109,9 +109,13 @@ final class TerminalControllerCoalescingTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(200))
 
         XCTAssertGreaterThan(controller.outputFlushCount, 0)
+        // 20 still demands a tenfold collapse. A tighter bound measures
+        // scheduling, not coalescing: under a loaded CI runner the burst
+        // straddled 11 flushes. The exact one-flush-per-drain contract is
+        // pinned deterministically by `CoalescingOutputBufferTests`.
         XCTAssertLessThanOrEqual(
             controller.outputFlushCount,
-            5,
+            20,
             "200 PTY reads must collapse into a handful of flushes, not one per read"
         )
     }
