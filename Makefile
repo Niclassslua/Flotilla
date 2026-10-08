@@ -18,8 +18,9 @@ SCENARIO ?=
 # override signing on the command line, e.g.:
 #   make build SIGNING_OVERRIDE="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="
 SIGNING_OVERRIDE ?=
-# A local development team signs Ephemeral with a stable identity so Handy can
-# remember its approval across rebuilds. Without the ignored local signing
+# A local development team signs Ephemeral and the installed Release build
+# with a stable identity so TCC grants (Documents access, Handy approval)
+# survive rebuilds. Without the ignored local signing
 # config, the project keeps its ad-hoc signing for CI and other contributors.
 EPHEMERAL_DEVELOPMENT_TEAM := $(shell awk -F= '/^[[:space:]]*DEVELOPMENT_TEAM[[:space:]]*=/ {gsub(/[[:space:]]/, "", $$2); print $$2; exit}' Config/CompanionSigning.local.xcconfig 2>/dev/null)
 EPHEMERAL_SIGNING_OVERRIDE ?= $(if $(EPHEMERAL_DEVELOPMENT_TEAM),CODE_SIGN_IDENTITY=Apple\ Development DEVELOPMENT_TEAM=$(EPHEMERAL_DEVELOPMENT_TEAM))
@@ -52,6 +53,7 @@ build-release: xcodegen
 		-destination 'platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) \
 		$(RELEASE_BUILD_FLAGS) \
+		$(EPHEMERAL_SIGNING_OVERRIDE) \
 		build
 
 build-ephemeral: xcodegen
@@ -102,6 +104,10 @@ test-ui: xcodegen
 		$(SIGNING_OVERRIDE) \
 		test -only-testing:FlotillaUITests
 
+# `make archive DEVELOPER_ID=1` signs for distribution (timestamped, as
+# notarization requires). Needs the "Developer ID Application" certificate in
+# a keychain; release-dmg.yml imports it from a secret first.
+ARCHIVE_SIGNING_OVERRIDE ?= $(if $(DEVELOPER_ID),CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=Developer\ ID\ Application DEVELOPMENT_TEAM=UWAHVC4JTL OTHER_CODE_SIGN_FLAGS=--timestamp)
 archive: xcodegen
 	xcodebuild \
 		-project $(PROJECT) \
@@ -110,6 +116,7 @@ archive: xcodegen
 		-destination 'generic/platform=macOS' \
 		-derivedDataPath $(DERIVED_DATA) \
 		-archivePath build/Flotilla.xcarchive \
+		$(ARCHIVE_SIGNING_OVERRIDE) \
 		archive
 
 # Release build, then replace /Applications/Flotilla.app with it.

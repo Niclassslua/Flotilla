@@ -555,20 +555,28 @@ error building Debug on a machine without that team.
 Release and Ephemeral project configs are ad-hoc by default (`project.yml`'s
 base `CODE_SIGN_IDENTITY: "-"`), so `make archive` always succeeds without
 secrets. The local `make build-ephemeral` signing override is described above.
-Producing a genuinely Developer-ID-signed release (`ExportOptions.plist`,
-`method: developer-id`) needs a real certificate, which CI does not have by
-default — the `archive` job falls back to uploading the ad-hoc-signed `.app`
-straight out of the archive in that case. To enable real Developer ID
-exports, add two repository secrets:
+Distributed builds are signed and notarized only by `release-dmg.yml` (runs
+when a GitHub Release is published). It imports the certificate into a
+temporary keychain, archives with `make archive DEVELOPER_ID=1` (Developer ID,
+manual style, timestamped), signs the DMG, notarizes it with `notarytool` and
+staples the ticket. The `archive` job in `build.yml` always uploads the
+ad-hoc `.app`. Without the secrets below the DMG falls back to the ad-hoc
+build and Gatekeeper warns on first open.
 
 | Secret | Value |
 |--------|-------|
 | `DEVELOPER_ID_CERTIFICATE_P12` | Base64 of a "Developer ID Application" `.p12` export (`base64 -i cert.p12 \| pbcopy`) |
 | `DEVELOPER_ID_CERTIFICATE_PASSWORD` | The password used when exporting that `.p12` |
+| `NOTARY_API_KEY` | Contents of an App Store Connect API key `.p8` (Users and Access → Integrations → Team Keys, role Developer) |
+| `NOTARY_API_KEY_ID` | That key's Key ID |
+| `NOTARY_API_ISSUER_ID` | The Issuer ID shown above the key list |
 
-Once both are set, the `archive` job and the release-DMG workflow import the
-certificate into a temporary keychain and run the real `-exportArchive` step
-instead of the ad-hoc fallback.
+Add them as **environment secrets** of the `release` environment (Settings →
+Environments), not repo secrets. It requires the maintainer's approval before
+the job runs and only admits `v*` tags, so nothing else can read them.
+
+The certificate must belong to team `UWAHVC4JTL`, which the Makefile's
+`ARCHIVE_SIGNING_OVERRIDE` names.
 
 `Flotilla.icon` is an Icon Composer bundle using features (`specular-location`,
 `refractivity`) that only Xcode 27 beta's `actool` parses correctly — the

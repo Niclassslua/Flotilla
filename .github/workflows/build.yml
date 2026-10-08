@@ -61,11 +61,6 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
 
-    # The `secrets` context isn't allowed in a step's `if:` condition, so
-    # resolve it into a plain env var here that the steps below can branch on.
-    env:
-      HAS_DEVELOPER_ID_CERT: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,43 +81,12 @@ jobs:
       - name: Archive
         run: make archive
 
-      # `make archive` itself is ad-hoc (project.yml's Release config has no
-      # team), so the archive always succeeds. Exporting it with a real
-      # Developer ID identity additionally needs a certificate — only attempt
-      # that when one has been configured as a secret; otherwise ship the
-      # already ad-hoc-signed .app straight out of the archive so this job
-      # still produces something installable.
-      - name: Import Developer ID certificate
-        if: env.HAS_DEVELOPER_ID_CERT == 'true'
-        env:
-          P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
-          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ github.run_id }}
-        run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
-          CERT_PATH="$RUNNER_TEMP/certificate.p12"
-          echo -n "$P12_BASE64" | base64 --decode -o "$CERT_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-
-      - name: Export (Developer ID)
-        if: env.HAS_DEVELOPER_ID_CERT == 'true'
-        run: |
-          xcodebuild -exportArchive \
-            -archivePath build/Flotilla.xcarchive \
-            -exportPath build/Export \
-            -exportOptionsPlist ExportOptions.plist
-
-      - name: Package ad-hoc build (no Developer ID certificate configured)
-        if: env.HAS_DEVELOPER_ID_CERT != 'true'
+      # Ad-hoc CI artifact. Developer ID signing and notarization happen only
+      # in release-dmg.yml, for builds that are actually distributed.
+      - name: Package app
         run: |
           mkdir -p build/Export
           ditto build/Flotilla.xcarchive/Products/Applications/Flotilla.app build/Export/Flotilla.app
-          echo "::notice::No DEVELOPER_ID_CERTIFICATE_P12 secret configured — uploaded the ad-hoc-signed build instead of a Developer ID export. See AGENTS.md's CI/CD section to add real Developer ID signing."
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
