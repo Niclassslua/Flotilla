@@ -442,6 +442,16 @@ final class ConnectionDiagnosisTests: XCTestCase {
 }
 
 final class TranscriptLayoutTests: XCTestCase {
+    func testImageReadThenSentAppearsOnce() {
+        let now = Date()
+        let events: [TranscriptEvent.Content] = [
+            .image(mimeType: "image/jpeg", base64: "same", filename: nil, timestamp: now),
+            .image(mimeType: "image/jpeg", base64: "same", filename: "design.png", timestamp: now),
+        ]
+        let items = TranscriptLayout.items(from: events.enumerated().map { TranscriptEvent(id: String($0.offset), content: $0.element) })
+        XCTAssertEqual(items.count, 1)
+    }
+
     func testCodexToolIdentifiersGetPreciseHumanFacingNames() {
         let now = Date()
         let events: [TranscriptEvent.Content] = [

@@ -113,6 +113,9 @@ enum TranscriptLayout {
 
         var items: [TranscriptItem] = []
         var group: (id: String, calls: [ToolCall])?
+        // An agent typically `Read`s a screenshot, then `SendUserFile`s it:
+        // both downsample the same bytes, so show the image once.
+        var shownImages = Set<String>()
 
         func flush() {
             if let current = group { items.append(.toolGroup(id: current.id, calls: current.calls)) }
@@ -145,6 +148,7 @@ enum TranscriptLayout {
                 flush()
                 items.append(.system(id: event.id, text: text))
             case .image(let mimeType, let base64, let filename, _):
+                guard shownImages.insert(base64).inserted else { continue }
                 flush()
                 items.append(.image(id: event.id, mimeType: mimeType, base64: base64, filename: filename))
             case .handoff(let from, let to, _):

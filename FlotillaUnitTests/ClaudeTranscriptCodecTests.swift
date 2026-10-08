@@ -464,4 +464,23 @@ final class ClaudeTranscriptCodecTests: XCTestCase {
         }
         XCTAssertEqual(images.count, 1)
     }
+
+    func testSendUserFileResolvesRelativePathAgainstRecordCwd() throws {
+        let capture = home.appendingPathComponent("build/capture")
+        try FileManager.default.createDirectory(at: capture, withIntermediateDirectories: true)
+        let onePixelData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        try onePixelData.write(to: capture.appendingPathComponent("design-a.png"))
+
+        let url = try writeTranscript([
+            """
+            {"type":"assistant","cwd":"\(home.path)","timestamp":"2026-09-08T01:18:36Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_send","name":"SendUserFile","input":{"files":["build/capture/design-a.png"]}}]}}
+            """
+        ])
+
+        let entries = try codec.readNative(at: url)
+        guard entries.count == 2, case let .image(_, _, filename, _) = entries[1] else {
+            return XCTFail("expected toolUse + image, got \(entries)")
+        }
+        XCTAssertEqual(filename, "design-a.png")
+    }
 }

@@ -155,6 +155,7 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                 type: type,
                 isMeta: isMeta,
                 isTurnCompanion: isTurnCompanion,
+                cwd: record["cwd"] as? String,
                 timestamp: timestamp
             ))
         }
@@ -186,6 +187,7 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
         type: String,
         isMeta: Bool,
         isTurnCompanion: Bool,
+        cwd: String?,
         timestamp: Date
     ) -> [CanonicalEntry] {
         // Claude writes user text as a bare string and everything richer as an
@@ -235,7 +237,10 @@ public struct ClaudeTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                    let files = dict["files"] as? [String] {
                     for path in files {
                         if isImagePath(path) {
-                            let url = path.hasPrefix("file://") ? URL(string: path) : URL(fileURLWithPath: path)
+                            // Relative paths are relative to the agent's cwd, not Flotilla's.
+                            let url = path.hasPrefix("file://")
+                                ? URL(string: path)
+                                : URL(fileURLWithPath: path, relativeTo: cwd.map { URL(fileURLWithPath: $0, isDirectory: true) })
                             if let url, let downsampled = ImageDownsampler.downsample(at: url) {
                                 entries.append(.image(
                                     mimeType: downsampled.mimeType,
