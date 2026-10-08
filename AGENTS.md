@@ -521,8 +521,17 @@ xcodebuild -project Flotilla.xcodeproj -scheme Flotilla -configuration Debug \
 ### CI/CD (GitHub Actions)
 
 Pipeline at `.github/workflows/build.yml`:
-1. Checkout → use the CI fallback app icon → generate project
+1. Checkout → install XcodeGen, tmux and the Metal toolchain → generate project
 2. Run standalone `CompanionKit` and `TerminalKit` SwiftPM tests → build Release
+3. `make test` (FlotillaUnitTests) with a 2-minute per-test timeout
+4. Upload the `.xcresult` bundles and any Flotilla crash reports as `test-results`
+
+Both workflows run on GitHub's `xcode-27` image (a preview label), so CI and
+releases use the same Xcode 27 as local builds and compile the real
+`Flotilla.icon`. That image lacks the Metal toolchain SwiftTerm's shader needs,
+and tmux, which the real-pipeline tests drive at `/opt/homebrew/bin/tmux`.
+The log names failing tests but not their messages; read those from the
+`test-results` artifact (`xcrun xcresulttool get test-results tests --path …`).
 
 A newer push to the same ref cancels the in-flight run. There is no Debug
 build (Xcode compiles it on every Run) and no CI archive or artifact; the
@@ -534,16 +543,12 @@ Publishing a GitHub Release archives the app with `make archive`, wraps `Flotill
 (also uploaded as the `Flotilla-DMG` artifact). Notarization is not included
 yet — Gatekeeper will still warn on first open until that is added.
 
-The GitHub-hosted workflow deliberately does **not** run `make test` or
-`make test-ui`. App unit-test compilation hits a Swift 6 region-based
-isolation-checker compiler error in GitHub's Xcode 26.6 (`Task.detached` in
-`CompanionHostTests`), while the developer's Xcode 27 toolchain compiles it.
-UI tests are intentionally local/Xcode-only: macOS UI automation needs
-Accessibility permission from the process driving the test (see
-"UI Vocabulary Screenshot Pipeline" above), which a hosted runner cannot be
-given. Run `make test` and the targeted `make test-ui` locally before merging
-changes that affect application behavior or UI/accessibility. `make test-packages`
-keeps CI exercising the two local packages that have standalone SwiftPM tests.
+CI does not run `make test-ui` yet. UI automation itself works on the hosted
+runner, but its display boots at 1024x768, narrower than the main window's
+minimum width. Switching it to 1920x1080 (`displayplacer`) still leaves the
+window 692 pt tall, and 11 of 30 UI tests fail on content that doesn't fit.
+Run the targeted `make test-ui` locally before merging changes that affect
+UI/accessibility.
 
 Debug signs with the maintainer's own Apple Development team
 (`DEVELOPMENT_TEAM: UWAHVC4JTL` in `project.yml`) so that Screen Recording
@@ -578,22 +583,9 @@ The certificate must belong to team `UWAHVC4JTL`, which the Makefile's
 `ARCHIVE_SIGNING_OVERRIDE` names.
 
 `Flotilla.icon` is an Icon Composer bundle using features (`specular-location`,
-`refractivity`) that only Xcode 27 beta's `actool` parses correctly — the
-maintainer's local Xcode. GitHub's hosted `macos-26` runners top out at Xcode
-26.6 stable, whose `actool` crashes compiling it (`Could not open
-"Flotilla.icon"` / `NSPlaceholderArray … nil object`), confirmed deterministic
-across reruns. Both jobs' "Use fallback app icon for CI" step works around
-this before generating the project: it moves `Flotilla.icon` aside (both
-targets that reference it mark that source `optional: true` in `project.yml`,
-so `xcodegen` tolerates its absence) and repoints
-`ASSETCATALOG_COMPILER_APPICON_NAME` at the plain
-`Flotilla/Resources/Assets.xcassets/FlotillaFallback.appiconset` instead — a
-traditional multi-size PNG icon with no Icon Composer features, so it compiles
-on any Xcode version. This only affects the ephemeral CI checkout; local
-builds are untouched. XcodeGen does not support `${VAR:-default}`-style
-templating in `project.yml` (it passes the literal string through unresolved),
-which is why this is a plain `mv`/`sed` step in the workflow rather than an
-env-var-driven source path.
+`refractivity`) that Xcode 26.6's `actool` crashes on. CI used to swap in
+`FlotillaFallback.appiconset` for that; on the `xcode-27` image it compiles
+the real icon, so both workflows build it as-is.
 
 ## Design System
 

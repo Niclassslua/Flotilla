@@ -50,24 +50,6 @@ jobs:
           make test SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
           TEST_FLAGS="-test-timeouts-enabled YES -maximum-test-execution-time-allowance 120"
 
-      # The runner's display is 1024x768, narrower than the main window's
-      # minimum width, so controls past x=1024 aren't hittable.
-      - name: Enlarge the display for UI tests
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        run: |
-          brew install displayplacer
-          displayplacer list
-          id=$(displayplacer list | awk '/^Persistent screen id:/ {print $4; exit}')
-          displayplacer "id:$id res:1920x1080"
-          system_profiler SPDisplaysDataType | grep -i resolution
-
-      # Experiment: hosted runners may not grant UI automation Accessibility.
-      - name: Run UI tests
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        run: make test-ui SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
-
       # The log only names failing tests; messages, attachments and test-host
       # crash reports live in the result bundles.
       - name: Upload test results
