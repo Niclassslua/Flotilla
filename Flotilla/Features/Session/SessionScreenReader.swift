@@ -62,18 +62,14 @@ struct ProcessTmuxPaneCapture: TmuxPaneCapturing {
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = FileHandle.nullDevice
+        let exited: DispatchSemaphore
         do {
-            try process.run()
+            exited = try process.runSignalingExit()
         } catch {
             return nil
         }
 
-        let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
-            process.waitUntilExit()
-            done.signal()
-        }
-        guard done.wait(timeout: .now() + 2) == .success else {
+        guard exited.wait(timeout: .now() + 2) == .success else {
             process.terminate()
             return nil
         }

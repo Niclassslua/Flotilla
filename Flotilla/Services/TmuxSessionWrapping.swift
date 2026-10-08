@@ -462,8 +462,9 @@ struct ProcessTmuxServerProbe: TmuxServerProbing {
         let errorPipe = Pipe()
         process.standardOutput = FileHandle.nullDevice
         process.standardError = errorPipe
+        let exited: DispatchSemaphore
         do {
-            try process.run()
+            exited = try process.runSignalingExit()
         } catch {
             // The probe itself failed to run — that says nothing about the
             // server, so keep the existing behavior (try tmux).
@@ -473,12 +474,7 @@ struct ProcessTmuxServerProbe: TmuxServerProbing {
         // A wedged server drops the client immediately, but a *hung* one
         // must not block the caller: bound the wait, and treat a timeout as
         // "not answering" too.
-        let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
-            process.waitUntilExit()
-            done.signal()
-        }
-        guard done.wait(timeout: .now() + 2) == .success else {
+        guard exited.wait(timeout: .now() + 2) == .success else {
             process.terminate()
             return false
         }
@@ -517,14 +513,8 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         // `new-session -A` with the same name, and an in-flight kill landing
         // after that would kill the freshly created session. Only wait when
         // the process actually started, with a bounded wait to prevent hangs.
-        guard (try? process.run()) != nil else { return }
-
-        let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .userInitiated).async {
-            process.waitUntilExit()
-            done.signal()
-        }
-        if done.wait(timeout: .now() + 2) != .success {
+        guard let exited = try? process.runSignalingExit() else { return }
+        if exited.wait(timeout: .now() + 2) != .success {
             process.terminate()
         }
     }
@@ -539,8 +529,9 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = FileHandle.nullDevice
+        let exited: DispatchSemaphore
         do {
-            try process.run()
+            exited = try process.runSignalingExit()
         } catch {
             return []
         }
@@ -549,7 +540,7 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         var data = Data()
         DispatchQueue.global(qos: .userInitiated).async {
             data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
+            exited.wait()
             done.signal()
         }
         guard done.wait(timeout: .now() + 2) == .success, process.terminationStatus == 0 else {
@@ -684,18 +675,14 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = FileHandle.nullDevice
+        let exited: DispatchSemaphore
         do {
-            try process.run()
+            exited = try process.runSignalingExit()
         } catch {
             return nil
         }
 
-        let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
-            process.waitUntilExit()
-            done.signal()
-        }
-        guard done.wait(timeout: .now() + 2) == .success else {
+        guard exited.wait(timeout: .now() + 2) == .success else {
             process.terminate()
             return nil
         }
@@ -727,5 +714,21 @@ private enum TmuxGoalDeliveryError: LocalizedError {
         case let .commandFailed(command, status):
             "tmux \(command) exited with code \(status)."
         }
+    }
+}
+
+extension Process {
+    /// `run()`, returning a semaphore signalled once the process exits.
+    ///
+    /// Bounded waits must hang off `terminationHandler`: parking a GCD worker
+    /// in `waitUntilExit()` instead can return seconds after the process has
+    /// exited. Measured: `tmux ls` exiting in under 20 ms still overran the
+    /// server probe's 2-second bound about once in 15 calls, so the probe
+    /// reported a healthy server as wedged and sessions launched without tmux.
+    func runSignalingExit() throws -> DispatchSemaphore {
+        let exited = DispatchSemaphore(value: 0)
+        terminationHandler = { _ in exited.signal() }
+        try run()
+        return exited
     }
 }
