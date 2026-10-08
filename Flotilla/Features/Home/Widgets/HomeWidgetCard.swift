@@ -78,6 +78,10 @@ struct HomeWidgetCard<Content: View>: View {
         // a click between the content's own controls lands on nothing, so
         // neither dragging nor the context menu would ever start.
         .contentShape(HomeWidgetCardMetrics.shape)
+        // `.contain` keeps this identifier on the card itself; on a plain
+        // container SwiftUI stamps it onto every child instead, so queries
+        // for the card matched its header icon.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AXID.homeWidget.rawValue + kind.rawValue)
     }
 

@@ -40,18 +40,19 @@ final class HomeWidgetsUITests: XCTestCase {
     func testContextMenuResizesAWidget() {
         let app = launchedApp()
         openHome(app)
-        let rhythm = widget(app, "weeklyRhythm")
-        XCTAssertTrue(fastWait(rhythm))
-        let before = rhythm.frame.width
+        // Contributions defaults to Wide and also offers Medium.
+        let contributions = widget(app, "contributions")
+        XCTAssertTrue(fastWait(contributions))
+        let before = contributions.frame.width
 
-        rhythm.rightClick()
-        let wide = app.menuItems["Wide"]
-        XCTAssertTrue(fastWait(wide, timeout: 3), "context menu should offer the widget's sizes")
-        wide.click()
+        contributions.rightClick()
+        let medium = app.menuItems["Medium"]
+        XCTAssertTrue(fastWait(medium, timeout: 3), "context menu should offer the widget's sizes")
+        medium.click()
 
         let deadline = Date().addingTimeInterval(3)
-        while rhythm.frame.width < before * 1.5, Date() < deadline { usleep(50_000) }
-        XCTAssertGreaterThan(rhythm.frame.width, before * 1.5, "Wide should span the full row")
+        while contributions.frame.width > before * 0.75, Date() < deadline { usleep(50_000) }
+        XCTAssertLessThan(contributions.frame.width, before * 0.75, "Medium should no longer span the full row")
     }
 
     func testEditModeEntersAndEscapeDiscards() {
@@ -72,7 +73,10 @@ final class HomeWidgetsUITests: XCTestCase {
         XCTAssertTrue(fastWait(widget(app, "agentShare")), "Esc should discard the removal")
     }
 
-    func testDraggingAWidgetMovesItAndDoneKeepsIt() {
+    // Reorders through the context menu, the same `editor.move` path the
+    // drag gesture uses: XCUITest's synthesized drags never reach the grid's
+    // SwiftUI DragGesture, so the gesture itself stays a manual check.
+    func testReorderingAWidgetMovesItAndDoneKeepsIt() {
         let app = launchedApp()
         openHome(app)
         element(app, .homeWidgetEditButton).click()
@@ -83,7 +87,10 @@ final class HomeWidgetsUITests: XCTestCase {
         XCTAssertTrue(fastWait(rhythm) && fastWait(contributions))
         XCTAssertGreaterThan(rhythm.frame.minY, contributions.frame.minY)
 
-        rhythm.press(forDuration: 0.3, thenDragTo: contributions)
+        rhythm.rightClick()
+        let moveEarlier = app.menuItems["Move Earlier"]
+        XCTAssertTrue(fastWait(moveEarlier, timeout: 3))
+        moveEarlier.click()
         element(app, .homeWidgetDoneButton).click()
 
         XCTAssertTrue(fastWait(element(app, .homeWidgetEditButton)))
