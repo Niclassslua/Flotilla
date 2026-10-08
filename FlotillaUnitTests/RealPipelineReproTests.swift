@@ -315,7 +315,10 @@ final class RealPipelineReproTests: XCTestCase {
         )
         let created = try XCTUnwrap(store.sessions.first { $0.title == "Agent exit restart" })
         let sessionName = TmuxSessionWrapping.sessionName(for: created.id)
-        let originalPID = try XCTUnwrap(waitForTmuxPanePID(sessionName))
+        let originalPID = try XCTUnwrap(
+            waitForTmuxPanePID(sessionName),
+            "no tmux pane; store error: \(store.lastOperationError ?? "none"), sessions: \(tmuxListSessions())"
+        )
         let process = try XCTUnwrap(store.process(for: created.id))
         XCTAssertTrue(process.isRunning)
 
@@ -463,6 +466,19 @@ final class RealPipelineReproTests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.1)
         }
         return nil
+    }
+
+    private func tmuxListSessions() -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/tmux")
+        process.arguments = TmuxSessionWrapping.socketArguments() + ["ls"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+        guard (try? process.run()) != nil else { return "tmux failed to launch" }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return "\(TmuxSessionWrapping.socketArguments()) exit \(process.terminationStatus): \(String(decoding: data, as: UTF8.self))"
     }
 
     private func waitForTmuxPanePID(_ name: String, timeout: TimeInterval = 10.0) -> String? {
