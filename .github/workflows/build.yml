@@ -28,6 +28,11 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # SwiftTerm compiles a Metal shader; the xcode-27 image ships without
+      # the Metal toolchain component.
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Generate Xcode project
         run: xcodegen generate
 
