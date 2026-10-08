@@ -18,6 +18,8 @@ SCENARIO ?=
 # override signing on the command line, e.g.:
 #   make build SIGNING_OVERRIDE="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="
 SIGNING_OVERRIDE ?=
+# Extra xcodebuild flags for `make test`, e.g. CI's per-test timeout.
+TEST_FLAGS ?=
 # A local development team signs Ephemeral and the installed Release build
 # with a stable identity so TCC grants (Documents access, Handy approval)
 # survive rebuilds. Without the ignored local signing
@@ -85,6 +87,7 @@ test: xcodegen
 		-parallel-testing-enabled YES \
 		-maximum-parallel-testing-workers 4 \
 		$(SIGNING_OVERRIDE) \
+		$(TEST_FLAGS) \
 		test -only-testing:FlotillaUnitTests
 
 # The two local packages with standalone SwiftPM test targets. Unlike the app

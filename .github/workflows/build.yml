@@ -25,8 +25,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      # The real-pipeline tests drive /opt/homebrew/bin/tmux.
+      - name: Install XcodeGen and tmux
+        run: brew install xcodegen tmux
 
       # SwiftTerm compiles a Metal shader; the xcode-27 image ships without
       # the Metal toolchain component.
@@ -44,7 +45,10 @@ jobs:
         run: make build-release
 
       - name: Run app unit tests
-        run: make test SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
+        # A hung test fails after 2 minutes instead of eating the job timeout.
+        run: >
+          make test SIGNING_OVERRIDE="$SIGNING_OVERRIDE"
+          TEST_FLAGS="-test-timeouts-enabled YES -maximum-test-execution-time-allowance 120"
 
       # Experiment: hosted runners may not grant UI automation Accessibility.
       - name: Run UI tests
