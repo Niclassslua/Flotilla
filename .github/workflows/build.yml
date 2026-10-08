@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# A newer push to the same ref supersedes the in-flight run.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-26
@@ -45,7 +50,9 @@ jobs:
       - name: Run package tests
         run: make test-packages
 
+      # On main the parallel `archive` job already compiles Release.
       - name: Build (Release)
+        if: github.event_name == 'pull_request'
         run: make build-release
 
       - name: Upload app artifact
@@ -55,8 +62,9 @@ jobs:
           path: build/DerivedData/Build/Products/Debug/Flotilla.app
           retention-days: 7
 
+  # Runs alongside `build` rather than after it: it's the long pole (a
+  # universal Release archive), so serializing it doubled wall time.
   archive:
-    needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: macos-26
     timeout-minutes: 30
