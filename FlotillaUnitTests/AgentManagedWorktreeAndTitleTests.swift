@@ -219,10 +219,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
 
         // Wait for the fallback to fire (it creates a stopgap worktree once
         // the shortened threshold elapses with no descriptor on disk).
-        for _ in 0..<40 {
-            if !gitService.createWorktreeCalls.isEmpty { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        try await waitForWorktree(of: unwrappedID, in: store)
         XCTAssertEqual(gitService.createWorktreeCalls.count, 1)
         let stopgapSession = try XCTUnwrap(store.sessions.first(where: { $0.id == unwrappedID }))
         XCTAssertNotNil(stopgapSession.worktree)
@@ -330,10 +327,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         let unwrappedID = try XCTUnwrap(sessionID)
 
         // Wait for fallback worktree to be created
-        for _ in 0..<40 {
-            if !gitService.createWorktreeCalls.isEmpty { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        try await waitForWorktree(of: unwrappedID, in: store)
         let fallbackWorktree = store.sessions.first(where: { $0.id == unwrappedID })?.worktree
         XCTAssertNotNil(fallbackWorktree, "Fallback worktree should exist")
 
@@ -360,5 +354,15 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         XCTAssertEqual(gitService.removeWorktreeCalls.count, 0)
 
         AgentSelfReportCoordinator.clearDescriptor(for: unwrappedID, supportDirectory: supportDir)
+    }
+
+    /// The mock records `createWorktree` before returning, and the store
+    /// assigns the worktree only after that await resumes — so wait for the
+    /// session itself, not the recorded call.
+    private func waitForWorktree(of sessionID: UUID, in store: AppStore) async throws {
+        for _ in 0..<100 {
+            if store.sessions.first(where: { $0.id == sessionID })?.worktree != nil { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
     }
 }
