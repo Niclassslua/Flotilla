@@ -522,13 +522,14 @@ xcodebuild -project Flotilla.xcodeproj -scheme Flotilla -configuration Debug \
 
 Pipeline at `.github/workflows/build.yml`:
 1. Checkout → use the CI fallback app icon → generate project
-2. Build Debug → run standalone `CompanionKit` and `TerminalKit` SwiftPM tests → build Release
-3. Upload the Debug `.app` artifact
-4. On `main` push: archive and upload a Developer-ID export when signing secrets are configured, otherwise the ad-hoc `.app`
+2. Run standalone `CompanionKit` and `TerminalKit` SwiftPM tests → build Release
+
+A newer push to the same ref cancels the in-flight run. There is no Debug
+build (Xcode compiles it on every Run) and no CI archive or artifact; the
+only archive is the one `release-dmg.yml` builds for a release.
 
 Release DMGs are a separate workflow (`.github/workflows/release-dmg.yml`).
-Publishing a GitHub Release archives the app the same way as the `archive`
-job, wraps `Flotilla.app` plus an Applications symlink in
+Publishing a GitHub Release archives the app with `make archive`, wraps `Flotilla.app` plus an Applications symlink in
 `Flotilla-<version>.dmg` via `hdiutil`, and attaches that file to the release
 (also uploaded as the `Flotilla-DMG` artifact). Notarization is not included
 yet — Gatekeeper will still warn on first open until that is added.
@@ -547,9 +548,8 @@ keeps CI exercising the two local packages that have standalone SwiftPM tests.
 Debug signs with the maintainer's own Apple Development team
 (`DEVELOPMENT_TEAM: UWAHVC4JTL` in `project.yml`) so that Screen Recording
 consent survives an ordinary rebuild — that team/certificate doesn't exist on
-a CI runner or another contributor's machine. The `build` job overrides
-signing to ad-hoc via `make build SIGNING_OVERRIDE="..."` (see the Makefile);
-pass the same `SIGNING_OVERRIDE` locally if you hit a "No signing certificate"
+a CI runner or another contributor's machine. Pass
+`make build SIGNING_OVERRIDE="..."` (see the Makefile) if you hit a "No signing certificate"
 error building Debug on a machine without that team.
 
 Release and Ephemeral project configs are ad-hoc by default (`project.yml`'s
@@ -559,8 +559,7 @@ Distributed builds are signed and notarized only by `release-dmg.yml` (runs
 when a GitHub Release is published). It imports the certificate into a
 temporary keychain, archives with `make archive DEVELOPER_ID=1` (Developer ID,
 manual style, timestamped), signs the DMG, notarizes it with `notarytool` and
-staples the ticket. The `archive` job in `build.yml` always uploads the
-ad-hoc `.app`. Without the secrets below the DMG falls back to the ad-hoc
+staples the ticket. Without the secrets below the DMG falls back to the ad-hoc
 build and Gatekeeper warns on first open.
 
 | Secret | Value |
