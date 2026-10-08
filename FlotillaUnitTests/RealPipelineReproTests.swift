@@ -454,7 +454,9 @@ final class RealPipelineReproTests: XCTestCase {
             let output = Pipe()
             process.standardOutput = output
             process.standardError = FileHandle.nullDevice
-            try? process.run()
+            // A launch failure leaves our end of the pipe open, so reading to
+            // EOF would block forever.
+            guard (try? process.run()) != nil else { return nil }
             let screen = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             process.waitUntilExit()
             if screen.contains("Agent exited") { return screen }
@@ -560,7 +562,7 @@ final class RealPipelineReproTests: XCTestCase {
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try? process.run()
+        guard (try? process.run()) != nil else { return nil }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return String(decoding: data, as: UTF8.self)
@@ -573,7 +575,7 @@ final class RealPipelineReproTests: XCTestCase {
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try? process.run()
+        guard (try? process.run()) != nil else { return nil }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         let value = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
