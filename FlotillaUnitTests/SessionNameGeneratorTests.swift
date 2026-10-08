@@ -60,6 +60,20 @@ final class SessionNameGeneratorTests: XCTestCase {
         )
     }
 
+    func testQuotedContextNameIsRejectedAsTitle() {
+        let goal = #"Why don't we display the screenshots in our right sidebar from session "Modal Design"? Check the transcript."#
+        XCTAssertNil(
+            AppleIntelligenceSessionNameGenerator.validated("Modal Design", against: goal)
+        )
+        XCTAssertNil(
+            AppleIntelligenceSessionNameGenerator.validated("modal design", against: goal)
+        )
+        XCTAssertEqual(
+            AppleIntelligenceSessionNameGenerator.validated("Display screenshots", against: goal),
+            "Display screenshots"
+        )
+    }
+
     func testOverlongSuggestionIsClippedToFiveWords() {
         XCTAssertEqual(
             AppleIntelligenceSessionNameGenerator.validated(

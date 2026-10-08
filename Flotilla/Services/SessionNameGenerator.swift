@@ -21,19 +21,23 @@ struct AppleIntelligenceSessionNameGenerator: SessionNameGenerating {
 
     @Generable
     struct SuggestedName {
-        @Guide(description: "2 to 5 word noun-phrase title naming the subject. Sentence case (capitalize the first word; leave the rest lowercase unless a proper noun or code identifier). Keep code identifiers verbatim. No first person, colon, or explanation.")
+        @Guide(description: "2 to 5 word noun-phrase title naming the work being asked for. Sentence case (capitalize the first word; leave the rest lowercase unless a proper noun or code identifier). Keep code identifiers verbatim. No first person, colon, or explanation.")
         var title: String
     }
 
     /// Short on purpose. Longer "never restated these instructions" prompts made
     /// the on-device model collapse conversational goals into a one-word answer
-    /// (`hooks`, `useCallback`) that validation rejected. This wording
-    /// consistently yields multi-word subject titles like "Hooks documentation".
-    /// Kept free of concrete example phrases the model could echo back.
+    /// (`hooks`, `useCallback`) that validation rejected. Preferring the
+    /// "concrete subject" alone made the model lift quoted session names
+    /// (`"Modal Design"`) instead of the task; naming the *task* and treating
+    /// quotes/session titles as context fixes that without collapsing
+    /// conversational goals. Kept free of concrete example phrases the model
+    /// could echo back.
     nonisolated static let instructions = """
-        Extract a short session title from the request. Prefer the concrete \
-        subject (feature, component, docs topic). Output a 2-5 word noun \
-        phrase only.
+        Extract a short session title for the task being requested. Prefer the \
+        actionable subject (feature, bug, UI change). Do not use quoted names, \
+        session titles, or other referenced labels as the title unless the whole \
+        request is only that name. Output a 2-5 word noun phrase only.
         """
 
     /// Sent once in the same `LanguageModelSession` when the first suggestion
@@ -160,6 +164,12 @@ struct AppleIntelligenceSessionNameGenerator: SessionNameGenerating {
             if goalNormalized.hasPrefix(normalized) {
                 return .rejected(suggestion: original, reason: "echoes the start of the goal")
             }
+            // Quoted labels in the goal are almost always context (another
+            // session, a UI region). Using them as the sidebar title loses the
+            // actual ask — "…from session \"Modal Design\"" became "Modal Design".
+            if Self.quotedPhrases(in: goalNormalized).contains(normalized) {
+                return .rejected(suggestion: original, reason: "matches a quoted phrase in the goal")
+            }
         }
 
         // On-device models still return all-lowercase phrases despite the
@@ -183,5 +193,20 @@ struct AppleIntelligenceSessionNameGenerator: SessionNameGenerating {
         let hasUppercase = title.contains(where: \.isUppercase)
         guard !hasUppercase, let first = title.first, first.isLetter else { return title }
         return String(first).uppercased() + title.dropFirst()
+    }
+
+    /// Returns normalized interiors of `"…"` / `“…”` spans in `text`.
+    nonisolated static func quotedPhrases(in text: String) -> Set<String> {
+        let pattern = #"["“]([^"”]+)["”]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return Set(regex.matches(in: text, range: range).compactMap { match -> String? in
+            guard match.numberOfRanges > 1,
+                  let phraseRange = Range(match.range(at: 1), in: text) else { return nil }
+            return text[phraseRange]
+                .lowercased()
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        })
     }
 }
