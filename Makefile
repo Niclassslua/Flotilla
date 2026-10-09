@@ -26,11 +26,12 @@ TEST_FLAGS ?=
 # config, the project keeps its ad-hoc signing for CI and other contributors.
 EPHEMERAL_DEVELOPMENT_TEAM := $(shell awk -F= '/^[[:space:]]*DEVELOPMENT_TEAM[[:space:]]*=/ {gsub(/[[:space:]]/, "", $$2); print $$2; exit}' Config/CompanionSigning.local.xcconfig 2>/dev/null)
 EPHEMERAL_SIGNING_OVERRIDE ?= $(if $(EPHEMERAL_DEVELOPMENT_TEAM),CODE_SIGN_IDENTITY=Apple\ Development DEVELOPMENT_TEAM=$(EPHEMERAL_DEVELOPMENT_TEAM))
-# Local Release stays -O / wholemodule, but skips the unused Intel slice and the
-# compiler index store. Override empty to force a universal binary:
+# Local/CI Release stays -O but uses incremental compilation (not wholemodule)
+# and skips dSYMs, the unused Intel slice, and the compiler index store so warm
+# `make install` rebuilds stay cheap. Override empty to force a universal:
 #   make build-release RELEASE_BUILD_FLAGS=
-# Shipping universals still go through `make archive`.
-RELEASE_BUILD_FLAGS ?= ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO
+# Shipping universals/dSYMs still go through `make archive`.
+RELEASE_BUILD_FLAGS ?= ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO SWIFT_COMPILATION_MODE=incremental DEBUG_INFORMATION_FORMAT=dwarf
 
 xcodegen:
 	@if [ ! -f "$(PROJECT)/project.pbxproj" ] || [ "project.yml" -nt "$(PROJECT)/project.pbxproj" ]; then \
@@ -52,7 +53,7 @@ build-release: xcodegen
 		-project $(PROJECT) \
 		-scheme $(SCHEME) \
 		-configuration Release \
-		-destination 'platform=macOS' \
+		-destination 'platform=macOS,arch=arm64' \
 		-derivedDataPath $(DERIVED_DATA) \
 		$(RELEASE_BUILD_FLAGS) \
 		$(EPHEMERAL_SIGNING_OVERRIDE) \
