@@ -12,20 +12,32 @@ import SwiftUI
 final class InstalledBuildMonitor {
     private(set) var isOutdated = false
     private let executableURL: URL?
-    private let launchedIdentity: FileIdentity?
 
     private struct FileIdentity: Equatable {
         let inode: UInt64
         let modified: Date
     }
 
+    /// Process-wide baseline. Must not live on a SwiftUI `@State` instance:
+    /// recreating the banner after `make install` would re-read the already
+    /// swapped bundle and never offer a relaunch.
+    private static var launchIdentity: FileIdentity?
+    private static var didRecordLaunch = false
+
+    /// Call once at process start (before any install can race the first check).
+    static func recordLaunchIdentity(bundle: Bundle = .main) {
+        guard !didRecordLaunch else { return }
+        didRecordLaunch = true
+        launchIdentity = bundle.executableURL.flatMap(identity(of:))
+    }
+
     init(bundle: Bundle = .main) {
+        Self.recordLaunchIdentity(bundle: bundle)
         executableURL = bundle.executableURL
-        launchedIdentity = executableURL.flatMap(Self.identity(of:))
     }
 
     func check() {
-        guard !isOutdated, let executableURL, let launchedIdentity else { return }
+        guard !isOutdated, let executableURL, let launchedIdentity = Self.launchIdentity else { return }
         // A missing file is mid-swap, not an update; the next check sees it.
         guard let current = Self.identity(of: executableURL) else { return }
         isOutdated = current != launchedIdentity
@@ -78,6 +90,7 @@ struct RelaunchToUpdateBanner: View {
                     Spacer()
                     Button("Later") { isDismissed = true }
                         .buttonStyle(.bordered)
+                        .accessibilityIdentifier("RelaunchToUpdateBanner.LaterButton")
                     Button("Relaunch") { monitor.relaunch() }
                         .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("RelaunchToUpdateBanner.RelaunchButton")
@@ -85,13 +98,18 @@ struct RelaunchToUpdateBanner: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Color.accentColor.opacity(0.12))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("RelaunchToUpdateBanner")
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .task {
+            // Check immediately so an install that landed before the first
+            // 5s tick still surfaces without waiting.
+            monitor.check()
             while !Task.isCancelled {
-                monitor.check()
                 try? await Task.sleep(for: .seconds(5))
+                monitor.check()
             }
         }
     }

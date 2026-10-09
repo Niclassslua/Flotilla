@@ -12,8 +12,9 @@ public protocol GhServiceProtocol: Sendable {
     /// default branch.
     func createPullRequest(title: String, body: String, base: String?, at repoPath: URL) async throws -> URL
     /// What CI says about `branch`: its pull request's checks when it has an
-    /// open or past PR, otherwise the Actions runs on its newest pushed
-    /// commit. `nil` when the branch has neither.
+    /// open or past PR, otherwise the Actions runs for the worktree's HEAD
+    /// commit (so a push of that SHA to any remote branch — including
+    /// landing on `main` — still counts). `nil` when neither exists.
     func ciStatus(forBranch branch: String, at repoPath: URL) async throws -> CIStatus?
     /// The failing steps' output of one Actions run (`gh run view --log-failed`).
     func failedLog(runID: Int, at repoPath: URL) async throws -> String
@@ -68,8 +69,11 @@ public struct GhService: GhServiceProtocol {
         guard pr.stderr.localizedCaseInsensitiveContains("no pull requests found") else {
             throw GitServiceError.ghCommandFailed(exitCode: pr.exitCode, stderr: pr.stderr)
         }
+        // Key by commit, not branch name: landing via `git push origin HEAD:main`
+        // (or any other remote ref) still leaves CI on this SHA.
+        guard let headSHA = try await headSHA(at: repoPath) else { return nil }
         let runs = try await runner.run(
-            ["run", "list", "--branch", branch, "--limit", "20", "--json", "databaseId,workflowName,status,conclusion,url,headSha,createdAt,updatedAt"],
+            ["run", "list", "--commit", headSHA, "--limit", "20", "--json", "databaseId,workflowName,status,conclusion,url,headSha,createdAt,updatedAt"],
             executable: ghExecutable,
             workingDirectory: repoPath
         )
@@ -78,6 +82,21 @@ public struct GhService: GhServiceProtocol {
         }
         let checks = try GhJSON.workflowRunChecks(from: Data(runs.stdout.utf8))
         return checks.isEmpty ? nil : CIStatus(checks: checks)
+    }
+
+    /// Worktree tip. `/usr/bin/git` is the macOS CLT shim Flotilla already
+    /// requires; keeping git off `GhService`'s initializer avoids threading a
+    /// second binary through every call site for one rev-parse.
+    private func headSHA(at repoPath: URL) async throws -> String? {
+        let git = URL(fileURLWithPath: "/usr/bin/git")
+        let result = try await runner.run(
+            ["rev-parse", "HEAD"],
+            executable: git,
+            workingDirectory: repoPath
+        )
+        guard result.exitCode == 0 else { return nil }
+        let sha = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sha.isEmpty ? nil : sha
     }
 
     public func openIssues(search: String, limit: Int, at repoPath: URL) async throws -> [GhIssue] {

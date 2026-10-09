@@ -118,9 +118,10 @@ final class CIStatusStore {
         return previous.state != .failing
     }
 
-    /// Only worktree sessions own a branch. A session in the main checkout is
-    /// on whatever the user has checked out there, usually the default
-    /// branch, whose CI is not this session's result.
+    /// Only worktree sessions own a branch tip whose CI is this session's.
+    /// A session in the main checkout is usually on the default branch, whose
+    /// CI is not this session's result — even though the no-PR path keys
+    /// Actions by commit SHA once a worktree branch is known.
     static func branch(of session: Session) -> String? {
         guard let branch = session.worktree?.branchName, !branch.isEmpty else { return nil }
         return branch

@@ -89,8 +89,10 @@ final class GhServiceCITests: XCTestCase {
     private final class ScriptedRunner: CommandRunning, @unchecked Sendable {
         var results: [String: CommandResult] = [:]
         private(set) var calls: [[String]] = []
+        private(set) var executables: [URL] = []
         func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult {
             calls.append(arguments)
+            executables.append(executable)
             return results[arguments[0] + " " + arguments[1]] ?? CommandResult(exitCode: 1, stdout: "", stderr: "unexpected")
         }
     }
@@ -98,16 +100,21 @@ final class GhServiceCITests: XCTestCase {
     private let repo = URL(fileURLWithPath: "/tmp/repo")
     private let gh = URL(fileURLWithPath: "/usr/local/bin/gh")
 
-    func testBranchWithoutPullRequestFallsBackToWorkflowRuns() async throws {
+    func testBranchWithoutPullRequestFallsBackToWorkflowRunsForHeadCommit() async throws {
         let runner = ScriptedRunner()
         runner.results["pr view"] = CommandResult(exitCode: 1, stdout: "", stderr: "no pull requests found for branch \"feature\"")
+        runner.results["rev-parse HEAD"] = CommandResult(exitCode: 0, stdout: "abc\n", stderr: "")
         runner.results["run list"] = CommandResult(exitCode: 0, stdout: #"[{"databaseId": 9, "workflowName": "Build", "status": "completed", "conclusion": "failure", "url": "https://x/9", "headSha": "abc"}]"#, stderr: "")
 
         let status = try await GhService(ghExecutable: gh, runner: runner).ciStatus(forBranch: "feature", at: repo)
 
         XCTAssertNil(status?.pullRequest)
         XCTAssertEqual(status?.state, .failing)
-        XCTAssertEqual(runner.calls.map { $0.prefix(3).joined(separator: " ") }, ["pr view feature", "run list --branch"])
+        XCTAssertEqual(
+            runner.calls.map { $0.prefix(3).joined(separator: " ") },
+            ["pr view feature", "rev-parse HEAD", "run list --commit"]
+        )
+        XCTAssertEqual(runner.calls[2][3], "abc", "runs are keyed by tip SHA, not the session branch name")
     }
 
     func testOtherGhFailuresAreReportedNotTreatedAsNoChecks() async {

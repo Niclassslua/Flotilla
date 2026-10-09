@@ -120,11 +120,12 @@ public enum GhJSON {
         return CIStatus(pullRequest: pullRequest, checks: latestPerName(checks))
     }
 
-    /// `gh run list --branch <b> --json databaseId,workflowName,status,conclusion,url,headSha,createdAt,updatedAt`
+    /// `gh run list --commit <sha> --json databaseId,workflowName,status,conclusion,url,headSha,createdAt,updatedAt`
     ///
-    /// Run list is the fallback for a pushed branch with no PR. It returns
-    /// history, newest first; only the runs for the newest commit describe
-    /// the branch as it is now.
+    /// Run list is the fallback for a tip with no PR. It returns history,
+    /// newest first; only the runs for the newest commit describe the tip
+    /// as it is now. Callers pass `--commit` so a SHA pushed under any
+    /// remote branch name still matches.
     public static func workflowRunChecks(from data: Data) throws -> [CICheck] {
         let runs = try decoder.decode([RunPayload].self, from: data)
         guard let newestSHA = runs.first?.headSha else { return [] }

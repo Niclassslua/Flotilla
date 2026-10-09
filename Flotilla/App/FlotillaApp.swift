@@ -49,6 +49,10 @@ struct FlotillaApp: App {
         UserDefaults.standard.removePersistentDomain(forName: "com.niclassslua.flotilla.ephemeral")
 #endif
 
+        // Before anything else can race a `make install` swap — the relaunch
+        // banner compares this snapshot to the on-disk executable.
+        InstalledBuildMonitor.recordLaunchIdentity()
+
         Self.installViewBridgeCrashGuard()
 
         // Flotilla is a single-window workspace app with its own navigation
