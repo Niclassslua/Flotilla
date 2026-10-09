@@ -83,10 +83,10 @@ final class RealHandoffPipelineTests: XCTestCase {
 
     private func makeManager() -> SessionProcessManager {
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = "/bin/sh"
-        settings.agentArguments.claudeCodeArguments = ["-c", Self.claudeCommand, "--"]
-        settings.agentPaths.codexCLIPath = "/bin/sh"
-        settings.agentArguments.codexCLIArguments = ["-c", Self.codexCommand, "--"]
+        settings.agentOverrides.paths["claudeCode"] = "/bin/sh"
+        settings.agentOverrides.arguments["claudeCode"] = ["-c", Self.claudeCommand, "--"]
+        settings.agentOverrides.paths["codexCLI"] = "/bin/sh"
+        settings.agentOverrides.arguments["codexCLI"] = ["-c", Self.codexCommand, "--"]
         return SessionProcessManager(
             locator: Locator(tmuxURL: tmuxURL),
             processFactory: SystemPTYProcessFactory(),

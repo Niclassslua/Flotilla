@@ -18,6 +18,3 @@ import SessionKit
 // The formats these codecs implement are undocumented and change between
 // upstream releases. Codecs therefore skip record types they do not recognise
 // rather than failing, and never assume a field is present.
-public enum TranscriptKitModule {
-    public static let name = "TranscriptKit"
-}

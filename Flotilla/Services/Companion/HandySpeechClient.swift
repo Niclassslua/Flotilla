@@ -3,15 +3,6 @@ import Darwin
 import Foundation
 import os
 
-protocol HandySpeechServing: Sendable {
-    func capabilities() async -> CompanionSpeechEvent
-    func start(_ request: CompanionSpeechStart) async -> CompanionSpeechEvent
-    func audio(requestID: UUID, sequence: Int, pcm: Data) async -> CompanionSpeechEvent
-    func finish(requestID: UUID) async -> CompanionSpeechEvent
-    func cancel(requestID: UUID) async -> CompanionSpeechEvent
-    func close() async
-}
-
 private enum HandySpeechError: Error {
     case unavailable
     case invalidResponse
@@ -142,7 +133,7 @@ private final class HandySpeechSocket: @unchecked Sendable {
     }
 }
 
-actor HandySpeechClient: HandySpeechServing {
+actor HandySpeechClient {
     private var socket: HandySpeechSocket?
 
     func capabilities() async -> CompanionSpeechEvent {

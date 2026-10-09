@@ -6,10 +6,10 @@ import SettingsKit
 final class AgentProviderTests: XCTestCase {
     func testLaunchPlanUsesConfiguredPathArgumentsAndInteractiveGoal() {
         var settings = AppSettings()
-        settings.agentPaths.codexCLIPath = "/opt/homebrew/bin/codex"
-        settings.agentArguments.codexCLIArguments = ["--model", "gpt-5"]
+        settings.agentOverrides.paths["codexCLI"] = "/opt/homebrew/bin/codex"
+        settings.agentOverrides.arguments["codexCLI"] = ["--model", "gpt-5"]
 
-        let plan = AgentProviderRegistry().provider(for: .codexCLI).launchPlan(
+        let plan = CLIAgentProvider(kind: .codexCLI).launchPlan(
             goal: "  Repair the build  ",
             settings: settings,
             baseEnvironment: ["PATH": "/bin"]
@@ -29,7 +29,7 @@ final class AgentProviderTests: XCTestCase {
     /// the agent CLI's color-support detection and renders the terminal in
     /// black and white.
     func testLaunchPlanReplacesUnusableDumbTerm() {
-        let plan = AgentProviderRegistry().provider(for: .claudeCode).launchPlan(
+        let plan = CLIAgentProvider(kind: .claudeCode).launchPlan(
             goal: nil,
             settings: AppSettings(),
             baseEnvironment: ["TERM": "dumb"]
@@ -40,9 +40,9 @@ final class AgentProviderTests: XCTestCase {
 
     func testLaunchPlanAppendsPerSessionModelAfterConfiguredArguments() {
         var settings = AppSettings()
-        settings.agentArguments.claudeCodeArguments = ["--permission-mode", "acceptEdits"]
+        settings.agentOverrides.arguments["claudeCode"] = ["--permission-mode", "acceptEdits"]
 
-        let plan = AgentProviderRegistry().provider(for: .claudeCode).launchPlan(
+        let plan = CLIAgentProvider(kind: .claudeCode).launchPlan(
             goal: nil,
             model: "  sonnet  ",
             settings: settings,
@@ -53,13 +53,13 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testLaunchPlanOmitsModelFlagWhenModelIsNilOrBlank() {
-        let planWithNilModel = AgentProviderRegistry().provider(for: .claudeCode).launchPlan(
+        let planWithNilModel = CLIAgentProvider(kind: .claudeCode).launchPlan(
             goal: nil,
             model: nil,
             settings: AppSettings(),
             baseEnvironment: [:]
         )
-        let planWithBlankModel = AgentProviderRegistry().provider(for: .claudeCode).launchPlan(
+        let planWithBlankModel = CLIAgentProvider(kind: .claudeCode).launchPlan(
             goal: nil,
             model: "   ",
             settings: AppSettings(),
@@ -71,7 +71,6 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testLaunchPlanEncodesEffortPerAgent() {
-        let registry = AgentProviderRegistry()
         let cases: [(AgentKind, String?, AgentEffort, [String])] = [
             (.claudeCode, "sonnet", .high, ["--model", "sonnet", "--effort", "high"]),
             (.codexCLI, nil, .xhigh, ["--config", "model_reasoning_effort=\"xhigh\""]),
@@ -79,7 +78,7 @@ final class AgentProviderTests: XCTestCase {
             (.openCode, nil, .high, []),
         ]
         for entry in cases {
-            let plan = registry.provider(for: entry.0).launchPlan(
+            let plan = CLIAgentProvider(kind: entry.0).launchPlan(
                 goal: nil,
                 model: entry.1,
                 effort: entry.2,
@@ -92,7 +91,7 @@ final class AgentProviderTests: XCTestCase {
 
     func testLaunchPlanDoesNotInventCredentialEnvironmentVariables() {
         let inherited = ["PATH": "/bin", "EXISTING": "preserved"]
-        let plan = AgentProviderRegistry().provider(for: .claudeCode).launchPlan(
+        let plan = CLIAgentProvider(kind: .claudeCode).launchPlan(
             goal: nil,
             settings: AppSettings(),
             baseEnvironment: inherited
@@ -105,9 +104,8 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testLaunchPlanResumeIntentPerAgent() {
-        let registry = AgentProviderRegistry()
 
-        let claude = registry.provider(for: .claudeCode)
+        let claude = CLIAgentProvider(kind: .claudeCode)
         XCTAssertEqual(
             claude.launchPlan(goal: nil, resumeIntent: .freshWithAssignedIdentity("test-uuid-123"), settings: AppSettings(), baseEnvironment: [:]).arguments,
             ["--session-id", "test-uuid-123"]
@@ -119,7 +117,7 @@ final class AgentProviderTests: XCTestCase {
 
         var codexSettings = AppSettings()
         codexSettings.agentOverrides.arguments["codexCLI"] = ["--verbose"]
-        let codex = registry.provider(for: .codexCLI)
+        let codex = CLIAgentProvider(kind: .codexCLI)
         XCTAssertEqual(
             codex.launchPlan(goal: nil, resumeIntent: .none, settings: codexSettings, baseEnvironment: [:]).arguments,
             ["--verbose"]
@@ -130,17 +128,16 @@ final class AgentProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            registry.provider(for: .openCode).launchPlan(goal: nil, resumeIntent: .resume("ses_abc123"), settings: AppSettings(), baseEnvironment: [:]).arguments,
+            CLIAgentProvider(kind: .openCode).launchPlan(goal: nil, resumeIntent: .resume("ses_abc123"), settings: AppSettings(), baseEnvironment: [:]).arguments,
             ["--session", "ses_abc123"]
         )
         XCTAssertEqual(
-            registry.provider(for: .antigravity).launchPlan(goal: nil, resumeIntent: .resume("conv-xyz789"), settings: AppSettings(), baseEnvironment: [:]).arguments,
+            CLIAgentProvider(kind: .antigravity).launchPlan(goal: nil, resumeIntent: .resume("conv-xyz789"), settings: AppSettings(), baseEnvironment: [:]).arguments,
             ["--conversation", "conv-xyz789"]
         )
     }
 
     func testLaunchPlanAppendsGoalPromptPerAgent() {
-        let registry = AgentProviderRegistry()
         let cases: [(AgentKind, String, String?, AgentEffort?, [String])] = [
             (.claudeCode, "Investigate crash in renderer", "sonnet", .high, [
                 "--model", "sonnet", "--effort", "high", "--session-id", "uuid-1234", "Investigate crash in renderer",
@@ -157,7 +154,7 @@ final class AgentProviderTests: XCTestCase {
         ]
         for entry in cases {
             let resume: ResumeIntent = entry.0 == .claudeCode ? .freshWithAssignedIdentity("uuid-1234") : .none
-            let plan = registry.provider(for: entry.0).launchPlan(
+            let plan = CLIAgentProvider(kind: entry.0).launchPlan(
                 goal: entry.1,
                 model: entry.2,
                 effort: entry.3,
@@ -171,25 +168,24 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testLaunchPlanPlanModeFlagPerAgent() {
-        let registry = AgentProviderRegistry()
         let goal = "Refactor database migrations"
 
         XCTAssertEqual(
-            registry.provider(for: .openCode).launchPlan(
+            CLIAgentProvider(kind: .openCode).launchPlan(
                 goal: goal, model: "opencode/deepseek-v4-flash-free", mode: .plan, resumeIntent: .none,
                 settings: AppSettings(), baseEnvironment: [:]
             ).arguments,
             ["--model", "opencode/deepseek-v4-flash-free", "--agent", "plan", "--prompt", goal]
         )
         XCTAssertEqual(
-            registry.provider(for: .claudeCode).launchPlan(
+            CLIAgentProvider(kind: .claudeCode).launchPlan(
                 goal: goal, model: "sonnet", mode: .plan, resumeIntent: .none,
                 settings: AppSettings(), baseEnvironment: [:]
             ).arguments,
             ["--model", "sonnet", "--permission-mode", "plan", goal]
         )
         XCTAssertEqual(
-            registry.provider(for: .antigravity).launchPlan(
+            CLIAgentProvider(kind: .antigravity).launchPlan(
                 goal: goal, model: "gemini-3.7-flash-high", mode: .plan, resumeIntent: .none,
                 settings: AppSettings(), baseEnvironment: [:]
             ).arguments,
@@ -198,7 +194,7 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testClaudeLaunchPlanKeepsPlanModeOnFirstLaunchWithAssignedIdentity() {
-        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let provider = CLIAgentProvider(kind: .claudeCode)
         let id = UUID().uuidString
         let plan = provider.launchPlan(
             goal: "Refactor database migrations",
@@ -221,7 +217,7 @@ final class AgentProviderTests: XCTestCase {
     /// would override the mode the conversation actually ended in and drop the
     /// session back into planning on every relaunch.
     func testClaudeLaunchPlanDropsPlanModeWhenResuming() {
-        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let provider = CLIAgentProvider(kind: .claudeCode)
         let id = UUID().uuidString
         let plan = provider.launchPlan(
             goal: "Refactor database migrations",
@@ -237,7 +233,7 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testCodexLaunchPlanWithPlanModeDeliversViaInitialInput() {
-        let provider = AgentProviderRegistry().provider(for: .codexCLI)
+        let provider = CLIAgentProvider(kind: .codexCLI)
         let plan = provider.launchPlan(
             goal: "Refactor database migrations",
             model: "gpt-5.5",
@@ -252,7 +248,7 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testLaunchPlanOmitsPromptFlagWhenGoalIsNilOrBlank() {
-        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let provider = CLIAgentProvider(kind: .claudeCode)
         let planWithNil = provider.launchPlan(
             goal: nil,
             model: "sonnet",
@@ -275,7 +271,7 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testLaunchPlanOmitsPromptFlagOnResumeEvenWithGoal() {
-        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let provider = CLIAgentProvider(kind: .claudeCode)
         let resumePlan = provider.launchPlan(
             goal: "Some previous goal",
             resumeIntent: .resume("sess-abc"),
@@ -288,7 +284,7 @@ final class AgentProviderTests: XCTestCase {
     }
 
     func testLaunchPlanPreservesMultilinePrompt() {
-        let provider = AgentProviderRegistry().provider(for: .claudeCode)
+        let provider = CLIAgentProvider(kind: .claudeCode)
         let multilineGoal = "Line 1: implement feature\nLine 2: ensure tests pass\nLine 3: add documentation"
         let plan = provider.launchPlan(
             goal: multilineGoal,

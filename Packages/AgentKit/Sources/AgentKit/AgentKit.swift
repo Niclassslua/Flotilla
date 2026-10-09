@@ -269,10 +269,3 @@ public struct CLIAgentProvider: AgentProviding {
     }
 }
 
-public struct AgentProviderRegistry: Sendable {
-    public init() {}
-
-    public func provider(for kind: AgentKind) -> any AgentProviding {
-        CLIAgentProvider(kind: kind)
-    }
-}

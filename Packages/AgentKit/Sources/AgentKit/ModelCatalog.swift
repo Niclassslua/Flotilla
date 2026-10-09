@@ -29,7 +29,7 @@ public struct AgentModelProfile: Sendable, Equatable, Identifiable {
 
 /// Live-queries each agent's installed CLI for its current model list,
 /// instead of hardcoding one that inevitably goes stale. Resolution always
-/// uses `PATH` (not any configured `AgentPathOverrides` binary) — model
+/// uses `PATH` (not any configured `agentOverrides` binary) — model
 /// discovery is a best-effort convenience, not the actual launch path.
 public struct ModelCatalogFetcher: Sendable {
     private let locator: ExecutableLocating

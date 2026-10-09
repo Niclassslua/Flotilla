@@ -12,7 +12,7 @@ final class SettingsKitTests: XCTestCase {
         let settings = store.load()
         XCTAssertEqual(settings.worktreeBaseDirectory, "/tmp/default-worktrees")
         XCTAssertEqual(settings.appearance, .system)
-        XCTAssertEqual(settings.agentPaths, AgentPathOverrides())
+        XCTAssertTrue(settings.agentOverrides.paths.isEmpty)
     }
 
     func testSaveThenLoadRoundTripsAndOverwrites() {
@@ -20,7 +20,7 @@ final class SettingsKitTests: XCTestCase {
         let store = UserDefaultsSettingsStore(defaults: defaults, defaultWorktreeBaseDirectory: "/tmp/default-worktrees")
 
         var settings = AppSettings(worktreeBaseDirectory: "/tmp/default-worktrees")
-        settings.agentPaths.claudeCodePath = "/opt/homebrew/bin/claude"
+        settings.agentOverrides.paths["claudeCode"] = "/opt/homebrew/bin/claude"
         settings.worktreeBaseDirectory = "/Users/dev/.flotilla/worktrees"
         settings.appearance = .dark
         store.save(settings)
@@ -56,8 +56,8 @@ final class SettingsKitTests: XCTestCase {
                 name: "pre-workspace/arguments",
                 json: #"{"agentPaths":{"claudeCodePath":"/usr/local/bin/claude","codexCLIPath":""},"worktreeBaseDirectory":"/tmp/worktrees","appearance":"dark"}"#
             ) { decoded in
-                XCTAssertEqual(decoded.agentPaths.claudeCodePath, "/usr/local/bin/claude")
-                XCTAssertEqual(decoded.agentArguments, AgentArgumentOverrides())
+                XCTAssertEqual(decoded.agentOverrides.paths["claudeCode"], "/usr/local/bin/claude")
+                XCTAssertTrue(decoded.agentOverrides.arguments.isEmpty)
                 XCTAssertEqual(decoded.workspace, WorkspacePreferences())
             },
             Case(

@@ -7,18 +7,13 @@ public enum AXID: String, Sendable {
     // MARK: - Sidebar
     case sidebarList = "SidebarList"
     case sidebarOverview = "Sidebar.Overview"
-    case sidebarAllSessions = "Sidebar.AllSessions"
-    case sidebarAllProjects = "Sidebar.AllProjects"
     case sidebarProjectRow = "Sidebar.ProjectRow-"
     case sidebarProjectCollapseToggle = "Sidebar.ProjectRow.CollapseToggle-"
     case sidebarExpandAllProjects = "Sidebar.ExpandAllProjects"
     case sidebarCollapseAllProjects = "Sidebar.CollapseAllProjects"
 
     // MARK: - Toolbar
-    case toolbarNewSession = "Toolbar.NewSession"
     case toolbarCommandPalette = "Toolbar.CommandPalette"
-    case toolbarInspectorToggle = "Toolbar.InspectorToggle"
-    case toolbarOverflow = "Toolbar.Overflow"
     /// The two destination buttons that replaced the segmented presentation
     /// picker. Each lands in Sessions with that presentation live, from
     /// wherever the user currently is.
@@ -72,25 +67,17 @@ public enum AXID: String, Sendable {
     case gitSidebarActionError = "GitSidebar.ActionError"
 
     // MARK: - Command Palette
-    case commandPaletteButton = "CommandPaletteButton"
-    case commandPaletteInput = "CommandPalette.Input"
     case commandPaletteSearch = "CommandPalette.Search"
-    case commandPaletteResult = "CommandPalette.Result-"
 
     // MARK: - Create Session
     case createSessionGoalField = "CreateSession.GoalField"
     case createSessionProjectPicker = "CreateSession.ProjectPicker"
-    case createSessionAgentPicker = "CreateSession.AgentPicker"
-    case createSessionModelPicker = "CreateSession.ModelPicker"
     case createSessionEffortPicker = "CreateSession.EffortPicker"
-    case createSessionWorktreeToggle = "CreateSession.WorktreeToggle"
-    case createSessionLaunchButton = "CreateSession.LaunchButton"
     case createSessionCreateButton = "CreateSession.CreateButton"
     case createSessionBackgroundButton = "CreateSession.BackgroundButton"
     case createSessionCancelButton = "CreateSession.CancelButton"
     case createSessionChooseFolderButton = "CreateSession.ChooseFolderButton"
     case createSessionSourceGeneral = "CreateSession.Source.General"
-    case createSessionProjectRow = "CreateSession.Project-"
     case createSessionAgentOption = "CreateSession.Agent."
     case createSessionCheckoutMain = "CreateSession.Checkout.Main"
     case createSessionCheckoutWorktree = "CreateSession.Checkout.Worktree"
@@ -116,25 +103,12 @@ public enum AXID: String, Sendable {
     case kanbanCard = "KanbanCard-"
 
     // MARK: - Inspector
-    case inspectorTabChanges = "Inspector.Tab.Changes"
-    case inspectorTabFiles = "Inspector.Tab.Files"
-    case inspectorTabInstructions = "Inspector.Tab.Instructions"
-    case inspectorTabDetails = "Inspector.Tab.Details"
 
     // MARK: - Session Details
-    case sessionDetailsPopover = "SessionDetailsPopover"
 
     // MARK: - Settings
     case settingsAppearancePicker = "Settings.AppearancePicker"
-    case settingsGeneralTab = "Settings.GeneralTab"
-    case settingsAppearanceTab = "Settings.AppearanceTab"
-    case settingsPermissionsTab = "Settings.PermissionsTab"
-    case settingsTerminalTab = "Settings.TerminalTab"
-    case settingsAgentsTab = "Settings.AgentsTab"
-    case settingsNotificationsTab = "Settings.NotificationsTab"
     case settingsNotificationDeliveryPicker = "Settings.NotificationDeliveryPicker"
-    case settingsGitTab = "Settings.GitTab"
-    case settingsAdvancedTab = "Settings.AdvancedTab"
     case settingsWorktreeBaseDirectory = "Settings.WorktreeBaseDirectory"
     case settingsWorktreeOnSessionDelete = "Settings.WorktreeOnSessionDelete"
     case settingsScreenRecordingPermissionRow = "Settings.ScreenRecordingPermissionRow"
@@ -152,13 +126,11 @@ public enum AXID: String, Sendable {
     case deleteSessionDeleteOnly = "DeleteSessionDialog.DeleteSessionOnly"
 
     // MARK: - Global / Misc
-    case globalRestoreStopped = "Global.Restore stopped sessions"
     case startupWarningBanner = "StartupWarningBanner"
     case startupWarningBannerDismissButton = "StartupWarningBanner.DismissButton"
     case lastNotifiedSession = "LastNotifiedSession"
     case detailPlaceholder = "DetailPlaceholder"
     case gridEmptyState = "GridEmptyState"
-    case viewModePicker = "ViewModePicker"
     case restartSessionButton = "Restart Session"
 
     // MARK: - Agent Exit Screen
@@ -172,7 +144,6 @@ public enum AXID: String, Sendable {
     // MARK: - Diff Panel
     case diffPanel = "DiffPanel"
     case diffPanelFile = "DiffPanel.File-"
-    case diffPanelHunk = "DiffPanel.Hunk-"
     case diffPanelEmpty = "DiffPanel.Empty"
     case diffPanelList = "DiffPanel.List"
     case diffPanelRefreshButton = "DiffPanel.RefreshButton"
@@ -180,46 +151,20 @@ public enum AXID: String, Sendable {
 
     // MARK: - File Browser
     case fileBrowser = "FileBrowser"
-    case fileBrowserNavigator = "FileBrowser.Navigator"
     case fileBrowserEditor = "FileBrowser.Editor"
-    case fileBrowserTree = "FileBrowser.Tree-"
     case fileBrowserRow = "FileBrowser.Row-"
 
     // MARK: - Rules Panel
     case rulesPanel = "RulesPanel"
-    case rulesPanelFileList = "RulesPanel.FileList"
-    case rulesPanelEditor = "RulesPanel.Editor"
-    case rulesPanelFilter = "RulesPanel.Filter"
 
     // MARK: - Project
     case projectRow = "ProjectRow-"
-    case projectCompactCard = "ProjectCompactCard-"
-    case projectSidebarHeader = "ProjectSidebarHeader"
-    case projectWorkspaceDetail = "ProjectWorkspaceDetail"
     case projectOverview = "ProjectOverview"
-    case projectSessionsSection = "ProjectSessionsSection"
     case projectWorktreesSection = "ProjectWorktreesSection"
-    case projectsCommandCenter = "Projects.CommandCenter"
-    case projectsMetricStrip = "Projects.MetricStrip"
-    case projectCardQuickLaunch = "ProjectCard.QuickLaunch-"
-    case projectCardTerminal = "ProjectCard.Terminal-"
-    case projectCardEditor = "ProjectCard.Editor-"
-    case projectCardFinder = "ProjectCard.Finder-"
-    case projectModeOverview = "Project.Mode.Overview"
-    case projectModeWorktrees = "Project.Mode.Worktrees"
-    case projectModePipeline = "Project.Mode.Pipeline"
-    case projectModeContext = "Project.Mode.Context"
-    case worktreeTable = "Worktree.Table"
-    case worktreePruneButton = "Worktree.PruneButton-"
-    case worktreeMergeButton = "Worktree.MergeButton-"
     case projectReturnToOverview = "Project.ReturnToOverview"
 
     // MARK: - Project Tabs
-    case projectTabOverview = "ProjectDetail.ModeTab-Overview"
     case projectTabGit = "ProjectDetail.ModeTab-Git"
-    case projectTabFiles = "ProjectDetail.ModeTab-Files"
-    case projectTabSkills = "ProjectDetail.ModeTab-Skills"
-    case projectTabRules = "ProjectDetail.ModeTab-Rules"
     case projectFiles = "ProjectFiles"
     case projectSkills = "ProjectSkills"
     case projectRules = "ProjectRules"
@@ -243,7 +188,6 @@ public enum AXID: String, Sendable {
     case homeDashboard = "HomeDashboard"
     case homeRecentProjects = "Home.RecentProjects"
     case homeGreeting = "Home.Greeting"
-    case homeStats = "Home.Stats"
     // MARK: - Home Widget Grid
     case homeWidgetGrid = "Home.Widgets.Grid"
     case homeWidgetEditButton = "Home.Widgets.EditButton"
@@ -261,21 +205,14 @@ public enum AXID: String, Sendable {
     case homeWidgetInfoBadge = "Home.Widget.Info-"
     case homeWidgetResizeHandle = "Home.Widget.Resize-"
     case homeWidgetSkeleton = "Home.Widget.Skeleton-"
-    case projectCompactCardEllipsis = "ProjectCompactCard.Ellipsis-"
 
     // MARK: - Session Row (Legacy - preserved for test compatibility)
     case sessionRow = "SessionRow-"
-    case sessionRowDeleteButton = "SessionRow-DeleteButton"
     case sessionRowDeleteMenuItem = "SessionRow-DeleteMenuItem"
 
     // MARK: - Session Toolbar (Legacy - preserved for test compatibility)
-    case sessionGitInspectorButton = "Session.GitInspectorButton"
 
     // MARK: - Global Bar (Legacy - preserved for test compatibility)
-    case globalOverview = "Global.Overview"
-    case globalSessions = "Global.Sessions"
-    case globalProjects = "Global.Projects"
-    case globalKanban = "Global.Kanban"
 
     // MARK: - Review
     case reviewWindow = "Review.Window"
@@ -386,11 +323,6 @@ public enum AXID: String, Sendable {
     /// the bar sits (0 is today).
     public static func commitWeekChartDay(_ daysAgo: Int) -> String {
         "Project.CommitWeekChart.Day-\(daysAgo)"
-    }
-
-    /// Creates a command palette result identifier
-    public static func commandPaletteResult(_ index: Int) -> String {
-        "CommandPalette.Result-\(index)"
     }
 
     /// Opens the review window for a session, from its session bar.
@@ -507,9 +439,6 @@ public enum AXID: String, Sendable {
     }
 
     /// Creates a session row delete button identifier
-    public static func sessionRowDeleteButton(_ title: String) -> String {
-        "SessionRow-\(title)-DeleteButton"
-    }
 
     /// Creates a session row delete context menu item identifier
     public static func sessionRowDeleteMenuItem(_ title: String) -> String {

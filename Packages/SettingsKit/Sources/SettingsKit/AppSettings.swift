@@ -543,9 +543,6 @@ public struct GitPreferences: Codable, Equatable, Sendable {
 }
 
 public struct WorkspacePreferences: Codable, Equatable, Sendable {
-    public var selectedSessionID: String?
-    public var viewMode: String
-    public var detailPanel: String
     /// The grid's layout knob: how many columns to show, and how many rows
     /// fit the viewport before it scrolls. Set from the toolbar's grid-size
     /// picker (drag/click a cell in the N×M swatch).
@@ -573,15 +570,8 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
     /// customized it and the app's default layout applies — so a later
     /// default change reaches everyone who hasn't built their own.
     public var homeWidgets: [HomeWidgetEntry]?
-    /// Schema version of `homeWidgets`, for migrating saved layouts.
-    public var homeWidgetsVersion: Int
-    /// The one-time "Customize Home" hint has been shown and dismissed.
-    public var homeCustomizeHintShown: Bool
 
     public init(
-        selectedSessionID: String? = nil,
-        viewMode: String = "single",
-        detailPanel: String = "terminal",
         gridColumnCount: Int = 3,
         gridRowCount: Int = 2,
         gridSelectedSessionIDs: [String] = [],
@@ -589,13 +579,8 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         gridDimIntensity: Double = 0.4,
         sidebarRailLabels: Bool = false,
         sessionGroup: String = "all",
-        homeWidgets: [HomeWidgetEntry]? = nil,
-        homeWidgetsVersion: Int = HomeWidgetEntry.currentVersion,
-        homeCustomizeHintShown: Bool = false
+        homeWidgets: [HomeWidgetEntry]? = nil
     ) {
-        self.selectedSessionID = selectedSessionID
-        self.viewMode = viewMode
-        self.detailPanel = detailPanel
         self.gridColumnCount = gridColumnCount
         self.gridRowCount = gridRowCount
         self.gridSelectedSessionIDs = gridSelectedSessionIDs
@@ -604,21 +589,16 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         self.sidebarRailLabels = sidebarRailLabels
         self.sessionGroup = sessionGroup
         self.homeWidgets = homeWidgets
-        self.homeWidgetsVersion = homeWidgetsVersion
-        self.homeCustomizeHintShown = homeCustomizeHintShown
     }
 
     private enum CodingKeys: String, CodingKey {
-        case selectedSessionID, viewMode, detailPanel, gridColumnCount, gridRowCount
+        case gridColumnCount, gridRowCount
         case gridSelectedSessionIDs, gridDimEnabled, gridDimIntensity, sidebarRailLabels
-        case sessionGroup, homeWidgets, homeWidgetsVersion, homeCustomizeHintShown
+        case sessionGroup, homeWidgets
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        selectedSessionID = try container.decodeIfPresent(String.self, forKey: .selectedSessionID)
-        viewMode = try container.decodeIfPresent(String.self, forKey: .viewMode) ?? "single"
-        detailPanel = try container.decodeIfPresent(String.self, forKey: .detailPanel) ?? "terminal"
         gridColumnCount = try container.decodeIfPresent(Int.self, forKey: .gridColumnCount) ?? 3
         gridRowCount = try container.decodeIfPresent(Int.self, forKey: .gridRowCount) ?? 2
         gridSelectedSessionIDs = try container.decodeIfPresent([String].self, forKey: .gridSelectedSessionIDs) ?? []
@@ -627,17 +607,14 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         sidebarRailLabels = try container.decodeIfPresent(Bool.self, forKey: .sidebarRailLabels) ?? false
         sessionGroup = try container.decodeIfPresent(String.self, forKey: .sessionGroup) ?? "all"
         // A layout that fails to decode falls back to the default rather
-        // than taking the rest of the settings file down with it.
+        // than taking the rest of the settings file down with it. Legacy
+        // keys (viewMode, detailPanel, selectedSessionID, homeWidgetsVersion,
+        // homeCustomizeHintShown) are ignored.
         homeWidgets = (try? container.decodeIfPresent([HomeWidgetEntry].self, forKey: .homeWidgets)) ?? nil
-        homeWidgetsVersion = try container.decodeIfPresent(Int.self, forKey: .homeWidgetsVersion) ?? HomeWidgetEntry.currentVersion
-        homeCustomizeHintShown = try container.decodeIfPresent(Bool.self, forKey: .homeCustomizeHintShown) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(selectedSessionID, forKey: .selectedSessionID)
-        try container.encodeIfPresent(viewMode, forKey: .viewMode)
-        try container.encodeIfPresent(detailPanel, forKey: .detailPanel)
         try container.encodeIfPresent(gridColumnCount, forKey: .gridColumnCount)
         try container.encodeIfPresent(gridRowCount, forKey: .gridRowCount)
         try container.encodeIfPresent(gridSelectedSessionIDs, forKey: .gridSelectedSessionIDs)
@@ -646,8 +623,6 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
         try container.encodeIfPresent(sidebarRailLabels, forKey: .sidebarRailLabels)
         try container.encodeIfPresent(sessionGroup, forKey: .sessionGroup)
         try container.encodeIfPresent(homeWidgets, forKey: .homeWidgets)
-        try container.encode(homeWidgetsVersion, forKey: .homeWidgetsVersion)
-        try container.encode(homeCustomizeHintShown, forKey: .homeCustomizeHintShown)
     }
 
 }
@@ -705,44 +680,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var notifications: NotificationPreferences
     public var git: GitPreferences
 
-    public var agentPaths: AgentPathOverrides {
-        get {
-            AgentPathOverrides(
-                claudeCodePath: agentOverrides.paths["claudeCode"] ?? "",
-                codexCLIPath: agentOverrides.paths["codexCLI"] ?? "",
-                openCodePath: agentOverrides.paths["openCode"] ?? "",
-                antigravityPath: agentOverrides.paths["antigravity"] ?? "",
-                cursorAgentPath: agentOverrides.paths["cursorAgent"] ?? ""
-            )
-        }
-        set {
-            if newValue.claudeCodePath.isEmpty { agentOverrides.paths.removeValue(forKey: "claudeCode") } else { agentOverrides.paths["claudeCode"] = newValue.claudeCodePath }
-            if newValue.codexCLIPath.isEmpty { agentOverrides.paths.removeValue(forKey: "codexCLI") } else { agentOverrides.paths["codexCLI"] = newValue.codexCLIPath }
-            if newValue.openCodePath.isEmpty { agentOverrides.paths.removeValue(forKey: "openCode") } else { agentOverrides.paths["openCode"] = newValue.openCodePath }
-            if newValue.antigravityPath.isEmpty { agentOverrides.paths.removeValue(forKey: "antigravity") } else { agentOverrides.paths["antigravity"] = newValue.antigravityPath }
-            if newValue.cursorAgentPath.isEmpty { agentOverrides.paths.removeValue(forKey: "cursorAgent") } else { agentOverrides.paths["cursorAgent"] = newValue.cursorAgentPath }
-        }
-    }
-
-    public var agentArguments: AgentArgumentOverrides {
-        get {
-            AgentArgumentOverrides(
-                claudeCodeArguments: agentOverrides.arguments["claudeCode"] ?? [],
-                codexCLIArguments: agentOverrides.arguments["codexCLI"] ?? [],
-                openCodeArguments: agentOverrides.arguments["openCode"] ?? [],
-                antigravityArguments: agentOverrides.arguments["antigravity"] ?? [],
-                cursorAgentArguments: agentOverrides.arguments["cursorAgent"] ?? []
-            )
-        }
-        set {
-            if newValue.claudeCodeArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "claudeCode") } else { agentOverrides.arguments["claudeCode"] = newValue.claudeCodeArguments }
-            if newValue.codexCLIArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "codexCLI") } else { agentOverrides.arguments["codexCLI"] = newValue.codexCLIArguments }
-            if newValue.openCodeArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "openCode") } else { agentOverrides.arguments["openCode"] = newValue.openCodeArguments }
-            if newValue.antigravityArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "antigravity") } else { agentOverrides.arguments["antigravity"] = newValue.antigravityArguments }
-            if newValue.cursorAgentArguments.isEmpty { agentOverrides.arguments.removeValue(forKey: "cursorAgent") } else { agentOverrides.arguments["cursorAgent"] = newValue.cursorAgentArguments }
-        }
-    }
-
     public init(
         agentOverrides: AgentOverrides = AgentOverrides(),
         openCodeSubscription: OpenCodeSubscription = .none,
@@ -757,47 +694,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
         git: GitPreferences = GitPreferences()
     ) {
         self.agentOverrides = agentOverrides
-        self.openCodeSubscription = openCodeSubscription
-        self.worktreeBaseDirectory = worktreeBaseDirectory
-        self.appearance = appearance
-        self.liquidGlassEnabled = liquidGlassEnabled
-        self.accentColor = accentColor
-        self.workspace = workspace
-        self.sessionDefaults = sessionDefaults
-        self.terminal = terminal
-        self.notifications = notifications
-        self.git = git
-    }
-
-    public init(
-        agentPaths: AgentPathOverrides,
-        agentArguments: AgentArgumentOverrides = AgentArgumentOverrides(),
-        openCodeSubscription: OpenCodeSubscription = .none,
-        worktreeBaseDirectory: String = "",
-        appearance: AppearanceMode = .system,
-        liquidGlassEnabled: Bool = false,
-        accentColor: String = "original",
-        workspace: WorkspacePreferences = WorkspacePreferences(),
-        sessionDefaults: SessionDefaults = SessionDefaults(),
-        terminal: TerminalPreferences = TerminalPreferences(),
-        notifications: NotificationPreferences = NotificationPreferences(),
-        git: GitPreferences = GitPreferences()
-    ) {
-        var paths: [String: String] = [:]
-        if !agentPaths.claudeCodePath.isEmpty { paths["claudeCode"] = agentPaths.claudeCodePath }
-        if !agentPaths.codexCLIPath.isEmpty { paths["codexCLI"] = agentPaths.codexCLIPath }
-        if !agentPaths.openCodePath.isEmpty { paths["openCode"] = agentPaths.openCodePath }
-        if !agentPaths.antigravityPath.isEmpty { paths["antigravity"] = agentPaths.antigravityPath }
-        if !agentPaths.cursorAgentPath.isEmpty { paths["cursorAgent"] = agentPaths.cursorAgentPath }
-
-        var arguments: [String: [String]] = [:]
-        if !agentArguments.claudeCodeArguments.isEmpty { arguments["claudeCode"] = agentArguments.claudeCodeArguments }
-        if !agentArguments.codexCLIArguments.isEmpty { arguments["codexCLI"] = agentArguments.codexCLIArguments }
-        if !agentArguments.openCodeArguments.isEmpty { arguments["openCode"] = agentArguments.openCodeArguments }
-        if !agentArguments.antigravityArguments.isEmpty { arguments["antigravity"] = agentArguments.antigravityArguments }
-        if !agentArguments.cursorAgentArguments.isEmpty { arguments["cursorAgent"] = agentArguments.cursorAgentArguments }
-
-        self.agentOverrides = AgentOverrides(paths: paths, arguments: arguments)
         self.openCodeSubscription = openCodeSubscription
         self.worktreeBaseDirectory = worktreeBaseDirectory
         self.appearance = appearance

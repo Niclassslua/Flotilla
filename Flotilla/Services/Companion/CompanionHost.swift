@@ -48,7 +48,7 @@ final class CompanionHost {
     }
 
     private(set) var handyStatus: HandyStatus = .checking
-    @ObservationIgnored private let localSpeech: any HandySpeechServing = HandySpeechClient()
+    @ObservationIgnored private let localSpeech = HandySpeechClient()
 
     var isEnabled: Bool {
         didSet {
@@ -98,7 +98,7 @@ final class CompanionHost {
     private final class Peer {
         let deviceID: String
         let session: ServerSideSession
-        let speech: any HandySpeechServing
+        let speech: HandySpeechClient
         var subscribedSessionID: UUID?
         var subscriptionGeneration: UInt64 = 0
         var lastFleet: FleetSnapshot?
@@ -110,7 +110,7 @@ final class CompanionHost {
         var transcriptPublishPending = false
 
         init(deviceID: String, session: ServerSideSession,
-             speech: any HandySpeechServing = HandySpeechClient()) {
+             speech: HandySpeechClient = HandySpeechClient()) {
             self.deviceID = deviceID
             self.session = session
             self.speech = speech

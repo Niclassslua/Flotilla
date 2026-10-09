@@ -455,7 +455,6 @@ final class AppStore {
     func deliverMessage(_ text: String, to sessionID: UUID) async throws {
         try await processManager.deliverMessage(text, to: sessionID)
     }
-    // ... rest of the file
 
     /// Seeds the same permission-prompt state the observation pipeline would
     /// produce, then echoes the prompt into the mock terminal for UI

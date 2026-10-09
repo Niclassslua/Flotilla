@@ -24,7 +24,7 @@ final class SessionProcessManagerTests: XCTestCase {
     func testStartUsesInjectedFactoryConfiguredArgumentsAndDeliversGoal() throws {
         let factory = RecordingProcessFactory()
         var settings = AppSettings()
-        settings.agentArguments.codexCLIArguments = ["--profile", "careful"]
+        settings.agentOverrides.arguments["codexCLI"] = ["--profile", "careful"]
         let manager = SessionProcessManager(
             locator: AppLayerExecutableLocator(
                 executable: URL(fileURLWithPath: "/usr/bin/env")

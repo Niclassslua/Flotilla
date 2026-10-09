@@ -470,7 +470,6 @@ struct FlotillaShell: View {
         navigator.selection = .overview
         navigator.sidebarSelection = []
         store.selectedSessionID = nil
-        settingsViewModel.settings.workspace.selectedSessionID = nil
         // The group is what the grid and board are filtered to, so restoring
         // it is what makes the bar's chip agree with the tiles on relaunch.
         // `SessionGroup.init(rawValue:)` falls back to `.all` for a project
@@ -558,9 +557,6 @@ private struct ShellLifecycleModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: navigator.presentation) { _, mode in
-                settingsViewModel.settings.workspace.viewMode = mode.rawValue
-            }
             .onChange(of: navigator.sessionGroup) { _, group in
                 settingsViewModel.settings.workspace.sessionGroup = group.rawValue
             }

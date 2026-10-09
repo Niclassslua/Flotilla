@@ -50,16 +50,4 @@ public struct AgentSessionProviderRegistry: Sendable {
         let provider = self.provider(for: kind)
         return try? await provider.fetchLatestSession(for: workingDirectory, since: since)
     }
-
-    /// Fetches all discovered sessions across all supported agents.
-    public func fetchAllSessions() async -> [DiscoveredAgentSession] {
-        async let claudeSessions = (try? claudeProvider.fetchSessions()) ?? []
-        async let openCodeSessions = (try? openCodeProvider.fetchSessions()) ?? []
-        async let codexSessions = (try? codexProvider.fetchSessions()) ?? []
-        async let antigravitySessions = (try? antigravityProvider.fetchSessions()) ?? []
-        async let cursorSessions = (try? cursorProvider.fetchSessions()) ?? []
-
-        let combined = await claudeSessions + openCodeSessions + codexSessions + antigravitySessions + cursorSessions
-        return combined.sorted { ($0.lastActiveAt ?? .distantPast) > ($1.lastActiveAt ?? .distantPast) }
-    }
 }

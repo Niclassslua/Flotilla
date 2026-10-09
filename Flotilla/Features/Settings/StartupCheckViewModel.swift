@@ -50,9 +50,8 @@ final class StartupCheckViewModel {
             foundToolPaths.merge(optionalReport.foundTools) { current, _ in current }
         }
 
-        let registry = AgentProviderRegistry()
         for agent in AgentKind.allCases {
-            let plan = registry.provider(for: agent).launchPlan(
+            let plan = CLIAgentProvider(kind: agent).launchPlan(
                 goal: nil,
                 settings: settings,
                 baseEnvironment: [:]

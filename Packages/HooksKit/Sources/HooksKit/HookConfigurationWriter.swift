@@ -2,21 +2,6 @@ import Foundation
 import Darwin
 import SessionKit
 
-/// Configures provider-native lifecycle hooks for one launched session.
-///
-/// The protocol keeps process launch code testable without coupling it to
-/// filesystem-backed configuration details.
-public protocol HookConfiguring: Sendable {
-    func configureHooks(
-        for kind: AgentKind,
-        sessionID: UUID,
-        workingDirectory: URL,
-        supportDirectory: URL
-    ) -> Bool
-
-    func launchArguments(for kind: AgentKind, supportDirectory: URL) -> [String]
-}
-
 /// Wires a launching agent's own event mechanism to a per-session status
 /// file, so `HookEventReceiver` can read exact, structured status instead
 /// of `TerminalScreenHeuristic` guessing from rendered text.
@@ -56,7 +41,7 @@ public protocol HookConfiguring: Sendable {
 /// plugin files all receive the same process event stream, so per-session
 /// plugin files would cross-contaminate siblings; environment-based routing
 /// keeps the shared plugin constant and every write session-specific.
-public struct HookConfigurationWriter: HookConfiguring {
+public struct HookConfigurationWriter: Sendable {
     /// Antigravity's user-level hooks file, which every agy process reads.
     /// Injectable so tests never touch the real one.
     public let antigravityGlobalHooksFile: URL

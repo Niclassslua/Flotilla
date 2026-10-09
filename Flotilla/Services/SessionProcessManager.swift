@@ -23,7 +23,6 @@ final class SessionProcessManager {
     private var hasConfiguredGlobalOptions = false
     private let locator: ExecutableLocating
     private let processFactory: any PTYProcessCreating
-    private let providers: AgentProviderRegistry
     private let settingsProvider: () -> AppSettings
     private let environmentProvider: () -> [String: String]
     private let tmuxTerminator: any TmuxSessionTerminating
@@ -32,7 +31,7 @@ final class SessionProcessManager {
     private let tmuxClientProbe: any TmuxClientProbing
     private let tmuxPaneProbe: any TmuxPaneProbing
     private let conversationOwnershipChecker: any AgentConversationOwnershipChecking
-    private let hookConfigurationWriter: any HookConfiguring
+    private let hookConfigurationWriter: HookConfigurationWriter
     private let hookSupportDirectory: URL
     private let antigravityWorkspaceTruster: (@Sendable (URL) throws -> Void)?
     private var intentionallyTerminating = Set<UUID>()
@@ -80,7 +79,6 @@ final class SessionProcessManager {
     init(
         locator: ExecutableLocating = PATHExecutableLocator(),
         processFactory: any PTYProcessCreating = SystemPTYProcessFactory(),
-        providers: AgentProviderRegistry = AgentProviderRegistry(),
         settingsProvider: @escaping () -> AppSettings = { AppSettings() },
         environmentProvider: @escaping () -> [String: String] = { ProcessInfo.processInfo.environment },
         tmuxTerminator: any TmuxSessionTerminating = ProcessTmuxSessionTerminator(),
@@ -89,7 +87,7 @@ final class SessionProcessManager {
         tmuxClientProbe: any TmuxClientProbing = ProcessTmuxClientProbe(),
         tmuxPaneProbe: any TmuxPaneProbing = ProcessTmuxPaneProbe(),
         conversationOwnershipChecker: any AgentConversationOwnershipChecking = ProcessAgentConversationOwnershipChecker(),
-        hookConfigurationWriter: any HookConfiguring = HookConfigurationWriter(),
+        hookConfigurationWriter: HookConfigurationWriter = HookConfigurationWriter(),
         hookSupportDirectory: URL = TmuxSessionWrapping.defaultSupportDirectory(),
         antigravityWorkspaceTruster: (@Sendable (URL) throws -> Void)? = {
             try AntigravityWorkspaceTrust.ensureTrusted(workspace: $0)
@@ -100,7 +98,6 @@ final class SessionProcessManager {
         self.locator = locator
         self.gitService = gitService
         self.processFactory = processFactory
-        self.providers = providers
         self.settingsProvider = settingsProvider
         self.environmentProvider = environmentProvider
         self.tmuxTerminator = tmuxTerminator
@@ -234,7 +231,7 @@ final class SessionProcessManager {
             try? antigravityWorkspaceTruster?(session.workingDirectory)
         }
 
-        let provider = providers.provider(for: session.agent)
+        let provider = CLIAgentProvider(kind: session.agent)
         let settings = settingsProvider()
 
         // Scoped to the agent's own process tree, which is what makes the

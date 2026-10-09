@@ -21,7 +21,8 @@ final class HomeWidgetLayoutPersistenceTests: XCTestCase {
     }
 
     func testDecodingOlderSettingsFileWithoutHomeWidgetsFieldsDefaultsGracefully() throws {
-        // Simulates a settings file saved before this feature existed.
+        // Simulates a settings file saved before this feature existed, including
+        // legacy keys that WorkspacePreferences no longer stores.
         let legacyJSON = """
         {
             "viewMode": "single",
@@ -37,8 +38,8 @@ final class HomeWidgetLayoutPersistenceTests: XCTestCase {
         """
         let decoded = try JSONDecoder().decode(WorkspacePreferences.self, from: Data(legacyJSON.utf8))
         XCTAssertNil(decoded.homeWidgets)
-        XCTAssertEqual(decoded.homeWidgetsVersion, HomeWidgetEntry.currentVersion)
-        XCTAssertFalse(decoded.homeCustomizeHintShown)
+        XCTAssertEqual(decoded.sessionGroup, "all")
+        XCTAssertEqual(decoded.gridColumnCount, 3)
     }
 
     func testResolutionDropsUnknownKindOrSizeAndDefaultsAllResolve() {

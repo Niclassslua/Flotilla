@@ -23,8 +23,8 @@ final class RealPipelineReproTests: XCTestCase {
 
     private func makeManager(useTmux: Bool) -> SessionProcessManager {
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = "/bin/sh"
-        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 30", "--"]
+        settings.agentOverrides.paths["claudeCode"] = "/bin/sh"
+        settings.agentOverrides.arguments["claudeCode"] = ["-c", "sleep 30", "--"]
         return SessionProcessManager(
             locator: Locator(tmuxURL: useTmux ? URL(fileURLWithPath: "/opt/homebrew/bin/tmux") : nil),
             processFactory: SystemPTYProcessFactory(),
@@ -175,8 +175,8 @@ final class RealPipelineReproTests: XCTestCase {
 
     func testCreateSessionThroughStoreKeepsProcessRunning() async throws {
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = "/bin/sh"
-        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 30", "--"]
+        settings.agentOverrides.paths["claudeCode"] = "/bin/sh"
+        settings.agentOverrides.arguments["claudeCode"] = ["-c", "sleep 30", "--"]
         let store = AppStore(
             repository: try GRDBSessionRepository(),
             gitService: MockGitService(),
@@ -211,8 +211,8 @@ final class RealPipelineReproTests: XCTestCase {
     /// delivered) must start a FRESH process — not return the dying one.
     func testRestartWhileOldProcessStillRegisteredStartsFreshProcess() async throws {
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = "/bin/sh"
-        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 30", "--"]
+        settings.agentOverrides.paths["claudeCode"] = "/bin/sh"
+        settings.agentOverrides.arguments["claudeCode"] = ["-c", "sleep 30", "--"]
         let store = AppStore(
             repository: try GRDBSessionRepository(),
             gitService: MockGitService(),
@@ -251,8 +251,8 @@ final class RealPipelineReproTests: XCTestCase {
     /// pane and the agent would never actually restart.
     func testTmuxRestartKillsOldSessionAndStartsFreshAgent() async throws {
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = "/bin/sh"
-        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 30", "--"]
+        settings.agentOverrides.paths["claudeCode"] = "/bin/sh"
+        settings.agentOverrides.arguments["claudeCode"] = ["-c", "sleep 30", "--"]
         let store = AppStore(
             repository: try GRDBSessionRepository(),
             gitService: MockGitService(),
@@ -293,8 +293,8 @@ final class RealPipelineReproTests: XCTestCase {
     /// fresh tmux session and a fresh agent, not reattach to nothing.
     func testRestartAfterAgentExitRecreatesFreshSession() async throws {
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = "/bin/sh"
-        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 600", "--"]
+        settings.agentOverrides.paths["claudeCode"] = "/bin/sh"
+        settings.agentOverrides.arguments["claudeCode"] = ["-c", "sleep 600", "--"]
         let store = AppStore(
             repository: try GRDBSessionRepository(),
             gitService: MockGitService(),
@@ -344,8 +344,8 @@ final class RealPipelineReproTests: XCTestCase {
     /// terminal with a one-line banner and a status that says nothing failed.
     func testAgentExitInsideTmuxIsConfirmedWithItsExitCodeAndClearedByRestart() async throws {
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = "/bin/sh"
-        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 2; exit 3", "--"]
+        settings.agentOverrides.paths["claudeCode"] = "/bin/sh"
+        settings.agentOverrides.arguments["claudeCode"] = ["-c", "sleep 2; exit 3", "--"]
         let store = AppStore(
             repository: try GRDBSessionRepository(),
             gitService: MockGitService(),
@@ -414,8 +414,8 @@ final class RealPipelineReproTests: XCTestCase {
     /// launches and keeps running.
     func testLargeGoalDoesNotCrashNewSession() async throws {
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = "/bin/sh"
-        settings.agentArguments.claudeCodeArguments = ["-c", "sleep 30", "--"]
+        settings.agentOverrides.paths["claudeCode"] = "/bin/sh"
+        settings.agentOverrides.arguments["claudeCode"] = ["-c", "sleep 30", "--"]
         let store = AppStore(
             repository: try GRDBSessionRepository(),
             gitService: MockGitService(),
@@ -518,7 +518,7 @@ final class RealPipelineReproTests: XCTestCase {
         try FileManager.default.createDirectory(at: testDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: testDirectory) }
         var settings = AppSettings()
-        settings.agentPaths.claudeCodePath = claudePath
+        settings.agentOverrides.paths["claudeCode"] = claudePath
         let store = AppStore(
             repository: try GRDBSessionRepository(),
             gitService: MockGitService(),

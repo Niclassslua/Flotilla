@@ -30,25 +30,7 @@ public enum FlotillaRadius {
     public static let card: CGFloat = 10
     public static let panel: CGFloat = 14
     public static let modal: CGFloat = 16
-
-    @available(*, deprecated, renamed: "control")
-    public static let small: CGFloat = 6
-
-    @available(*, deprecated, renamed: "card")
-    public static let medium: CGFloat = 10
-
-    @available(*, deprecated, renamed: "panel")
-    public static let large: CGFloat = 14
 }
-
-@available(*, deprecated, renamed: "FlotillaRadius.control")
-public let FlotillaRadiusSmall: CGFloat = 6
-
-@available(*, deprecated, renamed: "FlotillaRadius.card")
-public let FlotillaRadiusMedium: CGFloat = 10
-
-@available(*, deprecated, renamed: "FlotillaRadius.panel")
-public let FlotillaRadiusLarge: CGFloat = 14
 
 // MARK: - Border Width
 public enum FlotillaBorderWidth: Sendable {
@@ -300,9 +282,6 @@ public struct FlotillaColors: Sendable {
         dark: PlatformColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1).withAlphaComponent(0.12),
         light: PlatformColor(red: 0.85, green: 0.2, blue: 0.2, alpha: 1).withAlphaComponent(0.1)
     )
-
-    @available(*, deprecated, message: "Use static properties directly, e.g. FlotillaColors.canvas")
-    public init(colorScheme: ColorScheme = .dark) {}
 }
 
 // MARK: - Glass Tint Tokens
@@ -552,63 +531,6 @@ public struct FlotillaLiquidSurface: ViewModifier {
         }
     }
 }
-
-// MARK: - View Extensions for Spacing
-public extension View {
-    func flotillaPadding(_ edges: Edge.Set = .all, _ length: CGFloat = FlotillaSpacing.medium) -> some View {
-        padding(edges, length)
-    }
-
-    func flotillaPaddingXSmall() -> some View { padding(FlotillaSpacing.xSmall) }
-    func flotillaPaddingSmall() -> some View { padding(FlotillaSpacing.small) }
-    func flotillaPaddingMedium() -> some View { padding(FlotillaSpacing.medium) }
-    func flotillaPaddingLarge() -> some View { padding(FlotillaSpacing.large) }
-    func flotillaPaddingXLarge() -> some View { padding(FlotillaSpacing.xLarge) }
-    func flotillaPaddingXXLarge() -> some View { padding(FlotillaSpacing.xxLarge) }
-
-    func flotillaPaddingHorizontal(_ length: CGFloat = FlotillaSpacing.medium) -> some View {
-        padding(.horizontal, length)
-    }
-
-    func flotillaPaddingVertical(_ length: CGFloat = FlotillaSpacing.medium) -> some View {
-        padding(.vertical, length)
-    }
-}
-
-// MARK: - View Extensions for Border
-public extension View {
-    func flotillaBorder(_ color: Color = FlotillaColors.separator, width: CGFloat = FlotillaBorderWidth.thin) -> some View {
-        overlay(
-            RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                .strokeBorder(color, lineWidth: width)
-        )
-    }
-
-    func flotillaBorderHairline(_ color: Color = FlotillaColors.separator) -> some View {
-        flotillaBorder(color, width: FlotillaBorderWidth.hairline)
-    }
-
-    func flotillaBorderThin(_ color: Color = FlotillaColors.separator) -> some View {
-        flotillaBorder(color, width: FlotillaBorderWidth.thin)
-    }
-
-    func flotillaBorderMedium(_ color: Color = FlotillaColors.separator) -> some View {
-        flotillaBorder(color, width: FlotillaBorderWidth.medium)
-    }
-}
-
-// MARK: - View Extensions for State Opacity
-public extension View {
-    func flotillaHoverOpacity() -> some View { opacity(FlotillaStateOpacity.hover) }
-    func flotillaPressOpacity() -> some View { opacity(FlotillaStateOpacity.press) }
-    func flotillaSelectedOpacity() -> some View { opacity(FlotillaStateOpacity.selected) }
-    func flotillaDisabledOpacity() -> some View { opacity(FlotillaStateOpacity.disabled) }
-    func flotillaFocusOpacity() -> some View { opacity(FlotillaStateOpacity.focus) }
-}
-
-// Types are directly available in the module — no re-exports needed.
-// Import DesignSystem to access: FlotillaTypography, FlotillaElevation, FlotillaMotion,
-// StatusBadge, StatusBadgeSize, FlotillaBanner, FlotillaBannerStyle
 
 // MARK: - AgentEffort Tint
 public extension AgentEffort {
