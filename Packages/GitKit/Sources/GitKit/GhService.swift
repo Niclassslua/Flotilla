@@ -81,7 +81,9 @@ public struct GhService: GhServiceProtocol {
     }
 
     public func openIssues(search: String, limit: Int, at repoPath: URL) async throws -> [GhIssue] {
-        var arguments = ["issue", "list", "--state", "open", "--limit", String(limit), "--json", "number,title,url,labels,updatedAt"]
+        // Bodies ride along: they cost no measurable time, and a picked issue
+        // then needs no second round trip.
+        var arguments = ["issue", "list", "--state", "open", "--limit", String(limit), "--json", "number,title,url,labels,updatedAt,body"]
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         if !query.isEmpty {
             arguments += ["--search", query]

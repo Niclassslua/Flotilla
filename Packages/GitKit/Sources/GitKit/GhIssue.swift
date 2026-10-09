@@ -6,25 +6,27 @@ public struct GhIssue: Identifiable, Equatable, Sendable {
     public var title: String
     public var url: URL
     public var labels: [String]
+    /// Label name → GitHub's hex colour (no `#`), for tinting tags.
+    public var labelColors: [String: String]
     public var updatedAt: Date?
-    /// Filled by `gh issue view` only; the list call leaves it empty so a
-    /// search over a large backlog stays a small payload.
+    /// Empty when the source left it out (as older list payloads did).
     public var body: String
 
     public var id: Int { number }
 
-    public init(number: Int, title: String, url: URL, labels: [String] = [], updatedAt: Date? = nil, body: String = "") {
+    public init(number: Int, title: String, url: URL, labels: [String] = [], labelColors: [String: String] = [:], updatedAt: Date? = nil, body: String = "") {
         self.number = number
         self.title = title
         self.url = url
         self.labels = labels
+        self.labelColors = labelColors
         self.updatedAt = updatedAt
         self.body = body
     }
 }
 
 extension GhJSON {
-    /// `gh issue list --json number,title,url,labels,updatedAt` (an array) or
+    /// `gh issue list --json number,title,url,labels,updatedAt,body` (an array) or
     /// `gh issue view --json number,title,url,labels,updatedAt,body` (one object).
     public static func issues(from data: Data) throws -> [GhIssue] {
         let decoder = JSONDecoder()
@@ -37,7 +39,7 @@ extension GhJSON {
     }
 
     private struct IssuePayload: Decodable {
-        struct Label: Decodable { let name: String }
+        struct Label: Decodable { let name: String; let color: String? }
         let number: Int
         let title: String
         let url: String
@@ -52,6 +54,7 @@ extension GhJSON {
                 title: title,
                 url: url,
                 labels: labels?.map(\.name) ?? [],
+                labelColors: Dictionary((labels ?? []).compactMap { label in label.color.map { (label.name, $0) } }, uniquingKeysWith: { first, _ in first }),
                 updatedAt: updatedAt,
                 body: body ?? ""
             )

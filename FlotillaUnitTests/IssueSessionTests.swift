@@ -13,13 +13,14 @@ final class GhIssueJSONTests: XCTestCase {
         let list = #"""
         [
           {"number": 12, "title": "Crash on launch", "url": "https://github.com/acme/app/issues/12",
-           "labels": [{"name": "bug"}, {"name": "p1"}], "updatedAt": "2026-10-01T10:00:00Z"},
+           "labels": [{"name": "bug", "color": "d73a4a"}, {"name": "p1"}], "updatedAt": "2026-10-01T10:00:00Z"},
           {"number": 9, "title": "Dark mode", "url": "https://github.com/acme/app/issues/9", "labels": []}
         ]
         """#
         let issues = try GhJSON.issues(from: Data(list.utf8))
         XCTAssertEqual(issues.map(\.number), [12, 9])
         XCTAssertEqual(issues.first?.labels, ["bug", "p1"])
+        XCTAssertEqual(issues.first?.labelColors, ["bug": "d73a4a"])
         XCTAssertNotNil(issues.first?.updatedAt)
         XCTAssertEqual(issues.first?.body, "", "the list omits bodies")
 
@@ -197,5 +198,23 @@ final class ProjectIssuesViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.errorMessage, "gh auth login required")
         XCTAssertTrue(viewModel.hasLoaded)
+    }
+}
+
+@MainActor
+final class IssueFeedTests: XCTestCase {
+    func testLoadsOnceAndSearchesLocally() async {
+        let gh = MockGhService()
+        gh.issuesToReturn = [
+            GhIssue(number: 12, title: "Crash on launch", url: URL(string: "https://x/12")!, labels: ["bug"]),
+            GhIssue(number: 120, title: "Dark mode", url: URL(string: "https://x/120")!, labels: ["ui"]),
+        ]
+        let feed = IssueFeed()
+        await feed.load(ghService: gh, repository: URL(fileURLWithPath: "/tmp/app"))
+
+        XCTAssertEqual(feed.issues(matching: "#12").map(\.number), [12, 120])
+        XCTAssertEqual(feed.issues(matching: "crash").map(\.number), [12])
+        XCTAssertEqual(feed.issues(matching: "UI").map(\.number), [120])
+        XCTAssertEqual(gh.issueSearches, [""], "searching locally asks GitHub nothing")
     }
 }

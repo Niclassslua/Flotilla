@@ -21,6 +21,7 @@ struct TilesDesign: View {
     @State private var coordinator = AntigravityModelEffortCoordinator()
     @State private var isWorkspacePickerPresented = false
     @State private var isIssuePickerPresented = false
+    @State private var issueFeed = IssueFeed()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -38,7 +39,16 @@ struct TilesDesign: View {
             }
 
             LauncherIssueControl(draft: draft, ghService: store.ghService, isPickerPresented: $isIssuePickerPresented)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, FlotillaSpacing.xLarge)
+                // Anchored to the full-width row: the picker opens beside the
+                // launcher instead of covering it, its arrow level with the button.
+                .popover(isPresented: $isIssuePickerPresented, arrowEdge: .leading) {
+                    IssuePickerView(feed: issueFeed) { issue in
+                        draft.apply(issue: issue)
+                        isIssuePickerPresented = false
+                    }
+                }
                 .padding(.bottom, FlotillaSpacing.large)
 
             HStack(alignment: .top, spacing: FlotillaSpacing.medium) {
@@ -66,6 +76,11 @@ struct TilesDesign: View {
         .launcherSurface()
         .background { LauncherHiddenShortcuts(actions: actions) }
         .task(id: draft.agent) { await coordinator.refresh(for: draft.agent) }
+        // Fetched up front, so the issue picker opens with its list ready.
+        .task(id: draft.issueRepository) {
+            guard let ghService = store.ghService, let repository = draft.issueRepository else { return }
+            await issueFeed.load(ghService: ghService, repository: repository)
+        }
         .task {
             if let initialIssueNumber, let ghService = store.ghService, let repository = draft.issueRepository {
                 if let issue = try? await ghService.issue(number: initialIssueNumber, at: repository) {
