@@ -61,7 +61,7 @@ private final class XirpTerminalContainerView: NSView {
     private var terminalConstraints: [NSLayoutConstraint] = []
     private var shouldFocusTerminal = false
     private var hasRequestedFocus = false
-    private var liquidGlassEnabled = true
+    private var liquidGlassEnabled = false
     /// A real AppKit visual-effect layer gives SwiftTerm's translucent cells
     /// something to composite with. A SwiftUI effect alone sits behind an
     /// opaque NSWindow unless the hosting window opts into alpha compositing.

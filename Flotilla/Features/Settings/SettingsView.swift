@@ -318,7 +318,7 @@ private struct AppearanceSettingsPane: View {
                 Toggle("Liquid Glass", isOn: $viewModel.settings.liquidGlassEnabled)
                     .toggleStyle(.switch)
                     .accessibilityIdentifier("Settings.LiquidGlassToggle")
-                Text("Use translucent workspace, navigation rail, and panel surfaces. Turn this off to restore the opaque appearance.")
+                Text("Experimental. Translucent workspace, navigation rail, and panel surfaces. The opaque appearance is the default.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

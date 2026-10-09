@@ -11,7 +11,8 @@ public typealias PlatformColor = UIColor
 public extension EnvironmentValues {
     /// Whether the workspace uses macOS 26's translucent Liquid Glass chrome.
     /// The app owns the persisted preference; the design system only consumes it.
-    @Entry var flotillaLiquidGlassEnabled = true
+    /// Defaults off — Liquid Glass is opt-in / experimental.
+    @Entry var flotillaLiquidGlassEnabled = false
 }
 
 // MARK: - Core Tokens

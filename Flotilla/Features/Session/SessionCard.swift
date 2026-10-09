@@ -11,7 +11,6 @@ enum SessionCardVariant {
 }
 
 struct SessionCard<Terminal: View>: View {
-    @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     let session: Session
     let variant: SessionCardVariant
     let diffStatStore: DiffStatStore?
@@ -76,22 +75,20 @@ struct SessionCard<Terminal: View>: View {
 
     // MARK: - Row Variant (Sidebar)
 
+    /// One navigator row layout for every appearance. Material (glass vs
+    /// opaque) stays on the surrounding chrome; the row content does not fork.
+    ///
+    /// Plain content, not a `Button`: inside a `List` on macOS, wrapping row
+    /// content in a `Button` wins the hit-test race and swallows the click
+    /// before AppKit's own table-view selection ever sees it — which also
+    /// swallows modifier keys, breaking ⌘/Shift-click multi-select. Letting
+    /// the table view own the click is what makes `List`'s native selection
+    /// (and its `Set`-based multi-select) work; `onTap` still fires from the
+    /// context menu's "Open Session" item. Deletion lives on the row's
+    /// `.swipeActions` (see the call site in `SessionSidebarRow`) and the
+    /// context menu, exactly like Mail and Reminders — the row itself carries
+    /// no inline delete control.
     private var rowView: some View {
-        Group {
-            if liquidGlassEnabled {
-                glassSidebarRow
-            } else {
-                opaqueSidebarRow
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .contextMenu { contextMenu }
-        .accessibilityElement(children: .contain)
-    }
-
-    /// Quiet provider metadata, a legible title, then location and state.
-    private var glassSidebarRow: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 ProviderLogo(agent: session.agent)
@@ -138,41 +135,10 @@ struct SessionCard<Terminal: View>: View {
             .font(.system(size: 10, weight: .medium))
         }
         .padding(.vertical, 6)
-    }
-
-    private var opaqueSidebarRow: some View {
-        // Plain content, not a `Button`: inside a `List` on macOS, wrapping
-        // row content in a `Button` wins the hit-test race and swallows the
-        // click before AppKit's own table-view selection ever sees it —
-        // which also swallows modifier keys, breaking ⌘/Shift-click
-        // multi-select. Letting the table view own the click is what makes
-        // `List`'s native selection (and its `Set`-based multi-select) work;
-        // `onTap` still fires from the context menu's "Open Session" item.
-        // Deletion lives on the row's `.swipeActions` (see the call site in
-        // `SessionSidebarRow`) and the context menu, exactly like Mail and
-        // Reminders — the row itself carries no inline delete control.
-        // Centred, not top-aligned: the logo reads as belonging to the pair
-        // of lines beside it rather than to the title alone.
-        HStack(alignment: .center, spacing: 10) {
-            providerTile
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(session.title)
-                        .font(.callout.weight(.medium))
-                        // Explicit, not inherited: inside a `.sidebar` `List`
-                        // the ambient style renders the title dimmer than the
-                        // status word under it, which inverts the row.
-                        .foregroundStyle(FlotillaColors.textPrimary)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(compactTimestamp(for: session.lastActiveAt))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.tertiary)
-                }
-                metadataLine
-            }
-        }
-        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .contextMenu { contextMenu }
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: - Tile Variant (Grid) — Dense status card + last output line
@@ -410,81 +376,8 @@ struct SessionCard<Terminal: View>: View {
 
     // MARK: - Shared Components
 
-    /// The agent's logo, with the status dot at its corner.
-    ///
-    /// The logo used to sit on a 28pt filled and stroked tile. That put a
-    /// second rounded rectangle inside the row's own rounded background on
-    /// every line of the navigator, and the logo is a distinct enough mark to
-    /// carry itself.
-    private var providerTile: some View {
-        ZStack(alignment: .bottomTrailing) {
-            ProviderLogo(agent: session.agent)
-                .frame(width: 22, height: 22)
-            // Straddling the logo's bottom-right corner. The beacon used to
-            // carry a 16pt frame around its 8pt dot, which pulled the dot
-            // that far back inside the logo instead of onto its corner.
-            statusBeacon
-                .offset(x: 3, y: 3)
-        }
-        .frame(width: 22, height: 22)
-        .accessibilityHidden(true)
-    }
-
-    /// One filled dot. It used to sit on a same-sized stroked circle, and the
-    /// knockout border below insets the fill just enough to leave that stroke
-    /// showing around it — so a single status read as two concentric rings.
-    /// The knockout stays: with the tile gone it is what separates the dot
-    /// from the logo it overlaps and from the row behind.
-    private var statusBeacon: some View {
-        Circle()
-            .fill(statusColor)
-            .frame(width: 8, height: 8)
-            .overlay(Circle().strokeBorder(FlotillaColors.sidebar, lineWidth: 1.5))
-    }
-
     private var statusColor: Color {
         StatusPresentation.color(for: session.status)
-    }
-
-    /// Status and churn, nothing else.
-    ///
-    /// The branch and the agent name used to sit here too. Both are redundant
-    /// in the navigator: the agent is already the provider tile beside the
-    /// title, and the branch repeats in the window subtitle the moment the
-    /// session is open, with the full worktree path on the row's tooltip. In a
-    /// column this narrow they cost the title its width and turned every row
-    /// into three competing strings.
-    private var metadataLine: some View {
-        HStack(spacing: 5) {
-            statusWord
-            Spacer(minLength: 2)
-            CIStatusGlyph(state: ciState, quiet: true)
-            if let diffStatStore {
-                SessionDiffStatView(session: session, diffStatStore: diffStatStore, style: .plain)
-            }
-        }
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-    }
-
-    private var statusWord: some View {
-        ZStack(alignment: .leading) {
-            ForEach(StatusPresentation.attentionOrder, id: \.self) { status in
-                Text(StatusPresentation.label(for: status)).hidden()
-            }
-            Text(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
-                .foregroundStyle(statusColor)
-        }
-        .font(.caption2.weight(.semibold))
-        .fixedSize()
-        .animation(.easeInOut(duration: 0.18), value: session.status)
-        .animation(.easeInOut(duration: 0.18), value: session.waitingReason)
-        // Collapsed into one element so the word reports the status as its
-        // label; the UI suite asserts on exactly this (same pattern as the
-        // grid tile status dot).
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
-        .accessibilityIdentifier("SessionRow-\(session.title)-Status")
     }
 
     private func compactTimestamp(for date: Date, relativeTo now: Date = Date()) -> String {

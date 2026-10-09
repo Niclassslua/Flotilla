@@ -696,7 +696,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var worktreeBaseDirectory: String
     public var appearance: AppearanceMode
     /// Uses macOS's translucent, refractive surfaces across the workspace.
-    /// Defaults on so existing installs adopt the new visual language.
+    /// Opt-in and experimental; the opaque surfaces remain the default.
     public var liquidGlassEnabled: Bool
     public var accentColor: String
     public var workspace: WorkspacePreferences
@@ -748,7 +748,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
         appearance: AppearanceMode = .system,
-        liquidGlassEnabled: Bool = true,
+        liquidGlassEnabled: Bool = false,
         accentColor: String = "original",
         workspace: WorkspacePreferences = WorkspacePreferences(),
         sessionDefaults: SessionDefaults = SessionDefaults(),
@@ -775,7 +775,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription: OpenCodeSubscription = .none,
         worktreeBaseDirectory: String = "",
         appearance: AppearanceMode = .system,
-        liquidGlassEnabled: Bool = true,
+        liquidGlassEnabled: Bool = false,
         accentColor: String = "original",
         workspace: WorkspacePreferences = WorkspacePreferences(),
         sessionDefaults: SessionDefaults = SessionDefaults(),
@@ -850,7 +850,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         openCodeSubscription = try container.decodeIfPresent(OpenCodeSubscription.self, forKey: .openCodeSubscription) ?? .none
         worktreeBaseDirectory = try container.decodeIfPresent(String.self, forKey: .worktreeBaseDirectory) ?? ""
         appearance = try container.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
-        liquidGlassEnabled = try container.decodeIfPresent(Bool.self, forKey: .liquidGlassEnabled) ?? true
+        liquidGlassEnabled = try container.decodeIfPresent(Bool.self, forKey: .liquidGlassEnabled) ?? false
         accentColor = try container.decodeIfPresent(String.self, forKey: .accentColor) ?? "original"
         workspace = try container.decodeIfPresent(WorkspacePreferences.self, forKey: .workspace) ?? WorkspacePreferences()
         sessionDefaults = try container.decodeIfPresent(SessionDefaults.self, forKey: .sessionDefaults) ?? SessionDefaults()
