@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import SessionKit
 import DesignSystem
 import TerminalKit
@@ -546,7 +547,17 @@ struct DetailColumn: View {
                 isDismissed: $startupCheck.isDismissed
             )
             if let warning = store.lastOperationError {
-                OperationErrorBanner(message: warning) {
+                OperationErrorBanner(
+                    message: warning,
+                    actionTitle: warning.contains("Files & Folders") ? "Open Settings" : nil,
+                    action: warning.contains("Files & Folders")
+                        ? {
+                            if let url = ProtectedFolderAccess.Denied.settingsURL {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        : nil
+                ) {
                     store.lastOperationError = nil
                 }
             }
@@ -831,20 +842,17 @@ private struct ShortcutHintRow: View {
 
 struct OperationErrorBanner: View {
     let message: String
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
     let dismiss: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "xmark.octagon.fill")
-                .foregroundStyle(.red)
-            Text(message)
-                .font(.callout)
-                .lineLimit(2)
-            Spacer()
-            Button("Dismiss", action: dismiss)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.red.opacity(0.09))
+        FlotillaBanner(
+            message,
+            style: .error,
+            actionTitle: actionTitle,
+            action: action,
+            dismissAction: dismiss
+        )
     }
 }

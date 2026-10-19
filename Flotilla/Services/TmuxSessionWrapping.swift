@@ -2,10 +2,12 @@ import Foundation
 import ProcessKit
 
 /// Wraps an agent launch in `tmux new-session -A`, which creates the named
-/// session if it doesn't exist or attaches to it if it already does. Because
-/// tmux runs as a server independent of Flotilla, a session launched this way
-/// survives Flotilla quitting and relaunching — the exact same command line
-/// serves both the fresh-launch and reattach-after-relaunch cases.
+/// session if it doesn't exist or attaches to it if it already does.
+///
+/// The tmux *server* is started by `TmuxServerSupervisor` as a non-daemon
+/// child of Flotilla (`tmux -D`) so macOS can attribute TCC folder prompts to
+/// the app. That server ends when Flotilla quits; `AppStore.restoreSessions()`
+/// starts agents again on relaunch. Client commands here only attach.
 enum TmuxSessionWrapping {
     /// Flotilla never talks to the machine's shared default tmux server
     /// (`$TMUX_TMPDIR/default`): that server can be poisoned by stale clients
@@ -68,16 +70,10 @@ enum TmuxSessionWrapping {
     static let deadPaneBanner =
         "[Agent exited with #{?pane_dead_signal,signal #{pane_dead_signal},status #{pane_dead_status}}]"
 
-    /// `set-option -g` needs a server that is already running, and on a cold
-    /// socket there is no way to pre-start one to receive the options: a tmux
-    /// server with no sessions exits immediately, taking them with it. The
-    /// options therefore have to reach the very invocation that creates the
-    /// first session, which is what `-f` does — tmux reads the file when it
-    /// starts the server. Without this, the first session after a reboot (or
-    /// after `kill-server`) launched with the green status bar still visible.
-    ///
-    /// `-f` is ignored when the server is already up; the `set-option -g`
-    /// calls in `SessionProcessManager.start()` cover that case.
+    /// Server options ride on the `tmux -D -f` start in `TmuxServerSupervisor`.
+    /// `-f` on later clients is ignored when the server is already up; the
+    /// `set-option -g` calls in `SessionProcessManager.start()` cover that
+    /// case (and any orphaned server we reused without our `-f`).
     static func configurationFileContents() -> String {
         globalOptions
             .map { option in

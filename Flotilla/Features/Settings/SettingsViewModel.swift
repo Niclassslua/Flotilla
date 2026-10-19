@@ -56,4 +56,9 @@ final class SettingsViewModel {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else { return }
         openURL(url)
     }
+
+    func openFilesAndFoldersSettings() {
+        guard let url = ProtectedFolderAccess.Denied.settingsURL else { return }
+        openURL(url)
+    }
 }

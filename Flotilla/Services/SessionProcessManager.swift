@@ -38,6 +38,7 @@ final class SessionProcessManager {
     private let resizeVerification: ResizeVerificationPolicy
     private var tmuxProbeCache: (usable: Bool, probedAt: Date)?
     private static let tmuxProbeCacheLifetime: TimeInterval = 5
+    private let tmuxSupervisor: TmuxServerSupervisor
     var eventHandler: ((SessionProcessEvent) -> Void)?
     /// Extends a launching agent's environment so its git records commit
     /// attribution. Set by `AppStore`, which owns the attribution service;
@@ -48,11 +49,15 @@ final class SessionProcessManager {
     /// tests and UI testing, where launch arguments are asserted verbatim.
     var preparesCompanionRuntimes = false
 
+    /// Non-nil when an older daemonized tmux server was reused (TCC attribution
+    /// still broken until the user kills that server and relaunches).
+    var tmuxServerOrphanWarning: String? { tmuxSupervisor.orphanWarning }
+
     enum SessionProcessEvent: Equatable {
         case terminated(sessionID: UUID, exitCode: Int32)
         /// The tmux server did not answer clients, so the session was
-        /// launched directly in the PTY instead — losing quit/relaunch
-        /// persistence for that session, but keeping it usable at all.
+        /// launched directly in the PTY instead. Prefer fixing tmux; direct
+        /// launch keeps the session usable.
         case launchedWithoutTmux(sessionID: UUID)
     }
 
@@ -60,6 +65,7 @@ final class SessionProcessManager {
         case executableNotFound(agent: AgentKind, binary: String, configuredPath: String)
         case conversationAlreadyActive(agent: AgentKind, conversationID: String)
         case failedToStart(agent: AgentKind, message: String)
+        case folderAccessDenied(folderName: String)
 
         var errorDescription: String? {
             switch self {
@@ -72,6 +78,8 @@ final class SessionProcessManager {
                 return "\(agent.displayName) conversation is already open in another CLI. Close that CLI, then reopen this Flotilla session; use Restart Session only to begin a fresh conversation."
             case let .failedToStart(agent, message):
                 return "\(agent.displayName) could not start: \(message)"
+            case let .folderAccessDenied(folderName):
+                return ProtectedFolderAccess.Denied(folderName: folderName).errorDescription
             }
         }
     }
@@ -93,7 +101,8 @@ final class SessionProcessManager {
             try AntigravityWorkspaceTrust.ensureTrusted(workspace: $0)
         },
         gitService: any GitServiceProtocol = GitService(),
-        resizeVerification: ResizeVerificationPolicy = .default
+        resizeVerification: ResizeVerificationPolicy = .default,
+        tmuxSupervisor: TmuxServerSupervisor = TmuxServerSupervisor()
     ) {
         self.locator = locator
         self.gitService = gitService
@@ -110,6 +119,7 @@ final class SessionProcessManager {
         self.hookSupportDirectory = hookSupportDirectory
         self.antigravityWorkspaceTruster = antigravityWorkspaceTruster
         self.resizeVerification = resizeVerification
+        self.tmuxSupervisor = tmuxSupervisor
     }
 
     /// How patiently a resize is verified against tmux before the client is
@@ -177,6 +187,12 @@ final class SessionProcessManager {
         }
 
         intentionallyTerminating.remove(session.id)
+
+        do {
+            try ProtectedFolderAccess.requireReadable(session.workingDirectory)
+        } catch let denied as ProtectedFolderAccess.Denied {
+            throw LaunchError.folderAccessDenied(folderName: denied.folderName)
+        }
 
         let descriptor = AgentCatalog.descriptor(for: session.agent)
         let resumeIntent: ResumeIntent
@@ -372,10 +388,10 @@ final class SessionProcessManager {
         }
 
         // When wrapped in tmux, the pane's working directory is specified via `-c`
-        // in `launch.arguments`. The outer tmux client PTY process itself is started
-        // in `/` so that if this invocation starts the server daemon, the daemon's
-        // own working directory is root (which is never deleted) rather than a
-        // temporary or deletable worktree.
+        // in `launch.arguments`. The outer tmux client PTY runs from `/` — the
+        // server itself is already started under Flotilla as a non-daemon child
+        // (`TmuxServerSupervisor`), so this no longer forks a launchd-orphaned
+        // daemon whose cwd could pin to a deleted worktree.
         let ptyWorkingDirectory = tmuxExecutable == nil ? session.workingDirectory : URL(fileURLWithPath: "/")
         do {
             try process.start(
@@ -602,10 +618,9 @@ final class SessionProcessManager {
     }
 
     /// Returns the tmux executable to wrap launches with, or `nil` when the
-    /// server is provably not answering clients. A wedged server (accepts
-    /// the connection, then drops it — "server exited unexpectedly") makes
-    /// every `new-session -A` exit 1 instantly, which surfaced as sessions
-    /// that crash on launch and can never be restarted. The verdict is
+    /// server is provably not answering clients. Starts Flotilla's non-daemon
+    /// tmux server first so TCC can attribute folder access to the app. A
+    /// wedged server still falls back to a direct PTY launch. The verdict is
     /// cached briefly so restoring several sessions at launch costs one
     /// probe, not one subprocess per session.
     private func usableTmuxExecutable(for sessionID: UUID) -> URL? {
@@ -614,12 +629,39 @@ final class SessionProcessManager {
            Date().timeIntervalSince(cache.probedAt) < Self.tmuxProbeCacheLifetime {
             return cache.usable ? executable : nil
         }
+        // Probe before starting: a wedged server (or a test double that
+        // reports unusable) must not spawn a fresh `-D` child.
         let usable = tmuxServerProbe.serverIsUsable(tmuxExecutable: executable)
-        tmuxProbeCache = (usable, Date())
-        if !usable {
+        guard usable else {
+            tmuxProbeCache = (false, Date())
             eventHandler?(.launchedWithoutTmux(sessionID: sessionID))
+            return nil
         }
-        return usable ? executable : nil
+        switch tmuxSupervisor.ensureRunning(tmuxExecutable: executable) {
+        case .unavailable:
+            tmuxProbeCache = (false, Date())
+            eventHandler?(.launchedWithoutTmux(sessionID: sessionID))
+            return nil
+        case .runningUnderFlotilla, .reusingOrphanedServer:
+            tmuxProbeCache = (true, Date())
+            return executable
+        }
+    }
+
+    /// Starts (or detects) the Flotilla tmux server before session restore so
+    /// an orphaned-daemon warning can surface even when no session starts.
+    func prepareTmuxServer() {
+        guard let executable = locator.locate("tmux") else { return }
+        _ = tmuxSupervisor.ensureRunning(tmuxExecutable: executable)
+    }
+
+    /// Stops the non-daemon tmux server Flotilla owns. Call on app quit so
+    /// the server is not reparented to launchd (which would break TCC again).
+    /// `restoreSessions()` recreates agent panes on the next launch.
+    func shutdownTmuxServer() {
+        tmuxSupervisor.shutdown()
+        tmuxProbeCache = nil
+        hasConfiguredGlobalOptions = false
     }
 
     /// Kills the underlying tmux session too, not just the outer attached
@@ -627,8 +669,8 @@ final class SessionProcessManager {
     /// and leave the tmux session (and the agent inside it) running forever.
     /// Caller-initiated terminations are exactly the cases that must not
     /// survive: restart (a fresh agent is wanted) and delete (full cleanup).
-    /// App quit never calls this, so tmux-backed sessions still survive a
-    /// relaunch by design.
+    /// App quit stops the whole tmux server via `shutdownTmuxServer()`; on
+    /// relaunch, `restoreSessions()` starts agents again.
     func terminate(sessionID: UUID) {
         stopClient(sessionID: sessionID)
         // The tmux session outlives its client, and its agent keeps running

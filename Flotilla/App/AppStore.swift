@@ -195,6 +195,10 @@ final class AppStore {
 
     /// Launch-time recovery only. Refreshing saved data never starts processes.
     private func restoreSessions() {
+        processManager.prepareTmuxServer()
+        if let orphanWarning = processManager.tmuxServerOrphanWarning {
+            lastOperationError = orphanWarning
+        }
         processManager.reapOrphanTmuxSessions(knownSessionIDs: Set(sessions.map(\.id)))
 
         // One-time migration: sessions created before the fix above have the
@@ -922,6 +926,9 @@ final class AppStore {
         metadataMonitor.cancelAll()
         ciStatusStore.stop()
         flushLiveScrollback()
+        // End our non-daemon tmux server so it is not reparented to launchd
+        // (which would break TCC attribution on the next launch).
+        processManager.shutdownTmuxServer()
     }
 
     func flushLiveScrollback() {
@@ -1362,6 +1369,9 @@ final class AppStore {
             var worktreeInfo: WorktreeInfo?
 
             if let projectFolder {
+                // Trigger TCC from Flotilla before git/tmux children touch the tree.
+                try ProtectedFolderAccess.requireReadable(projectFolder)
+
                 let project = projects.first { $0.rootPath == projectFolder }
                     ?? Project(name: projectFolder.lastPathComponent, rootPath: projectFolder)
                 if !projects.contains(where: { $0.id == project.id }) {
@@ -1385,6 +1395,7 @@ final class AppStore {
                     case .useExistingCheckout(let path):
                         workingDirectory = path
                     case .createWorktree(let basePath, let branch, let destination):
+                        try ProtectedFolderAccess.requireReadable(basePath)
                         if fetchBeforeCreatingWorktree {
                             // Best-effort: an offline machine or a repo with no
                             // remote must not block worktree creation over a
@@ -1555,7 +1566,7 @@ final class AppStore {
                 onSessionFinished?(session)
             }
         case .launchedWithoutTmux:
-            lastOperationError = "tmux is running but not answering clients, so the session was started without it. It will work normally, but will not survive quitting Flotilla."
+            lastOperationError = "tmux is not answering clients, so the session was started without it."
         }
     }
 }

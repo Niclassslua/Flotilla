@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import SessionKit
 import AgentKit
 import DesignSystem
@@ -533,7 +534,20 @@ struct LauncherErrorBanner: View {
 
     var body: some View {
         if let error = store.lastCreationError {
-            FlotillaBanner.error(error) { store.lastCreationError = nil }
+            let isFolderAccess = error.contains("Files & Folders")
+            FlotillaBanner(
+                error,
+                style: .error,
+                actionTitle: isFolderAccess ? "Open Settings" : nil,
+                action: isFolderAccess
+                    ? {
+                        if let url = ProtectedFolderAccess.Denied.settingsURL {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    : nil,
+                dismissAction: { store.lastCreationError = nil }
+            )
         }
     }
 }

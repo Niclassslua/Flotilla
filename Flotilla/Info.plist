@@ -20,5 +20,11 @@
 	<string>1</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Flotilla allows coding agents to inspect screen and window previews.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Flotilla runs coding agents in your project folders, including projects you keep in Documents.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Flotilla runs coding agents in your project folders, including projects you keep on the Desktop.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Flotilla runs coding agents in your project folders, including projects you keep in Downloads.</string>
 </dict>
 </plist>
