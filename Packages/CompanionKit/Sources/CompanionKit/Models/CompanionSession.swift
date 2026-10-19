@@ -97,15 +97,22 @@ public struct DiffStat: Hashable, Codable, Sendable {
     }
 }
 
-/// A project as the create-session picker needs it. The Mac's `Project` also
-/// carries a filesystem path, which means nothing on the phone.
+/// A project as the create-session picker and fleet headers need it. The Mac's
+/// `Project` also carries a filesystem path, which means nothing on the phone.
+///
+/// `icon` and `accentColor` are optional so phones talking to older Macs (and
+/// Macs talking to older phones) degrade to a letter tile.
 public struct ProjectSummary: Identifiable, Hashable, Codable, Sendable {
     public let id: UUID
     public var name: String
+    public var icon: ProjectIcon?
+    public var accentColor: String?
 
-    public init(id: UUID, name: String) {
+    public init(id: UUID, name: String, icon: ProjectIcon? = nil, accentColor: String? = nil) {
         self.id = id
         self.name = name
+        self.icon = icon
+        self.accentColor = accentColor
     }
 }
 

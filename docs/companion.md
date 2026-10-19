@@ -289,8 +289,9 @@ Decisions made without asking, recorded so they can be revisited.
     transcript contains them.
 12. **Creating a session from the phone** uses the Mac's current defaults for
     everything the phone doesn't send (title generation, worktree naming).
-    The phone's project list is the Mac's known projects; General sessions use
-    the Mac's general directory.
+    The phone's project list is the Mac's known projects (id, name, icon, and
+    accent for fleet headers and the picker; custom icons are downscaled for
+    the wire). General sessions use the Mac's general directory.
 13. **Crash reasons** are not recorded by Flotilla today; the phone shows
     "The agent process exited unexpectedly".
 14. **Model catalogs** sent to the phone are AgentKit's static fallback lists,

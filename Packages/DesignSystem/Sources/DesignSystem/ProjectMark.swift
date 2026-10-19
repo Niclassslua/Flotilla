@@ -1,21 +1,24 @@
 import SwiftUI
 import SessionKit
-import DesignSystem
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
-/// A project identity mark used in sidebars: a tinted rounded tile bearing
-/// the project's initial (or a symbol for built-in groups like General).
-/// The tint is derived deterministically from the project name so a project
-/// keeps its color across launches without persisting anything.
-struct ProjectMark: View {
-    let title: String
-    let tint: Color
-    var icon: ProjectIcon? = nil
-    var systemImage: String? = nil
+/// A project identity mark: a tinted rounded tile bearing the project's
+/// custom icon, emoji, symbol, or initial. The tint comes from a persisted
+/// accent when set, otherwise a deterministic hash of the project name.
+public struct ProjectMark: View {
+    public let title: String
+    public let tint: Color
+    public var icon: ProjectIcon? = nil
+    public var systemImage: String? = nil
     /// Defaults to the sidebar size; commit history uses a larger mark in the
     /// detail pane, where the author is the subject rather than a list hint.
-    var size: CGFloat = 17
+    public var size: CGFloat = 17
 
-    init(project: Project, size: CGFloat = 17) {
+    public init(project: Project, size: CGFloat = 17) {
         self.title = project.name
         self.tint = Self.tint(for: project)
         self.icon = project.icon
@@ -23,9 +26,31 @@ struct ProjectMark: View {
         self.size = size
     }
 
-    init(title: String, tint: Color, icon: ProjectIcon? = nil, systemImage: String? = nil, size: CGFloat = 17) {
+    public init(
+        title: String,
+        tint: Color,
+        icon: ProjectIcon? = nil,
+        systemImage: String? = nil,
+        size: CGFloat = 17
+    ) {
         self.title = title
         self.tint = tint
+        self.icon = icon
+        self.systemImage = systemImage
+        self.size = size
+    }
+
+    /// Convenience for companion `ProjectSummary` and other wire shapes that
+    /// carry name / icon / accent without a filesystem path.
+    public init(
+        title: String,
+        icon: ProjectIcon? = nil,
+        accentColor: String? = nil,
+        systemImage: String? = nil,
+        size: CGFloat = 17
+    ) {
+        self.title = title
+        self.tint = Self.tint(accentColor: accentColor, name: title)
         self.icon = icon
         self.systemImage = systemImage
         self.size = size
@@ -34,10 +59,10 @@ struct ProjectMark: View {
     private var cornerRadius: CGFloat { size * 5 / 17 }
     private var glyphSize: CGFloat { size * 9 / 17 }
 
-    var body: some View {
+    public var body: some View {
         Group {
-            if let icon, case .custom(let data) = icon, let nsImage = NSImage(data: data) {
-                Image(nsImage: nsImage)
+            if let icon, case .custom(let data) = icon, let platformImage = Self.platformImage(from: data) {
+                platformImage
                     .resizable()
                     .scaledToFill()
                     .frame(width: size, height: size)
@@ -96,7 +121,7 @@ struct ProjectMark: View {
 
     /// Hues harmonized with FlotillaPalette — muted enough to sit in a dark
     /// sidebar without turning section headers into a rainbow.
-    static let tints: [Color] = [
+    public static let tints: [Color] = [
         FlotillaColors.statusWorking,
         FlotillaColors.statusReady,
         FlotillaColors.accent,
@@ -105,12 +130,16 @@ struct ProjectMark: View {
         Color(red: 0.62, green: 0.78, blue: 0.66),
     ]
 
-    static func tint(for project: Project) -> Color {
-        if let custom = project.accentColor, !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+    public static func tint(for project: Project) -> Color {
+        tint(accentColor: project.accentColor, name: project.name)
+    }
+
+    public static func tint(accentColor: String?, name: String) -> Color {
+        if let custom = accentColor, !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let normalized = custom.hasPrefix("#") ? custom : "#\(custom)"
             return FlotillaAccent.makeColor(for: normalized)
         }
-        return tint(forKey: project.name)
+        return tint(forKey: name)
     }
 
     /// Any stable string works as the key — a project name, a commit author's
@@ -118,8 +147,20 @@ struct ProjectMark: View {
     ///
     /// Stable polynomial hash: `Hasher` is launch-seeded and would reshuffle
     /// the colors on every start.
-    static func tint(forKey key: String) -> Color {
+    public static func tint(forKey key: String) -> Color {
         let hash = key.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }
         return tints[Int(hash.magnitude % UInt(tints.count))]
+    }
+
+    private static func platformImage(from data: Data) -> Image? {
+        #if os(iOS)
+        guard let uiImage = UIImage(data: data) else { return nil }
+        return Image(uiImage: uiImage)
+        #elseif os(macOS)
+        guard let nsImage = NSImage(data: data) else { return nil }
+        return Image(nsImage: nsImage)
+        #else
+        return nil
+        #endif
     }
 }

@@ -41,7 +41,7 @@ struct FleetView: View {
                         ForEach(group.sessions) { row(for: $0, isActionable: isActionable) }
                     }
                 } header: {
-                    projectHeader(group.name, isCollapsed: isCollapsed)
+                    projectHeader(group.name, project: group.project, isCollapsed: isCollapsed)
                 }
             }
         }
@@ -93,24 +93,38 @@ struct FleetView: View {
     private func logRender(
         sessions: [CompanionSession],
         needsYou: [CompanionSession],
-        groups: [(name: String, sessions: [CompanionSession])]
+        groups: [(name: String, project: ProjectSummary?, sessions: [CompanionSession])]
     ) {
         let collapsedVisibleGroups = groups.filter { collapsedProjects.contains($0.name) }.map(\.name)
         Self.syncLog.debug("render fleet mac=\(macID, privacy: .public) sessions=\(sessions.count) needsYou=\(needsYou.count) groups=\(groups.count) collapsed=\(collapsedVisibleGroups, privacy: .public)")
     }
 
-    private func projectHeader(_ name: String, isCollapsed: Bool) -> some View {
+    private func projectHeader(_ name: String, project: ProjectSummary?, isCollapsed: Bool) -> some View {
         Button {
             withAnimation(.snappy) {
                 if isCollapsed { collapsedProjects.remove(name) } else { collapsedProjects.insert(name) }
             }
             store.setCollapsedProjects(collapsedProjects, on: macID)
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
                     .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .frame(width: 10)
+                if let project {
+                    ProjectMark(
+                        title: project.name,
+                        icon: project.icon,
+                        accentColor: project.accentColor,
+                        size: 20
+                    )
+                } else {
+                    ProjectMark(title: name, systemImage: "tray.full", size: 20)
+                }
                 Text(name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(FlotillaColors.textPrimary)
             }
         }
         .buttonStyle(.plain)
@@ -119,7 +133,10 @@ struct FleetView: View {
         .modifier(HapticsOnChange(value: isCollapsed, feedback: .impact(weight: .light)))
     }
 
-    private func setAllCollapsed(_ collapsed: Bool, groups: [(name: String, sessions: [CompanionSession])]) {
+    private func setAllCollapsed(
+        _ collapsed: Bool,
+        groups: [(name: String, project: ProjectSummary?, sessions: [CompanionSession])]
+    ) {
         withAnimation(.snappy) {
             collapsedProjects = collapsed ? Set(groups.map(\.name)) : []
         }
@@ -161,10 +178,21 @@ struct FleetView: View {
         return first
     }
 
-    private func projectGroups(_ sessions: [CompanionSession]) -> [(name: String, sessions: [CompanionSession])] {
+    private func projectGroups(
+        _ sessions: [CompanionSession]
+    ) -> [(name: String, project: ProjectSummary?, sessions: [CompanionSession])] {
+        let projects = store.projects(on: macID)
+        let byID = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0) })
         let grouped = Dictionary(grouping: sessions) { store.projectName($0.projectID, on: macID) }
         return grouped
-            .map { (name: $0.key, sessions: $0.value.sorted { $0.updatedAt > $1.updatedAt }) }
+            .map { name, sessions in
+                let project = sessions.lazy.compactMap(\.projectID).compactMap { byID[$0] }.first
+                return (
+                    name: name,
+                    project: project,
+                    sessions: sessions.sorted { $0.updatedAt > $1.updatedAt }
+                )
+            }
             // General last; projects alphabetically.
             .sorted { lhs, rhs in
                 if lhs.name == "General" { return false }

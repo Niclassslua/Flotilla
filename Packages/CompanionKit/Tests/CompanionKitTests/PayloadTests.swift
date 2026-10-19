@@ -90,6 +90,58 @@ final class MessageCodingTests: XCTestCase {
         XCTAssertNil(decoded.accentColor)
     }
 
+    func testProjectSummaryIconAndAccentRoundTrip() throws {
+        let projectID = UUID()
+        let summary = ProjectSummary(
+            id: projectID,
+            name: "Flotilla",
+            icon: .symbol(name: "sailboat.fill"),
+            accentColor: "#F97316"
+        )
+        let snapshot = FleetSnapshot(
+            macID: "m",
+            macName: "Studio",
+            sessions: [],
+            projects: [summary],
+            catalog: .fallback
+        )
+        let decoded = try CompanionJSON.decode(FleetSnapshot.self, from: CompanionJSON.encode(snapshot))
+        XCTAssertEqual(decoded.projects, [summary])
+        XCTAssertEqual(decoded.projects.first?.icon, .symbol(name: "sailboat.fill"))
+        XCTAssertEqual(decoded.projects.first?.accentColor, "#F97316")
+    }
+
+    func testProjectSummaryFromMacWithoutIconDecodes() throws {
+        let projectID = UUID()
+        let json = Data("""
+        {"id":"\(projectID.uuidString)","name":"Harbor"}
+        """.utf8)
+        let decoded = try CompanionJSON.decode(ProjectSummary.self, from: json)
+        XCTAssertEqual(decoded.id, projectID)
+        XCTAssertEqual(decoded.name, "Harbor")
+        XCTAssertNil(decoded.icon)
+        XCTAssertNil(decoded.accentColor)
+    }
+
+    func testFleetDeltaCarriesProjectIdentityChanges() throws {
+        let projectID = UUID()
+        let old = FleetSnapshot(
+            macID: "m",
+            macName: "Studio",
+            sessions: [],
+            projects: [ProjectSummary(id: projectID, name: "Flotilla")],
+            catalog: .fallback
+        )
+        var updated = old
+        updated.projects = [
+            ProjectSummary(id: projectID, name: "Flotilla", icon: .emoji("⛵"), accentColor: "#0EA5E9")
+        ]
+        let delta = FleetDelta.make(from: old, to: updated, baseRevision: 0)
+        XCTAssertEqual(delta.projects, updated.projects)
+        XCTAssertEqual(delta.applying(to: old, revision: 0), updated)
+        XCTAssertNil(FleetDelta.make(from: old, to: old, baseRevision: 0).projects)
+    }
+
     func testEveryRequestShapeRoundTrips() throws {
         let id = UUID()
         let requests: [CompanionRequest] = [

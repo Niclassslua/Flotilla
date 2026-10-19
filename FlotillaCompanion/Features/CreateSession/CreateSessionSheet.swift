@@ -47,9 +47,24 @@ struct CreateSessionSheet: View {
 
                 Section("Workspace") {
                     Picker("Project", selection: $projectID) {
-                        Text("General").tag(UUID?.none)
+                        Label {
+                            Text("General")
+                        } icon: {
+                            ProjectMark(title: "General", systemImage: "tray.full", size: 20)
+                        }
+                        .tag(UUID?.none)
                         ForEach(store.projects(on: macID)) { project in
-                            Text(project.name).tag(Optional(project.id))
+                            Label {
+                                Text(project.name)
+                            } icon: {
+                                ProjectMark(
+                                    title: project.name,
+                                    icon: project.icon,
+                                    accentColor: project.accentColor,
+                                    size: 20
+                                )
+                            }
+                            .tag(Optional(project.id))
                         }
                     }
                     if projectID != nil {

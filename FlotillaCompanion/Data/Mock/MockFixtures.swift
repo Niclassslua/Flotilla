@@ -49,10 +49,27 @@ struct MockFixtures {
             sessionsByMac: [:],
             projectsByMac: [
                 MacID.studio: [
-                    ProjectSummary(id: ProjectID.flotilla, name: "Flotilla"),
-                    ProjectSummary(id: ProjectID.harbor, name: "Harbor API"),
+                    ProjectSummary(
+                        id: ProjectID.flotilla,
+                        name: "Flotilla",
+                        icon: .symbol(name: "sailboat.fill"),
+                        accentColor: "#F97316"
+                    ),
+                    ProjectSummary(
+                        id: ProjectID.harbor,
+                        name: "Harbor API",
+                        icon: .emoji("⚓"),
+                        accentColor: "#0EA5E9"
+                    ),
                 ],
-                MacID.macBook: [ProjectSummary(id: ProjectID.flotilla, name: "Flotilla")],
+                MacID.macBook: [
+                    ProjectSummary(
+                        id: ProjectID.flotilla,
+                        name: "Flotilla",
+                        icon: .symbol(name: "sailboat.fill"),
+                        accentColor: "#F97316"
+                    ),
+                ],
             ]
         )
         fixtures.files = sampleFiles

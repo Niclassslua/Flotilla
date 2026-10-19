@@ -189,6 +189,30 @@ final class CompanionSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(CompanionSnapshotBuilder.snapshot(macID: "m", macName: "S", sessions: [crashed], projects: [], context: { _ in self.context() }).pending.isEmpty)
     }
 
+    func testProjectSummaryCarriesIconAndAccent() {
+        let root = URL(fileURLWithPath: "/tmp/flotilla")
+        let project = Project(
+            name: "Flotilla",
+            rootPath: root,
+            icon: .symbol(name: "sailboat.fill"),
+            accentColor: "#F97316"
+        )
+        let summary = CompanionSnapshotBuilder.projectSummary(from: project)
+        XCTAssertEqual(summary.id, project.id)
+        XCTAssertEqual(summary.name, "Flotilla")
+        XCTAssertEqual(summary.icon, .symbol(name: "sailboat.fill"))
+        XCTAssertEqual(summary.accentColor, "#F97316")
+
+        let snapshot = CompanionSnapshotBuilder.snapshot(
+            macID: "m",
+            macName: "Studio",
+            sessions: [],
+            projects: [project],
+            context: { _ in self.context() }
+        )
+        XCTAssertEqual(snapshot.projects, [summary])
+    }
+
     func testCatalogOffersEveryAgent() {
         let catalog = CompanionSnapshotBuilder.catalog()
         for agent in AgentKind.allCases {

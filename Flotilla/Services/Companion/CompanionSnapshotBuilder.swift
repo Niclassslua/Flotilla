@@ -1,4 +1,6 @@
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 import SessionKit
 import GitKit
 import AgentKit
@@ -57,11 +59,53 @@ enum CompanionSnapshotBuilder {
             sessions: companionSessions,
             projects: projects
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-                .map { ProjectSummary(id: $0.id, name: $0.name) },
+                .map(projectSummary(from:)),
             catalog: catalog ?? self.catalog(),
             pending: pending,
             accentColor: accentColor
         )
+    }
+
+    /// Wire-sized project identity. Custom icons are downscaled so a fleet
+    /// snapshot with many projects stays well under the frame budget.
+    static func projectSummary(from project: Project) -> ProjectSummary {
+        ProjectSummary(
+            id: project.id,
+            name: project.name,
+            icon: wireIcon(project.icon),
+            accentColor: project.accentColor
+        )
+    }
+
+    /// Phone marks are ~20pt; 96px covers @3x without shipping the Mac's 512px crop.
+    private static let wireCustomIconMaxPixelSize = 96
+
+    private static func wireIcon(_ icon: ProjectIcon?) -> ProjectIcon? {
+        guard let icon else { return nil }
+        guard case .custom(let data) = icon else { return icon }
+        return .custom(data: downsampleCustomIcon(data) ?? data)
+    }
+
+    private static func downsampleCustomIcon(_ data: Data) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: wireCustomIconMaxPixelSize,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else { return nil }
+        CGImageDestinationAddImage(destination, thumbnail, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
 
     static func companionSession(_ session: Session, context: SessionContext, cards: [PendingInteraction]) -> CompanionSession {
