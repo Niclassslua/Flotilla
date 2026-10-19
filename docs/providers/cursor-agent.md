@@ -111,6 +111,7 @@ again to exit"), then clears the restored prompt with `Ctrl-U` + `Backspace`,
 | Chat state | `~/.cursor/chats/<md5(realpath(cwd))>/<chat id>/meta.json` (`title`, `cwd`, `createdAtMs`, `updatedAtMs`) + `store.db` (opaque, encrypted blob DAG) | **Verified** |
 | Display transcript | `~/.cursor/projects/<slug>/agent-transcripts/<id>/<id>.jsonl`; slug = path with `/` → `-` (sometimes with a `private-` prefix); falls back to scanning all projects | **Verified** |
 | Transcript semantics | A user record is written when its turn starts; assistant text only after that step's tool calls. A trailing `turn_ended` record is **removed** (the file is rewritten) when the next turn starts. Steered follow-ups are sometimes never written | **Verified** (probe) |
+| Screenshots | No inline image bytes. A capture appears as a `tool_use` `Read` of an image path and/or a markdown `![](/abs/path.png)` in the assistant text. `CursorTranscriptCodec` loads those files (downsampled) into `.image` entries for the screenshot panel and companion chat | **Verified** (expand-meeting-view transcript) |
 | Plans | `~/.cursor/plans/<name>.plan.md` | **Verified** |
 | Allowlist | `Tab` adds `Shell(<cmd>)` to the **global** `~/.cursor/cli-config.json` | **Verified** |
 | Handoff | Source: reads the JSONL. Destination: writes JSONL + meta, then seeds `store.db` with `agent --print --resume`. The preamble is inline on argv when small; past ~128 KB UTF-8 it is written to a temp file and argv only points at that path (avoids `E2BIG`) | `CursorTranscriptCodec` |

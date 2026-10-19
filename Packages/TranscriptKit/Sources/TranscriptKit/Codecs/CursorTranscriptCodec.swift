@@ -112,6 +112,7 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
     public func readRecords(_ lines: [Substring]) -> [CanonicalEntry] {
         var entries: [CanonicalEntry] = []
         let stamp = now()
+        var synthesizedToolID = 0
         for line in lines {
             guard let record = Self.decodeObject(line) else { continue }
             // Cursor keeps only the latest `turn_ended` and drops it when the
@@ -127,11 +128,75 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
             let role = record["role"] as? String
             let message = record["message"] as? [String: Any] ?? record
             let content = message["content"]
+
+            // Cursor's display JSONL stores tool *calls* but never results, and
+            // never inlines image bytes. Screenshots show up as a `Read` of an
+            // image path and/or a markdown `![](/absolute/path.png)` in the
+            // assistant reply — load those files the same way Claude's
+            // `SendUserFile` and Codex's `ImageView` paths are handled.
+            if let blocks = content as? [[String: Any]] {
+                var texts: [String] = []
+                var recordEntries: [CanonicalEntry] = []
+                for block in blocks {
+                    switch block["type"] as? String {
+                    case "text":
+                        guard let raw = block["text"] as? String else { continue }
+                        texts.append(raw)
+                    case "tool_use":
+                        guard let name = block["name"] as? String else { continue }
+                        let input = block["input"] as? [String: Any] ?? [:]
+                        guard let path = Self.imagePath(fromToolInput: input),
+                              let image = Self.imageEntry(atPath: path, timestamp: stamp)
+                        else { continue }
+                        synthesizedToolID += 1
+                        let id = (block["id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                            ?? "cursor-tool-\(synthesizedToolID)"
+                        recordEntries.append(.toolUse(
+                            id: id,
+                            tool: name,
+                            input: Self.encodeJSON(input),
+                            timestamp: stamp
+                        ))
+                        recordEntries.append(image)
+                    default:
+                        continue
+                    }
+                }
+                if let role {
+                    let text = texts
+                        .map(Self.stripHarnessWrappers)
+                        // Some models' end-of-sequence token leaks into the reply.
+                        .map { $0.replacingOccurrences(of: "<|eos|>", with: "").trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty && $0 != "[REDACTED]" }
+                        .joined(separator: "\n")
+                    if !text.isEmpty {
+                        switch role {
+                        case "user":
+                            entries.append(.userMessage(text: text, timestamp: stamp))
+                        case "assistant":
+                            entries.append(.assistantMessage(text: text, timestamp: stamp))
+                        default:
+                            break
+                        }
+                    }
+                    if role == "assistant" || role == "user" {
+                        for raw in texts {
+                            for path in Self.markdownImagePaths(in: raw) {
+                                if let image = Self.imageEntry(atPath: path, timestamp: stamp) {
+                                    recordEntries.append(image)
+                                }
+                            }
+                        }
+                    }
+                }
+                entries.append(contentsOf: recordEntries)
+                continue
+            }
+
             let texts = Self.flattenText(content)
             guard let role, !texts.isEmpty else { continue }
             let text = texts
                 .map(Self.stripHarnessWrappers)
-                // Some models' end-of-sequence token leaks into the reply.
                 .map { $0.replacingOccurrences(of: "<|eos|>", with: "").trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty && $0 != "[REDACTED]" }
                 .joined(separator: "\n")
@@ -145,7 +210,7 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                 continue
             }
         }
-        return entries
+        return Self.dedupingImages(entries)
     }
 
     public func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)? {
@@ -307,6 +372,89 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
             guard (block["type"] as? String) == "text" else { return nil }
             return block["text"] as? String
         }
+    }
+
+    private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "heic"
+    ]
+
+    private static func isImagePath(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return imageExtensions.contains(ext)
+    }
+
+    /// Absolute (or `file://`) image paths from a tool call's scalar inputs.
+    private static func imagePath(fromToolInput input: [String: Any]) -> String? {
+        let candidates = [
+            input["path"] as? String,
+            input["file_path"] as? String,
+            input["filePath"] as? String,
+            input["url"] as? String
+        ].compactMap { $0 }
+        return candidates.first { isImagePath($0) }
+    }
+
+    /// `![alt](/abs/path.png)` links Cursor agents use when presenting a
+    /// screenshot. Remote `http(s)` URLs are ignored — only on-disk files can
+    /// be downsampled for the companion wire.
+    private static func markdownImagePaths(in text: String) -> [String] {
+        guard text.contains("![") else { return [] }
+        let pattern = #"!\[(?:[^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        return matches.compactMap { match -> String? in
+            guard match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: text)
+            else { return nil }
+            var path = String(text[range])
+            if path.hasPrefix("<"), path.hasSuffix(">") {
+                path = String(path.dropFirst().dropLast())
+            }
+            if path.hasPrefix("http://") || path.hasPrefix("https://") { return nil }
+            guard isImagePath(path) else { return nil }
+            return path
+        }
+    }
+
+    private static func imageEntry(atPath rawPath: String, timestamp: Date) -> CanonicalEntry? {
+        let url: URL?
+        if rawPath.hasPrefix("file://") {
+            url = URL(string: rawPath)
+        } else if rawPath.hasPrefix("~/") {
+            url = URL(fileURLWithPath: (rawPath as NSString).expandingTildeInPath)
+        } else {
+            url = URL(fileURLWithPath: rawPath)
+        }
+        guard let url, let downsampled = ImageDownsampler.downsample(at: url) else { return nil }
+        return .image(
+            mimeType: downsampled.mimeType,
+            base64: downsampled.base64,
+            // Keep the absolute path so the screenshot panel's path heuristics
+            // (Desktop /tmp dump folders) still see it when there is no
+            // paired toolUse on the same record (markdown-only delivery).
+            filename: url.path,
+            timestamp: timestamp
+        )
+    }
+
+    /// A screenshot the agent takes commonly reaches the transcript twice:
+    /// once when `Read` names the path, and again when the reply embeds the
+    /// same (or a copied) file as markdown. Both downsample deterministically,
+    /// so identical source bytes collapse to one `.image`.
+    private static func dedupingImages(_ entries: [CanonicalEntry]) -> [CanonicalEntry] {
+        var seen = Set<String>()
+        return entries.filter { entry in
+            guard case let .image(_, base64, _, _) = entry else { return true }
+            return seen.insert(base64).inserted
+        }
+    }
+
+    private static func encodeJSON(_ value: Any) -> Data {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value)
+        else { return Data("{}".utf8) }
+        return data
     }
 
     /// Cursor wraps user turns in `<user_query>` and often a `<timestamp>`.

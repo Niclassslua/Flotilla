@@ -206,4 +206,95 @@ final class CursorTranscriptCodecTests: XCTestCase {
             "file-backed launch prompt must stay well under ARG_MAX"
         )
     }
+
+    // MARK: - Images & Screenshots
+
+    /// Cursor's JSONL never embeds image bytes — a `Read` of a `.png` is the
+    /// structured record that the agent looked at a capture (see the
+    /// expand-meeting-view Handy session).
+    func testReadOfImagePathBecomesInlineImage() throws {
+        let pngPath = home.appendingPathComponent("meeting-chrome.png")
+        let onePixelData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        try onePixelData.write(to: pngPath)
+
+        let url = try writeTranscript([
+            #"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"path":"\#(pngPath.path)"}}]}}"#
+        ])
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 2)
+        guard case let .toolUse(id, tool, input, _) = entries[0] else {
+            return XCTFail("expected toolUse, got \(entries[0])")
+        }
+        XCTAssertEqual(tool, "Read")
+        XCTAssertFalse(id.isEmpty)
+        let inputJSON = try XCTUnwrap(String(data: input, encoding: .utf8))
+        XCTAssertTrue(inputJSON.contains("meeting-chrome.png"))
+
+        guard case let .image(mimeType, base64, filename, _) = entries[1] else {
+            return XCTFail("expected image, got \(entries[1])")
+        }
+        XCTAssertEqual(mimeType, "image/jpeg")
+        XCTAssertFalse(base64.isEmpty)
+        XCTAssertEqual(filename, pngPath.path)
+    }
+
+    /// Agents present captures to the user as markdown image links with an
+    /// absolute path — that is Cursor's equivalent of Claude's `SendUserFile`.
+    func testMarkdownImageEmbedBecomesInlineImage() throws {
+        let pngPath = home.appendingPathComponent("find-bar.png")
+        let onePixelData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        try onePixelData.write(to: pngPath)
+
+        let url = try writeTranscript([
+            #"{"role":"assistant","message":{"content":[{"type":"text","text":"Here is the chrome:\n\n![Find bar](\#(pngPath.path))\n"}]}}"#
+        ])
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 2)
+        guard case .assistantMessage(let text, _) = entries[0] else {
+            return XCTFail("expected assistant text, got \(entries[0])")
+        }
+        XCTAssertTrue(text.contains("Here is the chrome"))
+        guard case let .image(mimeType, base64, filename, _) = entries[1] else {
+            return XCTFail("expected image, got \(entries[1])")
+        }
+        XCTAssertEqual(mimeType, "image/jpeg")
+        XCTAssertFalse(base64.isEmpty)
+        XCTAssertEqual(filename, pngPath.path)
+    }
+
+    func testReadThenMarkdownOfSameFileIsNotDuplicated() throws {
+        let pngPath = home.appendingPathComponent("playback.png")
+        let onePixelData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")!
+        try onePixelData.write(to: pngPath)
+
+        let url = try writeTranscript([
+            #"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"path":"\#(pngPath.path)"}}]}}"#,
+            #"{"role":"assistant","message":{"content":[{"type":"text","text":"![Playback](\#(pngPath.path))"}]}}"#
+        ])
+        let entries = try codec.readNative(at: url)
+        let images = entries.filter {
+            if case .image = $0 { return true }
+            return false
+        }
+        XCTAssertEqual(images.count, 1, "Read + markdown of the same bytes must collapse to one image")
+    }
+
+    func testMissingImagePathIsSkippedGracefully() throws {
+        let url = try writeTranscript([
+            #"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"path":"/tmp/does-not-exist-\#(UUID().uuidString).png"}}]}}"#
+        ])
+        let entries = try codec.readNative(at: url)
+        XCTAssertTrue(entries.isEmpty)
+    }
+
+    func testRemoteMarkdownImageURLIsIgnored() throws {
+        let url = try writeTranscript([
+            #"{"role":"assistant","message":{"content":[{"type":"text","text":"![remote](https://example.com/shot.png)"}]}}"#
+        ])
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 1)
+        guard case .assistantMessage = entries[0] else {
+            return XCTFail("expected only assistant text, got \(entries)")
+        }
+    }
 }

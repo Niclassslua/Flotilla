@@ -176,6 +176,38 @@ final class AgentScreenshotMonitorTests: XCTestCase {
         XCTAssertEqual(found.map(\.base64), ["preview_data"])
     }
 
+    /// Cursor delivers screenshots as markdown embeds whose `filename` is the
+    /// absolute path (no tool envelope on that record). Desktop / `*-shots`
+    /// dump folders must still count as agent captures.
+    func testAgentImagesRetainsCursorMarkdownEmbedOnDesktop() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let imageTime = Date(timeIntervalSince1970: 200)
+        let desktopPath = NSHomeDirectory() + "/Desktop/handy-meeting-reading-shots/01-transcript-chrome.png"
+        let events = [
+            TranscriptEvent(id: "1:0", content: .userMessage(text: "send me screenshots of the ui", timestamp: userTime)),
+            TranscriptEvent(id: "2:0", content: .assistantMessage(text: "Here they are", timestamp: imageTime)),
+            TranscriptEvent(id: "2:1", content: .image(mimeType: "image/jpeg", base64: "cursor_shot", filename: desktopPath, timestamp: imageTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertEqual(found.map(\.base64), ["cursor_shot"])
+        XCTAssertEqual(found.first?.filename, "01-transcript-chrome.png")
+    }
+
+    func testAgentImagesRetainsCursorReadOfTmpCapture() {
+        let userTime = Date(timeIntervalSince1970: 100)
+        let toolTime = Date(timeIntervalSince1970: 200)
+        let events = [
+            TranscriptEvent(id: "1:0", content: .userMessage(text: "capture the window", timestamp: userTime)),
+            TranscriptEvent(id: "2:0", content: .toolUse(id: "cursor-tool-1", tool: "Read", input: ["path": "/tmp/handy-meeting-shots/01-meetings.png"], timestamp: toolTime)),
+            TranscriptEvent(id: "2:1", content: .image(mimeType: "image/jpeg", base64: "tmp_shot", filename: "/tmp/handy-meeting-shots/01-meetings.png", timestamp: toolTime))
+        ]
+
+        let found = AgentScreenshotMonitor.agentImages(in: events)
+        XCTAssertEqual(found.map(\.base64), ["tmp_shot"])
+        XCTAssertEqual(found.first?.filename, "01-meetings.png")
+    }
+
     @MainActor
     func testMergingScreenshotsRetainsAnImageTrimmedFromTheTranscriptWindow() {
         let sessionID = UUID()

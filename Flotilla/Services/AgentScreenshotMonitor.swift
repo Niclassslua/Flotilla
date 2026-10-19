@@ -5,7 +5,8 @@ import SessionKit
 import CompanionKit
 
 /// One image the agent sent — Claude's `SendUserFile` or a tool result carrying
-/// an image, Codex's `view_image`.
+/// an image, Codex's `view_image`, Cursor's `Read` of an image path / markdown
+/// `![](…)` embed.
 struct AgentScreenshot: Identifiable {
     /// The transcript event id, stable for the life of the transcript.
     let id: String
@@ -428,30 +429,48 @@ final class AgentScreenshotMonitor {
         let url = URL(fileURLWithPath: path)
         let filename = url.lastPathComponent.lowercased()
         let nameWithoutExtension = (filename as NSString).deletingPathExtension.lowercased()
-        let pathComponents = Set(url.pathComponents.map { $0.lowercased() })
+        let pathComponents = url.pathComponents.map { $0.lowercased() }
+        let pathComponentSet = Set(pathComponents)
 
-        // 2. Documentation and logo/icon directories never contain live agent screenshots.
-        if pathComponents.contains("docs") || pathComponents.contains("documentation") || pathComponents.contains("doc") {
+        // 2. User-facing dump locations agents copy screenshots into (Cursor
+        // often Writes to Desktop / a `*-shots` folder, then embeds the path).
+        let home = NSHomeDirectory().lowercased()
+        if !home.isEmpty {
+            for folder in ["desktop", "downloads", "pictures"] {
+                if lower.hasPrefix(home + "/" + folder + "/") {
+                    return true
+                }
+            }
+        }
+
+        // 3. Documentation and logo/icon directories never contain live agent screenshots.
+        if pathComponentSet.contains("docs") || pathComponentSet.contains("documentation") || pathComponentSet.contains("doc") {
             return false
         }
-        if pathComponents.contains("logos") || pathComponents.contains("icons") {
+        if pathComponentSet.contains("logos") || pathComponentSet.contains("icons") {
             return false
         }
 
-        // 3. Explicit screenshot directory (e.g. screenshots/...)
-        if pathComponents.contains("screenshots") || pathComponents.contains("screencaps") {
+        // 4. Explicit screenshot / capture dump directories (e.g. screenshots/...,
+        // handy-meeting-reading-shots/...).
+        if pathComponents.contains(where: { name in
+            name == "screenshots" || name == "screencaps" || name == "captures"
+                || name.contains("screenshot") || name.contains("screencap")
+                || name.hasSuffix("shots") || name.hasSuffix("-shots")
+                || name.hasSuffix("captures") || name.hasSuffix("-captures")
+        }) {
             return true
         }
 
-        // 4. Reject other repository asset/resource directories unless explicitly named as a screenshot.
-        let isAssetDir = !assetOrDocDirectoryNames.isDisjoint(with: pathComponents)
+        // 5. Reject other repository asset/resource directories unless explicitly named as a screenshot.
+        let isAssetDir = !assetOrDocDirectoryNames.isDisjoint(with: pathComponentSet)
         if isAssetDir {
             return nameWithoutExtension.contains("screenshot")
                 || nameWithoutExtension.contains("screencap")
                 || nameWithoutExtension.contains("snapshot")
         }
 
-        // 5. For any other project or workspace path, check if the filename indicates a screenshot.
+        // 6. For any other project or workspace path, check if the filename indicates a screenshot.
         return isScreenshotNamePattern(nameWithoutExtension)
     }
 
@@ -594,7 +613,10 @@ final class AgentScreenshotMonitor {
             let position = EventPosition(line: Int(parts[0]) ?? offset,
                                          entry: parts.count > 1 ? (Int(parts[1]) ?? 0) : 0)
             guard baseline.map({ position > $0 }) ?? true else { return nil }
-            let resolvedFilename = filename ?? candidatePaths.first.map { ($0 as NSString).lastPathComponent }
+            // Codecs may stash an absolute path in `filename` (Cursor markdown
+            // embeds) so the path heuristics above still run; the panel only
+            // wants the basename.
+            let resolvedFilename = (filename ?? candidatePaths.first).map { ($0 as NSString).lastPathComponent }
             return ImageEvent(id: event.id, position: position, base64: base64, filename: resolvedFilename, timestamp: timestamp)
         }
     }
