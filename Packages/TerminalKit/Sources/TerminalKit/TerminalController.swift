@@ -270,6 +270,8 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled, let self else { return }
             self.resizeTasks[presentation] = nil
+            // A layout switch can retire this renderer during the debounce.
+            guard presentation == self.authoritativePresentation else { return }
             guard size != self.lastAppliedSize else { return }
             self.lastAppliedSize = size
             TerminalPerfLog.event("PTY resize \(self.accessibilityIdentifier) → \(size.cols)x\(size.rows)")
