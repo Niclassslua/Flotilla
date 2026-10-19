@@ -379,6 +379,32 @@ final class RemoteCompanionTests: XCTestCase {
         XCTAssertEqual(data.macs.first { $0.id == macID }?.isReachable, true)
     }
 
+    func testForegroundResumeMarksConnectingImmediately() async throws {
+        let mac = FakeMac(sessions: [])
+        try await mac.start()
+        let data = RemoteCompanionDataSource(store: .temporary(), identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
+        data.setActive(true)
+        _ = try await data.pair(with: mac.payload) { _, _ in }
+        await waitUntil { data.macs.first?.isReachable == true }
+
+        // Background drops the link (same path as RootView after disconnectGrace).
+        data.setActive(false)
+        let host = try XCTUnwrap(data.macs.first)
+        XCTAssertEqual(host.connection, .unreachable)
+        XCTAssertTrue(host.showsConnectionLostBanner)
+
+        // Foreground must not leave `.unreachable` for even one frame — the
+        // banner keys off that state and would flash until the connect Task runs.
+        data.setActive(true)
+        let resumed = try XCTUnwrap(data.macs.first)
+        switch resumed.connection {
+        case .connecting, .connected:
+            XCTAssertFalse(resumed.showsConnectionLostBanner)
+        default:
+            XCTFail("expected connecting/connected after resume, got \(resumed.connection)")
+        }
+    }
+
     func testExpiredCodeIsDiagnosedWithoutConnecting() async {
         let data = RemoteCompanionDataSource(store: .temporary(), identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
         var payload = FakeMac(sessions: []).payload

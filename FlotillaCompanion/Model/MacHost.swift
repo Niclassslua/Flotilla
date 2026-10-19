@@ -13,6 +13,16 @@ struct MacHost: Identifiable, Hashable, Sendable {
         if case .connected = connection { return true }
         return false
     }
+
+    /// Banner for a confirmed outage — not for `.connecting`, which is the
+    /// normal brief window after returning from background (the link is
+    /// dropped while inactive and re-opened on foreground).
+    var showsConnectionLostBanner: Bool {
+        switch connection {
+        case .unreachable, .needsRepairing: true
+        case .connecting, .connected: false
+        }
+    }
 }
 
 enum MacConnectionState: Hashable, Sendable {

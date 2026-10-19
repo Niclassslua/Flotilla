@@ -688,6 +688,7 @@
 		DDEA9EAAC1F0DE9C644DBEE0 /* CursorCompanionAdapterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF4723676EBB9EFDE478DBC9 /* CursorCompanionAdapterTests.swift */; };
 		DDEAF468EAE1353733FC0787 /* KanbanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 433D3BE507D2D44750EAEDF9 /* KanbanViews.swift */; };
 		DE3C3E3A908D92B34712F6C0 /* WorkspaceToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F5B48EC4DF04020E549FAE6 /* WorkspaceToolbar.swift */; };
+		DEFFE6D15AF134DCB153AC57 /* UnreachableBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E92FA759CF38C84575BF058 /* UnreachableBanner.swift */; };
 		DFA843AB85C9272568B14003 /* HandySpeechClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D144DD3648F458208978127 /* HandySpeechClient.swift */; };
 		DFD7C33B4C388D3EA7376B37 /* HomeWidgetGallerySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99892CDB2FE43BEF149EC8C9 /* HomeWidgetGallerySheet.swift */; };
 		E00148B12BF6FE1353AC65E7 /* react.svg in Resources */ = {isa = PBXBuildFile; fileRef = 436A09BE5F1F4456C824B2AF /* react.svg */; };
@@ -955,6 +956,7 @@
 		3B6476746D5B5EB4D2018DA5 /* AntigravityModelEffortCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityModelEffortCoordinator.swift; sourceTree = "<group>"; };
 		3E5808CB3A9D390526202628 /* Scenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scenario.swift; sourceTree = "<group>"; };
 		3E782E7FF5EA05CA2F213E13 /* MonacoHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonacoHostView.swift; sourceTree = "<group>"; };
+		3E92FA759CF38C84575BF058 /* UnreachableBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreachableBanner.swift; sourceTree = "<group>"; };
 		3F7E6D3E8923F89B47F5C5A4 /* SessionGitSidebarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGitSidebarViewModel.swift; sourceTree = "<group>"; };
 		404850BCFCB183E77711ED5F /* ViewBridgeCrashGuard.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewBridgeCrashGuard.m; sourceTree = "<group>"; };
 		40AE3450061AAA8E17CFEE78 /* HomeWidgetGridEmptyState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeWidgetGridEmptyState.swift; sourceTree = "<group>"; };
@@ -1577,6 +1579,7 @@
 				C0C823C7BD8BFB5B06166B1E /* GlassCompatibility.swift */,
 				34271E2E4A5D6F47F1DBF87F /* ModelPickerSheet.swift */,
 				49118360E61B462D7B8AF880 /* SessionRowView.swift */,
+				3E92FA759CF38C84575BF058 /* UnreachableBanner.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -3103,6 +3106,7 @@
 				00578555C57896DC8F3DD16C /* TranscriptRows.swift in Sources */,
 				591BE56C98E7462CA96F3C07 /* TranscriptSearch.swift in Sources */,
 				B2611563F5D4E20C095C8CB8 /* TranscriptSearchBar.swift in Sources */,
+				DEFFE6D15AF134DCB153AC57 /* UnreachableBanner.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

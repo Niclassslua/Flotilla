@@ -107,6 +107,7 @@ final class MacConnection {
         } else {
             onCacheFlush(currentCache(), cacheRevision)
             connectTask?.cancel()
+            connectTask = nil
             disconnect()
         }
     }
@@ -118,6 +119,10 @@ final class MacConnection {
         }
         guard connectTask == nil, !isConnected else { return }
         retryAttempt = 0
+        // Eagerly leave `.unreachable` so the UI doesn't flash the lost-
+        // connection banner during the async hop into `attemptConnection`
+        // (notably when returning from background).
+        state = .connecting
         scheduleConnect(after: 0)
     }
 
@@ -132,6 +137,7 @@ final class MacConnection {
         connectTask?.cancel()
         connectTask = nil
         retryAttempt = 0
+        state = .connecting
         scheduleConnect(after: 0)
     }
 
@@ -314,7 +320,9 @@ final class MacConnection {
             waiter.resume(throwing: CompanionActionError.unreachable)
         }
         failWaiting(CompanionActionError.unreachable)
-        if isConnected {
+        if case .needsRepairing = state {
+            // Keep the repair reason; only a successful re-pair clears it.
+        } else {
             state = .unreachable
         }
         if isSpeechAvailable {

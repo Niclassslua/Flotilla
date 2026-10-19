@@ -121,7 +121,9 @@ struct SessionDetailView: View {
                     inFlight: inFlight,
                     diffStat: headerDiffStat(session)
                 )
-                if let mac, !mac.isReachable { UnreachableBanner(mac: mac, asOf: store.transcriptReceivedAt(sessionID)) }
+                if let mac, mac.showsConnectionLostBanner {
+                    UnreachableBanner(mac: mac, asOf: store.transcriptReceivedAt(sessionID))
+                }
                 if isSearching {
                     TranscriptSearchBar(
                         query: $searchQuery,
