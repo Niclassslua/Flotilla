@@ -16,6 +16,18 @@ diffing behavior against this baseline instead of rediscovering it.
 | Antigravity | `agy` | [antigravity.md](antigravity.md) | valid through 1.3.0 · 2026-10-06 (full live probe) |
 | Cursor Agent | `agent` | [cursor-agent.md](cursor-agent.md) | valid through 2026.10.01-e373342 · 2026-10-06 (full live probe) |
 
+Machine-readable baselines live in [`versions.json`](versions.json). To see
+whether installed (or GitHub-published) CLIs have moved past those stamps:
+
+```bash
+make provider-check                         # documented vs installed
+make provider-check ARGS='--upstream'       # also query GitHub / Cursor latest
+make provider-check ARGS='--upstream --notes'    # digest: relevant changelog + snapshot summary
+make provider-check ARGS='--notes-full'     # full changelog bodies (noisy)
+make provider-check ARGS='--snapshot'       # on drift, run provider-snapshot.sh too
+make provider-check ARGS='--strict'         # exit 1 on drift (default exits 0)
+```
+
 Cross-cutting references:
 
 - [CHANGES.md](CHANGES.md) — provider version bumps and integration changes.

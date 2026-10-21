@@ -9,8 +9,8 @@ Upstream release notes to check on each version bump:
 - Claude Code: [CHANGELOG.md](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)
 - Codex CLI: [GitHub releases](https://github.com/openai/codex/releases)
 - OpenCode: [GitHub releases](https://github.com/anomalyco/opencode/releases)
-- Antigravity: `agy changelog`
-- Cursor Agent: [Cursor changelog](https://cursor.com/changelog)
+- Antigravity: [GitHub releases](https://github.com/google-antigravity/antigravity-cli/releases) (`agy changelog` locally)
+- Cursor Agent: [CLI changelog](https://cursor.com/docs/cli/changelog) (`agent about --format json` → `latestVersion`)
 
 For every bump, capture the upstream notes and local snapshots, compare the
 provider page's verified rows and fixtures, then add one dated entry below.

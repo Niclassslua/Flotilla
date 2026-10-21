@@ -1,4 +1,4 @@
-.PHONY: install build build-release build-ephemeral build-companion test test-packages test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo run-companion-device xcodegen
+.PHONY: install build build-release build-ephemeral build-companion test test-packages test-companion clean run run-ephemeral run-board-demo run-companion run-companion-demo run-companion-device xcodegen provider-check
 
 SCHEME := Flotilla
 EPHEMERAL_SCHEME := Flotilla Ephemeral
@@ -201,6 +201,16 @@ test-companion: xcodegen
 		-derivedDataPath "$(COMPANION_TEST_DERIVED_DATA)" \
 		-test-timeouts-enabled YES \
 		test
+
+# Manual provider version drift check (documented vs installed; optional upstream).
+#   make provider-check
+#   make provider-check ARGS='--upstream'
+#   make provider-check ARGS='--upstream --notes'       # digest
+#   make provider-check ARGS='--notes-full'             # full bodies
+#   make provider-check ARGS='--upstream --snapshot codex-cli'
+#   make provider-check ARGS='--strict'   # non-zero exit on drift
+provider-check:
+	Scripts/provider-check.sh $(ARGS)
 
 clean:
 	xcodebuild \

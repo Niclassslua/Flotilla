@@ -1,0 +1,14 @@
+beforeSubmitPrompt
+preToolUse
+beforeShellExecution
+beforeMCPExecution
+postToolUse
+postToolUseFailure
+afterShellExecution
+afterFileEdit
+afterAgentThought
+afterAgentResponse
+subagentStart
+preCompact
+sessionEnd
+stop
