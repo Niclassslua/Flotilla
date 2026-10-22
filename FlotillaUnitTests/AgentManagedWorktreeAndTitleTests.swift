@@ -20,20 +20,22 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         let factory = RecordingProcessFactory()
         let settings = AppSettings()
         let gitService = MockGitService()
+        let worktreeBase = try makeTempProject("worktrees")
         let store = AppStore(
             repository: repository,
             gitService: gitService,
             processManager: manager(factory: factory, settings: settings),
-            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            worktreeBaseDirectoryProvider: { worktreeBase },
             settingsProvider: { settings },
             nameGenerator: StubNameGenerator(result: "Session naming pipeline")
         )
 
+        let projectFolder = try makeTempProject("name-project")
         let createdID = await store.createSession(
             title: "First line of a much longer request",
             goal: "Improve naming from the full request",
             agent: .codexCLI,
-            projectFolder: URL(fileURLWithPath: "/tmp/name-project"),
+            projectFolder: projectFolder,
             checkoutMode: .newWorktree
         )
         let id = try XCTUnwrap(createdID)
@@ -50,20 +52,22 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         let factory = RecordingProcessFactory()
         let settings = AppSettings()
         let gitService = MockGitService()
+        let worktreeBase = try makeTempProject("worktrees")
         let store = AppStore(
             repository: repository,
             gitService: gitService,
             processManager: manager(factory: factory, settings: settings),
-            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            worktreeBaseDirectoryProvider: { worktreeBase },
             settingsProvider: { settings },
             nameGenerator: StubNameGenerator(result: nil)
         )
 
+        let projectFolder = try makeTempProject("name-project")
         let createdID = await store.createSession(
             title: "Prompt title",
             goal: "A specific long request",
             agent: .codexCLI,
-            projectFolder: URL(fileURLWithPath: "/tmp/name-project"),
+            projectFolder: projectFolder,
             checkoutMode: .newWorktree
         )
         let id = try XCTUnwrap(createdID)
@@ -128,7 +132,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
             settingsProvider: { settings }
         )
 
-        let projectFolder = URL(fileURLWithPath: "/tmp/my-project")
+        let projectFolder = try makeTempProject("my-project")
         let sessionID = await store.createSession(
             title: "Prompt Title",
             goal: "Implement feature",
@@ -205,7 +209,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
             metadataMonitor: SessionMetadataMonitor(timing: .init(fallbackAfter: .milliseconds(50), pollChunk: .milliseconds(50)))
         )
 
-        let projectFolder = URL(fileURLWithPath: "/tmp/my-project")
+        let projectFolder = try makeTempProject("my-project")
         let sessionID = await store.createSession(
             title: "Prompt Title",
             goal: "Implement feature",
@@ -303,7 +307,7 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         var settings = AppSettings()
         settings.sessionDefaults.namingSource = .agentManaged
 
-        let projectFolder = URL(fileURLWithPath: "/tmp/safe-project")
+        let projectFolder = try makeTempProject("safe-project")
         // Main checkout is main worktree
         gitService.worktreesToReturn = [
             GitWorktree(branch: "main", path: projectFolder, isMainWorktree: true)
@@ -364,5 +368,32 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTFail("fallback createWorktree never recorded")
+    }
+
+    private func makeTempProject(_ name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flotilla-agent-wt-\(name)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        // WorktreePlanner / createSession need a real git checkout, not an empty folder.
+        let git = Process()
+        git.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        git.currentDirectoryURL = url
+        git.arguments = ["init"]
+        git.standardOutput = FileHandle.nullDevice
+        git.standardError = FileHandle.nullDevice
+        try git.run()
+        git.waitUntilExit()
+        XCTAssertEqual(git.terminationStatus, 0, "git init failed for \(url.path)")
+        let commit = Process()
+        commit.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        commit.currentDirectoryURL = url
+        commit.arguments = ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "--allow-empty", "-m", "init"]
+        commit.standardOutput = FileHandle.nullDevice
+        commit.standardError = FileHandle.nullDevice
+        try commit.run()
+        commit.waitUntilExit()
+        XCTAssertEqual(commit.terminationStatus, 0, "empty commit failed for \(url.path)")
+        return url
     }
 }
