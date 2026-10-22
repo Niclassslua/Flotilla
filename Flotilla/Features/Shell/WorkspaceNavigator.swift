@@ -13,7 +13,9 @@ final class WorkspaceNavigator {
             switch selection {
             case .overview, .project:
                 lastOverviewSelection = selection
-            case .allSessions, .smartList, .session, .projectTool:
+            case .session(let id):
+                focusedSessionID = id
+            case .allSessions, .smartList, .projectTool:
                 break
             }
             // Tool destinations are not List tags, and the rail already marks
@@ -29,6 +31,9 @@ final class WorkspaceNavigator {
             recordHistory(from: oldValue)
         }
     }
+    /// Session Focus shows while the navigator stays on All Sessions / a smart
+    /// list. Selection stays on the collection; this is what Focus renders.
+    private(set) var focusedSessionID: UUID?
     /// Mirrors visible List rows for native multi-select. Home is a separate
     /// button above the List, so it has no List selection tag.
     /// A plain click narrows this to one tag and `FlotillaShell` folds that
@@ -54,14 +59,28 @@ final class WorkspaceNavigator {
     @ObservationIgnored private var diffPanelViewModels: [URL: DiffPanelViewModel] = [:]
     @ObservationIgnored private var sessionGitSidebarViewModels: [URL: SessionGitSidebarViewModel] = [:]
 
-    // Legacy compatibility - one-way flow from navigator to store
+    // Legacy compatibility — bridges store selection IDs and navigator selection.
     var selectedSessionID: UUID? {
         get {
-            if case .session(let id) = selection { return id }
-            return nil
+            switch selection {
+            case .session(let id): return id
+            case .allSessions, .smartList: return focusedSessionID
+            case .overview, .project, .projectTool: return nil
+            }
         }
         set {
-            if let newValue { selection = .session(newValue) }
+            if let newValue {
+                focusedSessionID = newValue
+                // Collections keep their own selection; Focus reads focusedSessionID.
+                if !selection.isCollection {
+                    selection = .session(newValue)
+                }
+            } else {
+                focusedSessionID = nil
+                if case .session = selection {
+                    selection = .allSessions
+                }
+            }
         }
     }
 
@@ -73,7 +92,11 @@ final class WorkspaceNavigator {
             }
         }
         set {
-            if let newValue { selection = .project(newValue) }
+            if let newValue {
+                selection = .project(newValue)
+            } else if selectedProjectID != nil {
+                selection = .overview
+            }
         }
     }
 
@@ -88,11 +111,15 @@ final class WorkspaceNavigator {
     private(set) var backStack: [SidebarItem] = []
     private(set) var forwardStack: [SidebarItem] = []
     private var isNavigatingHistory = false
+    /// `nil` until the shell primes them — unprimed means "accept any ID" so
+    /// unit tests and early launch don't treat every destination as dead.
+    private var knownSessionIDs: Set<UUID>?
+    private var knownProjectIDs: Set<UUID>?
 
     private static let historyLimit = 50
 
-    var canGoBack: Bool { !backStack.isEmpty }
-    var canGoForward: Bool { !forwardStack.isEmpty }
+    var canGoBack: Bool { backStack.contains(where: isValidDestination) }
+    var canGoForward: Bool { forwardStack.contains(where: isValidDestination) }
 
     private func recordHistory(from previous: SidebarItem) {
         guard !isNavigatingHistory else { return }
@@ -104,19 +131,59 @@ final class WorkspaceNavigator {
     }
 
     func goBack() {
-        guard let destination = backStack.popLast() else { return }
-        isNavigatingHistory = true
-        forwardStack.append(selection)
-        selection = destination
-        isNavigatingHistory = false
+        while let destination = backStack.popLast() {
+            guard isValidDestination(destination) else { continue }
+            isNavigatingHistory = true
+            forwardStack.append(selection)
+            selection = destination
+            isNavigatingHistory = false
+            return
+        }
     }
 
     func goForward() {
-        guard let destination = forwardStack.popLast() else { return }
+        while let destination = forwardStack.popLast() {
+            guard isValidDestination(destination) else { continue }
+            isNavigatingHistory = true
+            backStack.append(selection)
+            selection = destination
+            isNavigatingHistory = false
+            return
+        }
+    }
+
+    /// Drops history entries (and the current selection) that point at sessions
+    /// or projects that no longer exist.
+    func pruneNavigation(sessions sessionIDs: Set<UUID>, projects projectIDs: Set<UUID>) {
+        knownSessionIDs = sessionIDs
+        knownProjectIDs = projectIDs
+        backStack.removeAll { !isValidDestination($0) }
+        forwardStack.removeAll { !isValidDestination($0) }
+        guard !isValidDestination(selection) else { return }
         isNavigatingHistory = true
-        backStack.append(selection)
-        selection = destination
+        switch selection {
+        case .session:
+            focusedSessionID = nil
+            selection = .allSessions
+        case .project, .projectTool:
+            selection = .overview
+        case .overview, .allSessions, .smartList:
+            break
+        }
         isNavigatingHistory = false
+    }
+
+    private func isValidDestination(_ item: SidebarItem) -> Bool {
+        switch item {
+        case .overview, .allSessions, .smartList:
+            return true
+        case .session(let id):
+            guard let known = knownSessionIDs else { return true }
+            return known.contains(id)
+        case .project(let id), .projectTool(let id, _):
+            guard let known = knownProjectIDs else { return true }
+            return known.contains(id)
+        }
     }
 
     // MARK: - Scope
