@@ -97,7 +97,7 @@ What Claude 2.1.291 draws at the bottom of its pane while working:
 | --- | --- | --- |
 | `Yes, I trust this folder` (trust dialog; `❯ No, exit` is preselected) | `waitingForInput` / `permission`. The only source: hooks are held until it is accepted | **Verified** 2.1.291 — `screens/trust-dialog.txt` |
 | `⎿  Interrupted · What should Claude do instead?` | `readyForReview` with `endsTurn`. The one screen observation that may end a hook-held *working*, because an interrupt fires no hook | **Verified** 2.1.291 — `screens/interrupted.txt` |
-| Working spinner `thought for` (no `esc to interrupt`) | `working` — Claude 2.1.291+ dropped the interrupt hint; the spinner still ends with `thought for Ns` | **Verified** 2.1.291 — `screens/working-thinking.txt` |
+| Working spinner `thought for` (no `esc to interrupt`) | `working` — Claude 2.1.291+ dropped the interrupt hint; match `thought for` only on the live `✻`/`…` spinner line so a free composer is not stuck Working | **Verified** 2.1.291 — `screens/working-thinking.txt` |
 | Composer `❯` above transcript → `readyForReview` | Also matches while working; held back by the arbiter while the last hook said `working`/`waitingForInput` | **Verified** 2.1.291 |
 | Numbered choice list with `❯` caret → question; `do you want to`, `(y/n)` … → permission | Generic | code |
 
