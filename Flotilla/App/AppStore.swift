@@ -71,6 +71,10 @@ final class AppStore {
     /// Sessions whose handoff destination has not yet proved it can run.
     @ObservationIgnored
     private var handoffProbation: Set<UUID> = []
+    /// Set by `deleteSession` so an in-flight `perform` stops before starting
+    /// the destination (and so a late settlement does not resurrect state).
+    @ObservationIgnored
+    private var handoffCancelled: Set<UUID> = []
     @ObservationIgnored
     private var sessionResumeStarts: [UUID: Date] = [:]
     @ObservationIgnored
@@ -213,8 +217,9 @@ final class AppStore {
 
         // Handoff recovery: resolve or resume probation for any sessions
         // that were in flight when Flotilla previously quit or crashed.
+        // Same window as live settle — `HandoffService.probationWindow`.
         let now = Date()
-        let probationWindowSeconds = 15.0
+        let probationWindowSeconds = handoffService.probationWindowSeconds
         for index in sessions.indices where sessions[index].pendingHandoff != nil {
             let pending = sessions[index].pendingHandoff!
             let elapsed = now.timeIntervalSince(pending.startedAt)
@@ -1003,23 +1008,38 @@ final class AppStore {
         // clobber the new agent's id because it only pins when none is set.
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         lastOperationError = nil
+        handoffCancelled.remove(sessionID)
+        defer { handoffCancelled.remove(sessionID) }
         let source = sessions[index].agent
 
         do {
-            // Quiesce/stop source agent before planning and transcoding so the tail is stable and no writes race
-            processManager.terminate(sessionID: sessionID)
-            processManager.killServerSideSession(sessionID: sessionID)
-
+            // Plan is read-only. Killing before it left refused handoffs with
+            // no process; `perform` quiesces only after a successful write.
             let plan = try handoffService.plan(for: sessions[index], to: target)
-            let moved = try await handoffService.perform(plan)
+            guard sessions.contains(where: { $0.id == sessionID }) else { return }
+
+            let moved = try await handoffService.perform(plan) { [weak self] in
+                guard let self else { return true }
+                return self.handoffCancelled.contains(sessionID)
+                    || !self.sessions.contains(where: { $0.id == sessionID })
+            }
+
+            guard let currentIndex = sessions.firstIndex(where: { $0.id == sessionID }) else {
+                // Deleted during perform — drop the destination we started.
+                processManager.terminate(sessionID: sessionID)
+                processManager.killServerSideSession(sessionID: sessionID)
+                handoffService.abandon(moved)
+                return
+            }
+
             handoffProbation.insert(sessionID)
             scheduleHandoffSettlement(sessionID: sessionID)
-
-            guard let currentIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
             sessions[currentIndex] = transition(moved, to: .working, origin: .handoff(from: source, to: target))
             try repository.save(mergingLiveScrollback(sessions[currentIndex]))
             onAgentChanged?(sessionID)
             scheduleTitleSync(forSessionID: sessionID)
+        } catch HandoffService.HandoffError.aborted {
+            return
         } catch {
             lastOperationError = error.localizedDescription
         }
@@ -1036,8 +1056,14 @@ final class AppStore {
     }
 
     private func settleHandoff(sessionID: UUID) {
-        guard handoffProbation.remove(sessionID) != nil,
-              let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        // Still on probation, still present, and the destination is still
+        // alive. If termination already claimed the probation token, or the
+        // process is already dead/dying, leave the source for rollback.
+        guard handoffProbation.contains(sessionID),
+              !handoffCancelled.contains(sessionID),
+              let index = sessions.firstIndex(where: { $0.id == sessionID }),
+              processManager.process(for: sessionID)?.isRunning == true else { return }
+        handoffProbation.remove(sessionID)
         let settled = handoffService.finalize(sessions[index])
         sessions[index] = settled
         try? repository.save(mergingLiveScrollback(settled))
@@ -1050,7 +1076,13 @@ final class AppStore {
     /// `handleProcessEvent`: that path clears `agentSessionID` and relaunches
     /// with a blank context, which after a handoff would throw away the very
     /// history the move existed to preserve.
+    ///
+    /// The probation token is claimed synchronously in `handleProcessEvent`
+    /// before this Task is scheduled, so `settleHandoff` cannot finalize while
+    /// rollback is still pending.
     private func handleHandoffTermination(sessionID: UUID, exitCode: Int32) async {
+        // Usually already claimed in `handleProcessEvent`; also covers the
+        // restore-time failure path that schedules this without that claim.
         handoffProbation.remove(sessionID)
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
 
@@ -1233,6 +1265,14 @@ final class AppStore {
         lastOperationError = nil
         metadataMonitor.cancel(sessionID)
         scrollbackStore.remove(sessionID)
+
+        // Abort an in-flight or probation handoff so we neither start a
+        // destination after the row is gone nor leave its transcript orphaned.
+        handoffCancelled.insert(sessionID)
+        handoffProbation.remove(sessionID)
+        if session.pendingHandoff != nil {
+            handoffService.abandon(session)
+        }
 
         processManager.terminateForDeletion(sessionID: sessionID)
 
@@ -1526,6 +1566,9 @@ final class AppStore {
         switch event {
         case let .terminated(sessionID, exitCode):
             if handoffProbation.contains(sessionID) {
+                // Claim the token before yielding so settle cannot finalize
+                // while this rollback/settle path is still pending.
+                handoffProbation.remove(sessionID)
                 Task { await handleHandoffTermination(sessionID: sessionID, exitCode: exitCode) }
                 return
             }

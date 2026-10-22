@@ -241,6 +241,66 @@ final class AppStoreHandoffTests: XCTestCase {
         XCTAssertEqual(store.sessions.first?.agent, .claudeCode, "the session is untouched")
         XCTAssertNil(store.sessions.first?.pendingHandoff)
         XCTAssertNotNil(store.lastOperationError)
+        // Refused handoff must leave the source process running (#40).
+        let process = try XCTUnwrap(store.process(for: session.id) as? MockPTYProcess)
+        XCTAssertTrue(process.isRunning, "plan failure must not kill the source")
+    }
+
+    func testDeleteDuringHandoffProbationCleansDestinationAndDropsProbation() async throws {
+        let (store, _) = try makeStore()
+        let session = try await startedSession(in: store)
+        try seedClaudeTranscript(for: session)
+
+        await store.handoffSession(sessionID: session.id, to: .codexCLI)
+        let moved = try XCTUnwrap(store.sessions.first)
+        XCTAssertNotNil(moved.pendingHandoff)
+        let destination = try XCTUnwrap(moved.nativeTranscriptPath)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+
+        await store.deleteSession(sessionID: session.id, deleteWorktree: false)
+
+        XCTAssertTrue(store.sessions.isEmpty)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: destination.path),
+            "destination transcript must not be orphaned (#41)"
+        )
+    }
+
+    func testHandoffRecoveryUsesSharedProbationWindow() async throws {
+        let repo = try GRDBSessionRepository()
+        let factory = RecordingProcessFactory()
+        let procManager = manager(factory: factory)
+        let sessionID = UUID()
+        // 10s ago — expired under a 6s window, would still be live under the
+        // old hardcoded 15s restore window (#69).
+        let pending = PendingHandoff(
+            sourceAgent: .claudeCode,
+            sourceSessionID: "claude-old-id",
+            sourceTranscriptPath: URL(fileURLWithPath: "/tmp/source-transcript.jsonl"),
+            startedAt: Date().addingTimeInterval(-10)
+        )
+        let session = Session(
+            id: sessionID,
+            title: "Handoff in flight",
+            goal: "Goal",
+            agent: .codexCLI,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working,
+            pendingHandoff: pending
+        )
+        try repo.save(session)
+
+        let store = AppStore(
+            repository: repo,
+            gitService: MockGitService(),
+            processManager: procManager,
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") },
+            handoffService: handoffService(processManager: procManager)
+        )
+
+        let restored = try XCTUnwrap(store.sessions.first(where: { $0.id == sessionID }))
+        XCTAssertNil(restored.pendingHandoff, "10s > shared 6s window must settle on launch")
     }
 
     func testHandoffRecoveryOnLaunchSettlesExpiredProbation() async throws {

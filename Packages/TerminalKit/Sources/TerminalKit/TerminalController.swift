@@ -38,7 +38,9 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     /// first mount installed — see `updateHandlers`.
     private var outputHandler: @MainActor @Sendable (Data) -> Void
     private var inputHandler: @MainActor @Sendable () -> Void
-    private let multilineNewlineSequence: Data
+    /// Agent-specific Shift+Enter sequence. `var` so a handoff that keeps the
+    /// same session id (and thus the cached controller) can refresh it.
+    public private(set) var multilineNewlineSequence: Data
     private var accessibilityIdentifier: String
     private var customReflowHandler: (@MainActor @Sendable (TerminalPresentation) -> Void)?
     private var onPTYResize: (@MainActor @Sendable (PTYSize) -> Void)?
@@ -288,6 +290,7 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     @MainActor
     public func updateHandlers(
         accessibilityIdentifier: String? = nil,
+        multilineNewlineSequence: Data? = nil,
         customReflowHandler: (@MainActor @Sendable (TerminalPresentation) -> Void)? = nil,
         onPTYResize: (@MainActor @Sendable (PTYSize) -> Void)? = nil,
         outputHandler: (@MainActor @Sendable (Data) -> Void)? = nil,
@@ -297,6 +300,9 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         self.onPTYResize = onPTYResize
         if let outputHandler { self.outputHandler = outputHandler }
         if let inputHandler { self.inputHandler = inputHandler }
+        if let multilineNewlineSequence {
+            self.multilineNewlineSequence = multilineNewlineSequence
+        }
         // Renaming a session changes the identifier UI tests look the terminal
         // up by, so it has to follow the rename rather than stay pinned to the
         // title the session had when its controller was first created.

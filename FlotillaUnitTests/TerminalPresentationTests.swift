@@ -43,4 +43,33 @@ final class TerminalPresentationTests: XCTestCase {
         controller.sendMultilineNewline()
         XCTAssertEqual(process.sentInput.last, Data([0x0A]))
     }
+
+    /// Handoff keeps the session id (and thus the cached controller). The
+    /// Shift+Enter sequence must follow the new agent (#71).
+    func testUpdateHandlersRefreshesMultilineNewlineSequence() throws {
+        let process = MockPTYProcess()
+        try process.start(
+            executable: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 120, rows: 30)
+        )
+        let claudeSequence = Data([0x1B, 0x0D])
+        let codexSequence = Data([0x0A])
+        let controller = TerminalController(
+            sessionID: UUID(),
+            process: process,
+            accessibilityIdentifier: "TerminalView-Handoff",
+            multilineNewlineSequence: claudeSequence
+        )
+
+        controller.sendMultilineNewline()
+        XCTAssertEqual(process.sentInput.last, claudeSequence)
+
+        controller.updateHandlers(multilineNewlineSequence: codexSequence)
+        controller.sendMultilineNewline()
+        XCTAssertEqual(process.sentInput.last, codexSequence)
+        XCTAssertEqual(controller.multilineNewlineSequence, codexSequence)
+    }
 }
