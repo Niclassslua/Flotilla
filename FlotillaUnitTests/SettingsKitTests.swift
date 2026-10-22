@@ -15,6 +15,21 @@ final class SettingsKitTests: XCTestCase {
         XCTAssertTrue(settings.agentOverrides.paths.isEmpty)
     }
 
+    /// A missing schemaVersion key must not discard still-valid JSON.
+    func testLoadDecodesPayloadWhenSchemaVersionKeyIsMissing() throws {
+        let defaults = makeIsolatedDefaults()
+        let key = "com.flotilla.appSettings"
+        let json = #"{"worktreeBaseDirectory":"/tmp/kept-worktrees","appearance":"dark"}"#
+        defaults.set(Data(json.utf8), forKey: key)
+        XCTAssertNil(defaults.object(forKey: "\(key).schemaVersion"))
+
+        let store = UserDefaultsSettingsStore(defaults: defaults, defaultWorktreeBaseDirectory: "/tmp/default-worktrees")
+        let loaded = store.load()
+        XCTAssertEqual(loaded.worktreeBaseDirectory, "/tmp/kept-worktrees")
+        XCTAssertEqual(loaded.appearance, .dark)
+        XCTAssertEqual(defaults.integer(forKey: "\(key).schemaVersion"), 1)
+    }
+
     func testSaveThenLoadRoundTripsAndOverwrites() {
         let defaults = makeIsolatedDefaults()
         let store = UserDefaultsSettingsStore(defaults: defaults, defaultWorktreeBaseDirectory: "/tmp/default-worktrees")

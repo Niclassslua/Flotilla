@@ -942,10 +942,18 @@ final class AppStore {
 
     func flushLiveScrollback() {
         scrollbackStore.cancelPendingSaves()
+        var flushFailure: String?
         for session in sessions {
             if let buffer = scrollbackStore.buffer(for: session.id) {
-                try? repository.updateScrollback(sessionID: session.id, scrollback: buffer)
+                do {
+                    try repository.updateScrollback(sessionID: session.id, scrollback: buffer)
+                } catch {
+                    flushFailure = error.localizedDescription
+                }
             }
+        }
+        if let flushFailure {
+            lastOperationError = "Terminal history could not be saved on quit: \(flushFailure)"
         }
     }
 
@@ -1371,6 +1379,10 @@ final class AppStore {
         attachments: [SessionAttachment] = []
     ) async -> UUID? {
         lastCreationError = nil
+        guard repository.acceptsMutations else {
+            lastCreationError = "Persistent session storage is unavailable. Creating a session would lose it on quit."
+            return nil
+        }
         var createdWorktree: WorktreeInfo?
         let settings = settingsProvider()
         let agentDescriptor = AgentCatalog.descriptor(for: agent)

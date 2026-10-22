@@ -3,6 +3,9 @@ import Foundation
 /// Persistence-agnostic seam — SessionKit knows nothing about SQLite/GRDB.
 /// PersistenceKit provides the real implementation.
 public protocol SessionRepository: Sendable {
+    /// `false` when the store is a scratch fallback that must not accept writes.
+    var acceptsMutations: Bool { get }
+
     func loadAll() throws -> (projects: [Project], sessions: [Session])
     func save(_ project: Project) throws
     func save(_ session: Session) throws
@@ -58,6 +61,8 @@ public protocol SessionRepository: Sendable {
 }
 
 public extension SessionRepository {
+    var acceptsMutations: Bool { true }
+
     /// Correct for any store; `GRDBSessionRepository` overrides it with a
     /// single transaction.
     func save(_ sessions: [Session]) throws {
