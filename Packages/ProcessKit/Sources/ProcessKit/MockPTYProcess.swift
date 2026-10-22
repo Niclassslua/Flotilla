@@ -25,6 +25,10 @@ public final class MockPTYProcess: PTYProcessProtocol, @unchecked Sendable {
     /// When true, `start` throws `.failedToOpenPTY` instead of succeeding.
     public var shouldFailToStart = false
 
+    /// When false, `terminate()` records the call but leaves the process
+    /// running so a test can fire a stale exit after a replacement is live.
+    public var exitOnTerminate = true
+
     /// When true, `send(input:)` immediately feeds the same bytes back
     /// through `outputStream`, simulating a shell echoing keystrokes. Off
     /// by default so existing input-recording tests stay purely passive;
@@ -77,6 +81,7 @@ public final class MockPTYProcess: PTYProcessProtocol, @unchecked Sendable {
 
     public func terminate() {
         terminateCallCount += 1
+        guard exitOnTerminate else { return }
         simulateExit(code: 0)
     }
 

@@ -623,19 +623,25 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
 
     private func consumeOutput() {
         let stream = process.outputStream
+        // Bind this loop to the process identity at subscribe time. A rebind
+        // cancels the task, but a chunk already in flight can still land after
+        // the flush — drop anything from a superseded generation.
+        let boundProcessID = process.id
         outputTask = Task { [weak self] in
             for await chunk in stream {
-                guard let self else { return }
+                guard let self, self.processID == boundProcessID else { return }
                 if self.pendingOutput.append(chunk) {
                     Task { @MainActor [weak self] in
-                        self?.flushPendingOutput()
+                        guard let self, self.processID == boundProcessID else { return }
+                        self.flushPendingOutput()
                     }
                 }
             }
             // The stream finished (process exited) — drain whatever arrived
             // after the last scheduled flush so no trailing output is lost.
             await MainActor.run { [weak self] in
-                self?.flushPendingOutput()
+                guard let self, self.processID == boundProcessID else { return }
+                self.flushPendingOutput()
             }
         }
     }

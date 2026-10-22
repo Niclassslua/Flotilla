@@ -29,6 +29,41 @@ final class TerminalConnectionMarginsTests: XCTestCase {
         XCTAssertTrue(replacement.sentInput.isEmpty, "Display resets must never become agent input")
     }
 
+    func testRebindDropsChunksFromSupersededProcess() async throws {
+        let original = MockPTYProcess()
+        try original.start(
+            executable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+        var flushed = ""
+        let controller = TerminalController(
+            sessionID: UUID(), process: original, accessibilityIdentifier: "RebindDrop",
+            outputHandler: { data in
+                flushed += String(decoding: data, as: UTF8.self)
+            }
+        )
+
+        let replacement = MockPTYProcess()
+        try replacement.start(
+            executable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: [],
+            environment: [:],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialSize: PTYSize(cols: 80, rows: 24)
+        )
+        controller.rebind(process: replacement)
+
+        original.simulateOutput("STALE-FROM-OLD-PTY")
+        replacement.simulateOutput("fresh")
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertFalse(flushed.contains("STALE-FROM-OLD-PTY"))
+        XCTAssertTrue(flushed.contains("fresh"))
+    }
+
     func testRestoredTmuxScrollbackCannotConstrainFreshClientRepaint() {
         let process = MockPTYProcess()
         let controller = TerminalController(
