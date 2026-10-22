@@ -51,12 +51,21 @@ private final class FakeMac: @unchecked Sendable {
             onPeer: { [self] peer in
                 let snapshot = lock.withLock {
                     devices[peer.hello.deviceID] = peer.hello.deviceKey
+                    revoked.remove(peer.hello.deviceID)
                     peers.append(peer.session)
                     return fleet
                 }
                 try? peer.session.send(.fleet(snapshot))
                 Task {
                     for try await message in peer.session.messages {
+                        if case .revoke = message {
+                            self.lock.withLock {
+                                self.devices[peer.hello.deviceID] = nil
+                                self.revoked.insert(peer.hello.deviceID)
+                            }
+                            peer.session.close()
+                            continue
+                        }
                         if case .subscribe(let sessionID) = message {
                             let transcript = SessionTranscript(events: [TranscriptEvent(id: "0", content: .assistantMessage(text: "Arrived", timestamp: Date(timeIntervalSince1970: 1_700_000_000)))])
                             try? peer.session.send(.transcriptSnapshot(sessionID: sessionID, revision: 1, transcript))
@@ -357,6 +366,29 @@ final class RemoteCompanionTests: XCTestCase {
 
         await waitUntil(10) { data.macs.first?.connection == .needsRepairing(.revoked) }
         XCTAssertEqual(data.macs.first { $0.id == macID }?.connection, .needsRepairing(.revoked))
+    }
+
+    func testRemoveMacRevokesTrustOnTheMac() async throws {
+        let mac = FakeMac(sessions: [])
+        try await mac.start()
+        let store = PairedMacStore.temporary()
+        let identity = InMemoryDeviceIdentityStore()
+        let data = RemoteCompanionDataSource(store: store, identityStore: identity, deviceName: "Test iPhone")
+        data.setActive(true)
+        let macID = try await data.pair(with: mac.payload) { _, _ in }
+        await waitUntil { data.macs.first?.isReachable == true }
+
+        let deviceID = try identity.loadOrCreate().deviceID
+        XCTAssertNotNil(mac.lock.withLock { mac.devices[deviceID] })
+
+        data.removeMac(macID)
+        await waitUntil(5) {
+            mac.lock.withLock { mac.revoked.contains(deviceID) && mac.devices[deviceID] == nil }
+        }
+        XCTAssertTrue(mac.lock.withLock { mac.revoked.contains(deviceID) })
+        XCTAssertNil(mac.lock.withLock { mac.devices[deviceID] })
+        XCTAssertNil(data.macs.first { $0.id == macID })
+        XCTAssertTrue(store.loadMacs().isEmpty)
     }
 
     func testReconnectCancelsPendingBackoffAndRetriesImmediately() async throws {

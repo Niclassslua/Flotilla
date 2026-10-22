@@ -24,7 +24,8 @@ public enum HandshakeMode: String, Codable, Sendable {
     case resume
 }
 
-/// First frame, phone → Mac. Plaintext; every field is bound into the proof.
+/// First frame, phone → Mac. Plaintext; mode, ids, name, keys, and nonce are
+/// bound into the proof (`version` is checked separately).
 public struct ClientHello: Codable, Sendable, Equatable {
     public var version: Int
     public var mode: HandshakeMode
@@ -82,11 +83,29 @@ public enum HandshakeError: Error, Equatable, Sendable {
 /// Both sides of the handshake. Pure functions over keys and bytes; the
 /// transport only moves the frames.
 public enum Handshake {
-    static let label = Data("flotilla-companion-v2".utf8)
+    /// Domain separator — bumped when transcript field binding changes so
+    /// older peers fail closed instead of accepting unbound fields.
+    static let label = Data("flotilla-companion-v3".utf8)
 
-    static func clientTranscript(macID: String, deviceID: String, deviceKey: Data, ephemeral: Data, nonce: Data) -> Data {
+    static func clientTranscript(
+        macID: String,
+        deviceID: String,
+        deviceName: String,
+        mode: HandshakeMode,
+        deviceKey: Data,
+        ephemeral: Data,
+        nonce: Data
+    ) -> Data {
         var data = label
-        for field in [Data(macID.utf8), Data(deviceID.utf8), deviceKey, ephemeral, nonce] {
+        for field in [
+            Data(macID.utf8),
+            Data(deviceID.utf8),
+            Data(deviceName.utf8),
+            Data(mode.rawValue.utf8),
+            deviceKey,
+            ephemeral,
+            nonce,
+        ] {
             var length = UInt32(field.count).bigEndian
             data.append(Data(bytes: &length, count: 4))
             data.append(field)
@@ -121,6 +140,8 @@ public enum Handshake {
         let transcript = clientTranscript(
             macID: macID,
             deviceID: deviceID,
+            deviceName: deviceName,
+            mode: mode,
             deviceKey: identity.publicKey,
             ephemeral: ephemeral.publicKey.rawRepresentation,
             nonce: nonce
@@ -217,6 +238,8 @@ public enum Handshake {
         let transcript = clientTranscript(
             macID: hello.macID,
             deviceID: hello.deviceID,
+            deviceName: hello.deviceName,
+            mode: hello.mode,
             deviceKey: hello.deviceKey,
             ephemeral: hello.ephemeralKey,
             nonce: hello.nonce

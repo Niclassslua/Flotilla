@@ -3,7 +3,7 @@ import SessionKit
 
 /// The wire protocol version. Both the handshake and the pairing link carry it.
 public enum CompanionProtocol {
-    public static let version = 4
+    public static let version = 5
     /// Transcripts are capped to the newest events (docs/companion.md, A7).
     public static let transcriptEventLimit = 400
 }
@@ -23,6 +23,8 @@ public enum ClientMessage: Hashable, Codable, Sendable {
     case speechFinish(requestID: UUID)
     case speechCancel(requestID: UUID)
     case ping
+    /// Phone is removing this Mac locally; Mac must drop trust for this device.
+    case revoke
 }
 
 public enum CompanionRequest: Hashable, Codable, Sendable {

@@ -325,10 +325,12 @@ final class RemoteCompanionDataSource: CompanionDataSource {
 
     func removeMac(_ macID: MacHost.ID) {
         guard let connection = connection(macID) else { return }
-        connection.setActive(false)
-        Task { await connection.onCacheDiscard() }
         connections.removeAll { $0 === connection }
         saveRecords()
+        Task {
+            await connection.revokeTrust()
+            await connection.onCacheDiscard()
+        }
     }
 
     func reconnect(_ macID: MacHost.ID) {

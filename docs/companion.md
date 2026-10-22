@@ -114,14 +114,15 @@ Remove a row here once its feature ships (drops the flag) or is dropped
    authenticate with that key; no secret is ever reused. The Mac trusts a
    phone immediately after this one-time proof and changes the QR sheet into
    a paired-device receipt; there is no second approval prompt. A paired
-   phone can be removed from the list in Settings at any time.
+   phone can be removed from the list in Settings at any time. Removing a Mac
+   on the phone sends `ClientMessage.revoke` so the Mac drops trust too.
 
-### Handshake (protocol version 4)
+### Handshake (protocol version 5)
 
-The attention event changed the wire protocol from 3 to 4. The current
-handshake requires an exact version match, so an older phone cannot pair or
-resume with a version-4 Mac until both apps are updated. The `v2` transcript
-domain separator below is a cryptographic label and did not change.
+Protocol 5 binds `deviceName` and `mode` into the signed client transcript and
+adds phone-initiated revoke. An exact version match is required, so older peers
+fail closed with `versionUnsupported` instead of accepting unbound names. The
+transcript domain separator is `v3` (was `v2` through protocol 4).
 
 All frames are length-prefixed (`UInt32` big-endian, max 8 MiB).
 
@@ -131,7 +132,7 @@ All frames are length-prefixed (`UInt32` big-endian, max 8 MiB).
 | 2 | `ServerHello` or `ServerReject` (plaintext JSON) | X25519 ephemeral key, nonce, Mac name, Ed25519 signature over the transcript — or a reject code |
 | 3+ | Sealed frames | 8-byte counter + ChaChaPoly ciphertext and tag |
 
-- *Client transcript* = `"flotilla-companion-v2" ‖ macID ‖ deviceID ‖ deviceKey ‖ clientEphemeral ‖ clientNonce`.
+- *Client transcript* = `"flotilla-companion-v3" ‖ macID ‖ deviceID ‖ deviceName ‖ mode ‖ deviceKey ‖ clientEphemeral ‖ clientNonce`.
 - *Proof*: `pair` → HMAC-SHA256(secret, SHA256(client transcript));
   `resume` → Ed25519 signature by the device key over SHA256(client transcript).
 - *Server signature*: Ed25519 by the Mac key over
@@ -156,7 +157,7 @@ and decoded sizes are bounded by the frame limit.
 |---|---|
 | `subscribe(sessionID)` / `unsubscribe` / `resyncTranscript(sessionID)` / `resyncFleet` | `fleet(FleetSnapshot)` on connect; `fleetDelta(FleetDelta)` on changes |
 | `request(id, CompanionRequest)`: `sendPrompt`, `stop`, `answer`, `createSession`, `handoff`, `restart`, `delete`, `diff`, `commits`, `file` | `transcriptSnapshot` on subscription or resync, then `transcriptDelta` on change |
-| `ping` | `transcriptSnapshot(sessionID, revision, SessionTranscript)` on subscription; `transcriptDelta(sessionID, TranscriptDelta)` for overlapping changes; `response(id, CompanionResponse)` · `pong` |
+| `ping` / `revoke` (phone removes Mac → Mac drops trust) | `transcriptSnapshot(sessionID, revision, SessionTranscript)` on subscription; `transcriptDelta(sessionID, TranscriptDelta)` for overlapping changes; `response(id, CompanionResponse)` · `pong` |
 
 Pending cards travel inside `FleetSnapshot.pending`, keyed by session.
 

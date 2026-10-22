@@ -101,6 +101,90 @@ final class CompanionHostPairingTests: XCTestCase {
         XCTAssertTrue(host.connectedDeviceIDs.contains("phone-1"))
         XCTAssertNil(host.pairing, "The used code should be replaced by the success receipt")
     }
+
+    func testRePairClosesExistingPeersForTheSameDeviceID() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("companion-repair-test-\(UUID().uuidString)")
+        let domain = "CompanionRePairTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer {
+            defaults.removePersistentDomain(forName: domain)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let storage = CompanionHostStorage(directory: directory.appendingPathComponent("identity"))
+        let appStore = AppStore(
+            repository: try GRDBSessionRepository(),
+            gitService: MockGitService(),
+            processManager: SessionProcessManager(
+                locator: AppLayerExecutableLocator(executable: URL(fileURLWithPath: "/usr/bin/env")),
+                processFactory: RecordingProcessFactory()
+            ),
+            worktreeBaseDirectoryProvider: { directory }
+        )
+        let host = CompanionHost(
+            store: appStore,
+            gitService: MockGitService(),
+            supportDirectory: directory,
+            storage: storage,
+            defaults: defaults
+        )
+        defer { host.shutdown() }
+
+        host.isEnabled = true
+        let listenDeadline = Date().addingTimeInterval(5)
+        while Date() < listenDeadline {
+            if case .listening = host.status { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        guard case let .listening(port) = host.status else {
+            return XCTFail("The Mac must listen before a phone can pair")
+        }
+
+        host.beginPairing()
+        let firstPayload = try XCTUnwrap(host.pairing?.payload)
+        let firstPhone = CompanionIdentity()
+        let first = try await CompanionClient.connect(
+            to: [ConnectTarget(path: .lan, label: "loopback", endpoint: .hostPort(host: "127.0.0.1", port: .init(rawValue: port)!))],
+            hello: {
+                try Handshake.makeClientHello(
+                    mode: .pair, macID: firstPayload.macID, deviceID: "phone-1",
+                    deviceName: "First", identity: firstPhone, pairingSecret: firstPayload.secret
+                )
+            },
+            pinnedMacKey: firstPayload.macKey
+        )
+        var firstClosed = false
+        first.session.onClose { _ in firstClosed = true }
+        let attachedDeadline = Date().addingTimeInterval(5)
+        while host.recentlyPairedDevice == nil, Date() < attachedDeadline {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertTrue(host.connectedDeviceIDs.contains("phone-1"))
+
+        host.beginPairing()
+        let secondPayload = try XCTUnwrap(host.pairing?.payload)
+        let secondPhone = CompanionIdentity()
+        let second = try await CompanionClient.connect(
+            to: [ConnectTarget(path: .lan, label: "loopback", endpoint: .hostPort(host: "127.0.0.1", port: .init(rawValue: port)!))],
+            hello: {
+                try Handshake.makeClientHello(
+                    mode: .pair, macID: secondPayload.macID, deviceID: "phone-1",
+                    deviceName: "Second", identity: secondPhone, pairingSecret: secondPayload.secret
+                )
+            },
+            pinnedMacKey: secondPayload.macKey
+        )
+        defer { second.session.close() }
+
+        let closeDeadline = Date().addingTimeInterval(5)
+        while !firstClosed, Date() < closeDeadline {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertTrue(firstClosed, "Re-pair must close the previous peer for the same deviceID")
+        XCTAssertEqual(host.devices.map(\.id), ["phone-1"])
+        XCTAssertEqual(host.devices.first?.name, "Second")
+        XCTAssertEqual(storage.loadDevices().first?.publicKey, secondPhone.publicKey)
+        XCTAssertTrue(host.connectedDeviceIDs.contains("phone-1"))
+    }
 }
 
 final class CompanionSnapshotBuilderTests: XCTestCase {
