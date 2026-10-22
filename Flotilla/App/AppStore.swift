@@ -766,16 +766,19 @@ final class AppStore {
     }
 
     /// Applies a (possibly late-arriving) self-report descriptor. When a
-    /// `replacing` fallback worktree is passed, it's removed first so the
+    /// `replacing` fallback worktree is passed, it's removed so the
     /// agent-reported worktree becomes the session's only one, and the
     /// fallback's warning is cleared since the situation it described has
-    /// now resolved itself.
+    /// now resolved itself. The process is never terminated here — fallback
+    /// never rewrites cwd, so the agent was never running in the stopgap.
     private func applySelfReport(
         _ descriptor: AgentSelfReportDescriptor,
         sessionID: UUID,
         projectFolder: URL?,
         replacing fallbackWorktree: WorktreeInfo?
     ) async {
+        let generation = metadataMonitor.generation(for: sessionID)
+
         // Validate agent-reported worktree against registered secondary worktrees
         var validatedWorktree: WorktreeInfo?
         if let branch = descriptor.branch,
@@ -803,23 +806,26 @@ final class AppStore {
             }
         }
 
+        // Cancel/generation before any git destroy — restart/delete can race
+        // a task already past the await in listWorktrees above.
+        guard metadataMonitor.isCurrent(generation, for: sessionID),
+              sessions.contains(where: { $0.id == sessionID }) else { return }
+
         if let fallbackWorktree, validatedWorktree != nil {
-            if let index = sessions.firstIndex(where: { $0.id == sessionID }),
-               sessions[index].workingDirectory == fallbackWorktree.worktreePath {
-                processManager.terminate(sessionID: sessionID)
-            }
             try? await gitService.removeWorktree(
                 at: fallbackWorktree.worktreePath,
                 in: fallbackWorktree.baseCheckoutPath,
                 branch: fallbackWorktree.branchName,
                 deleteBranch: true
             )
+            guard metadataMonitor.isCurrent(generation, for: sessionID),
+                  sessions.contains(where: { $0.id == sessionID }) else { return }
             if lastOperationError == Self.fallbackWarning {
                 lastOperationError = nil
             }
         }
 
-        guard !Task.isCancelled, let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
 
         // Apply title (same guards syncAgentSessionMetadata already applies).
         if let reportedTitle = descriptor.title {
@@ -853,15 +859,14 @@ final class AppStore {
     /// caller can discard it later if the agent's own descriptor still
     /// shows up.
     ///
-    /// **Known limitation:** by the time this fires, the agent has already
-    /// been running — and possibly editing files — directly in the main
-    /// checkout, since it was never actually launched into a worktree. The
-    /// worktree created here gives the session a `Session.worktree` the
-    /// running agent process has no relationship to; its real edits are
-    /// still landing in the main checkout. The warning makes this visible
-    /// rather than silently presenting the worktree as if it were in use.
+    /// **Path freeze:** the agent is still running in the main checkout, so
+    /// session `workingDirectory` / `worktree` stay on that real checkout.
+    /// DiffStat and review follow the live process; the stopgap is held only
+    /// for later cleanup. The warning makes the mismatch visible — no silent
+    /// relaunch into the unused worktree.
     @discardableResult
     private func fallBackToAppManagedWorktree(sessionID: UUID, projectFolder: URL?) async -> WorktreeInfo? {
+        let generation = metadataMonitor.generation(for: sessionID)
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
               let projectFolder else { return nil }
 
@@ -880,13 +885,12 @@ final class AppStore {
                 worktreePath: worktree.path,
                 baseCheckoutPath: basePath
             )
-            guard !Task.isCancelled, let index = sessions.firstIndex(where: { $0.id == sessionID }) else {
+            guard metadataMonitor.isCurrent(generation, for: sessionID),
+                  sessions.contains(where: { $0.id == sessionID }) else {
                 try? await gitService.removeWorktree(at: worktree.path, in: basePath, branch: worktree.branch, deleteBranch: true)
                 return nil
             }
-            sessions[index].worktree = worktreeInfo
-            sessions[index].workingDirectory = worktree.path
-            try repository.save(mergingLiveScrollback(sessions[index]))
+            // Do not rewrite workingDirectory / worktree — process never moved.
             lastOperationError = Self.fallbackWarning
             return worktreeInfo
         } catch {

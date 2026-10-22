@@ -254,6 +254,49 @@ final class GitServiceRealRepoTests: XCTestCase {
         }
     }
 
+    /// Destination `…/flotilla/<slug>` embeds branch `flotilla/<slug>`; a path
+    /// collision must not be misread as branchAlreadyExists (#52), and the
+    /// `-b` branch created before the failed checkout must be rolled back (#50).
+    func testCreateWorktreePathCollisionIsNotBranchAlreadyExistsAndRollsBackBranch() async throws {
+        let slug = "flotilla/collision-slug"
+        let occupied = worktreeBase.appendingPathComponent(slug)
+        try FileManager.default.createDirectory(at: occupied, withIntermediateDirectories: true)
+        try "occupied\n".write(to: occupied.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+
+        do {
+            _ = try await service.createWorktree(basePath: repoPath, branch: slug, destination: occupied)
+            XCTFail("expected worktreePathAlreadyExists error")
+        } catch GitServiceError.worktreePathAlreadyExists(let url) {
+            XCTAssertEqual(url.path, occupied.path)
+        }
+
+        let branches = try await git(["branch", "--list", slug])
+        XCTAssertTrue(
+            branches.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            "failed worktree add -b must not leave an orphan branch"
+        )
+    }
+
+    func testCreateWorktreeRollsBackBranchWhenCheckoutFails() async throws {
+        let parentFile = worktreeBase.appendingPathComponent("not-a-dir")
+        try Data().write(to: parentFile)
+        let destination = parentFile.appendingPathComponent("child")
+        let branch = "flotilla/orphan-rollback"
+
+        do {
+            _ = try await service.createWorktree(basePath: repoPath, branch: branch, destination: destination)
+            XCTFail("expected createWorktree to fail when parent path is a file")
+        } catch {
+            // any failure is fine — assert the branch did not stick
+        }
+
+        let branches = try await git(["branch", "--list", branch])
+        XCTAssertTrue(
+            branches.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            "orphan -b branch must be deleted after checkout failure"
+        )
+    }
+
     func testRemoveWorktreeCleansUpDirectoryAndBranch() async throws {
         let destination = worktreeBase.appendingPathComponent("to-remove")
         _ = try await service.createWorktree(basePath: repoPath, branch: "to-remove", destination: destination)

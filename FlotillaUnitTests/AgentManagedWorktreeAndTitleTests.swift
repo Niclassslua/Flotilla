@@ -183,14 +183,12 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         AgentSelfReportCoordinator.clearDescriptor(for: unwrappedID, supportDirectory: supportDir)
     }
 
-    /// Regression test: a permission-gated agent (e.g. a CLI tool-approval
-    /// prompt sitting in front of the `git worktree add` command) can take
-    /// longer than the fallback threshold to write its self-report
-    /// descriptor. Flotilla's fallback should create a stopgap worktree in
-    /// the meantime, but once the agent's real descriptor finally shows up
-    /// it must win: the stopgap worktree is discarded and the
-    /// agent-reported title/branch/path take over, instead of the poll loop
-    /// having already given up.
+    /// Regression test: a permission-gated agent can take longer than the
+    /// fallback threshold to write its self-report. Fallback creates a
+    /// stopgap worktree but must not rewrite session paths (process still
+    /// on main). Once the agent descriptor arrives it wins: paths update to
+    /// the reported worktree, the stopgap is removed, and the process is
+    /// not killed (#51/#44).
     func testAppStoreAgentSelfReportArrivingAfterFallbackReplacesStopgapWorktree() async throws {
         let repository = try GRDBSessionRepository()
         let factory = RecordingProcessFactory()
@@ -217,13 +215,14 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         )
         let unwrappedID = try XCTUnwrap(sessionID)
 
-        // Wait for the fallback to fire (it creates a stopgap worktree once
-        // the shortened threshold elapses with no descriptor on disk).
-        try await waitForWorktree(of: unwrappedID, in: store)
+        try await waitForFallbackCreate(gitService)
         XCTAssertEqual(gitService.createWorktreeCalls.count, 1)
         let stopgapSession = try XCTUnwrap(store.sessions.first(where: { $0.id == unwrappedID }))
-        XCTAssertNotNil(stopgapSession.worktree)
+        // Path freeze: still on the real checkout until the agent reports.
+        XCTAssertNil(stopgapSession.worktree)
+        XCTAssertEqual(stopgapSession.workingDirectory, projectFolder)
         XCTAssertNotNil(store.lastOperationError)
+        XCTAssertTrue(try XCTUnwrap(factory.processes.first).isRunning)
 
         // Now simulate the agent finally clearing its permission prompt and
         // writing its own descriptor, after the fallback already ran.
@@ -253,9 +252,11 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         XCTAssertEqual(finalSession.worktree?.worktreePath, chosenWorktreeURL)
         XCTAssertEqual(finalSession.workingDirectory, chosenWorktreeURL)
 
-        // The stopgap worktree should have been cleaned up, and its warning cleared.
+        // Stopgap cleaned up; process never terminated for the move.
         XCTAssertEqual(gitService.removeWorktreeCalls.count, 1)
         XCTAssertNil(store.lastOperationError)
+        XCTAssertTrue(try XCTUnwrap(factory.processes.first).isRunning)
+        XCTAssertEqual(factory.processes.count, 1)
 
         AgentSelfReportCoordinator.clearDescriptor(for: unwrappedID, supportDirectory: supportDir)
     }
@@ -326,10 +327,11 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         )
         let unwrappedID = try XCTUnwrap(sessionID)
 
-        // Wait for fallback worktree to be created
-        try await waitForWorktree(of: unwrappedID, in: store)
-        let fallbackWorktree = store.sessions.first(where: { $0.id == unwrappedID })?.worktree
-        XCTAssertNotNil(fallbackWorktree, "Fallback worktree should exist")
+        try await waitForFallbackCreate(gitService)
+        XCTAssertEqual(gitService.createWorktreeCalls.count, 1)
+        let before = try XCTUnwrap(store.sessions.first(where: { $0.id == unwrappedID }))
+        XCTAssertNil(before.worktree)
+        XCTAssertEqual(before.workingDirectory, projectFolder)
 
         let supportDir = TmuxSessionWrapping.defaultSupportDirectory()
         let descPath = AgentSelfReportCoordinator.descriptorPath(for: unwrappedID, supportDirectory: supportDir)
@@ -346,23 +348,21 @@ final class AgentManagedWorktreeAndTitleTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(200))
 
         let currentSession = try XCTUnwrap(store.sessions.first(where: { $0.id == unwrappedID }))
-        // Worktree should NOT be updated to "/"
-        XCTAssertNotEqual(currentSession.worktree?.worktreePath.path, "/")
-        // The fallback worktree must remain intact
-        XCTAssertEqual(currentSession.worktree?.worktreePath, fallbackWorktree?.worktreePath)
-        // Fallback worktree should not have been removed
+        XCTAssertNil(currentSession.worktree)
+        XCTAssertEqual(currentSession.workingDirectory, projectFolder)
+        // Invalid report must not discard the stopgap held for later cleanup
         XCTAssertEqual(gitService.removeWorktreeCalls.count, 0)
 
         AgentSelfReportCoordinator.clearDescriptor(for: unwrappedID, supportDirectory: supportDir)
     }
 
-    /// The mock records `createWorktree` before returning, and the store
-    /// assigns the worktree only after that await resumes — so wait for the
-    /// session itself, not the recorded call.
-    private func waitForWorktree(of sessionID: UUID, in store: AppStore) async throws {
+    /// Fallback no longer rewrites session.worktree (path freeze); wait for
+    /// the mock's createWorktree call instead.
+    private func waitForFallbackCreate(_ gitService: MockGitService) async throws {
         for _ in 0..<100 {
-            if store.sessions.first(where: { $0.id == sessionID })?.worktree != nil { return }
+            if !gitService.createWorktreeCalls.isEmpty { return }
             try await Task.sleep(for: .milliseconds(20))
         }
+        XCTFail("fallback createWorktree never recorded")
     }
 }

@@ -521,13 +521,27 @@ public struct GitService: GitServiceProtocol {
         do {
             _ = try await run(["worktree", "add", "-b", branch, destination.path], at: basePath)
         } catch let GitServiceError.commandFailed(_, stderr) {
-            if stderr.contains("already exists") && stderr.contains(branch) {
-                throw GitServiceError.branchAlreadyExists(branch)
+            // Path messages quote the destination (often `…/flotilla/<slug>`),
+            // which embeds the branch name — only a true branch collision says
+            // "a branch named …".
+            let error: GitServiceError
+            if stderr.contains("already exists") {
+                if stderr.contains("a branch named") {
+                    error = .branchAlreadyExists(branch)
+                } else {
+                    error = .worktreePathAlreadyExists(destination)
+                }
+            } else {
+                error = .commandFailed(exitCode: -1, stderr: stderr)
             }
-            if stderr.lowercased().contains("already exists") {
-                throw GitServiceError.worktreePathAlreadyExists(destination)
+            // `worktree add -b` creates the branch before the checkout; roll it
+            // back on checkout failure so failed creates don't leave orphan refs.
+            if case .branchAlreadyExists = error {
+                // Pre-existing branch — leave it alone.
+            } else {
+                try? await deleteBranch(branch, force: true, at: basePath)
             }
-            throw GitServiceError.commandFailed(exitCode: -1, stderr: stderr)
+            throw error
         }
         return GitWorktree(branch: branch, path: destination, isMainWorktree: false)
     }
