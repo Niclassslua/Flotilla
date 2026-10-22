@@ -81,6 +81,98 @@ final class WorkspaceNavigatorHistoryTests: XCTestCase {
             XCTAssertEqual(navigator.selection, .overview)
         }
     }
+
+    func testNilSelectedSessionIDLeavesDeletedSession() {
+        let navigator = makeNavigator()
+        let session = UUID()
+        navigator.selection = .session(session)
+        XCTAssertEqual(navigator.selectedSessionID, session)
+
+        navigator.selectedSessionID = nil
+
+        XCTAssertEqual(navigator.selection, .allSessions)
+        XCTAssertNil(navigator.selectedSessionID)
+        XCTAssertNil(navigator.focusedSessionID)
+    }
+
+    func testNilSelectedProjectIDLeavesDeletedProject() {
+        let navigator = makeNavigator()
+        let project = UUID()
+        navigator.selection = .project(project)
+
+        navigator.selectedProjectID = nil
+
+        XCTAssertEqual(navigator.selection, .overview)
+        XCTAssertNil(navigator.selectedProjectID)
+    }
+
+    func testCollectionKeepsFocusedSessionID() {
+        let navigator = makeNavigator()
+        let session = UUID()
+        navigator.selection = .session(session)
+        navigator.selection = .allSessions
+
+        XCTAssertEqual(navigator.selection, .allSessions)
+        XCTAssertEqual(navigator.focusedSessionID, session)
+        XCTAssertEqual(navigator.selectedSessionID, session)
+
+        navigator.selection = .smartList(.needsYou)
+        XCTAssertEqual(navigator.selectedSessionID, session)
+
+        navigator.selectedSessionID = UUID()
+        XCTAssertEqual(navigator.selection, .smartList(.needsYou), "Focus target must not yank selection off the collection")
+        XCTAssertEqual(navigator.selectedSessionID, navigator.focusedSessionID)
+    }
+
+    func testHistorySkipsDeletedSessionsAndProjects() {
+        let navigator = makeNavigator()
+        let aliveSession = UUID()
+        let deadSession = UUID()
+        let aliveProject = UUID()
+        let deadProject = UUID()
+
+        navigator.selection = .session(aliveSession)
+        navigator.selection = .session(deadSession)
+        navigator.selection = .project(deadProject)
+        navigator.selection = .project(aliveProject)
+        navigator.selection = .allSessions
+
+        navigator.pruneNavigation(sessions: [aliveSession], projects: [aliveProject])
+
+        XCTAssertFalse(navigator.backStack.contains(.session(deadSession)))
+        XCTAssertFalse(navigator.backStack.contains(.project(deadProject)))
+        XCTAssertTrue(navigator.backStack.contains(.session(aliveSession)))
+        XCTAssertTrue(navigator.backStack.contains(.project(aliveProject)))
+
+        // Land on a tombstone via an unprimed stack, then skip it on Back.
+        let navigator2 = makeNavigator()
+        navigator2.selection = .session(aliveSession)
+        navigator2.selection = .session(deadSession)
+        navigator2.selection = .allSessions
+        navigator2.pruneNavigation(sessions: [aliveSession], projects: [])
+        // Manually reintroduce a dead entry behind the current position.
+        navigator2.backStack.append(.session(deadSession))
+        navigator2.backStack.append(.session(aliveSession))
+
+        navigator2.goBack()
+        XCTAssertEqual(navigator2.selection, .session(aliveSession))
+        navigator2.goBack()
+        XCTAssertNotEqual(navigator2.selection, .session(deadSession))
+    }
+
+    func testPruneNavigationLeavesTombstoneSelection() {
+        let navigator = makeNavigator()
+        let deadSession = UUID()
+        let deadProject = UUID()
+
+        navigator.selection = .session(deadSession)
+        navigator.pruneNavigation(sessions: [], projects: [])
+        XCTAssertEqual(navigator.selection, .allSessions)
+
+        navigator.selection = .project(deadProject)
+        navigator.pruneNavigation(sessions: [], projects: [])
+        XCTAssertEqual(navigator.selection, .overview)
+    }
 }
 
 /// One scope drives every presentation, so switching Grid/Board/Focus changes

@@ -18,6 +18,9 @@ struct FlotillaShell: View {
     @Bindable var settingsViewModel: SettingsViewModel
     @State var activityStore: SessionActivityStore
     @State private var createSessionProgress: CGFloat = 0
+    /// Bumped on every present so a dismiss animation completion cannot clear
+    /// a sheet that was reopened (⌘N) while the animation was still running.
+    @State private var createSessionDismissGeneration = 0
 
     init(
         store: AppStore,
@@ -134,21 +137,21 @@ struct FlotillaShell: View {
     /// `FleetSessionList.onDeleteCommand`) as the only thing that acts on it
     /// for now.
     ///
-    /// While the grid is the presentation, clicking a session row assigns or
-    /// unassigns it instead of opening it — there is no reason to leave the
-    /// grid just to build it.
-    ///
-    /// This is the gesture the audit filed as a P0, and it is deliberately
-    /// back. What made it a defect was not the shortcut itself but that
-    /// nothing said which mode you were in or what a click had just done: the
-    /// only cue was a green tint matching the `Working` status text two lines
-    /// below it. Membership is drawn on the row now — a border with a corner
-    /// checkmark — so the gesture has a visible result, and double-click (see
-    /// `SessionSidebarRow`) still opens the session.
+    /// While the grid is the presentation, a mouse click on a session row
+    /// assigns or unassigns it instead of opening it — there is no reason to
+    /// leave the grid just to build it. Arrow keys share this `onChange` path,
+    /// so they must not toggle: membership is click/control only. After a
+    /// toggle (or a keyboard hop onto a row) List selection is restored to the
+    /// collection so Delete/Backspace still targets the viewed surface.
+    /// Double-click (see `SessionSidebarRow`) still opens the session.
     func handleSidebarSelectionChange(_ newSelection: Set<SidebarItem>) {
         guard newSelection.count == 1, let only = newSelection.first else { return }
         if let gridMembership, case .session(let id) = only {
-            gridMembership.onToggle(id)
+            let isKeyboard = NSApp.currentEvent?.type == .keyDown
+            if !isKeyboard {
+                gridMembership.onToggle(id)
+            }
+            navigator.sidebarSelection = [navigator.selection]
             return
         }
         guard only != navigator.selection else { return }
@@ -277,6 +280,7 @@ struct FlotillaShell: View {
     }
 
     private func presentCreateSession() {
+        createSessionDismissGeneration += 1
         createSessionProgress = reduceMotion ? 1 : 0
         navigator.presentedSheet = .createSession
     }
@@ -284,6 +288,7 @@ struct FlotillaShell: View {
     /// The launcher with its issue picker open, for `projectID` — or, from the
     /// palette, the project in view or the selected session's project.
     private func presentCreateSessionFromIssue(projectID: UUID?) {
+        createSessionDismissGeneration += 1
         createSessionProgress = reduceMotion ? 1 : 0
         let target = projectID ?? navigator.selectedProjectID ?? store.selectedSession?.projectID
         navigator.presentedSheet = .createSession(projectID: target, opensIssuePicker: true)
@@ -305,9 +310,11 @@ struct FlotillaShell: View {
             createSessionProgress = 0
             return
         }
+        let generation = createSessionDismissGeneration
         withAnimation(.easeIn(duration: 0.18), completionCriteria: .logicallyComplete) {
             createSessionProgress = 0
         } completion: {
+            guard generation == createSessionDismissGeneration else { return }
             navigator.presentedSheet = nil
         }
     }
@@ -420,6 +427,7 @@ struct FlotillaShell: View {
                 initialIssueNumber: issueNumber,
                 onDismiss: { dismissOverlay() }
             )
+            .id(sheet.id)
         case .commandPalette:
             CommandPaletteView(
                 projects: store.projects,
@@ -477,7 +485,12 @@ struct FlotillaShell: View {
         navigator.sessionGroup = SessionGroup(
             rawValue: settingsViewModel.settings.workspace.sessionGroup
         )
-        navigator.pruneSessionGroup(against: Set(store.projects.map(\.id)))
+        let projectIDs = Set(store.projects.map(\.id))
+        navigator.pruneSessionGroup(against: projectIDs)
+        navigator.pruneNavigation(
+            sessions: Set(store.sessions.map(\.id)),
+            projects: projectIDs
+        )
     }
 
     private func openSession(_ id: UUID) {
@@ -563,13 +576,31 @@ private struct ShellLifecycleModifier: ViewModifier {
             // A deleted project must not leave the fleet filtered to a group
             // whose chip is no longer in the bar to explain the emptiness.
             .onChange(of: store.projects.map(\.id)) { _, ids in
-                navigator.pruneSessionGroup(against: Set(ids))
+                let projectIDs = Set(ids)
+                navigator.pruneSessionGroup(against: projectIDs)
+                navigator.pruneNavigation(
+                    sessions: Set(store.sessions.map(\.id)),
+                    projects: projectIDs
+                )
+            }
+            .onChange(of: store.sessions.map(\.id)) { _, ids in
+                navigator.pruneNavigation(
+                    sessions: Set(ids),
+                    projects: Set(store.projects.map(\.id))
+                )
             }
             .onChange(of: store.selectedSessionID) { _, sessionID in
                 navigator.selectedSessionID = sessionID
             }
             .onChange(of: navigator.selectedSessionID) { _, sessionID in
-                store.selectedSessionID = sessionID
+                // Collections keep a focused session ID for Focus; do not clear
+                // the store when the navigator leaves `.session` for one.
+                if let sessionID {
+                    store.selectedSessionID = sessionID
+                }
+            }
+            .onChange(of: store.selectedProjectID) { _, projectID in
+                navigator.selectedProjectID = projectID
             }
             .onChange(of: store.sessions.count) {
                 terminalManager.retainControllers(for: Set(store.sessions.map(\.id)))
