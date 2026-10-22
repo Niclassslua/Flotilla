@@ -456,7 +456,7 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
         try dbQueue.write { db in
             var boardToSave = board
             boardToSave.updatedAt = Date()
-            try KanbanBoardRecord(board: boardToSave).save(db)
+            try KanbanBoardRecord(board: boardToSave).save(db) // throws on encode failure — keeps prior row
             
             // Save custom columns
             if board.columnMode == .custom {

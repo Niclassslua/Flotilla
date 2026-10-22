@@ -334,17 +334,26 @@ struct KanbanBoardRecord: Codable, FetchableRecord, PersistableRecord {
     var cardOrderJSON: String
     var updatedAt: Date
 
-    init(board: KanbanBoard) {
+    init(board: KanbanBoard) throws {
         id = board.id.uuidString
         projectID = board.projectID?.uuidString
         name = board.name
         columnMode = board.columnMode.rawValue
         let encoder = JSONEncoder()
-        // Prefer keeping prior JSON over writing `[]` when encode somehow fails.
-        customColumnsJSON = (try? String(data: encoder.encode(board.customColumns), encoding: .utf8))
-            ?? "[]"
-        cardOrderJSON = (try? String(data: encoder.encode(board.cardOrder), encoding: .utf8))
-            ?? "{}"
+        // Never fall back to `[]`/`{}` — that silently wiped boards (#82).
+        // A failed encode must fail the save so the prior row stays put.
+        guard let columnsData = try? encoder.encode(board.customColumns),
+              let columnsJSON = String(data: columnsData, encoding: .utf8),
+              let orderData = try? encoder.encode(board.cardOrder),
+              let orderJSON = String(data: orderData, encoding: .utf8) else {
+            throw RecordDecodingError.invalidKanbanBoard(
+                id: board.id.uuidString,
+                field: "encode",
+                value: "customColumns/cardOrder"
+            )
+        }
+        customColumnsJSON = columnsJSON
+        cardOrderJSON = orderJSON
         updatedAt = board.updatedAt
     }
 
