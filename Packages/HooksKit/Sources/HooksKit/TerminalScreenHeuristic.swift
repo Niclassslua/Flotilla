@@ -40,9 +40,6 @@ public struct TerminalScreenHeuristic: Sendable {
         "ctrl+c to interrupt",
         "ctrl-c to interrupt",
         "ctrl+c to stop",
-        // Claude Code 2.1.291+ drops the interrupt hint while thinking; the
-        // spinner still ends with "thought for Ns" above an empty ❯.
-        "thought for",
     ]
 
     /// Approval prompts. Checked before the working markers: some CLIs keep
@@ -232,6 +229,16 @@ public struct TerminalScreenHeuristic: Sendable {
                 cause: "screen: working marker \(Self.quoted(marker))"
             )
         }
+        // Claude 2.1.291+ drops the interrupt hint while thinking; the live
+        // spinner line still ends with "thought for Ns". Require the spinner
+        // glyph on the *same* line so a free composer after the turn (or
+        // prose that merely mentions "thought for") is not stuck Working.
+        if Self.showsClaudeThinkingSpinner(in: tail) {
+            return SessionStatusObservation(
+                .working,
+                cause: "screen: working marker \"thought for\" (Claude thinking spinner)"
+            )
+        }
         if Self.hasComposerWithTranscript(interactiveTail) {
             // Cursor approvals/plans fire no clearing hook when the prompt
             // leaves; a free composer means the wait is over (`endsTurn`).
@@ -249,6 +256,20 @@ public struct TerminalScreenHeuristic: Sendable {
 
     private static func quoted(_ marker: String) -> String {
         "\u{22}\(marker)\u{22}"
+    }
+
+    /// Claude's thinking row looks like `✻ Wibbling… (… · thought for 2s)`.
+    /// Matching bare `thought for` anywhere in the 8-line tail would outrank
+    /// a free composer once the spinner scrolled but the phrase lingered.
+    private static func showsClaudeThinkingSpinner(in tail: String) -> Bool {
+        for line in tail.split(separator: "\n") {
+            let lowered = line.lowercased()
+            guard lowered.contains("thought for") else { continue }
+            if line.contains("✻") || line.contains("…") || lowered.contains("...") {
+                return true
+            }
+        }
+        return false
     }
 
     /// Compatibility convenience for callers interested only in the broad

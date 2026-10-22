@@ -1103,6 +1103,19 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertTrue(observation?.cause?.contains("thought for") == true)
     }
 
+    func testStaleThoughtForWithoutSpinnerDoesNotBlockReadyComposer() {
+        let screen = """
+        I thought for a bit, then finished the change.
+        ● Done.
+        ❯
+        """
+        XCTAssertEqual(
+            TerminalScreenHeuristic(agent: .claudeCode).status(forScreen: screen),
+            .readyForReview,
+            "bare 'thought for' in transcript must not outrank a free composer"
+        )
+    }
+
     func testQuotedContinueHelpDoesNotForceWaiting() {
         let screen = """
         The docs say: press enter to continue, or answer continue?

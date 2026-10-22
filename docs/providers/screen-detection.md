@@ -36,7 +36,7 @@ substring matching on the bottom 8 non-empty lines, unless noted.
 | 7 | `SessionStatusHeuristic` | the rule 4 list (no bare `continue?` — too common in quoted help) | `waitingForInput` (no reason) | generic |
 | 8a | interrupt marker | `interrupted · what should claude do instead?`, `interrupted · what should antigravity cli do instead?` | `readyForReview` with **`endsTurn`**: ends a hook-held episode (an interrupt fires no hook) | Claude Code, Antigravity |
 | 8 | finished marker | `agent exited`, `pane is dead`, `process finished` | `readyForReview`, `suggestsAgentExit` | all (tmux) |
-| 9 | working marker | `esc to interrupt`, `escape to interrupt`, `esc to cancel`, `escape to cancel`, `ctrl+c to interrupt`, `ctrl-c to interrupt`, `ctrl+c to stop`, `thought for` (Claude 2.1.291+ spinner) | `working` | Claude, Codex, Cursor (`ctrl+c to stop`) |
+| 9 | working marker | `esc to interrupt`, `escape to interrupt`, `esc to cancel`, `escape to cancel`, `ctrl+c to interrupt`, `ctrl-c to interrupt`, `ctrl+c to stop`; Claude thinking spinner line with `thought for` **and** `✻`/`…` | `working` | Claude, Codex, Cursor (`ctrl+c to stop`) |
 | 10 | composer above transcript, 24-line window | a line starting (after `│┃║`) with `❯`, `> ` or `› `, with a non-decoration line above it | `readyForReview`; Cursor also sets **`endsTurn`** so a free composer clears a hook-held wait (approvals fire no clearing hook) | Claude (`❯`), Codex (`›`), Cursor |
 | — | nothing matched | | no observation (the status is left alone) | |
 
