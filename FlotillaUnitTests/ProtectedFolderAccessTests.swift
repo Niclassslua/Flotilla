@@ -31,4 +31,9 @@ final class ProtectedFolderAccessTests: XCTestCase {
     func testRequireReadableAllowsTmp() throws {
         try ProtectedFolderAccess.requireReadable(URL(fileURLWithPath: "/tmp"))
     }
+
+    func testRequireReadableSkipsMissingPath() throws {
+        let missing = URL(fileURLWithPath: "/tmp/flotilla-does-not-exist-\(UUID().uuidString)")
+        try ProtectedFolderAccess.requireReadable(missing)
+    }
 }
