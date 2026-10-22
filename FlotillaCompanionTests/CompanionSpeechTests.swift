@@ -34,6 +34,19 @@ final class CompanionSpeechTests: XCTestCase {
         await speech.checkAvailability(store: store, sessionID: sessionID)
         XCTAssertTrue(speech.isAvailable, "Mock source reports speech ready, so isAvailable must become true")
     }
+
+    // MARK: - Audio level meter
+
+    private func meterLevels(_ chunks: [[Float]]) -> [CompanionAudioLevelUpdate] {
+        var meter = CompanionAudioLevelMeter()
+        return chunks.map { chunk in chunk.withUnsafeBufferPointer { meter.process($0) } }
+    }
+
+    private func tone(amplitude: Float, seconds: Double) -> [Float] {
+        let count = Int(CompanionAudioLevelMeter.sampleRate * seconds)
+        return (0..<count).map { amplitude * sin(Float($0) * 0.3) }
+    }
+
     func testLoudSoundDoesNotFlattenFollowingSpeech() {
         let speech = tone(amplitude: 0.05, seconds: 0.2)
         let before = meterLevels([speech])[0].samples.last!.level
