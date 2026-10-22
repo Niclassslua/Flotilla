@@ -145,9 +145,6 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                     case "tool_use":
                         guard let name = block["name"] as? String else { continue }
                         let input = block["input"] as? [String: Any] ?? [:]
-                        guard let path = Self.imagePath(fromToolInput: input),
-                              let image = Self.imageEntry(atPath: path, timestamp: stamp)
-                        else { continue }
                         synthesizedToolID += 1
                         let id = (block["id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
                             ?? "cursor-tool-\(synthesizedToolID)"
@@ -157,7 +154,12 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
                             input: Self.encodeJSON(input),
                             timestamp: stamp
                         ))
-                        recordEntries.append(image)
+                        // Screenshots are a Read of an image path — keep the
+                        // inline image entry when the file is loadable.
+                        if let path = Self.imagePath(fromToolInput: input),
+                           let image = Self.imageEntry(atPath: path, timestamp: stamp) {
+                            recordEntries.append(image)
+                        }
                     default:
                         continue
                     }
@@ -221,29 +223,30 @@ public struct CursorTranscriptCodec: TranscriptLineReading, TranscriptWriting {
         guard FileManager.default.fileExists(atPath: bucket.path) else { return nil }
         let dirs = (try? FileManager.default.contentsOfDirectory(
             at: bucket,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         )) ?? []
-        let sorted = dirs.sorted { a, b in
-            let dateA = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            let dateB = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            return dateA > dateB
-        }
-        for dir in sorted {
+
+        // Earliest creation at/after launch — not latest updatedAt/mtime
+        // (docs/session-handoff.md). Recency picks the wrong chat when an
+        // older conversation in the same cwd was touched after launch.
+        var candidates: [(id: String, url: URL, created: Date)] = []
+        for dir in dirs {
             let metaURL = dir.appendingPathComponent("meta.json")
             guard let data = try? Data(contentsOf: metaURL),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-            let updatedMs = json["updatedAtMs"] as? Double ?? json["createdAtMs"] as? Double
-            let updated = updatedMs.map { Date(timeIntervalSince1970: $0 / 1000) }
-                ?? ((try? dir.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast)
-            guard updated >= since else { continue }
+            let createdMs = json["createdAtMs"] as? Double
+            let values = try? dir.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+            let created = createdMs.map { Date(timeIntervalSince1970: $0 / 1000) }
+                ?? values?.creationDate
+                ?? values?.contentModificationDate
+                ?? .distantPast
+            guard created >= since else { continue }
             let id = dir.lastPathComponent
-            if let url = try transcriptURL(sessionID: id, workingDirectory: workingDirectory) {
-                return (id, url)
-            }
-            return (id, metaURL)
+            let url = (try? transcriptURL(sessionID: id, workingDirectory: workingDirectory)) ?? metaURL
+            candidates.append((id, url, created))
         }
-        return nil
+        return candidates.min(by: { $0.created < $1.created }).map { ($0.id, $0.url) }
     }
 
     // MARK: - TranscriptWriting

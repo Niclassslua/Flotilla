@@ -171,6 +171,14 @@ public struct HookConfigurationWriter: Sendable {
             // Truncate any stale content from a previous launch of this
             // session ID before the new process starts appending to it.
             try Data().write(to: eventFile, options: .atomic)
+            // Cursor `.followup` / Antigravity `.queue` sit next to the event
+            // file; a relaunch must not re-inject prompts queued last run.
+            try? FileManager.default.removeItem(
+                at: URL(fileURLWithPath: eventFile.path + Self.cursorFollowupSuffix)
+            )
+            try? FileManager.default.removeItem(
+                at: URL(fileURLWithPath: eventFile.path + Self.antigravityQueueSuffix)
+            )
         } catch {
             return false
         }
@@ -768,6 +776,10 @@ public struct HookConfigurationWriter: Sendable {
     /// Suffix of the file `CursorCompanionAdapter` queues mid-turn phone
     /// prompts in, next to the event file. One prompt per line.
     public static let cursorFollowupSuffix = ".followup"
+
+    /// Suffix of the file Antigravity's PreInvocation wrapper drains for
+    /// phone prompts queued mid-turn (`$event_file.queue`).
+    public static let antigravityQueueSuffix = ".queue"
 
     /// Cursor's hooks.json only takes a command string, so the script reads
     /// `hook_event_name` (and `status`) from stdin, falling back to the first

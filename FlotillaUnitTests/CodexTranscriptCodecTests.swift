@@ -431,4 +431,43 @@ final class CodexTranscriptCodecTests: XCTestCase {
         // Removing state for a session that has none is not an error.
         XCTAssertNoThrow(try codec.removeNativeState(sessionID: sessionID, workingDirectory: workingDirectory))
     }
+
+    // MARK: - Discovery
+
+    func testDiscoverSessionPrefersEarliestCreationAfterLaunchNotLatestMtime() async throws {
+        let launch = Self.writeTime
+        let earlierID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        let laterID = "ffffffff-1111-2222-3333-444444444444"
+
+        let earlierCodec = CodexTranscriptCodec(homeDirectory: home, now: { launch.addingTimeInterval(1) })
+        let laterCodec = CodexTranscriptCodec(homeDirectory: home, now: { launch.addingTimeInterval(30) })
+        let earlier = try await earlierCodec.writeNative(
+            [.userMessage(text: "first", timestamp: launch.addingTimeInterval(1))],
+            workingDirectory: workingDirectory,
+            sessionID: earlierID
+        )
+        _ = try await laterCodec.writeNative(
+            [.userMessage(text: "second", timestamp: launch.addingTimeInterval(30))],
+            workingDirectory: workingDirectory,
+            sessionID: laterID
+        )
+
+        // Make the earlier rollout look "hotter" on mtime — the old bug would
+        // have returned it; creation order must still win.
+        let earlierURL = try XCTUnwrap(earlier.transcriptURL)
+        try FileManager.default.setAttributes(
+            [.modificationDate: launch.addingTimeInterval(120)],
+            ofItemAtPath: earlierURL.path
+        )
+
+        let found = try codec.discoverSession(workingDirectory: workingDirectory, since: launch)
+        XCTAssertEqual(found?.sessionID, earlierID)
+    }
+
+    func testCreationDateParsesRolloutFilenameStamp() {
+        let date = CodexTranscriptCodec.creationDate(
+            fromRolloutFilename: "rollout-2026-09-08T01-18-36-\(sessionID).jsonl"
+        )
+        XCTAssertEqual(date, Self.writeTime)
+    }
 }

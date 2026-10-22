@@ -95,11 +95,7 @@
       "cliVersion": "2.1.291",
       "expect": {
         "status": "working"
-      },
-      "currentlyObserved": {
-        "status": "readyForReview"
-      },
-      "knownGap": "Claude Code 2.1.291 no longer prints an 'esc to interrupt' hint while it works; its spinner line ('✻ <verb>… (<elapsed> · <tokens>)') sits above the ❯ composer, so the screen alone reads composer-with-transcript (Ready for Review). Since UserPromptSubmit is registered, the hook's working observation holds the session until Stop; this fixture tracks the screen fallback on its own."
+      }
     },
     {
       "file": "hooks/session-start-startup.json",

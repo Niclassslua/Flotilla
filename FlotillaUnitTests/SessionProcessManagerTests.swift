@@ -58,6 +58,56 @@ final class SessionProcessManagerTests: XCTestCase {
         XCTAssertTrue(mock.sentInput.isEmpty)
     }
 
+    func testClaudeLaunchPassesSessionTitleAsName() throws {
+        let factory = RecordingProcessFactory()
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env")
+            ),
+            processFactory: factory,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: false)
+        )
+        var model = session()
+        model.agent = .claudeCode
+        model.title = "Fix the beacon"
+
+        let process = try manager.start(session: model)
+        let mock = try XCTUnwrap(process as? MockPTYProcess)
+        let pairs = zip(mock.startedArguments, mock.startedArguments.dropFirst())
+        XCTAssertTrue(
+            pairs.contains { $0.0 == "--name" && $0.1 == "Fix the beacon" },
+            "Claude launch must pass --name with the session title; got \(mock.startedArguments)"
+        )
+    }
+
+    func testHookInstallFailureSurfacesViaEvent() throws {
+        let factory = RecordingProcessFactory()
+        let support = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hooks-fail-\(UUID().uuidString)", isDirectory: true)
+        // A file where a directory is required makes configureHooks fail closed.
+        try Data().write(to: support)
+        defer { try? FileManager.default.removeItem(at: support) }
+
+        var events: [SessionProcessManager.SessionProcessEvent] = []
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env")
+            ),
+            processFactory: factory,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: false),
+            hookSupportDirectory: support
+        )
+        manager.eventHandler = { events.append($0) }
+
+        let model = session()
+        _ = try manager.start(session: model)
+
+        XCTAssertTrue(
+            events.contains { if case .hooksConfigurationFailed(let id) = $0 { return id == model.id }; return false },
+            "failed hook install must surface; got \(events)"
+        )
+    }
+
     func testStartDoesNotForwardXcodeInstrumentationToAgentProcess() throws {
         let factory = RecordingProcessFactory()
         let manager = SessionProcessManager(

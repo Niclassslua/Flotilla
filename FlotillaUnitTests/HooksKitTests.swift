@@ -866,6 +866,10 @@ final class HookConfigurationWriterTests: XCTestCase {
         let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         try FileManager.default.createDirectory(at: eventFile.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("stale from a previous launch\n".utf8).write(to: eventFile)
+        let followup = URL(fileURLWithPath: eventFile.path + HookConfigurationWriter.cursorFollowupSuffix)
+        let queue = URL(fileURLWithPath: eventFile.path + HookConfigurationWriter.antigravityQueueSuffix)
+        try Data("queued phone prompt\n".utf8).write(to: followup)
+        try Data(#"{"injectSteps":[]}"#.utf8).write(to: queue)
 
         _ = writer.configureHooks(
             for: .claudeCode,
@@ -876,6 +880,8 @@ final class HookConfigurationWriterTests: XCTestCase {
 
         let contents = try String(contentsOf: eventFile, encoding: .utf8)
         XCTAssertTrue(contents.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: followup.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: queue.path))
     }
 
     func testConfigureHooksCleansLegacyFixedPathClaudeHookGroups() throws {
@@ -1064,6 +1070,49 @@ final class HookConfigurationWriterTests: XCTestCase {
         XCTAssertNotNil(
             arbiter.accept(SessionStatusObservation(.readyForReview, cause: "screen: composer"), from: .screen),
             "after the interrupt nothing holds the session in Working"
+        )
+    }
+
+    /// Cursor approvals fire no clearing hook; a free composer must end the wait.
+    func testCursorComposerEndsTurnClearsHookHeldWaiting() {
+        let cursorScreen = """
+        ● Done.
+        ┌────────────────────────┐
+        │ > follow up            │
+        └────────────────────────┘
+        """
+        let observation = TerminalScreenHeuristic(agent: .cursorAgent).observation(forScreen: cursorScreen)
+        XCTAssertEqual(observation?.status, .readyForReview)
+        XCTAssertEqual(observation?.endsTurn, true, "Cursor free composer must end a hook-held wait")
+
+        var arbiter = SessionStatusObservationArbiter(sessionHasProgressed: true)
+        let waiting = SessionStatusObservation(.waitingForInput, waitingReason: .permission, cause: "screen: Cursor approval")
+        XCTAssertEqual(arbiter.accept(waiting, from: .hook), waiting)
+        XCTAssertEqual(arbiter.accept(observation!, from: .screen), observation)
+    }
+
+    func testClaudeThinkingSpinnerClassifiesAsWorking() throws {
+        let screen = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .appendingPathComponent("ProviderFixtures/claude-code/screens/working-thinking.txt"),
+            encoding: .utf8
+        )
+        let observation = TerminalScreenHeuristic(agent: .claudeCode).observation(forScreen: screen)
+        XCTAssertEqual(observation?.status, .working)
+        XCTAssertTrue(observation?.cause?.contains("thought for") == true)
+    }
+
+    func testQuotedContinueHelpDoesNotForceWaiting() {
+        let screen = """
+        The docs say: press enter to continue, or answer continue?
+        ● Done with the explanation.
+        ❯
+        """
+        XCTAssertEqual(
+            TerminalScreenHeuristic().status(forScreen: screen),
+            .readyForReview,
+            "quoted help must not outrank a free composer"
         )
     }
 
