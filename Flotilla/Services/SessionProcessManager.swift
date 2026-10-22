@@ -18,7 +18,9 @@ final class SessionProcessManager {
     private var tmuxWrappedSessions: [UUID: URL] = [:]
     private var reattachTimestamps: [UUID: [Date]] = [:]
     private var verifyResizeTasks: [UUID: Task<Void, Never>] = [:]
-    private var goalDeliveryTasks: [UUID: Task<Void, Never>] = [:]
+    /// In-flight tmux send-keys (initial goal or `deliverMessage`). Stored as
+    /// the detached task itself so `cancel()` reaches the deliverer.
+    private var goalDeliveryTasks: [UUID: Task<Void, Error>] = [:]
     private let gitService: any GitServiceProtocol
     private var hasConfiguredGlobalOptions = false
     private let locator: ExecutableLocating
@@ -439,7 +441,7 @@ final class SessionProcessManager {
             let deliverer = tmuxGoalDeliverer
             let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)
             goalDeliveryTasks[sessionID] = Task.detached(priority: .userInitiated) {
-                try? deliverer.deliverGoal(text, toSessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
+                try deliverer.deliverGoal(text, toSessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
             }
         } else {
             process.send(input: initialInput)
@@ -482,13 +484,15 @@ final class SessionProcessManager {
 
         // One in-flight delivery per session: cancel/replace any goal or
         // prior message so send-keys cannot interleave into the same pane.
+        // Store the detached task itself — wrapping it in another Task meant
+        // canceling `goalDeliveryTasks` never reached the deliverer (#76/#48).
         goalDeliveryTasks[sessionID]?.cancel()
         let deliverer = tmuxGoalDeliverer
         let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)
         let delivery = Task.detached(priority: .userInitiated) {
             try deliverer.deliverGoal(trimmed, toSessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
         }
-        goalDeliveryTasks[sessionID] = Task { _ = await delivery.result }
+        goalDeliveryTasks[sessionID] = delivery
         try await delivery.value
     }
 
