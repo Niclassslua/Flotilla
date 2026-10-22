@@ -34,6 +34,7 @@ struct SessionStatusOrigin: Sendable {
     }
 
     static let restart = Self("session restarted by user")
+    static let restartFailed = Self("session restart failed to start")
     static let resumeRetry = Self("resume failed — relaunched with fresh context")
     static func handoff(from source: AgentKind, to target: AgentKind) -> Self {
         Self("handed off from \(source.displayName) to \(target.displayName)")

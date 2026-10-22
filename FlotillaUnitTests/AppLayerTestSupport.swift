@@ -139,3 +139,73 @@ final class RecordingTmuxGoalDeliverer: TmuxGoalDelivering, @unchecked Sendable 
         deliveries.append((goal, name, tmuxExecutable))
     }
 }
+
+/// Forwards to GRDB; set `deleteError` to exercise durable-delete failure paths.
+final class ControllableSessionRepository: SessionRepository, @unchecked Sendable {
+    let inner: GRDBSessionRepository
+    var deleteError: Error?
+
+    init(inner: GRDBSessionRepository? = nil) throws {
+        self.inner = try inner ?? GRDBSessionRepository()
+    }
+
+    func loadAll() throws -> (projects: [Project], sessions: [Session]) { try inner.loadAll() }
+    func save(_ project: Project) throws { try inner.save(project) }
+    func save(_ session: Session) throws { try inner.save(session) }
+    func delete(sessionID: UUID) throws {
+        if let deleteError { throw deleteError }
+        try inner.delete(sessionID: sessionID)
+    }
+    func delete(projectID: UUID) throws { try inner.delete(projectID: projectID) }
+    func loadScrollback(sessionID: UUID) -> Data? { inner.loadScrollback(sessionID: sessionID) }
+    func updateScrollback(sessionID: UUID, scrollback: Data) throws {
+        try inner.updateScrollback(sessionID: sessionID, scrollback: scrollback)
+    }
+    func loadKanbanBoards() throws -> [KanbanBoard] { try inner.loadKanbanBoards() }
+    func loadKanbanBoard(id: UUID) throws -> KanbanBoard? { try inner.loadKanbanBoard(id: id) }
+    func loadKanbanBoard(forProject projectID: UUID?) throws -> KanbanBoard? {
+        try inner.loadKanbanBoard(forProject: projectID)
+    }
+    func saveKanbanBoard(_ board: KanbanBoard) throws { try inner.saveKanbanBoard(board) }
+    func deleteKanbanBoard(id: UUID) throws { try inner.deleteKanbanBoard(id: id) }
+    func getOrCreateDefaultKanbanBoard(forProject projectID: UUID?, name: String) throws -> KanbanBoard {
+        try inner.getOrCreateDefaultKanbanBoard(forProject: projectID, name: name)
+    }
+    func loadReviewComments(sessionID: UUID) throws -> [ReviewComment] {
+        try inner.loadReviewComments(sessionID: sessionID)
+    }
+    func saveReviewComment(_ comment: ReviewComment) throws { try inner.saveReviewComment(comment) }
+    func markReviewCommentsSent(sessionID: UUID, commentIDs: Set<UUID>, at date: Date) throws {
+        try inner.markReviewCommentsSent(sessionID: sessionID, commentIDs: commentIDs, at: date)
+    }
+    func deleteReviewComment(id: UUID) throws { try inner.deleteReviewComment(id: id) }
+    func deleteReviewComments(sessionID: UUID) throws {
+        try inner.deleteReviewComments(sessionID: sessionID)
+    }
+    func loadReviewedFiles(sessionID: UUID) throws -> [ReviewedFile] {
+        try inner.loadReviewedFiles(sessionID: sessionID)
+    }
+    func saveReviewedFile(_ file: ReviewedFile) throws { try inner.saveReviewedFile(file) }
+    func deleteReviewedFile(sessionID: UUID, scope: ReviewScope, filePath: String) throws {
+        try inner.deleteReviewedFile(sessionID: sessionID, scope: scope, filePath: filePath)
+    }
+    func saveAttributionSession(_ snapshot: AttributionSessionSnapshot) throws {
+        try inner.saveAttributionSession(snapshot)
+    }
+    func loadAttributionSessions(repositoryKey: String) throws -> [AttributionSessionSnapshot] {
+        try inner.loadAttributionSessions(repositoryKey: repositoryKey)
+    }
+    func saveAttributedCommits(_ commits: [AttributedCommit], links: [AttributedCommitLink]) throws {
+        try inner.saveAttributedCommits(commits, links: links)
+    }
+    func loadAttributedCommits(repositoryKey: String) throws -> [AttributedCommit] {
+        try inner.loadAttributedCommits(repositoryKey: repositoryKey)
+    }
+    func loadAttributedCommitLinks(repositoryKey: String) throws -> [AttributedCommitLink] {
+        try inner.loadAttributedCommitLinks(repositoryKey: repositoryKey)
+    }
+    func saveAttributedCommitLinks(_ links: [AttributedCommitLink]) throws {
+        try inner.saveAttributedCommitLinks(links)
+    }
+    func deleteAllCommitAttribution() throws { try inner.deleteAllCommitAttribution() }
+}

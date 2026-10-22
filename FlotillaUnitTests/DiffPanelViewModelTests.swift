@@ -117,4 +117,36 @@ final class DiffPanelViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.lastPullRequestURL?.absoluteString, "https://github.com/example/example/pull/7")
         XCTAssertEqual(ghService.createPullRequestCalls.count, 1)
     }
+
+    /// Path-keyed reuse must retarget PR metadata at the current session.
+    func testNavigatorReuseUpdatesSessionForPullRequestMetadata() async {
+        let repoPath = URL(fileURLWithPath: "/tmp/flotilla-diff-reuse")
+        let first = Session(
+            title: "First session",
+            goal: "First goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: repoPath
+        )
+        let second = Session(
+            title: "Second session",
+            goal: "Second goal",
+            agent: .codexCLI,
+            projectID: nil,
+            workingDirectory: repoPath
+        )
+        let ghService = MockGhService()
+        ghService.urlToReturn = URL(string: "https://github.com/example/example/pull/9")!
+        let navigator = WorkspaceNavigator()
+
+        let reused = navigator.diffPanelViewModel(for: first, gitService: MockGitService(), ghService: ghService)
+        let again = navigator.diffPanelViewModel(for: second, gitService: MockGitService(), ghService: ghService)
+        XCTAssertTrue(reused === again)
+        XCTAssertEqual(again.session.id, second.id)
+
+        await again.createPullRequest()
+
+        XCTAssertEqual(ghService.createPullRequestCalls.first?.title, "Second session")
+        XCTAssertEqual(ghService.createPullRequestCalls.first?.body, "Second goal")
+    }
 }

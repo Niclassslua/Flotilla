@@ -249,6 +249,7 @@ final class WorkspaceNavigator {
     ) -> DiffPanelViewModel {
         let repoPath = (session.worktree?.worktreePath ?? session.workingDirectory).standardizedFileURL
         if let existing = diffPanelViewModels[repoPath] {
+            existing.session = session
             existing.commitEnvironment = commitEnvironment
             return existing
         }

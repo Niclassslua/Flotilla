@@ -633,4 +633,72 @@ final class AppStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(process.startedArguments.contains("resume"), "Process arguments must include 'resume'")
         XCTAssertTrue(process.startedArguments.contains("thread-uuid-123"), "Process arguments must include the session ID")
     }
+
+    /// A DB delete failure must leave the live process alone — otherwise the
+    /// session stays in the fleet with a dead agent and wiped scrollback.
+    func testFailedDeleteLeavesProcessRunning() async throws {
+        let repository = try ControllableSessionRepository()
+        let session = Session(
+            title: "Keep living",
+            goal: "Stay up",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working,
+            terminalScrollback: Data("prior-output".utf8)
+        )
+        try repository.save(session)
+        let factory = RecordingProcessFactory()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: factory),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+        let process = try XCTUnwrap(factory.processes.first)
+        XCTAssertTrue(process.isRunning)
+        XCTAssertEqual(process.terminateCallCount, 0)
+
+        repository.deleteError = NSError(domain: "test", code: 1)
+        await store.deleteSession(sessionID: session.id, deleteWorktree: false)
+
+        XCTAssertEqual(store.sessions.count, 1, "Session must remain visible")
+        XCTAssertNotNil(store.lastOperationError)
+        XCTAssertEqual(process.terminateCallCount, 0, "Process must not be killed before a durable delete")
+        XCTAssertTrue(process.isRunning)
+        XCTAssertEqual(try repository.inner.loadAll().sessions.count, 1)
+        XCTAssertEqual(store.scrollback(for: session.id), Data("prior-output".utf8))
+    }
+
+    /// Restart terminates first; a start failure must not leave `.working`
+    /// with no process behind it.
+    func testRestartStartFailureMarksSessionCrashed() throws {
+        let repository = try GRDBSessionRepository()
+        let session = Session(
+            title: "Restart fail",
+            goal: "Work",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working
+        )
+        try repository.save(session)
+        let factory = RecordingProcessFactory()
+        let store = AppStore(
+            repository: repository,
+            gitService: MockGitService(),
+            processManager: manager(factory: factory),
+            worktreeBaseDirectoryProvider: { URL(fileURLWithPath: "/tmp/worktrees") }
+        )
+        XCTAssertEqual(store.sessions.first?.status, .working)
+        XCTAssertEqual(factory.processes.count, 1)
+
+        factory.shouldFailToStart = true
+        store.restartSession(sessionID: session.id)
+
+        XCTAssertEqual(store.sessions.first?.status, .crashed)
+        XCTAssertEqual(try repository.loadAll().sessions.first?.status, .crashed)
+        XCTAssertNotNil(store.lastOperationError)
+        XCTAssertFalse(store.process(for: session.id)?.isRunning ?? false)
+    }
 }
