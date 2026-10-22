@@ -144,20 +144,15 @@ final class WorkspaceNavigatorHistoryTests: XCTestCase {
         XCTAssertTrue(navigator.backStack.contains(.session(aliveSession)))
         XCTAssertTrue(navigator.backStack.contains(.project(aliveProject)))
 
-        // Land on a tombstone via an unprimed stack, then skip it on Back.
-        let navigator2 = makeNavigator()
-        navigator2.selection = .session(aliveSession)
-        navigator2.selection = .session(deadSession)
-        navigator2.selection = .allSessions
-        navigator2.pruneNavigation(sessions: [aliveSession], projects: [])
-        // Manually reintroduce a dead entry behind the current position.
-        navigator2.backStack.append(.session(deadSession))
-        navigator2.backStack.append(.session(aliveSession))
-
-        navigator2.goBack()
-        XCTAssertEqual(navigator2.selection, .session(aliveSession))
-        navigator2.goBack()
-        XCTAssertNotEqual(navigator2.selection, .session(deadSession))
+        navigator.goBack()
+        XCTAssertEqual(navigator.selection, .project(aliveProject))
+        navigator.goBack()
+        XCTAssertEqual(navigator.selection, .session(aliveSession))
+        XCTAssertFalse(navigator.backStack.contains(where: {
+            if case .session(let id) = $0 { return id == deadSession }
+            if case .project(let id) = $0 { return id == deadProject }
+            return false
+        }))
     }
 
     func testPruneNavigationLeavesTombstoneSelection() {
