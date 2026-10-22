@@ -59,6 +59,9 @@ final class SessionProcessManager {
         /// launched directly in the PTY instead. Prefer fixing tmux; direct
         /// launch keeps the session usable.
         case launchedWithoutTmux(sessionID: UUID)
+        /// Hook install failed for a hook-capable agent. The session still
+        /// launches; status falls back to the screen heuristic alone.
+        case hooksConfigurationFailed(sessionID: UUID)
     }
 
     enum LaunchError: LocalizedError, Equatable {
@@ -239,6 +242,9 @@ final class SessionProcessManager {
             workingDirectory: session.workingDirectory,
             supportDirectory: hookSupportDirectory
         )
+        if HookConfigurationWriter.supportsHooks(for: session.agent), !hooksConfigured {
+            eventHandler?(.hooksConfigurationFailed(sessionID: session.id))
+        }
 
         // Ensure Antigravity's workspace trust is recorded so the interactive
         // trust confirmation dialog ("Do you trust the contents of this project?")
@@ -303,6 +309,14 @@ final class SessionProcessManager {
                 for: session.agent,
                 supportDirectory: hookSupportDirectory
             )
+        }
+        // Claude Code: surface Flotilla's session title in the prompt box /
+        // terminal title (verified `--name` in docs/providers/claude-code.md).
+        if session.agent == .claudeCode {
+            let title = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty {
+                plan.arguments += ["--name", title]
+            }
         }
         plan.arguments += HostAppAwareness.launchArguments(for: session.agent)
         guard var resolvedExecutable = resolveExecutable(plan: plan) else {

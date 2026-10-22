@@ -30,14 +30,14 @@ substring matching on the bottom 8 non-empty lines, unless noted.
 | 1 | last line starts with the tmux dead-pane banner | `[agent exited` (from `remain-on-exit-format` `[Agent exited with status N]`) | `readyForReview`, `suggestsAgentExit` | all (tmux) |
 | 2 | permission heading + live choice list, **24-line window** | `requesting permission for:` and ≥ 2 numbered options, one with a `❯`/`>`/`›` caret | `waitingForInput` / `permission` | Antigravity |
 | 3 | plan-approval marker | `approval for the plan`, `approve the plan`, `approve this plan`, `plan is ready`, `plan ready for approval`, `proposed plan`, `<proposed_plan>` | `waitingForInput` / `planApproval` | Codex, Claude |
-| 4 | permission marker | `do you want to`, `do you trust`, `yes, i trust this folder`, `permission required`, `permission requested`, `requires permission`, `press enter to continue`, `(y/n)`, `[y/n]`, `yes/no`, `allow this`, `approve?` | `waitingForInput` / `permission` | Claude, Codex, Cursor web fetch |
+| 4 | permission marker | `do you want to`, `do you trust`, `yes, i trust this folder`, `permission required`, `permission requested`, `requires permission`, `(y/n)`, `[y/n]`, `yes/no`, `allow this`, `approve?` | `waitingForInput` / `permission` | Claude, Codex, Cursor web fetch |
 | 5 | question marker | ` unanswered)`, `waiting for your answer`, `answer the question`, `provide your answer`, `question for you` | `waitingForInput` / `question` | Claude `AskUserQuestion` |
 | 6 | numbered choice list with caret | `❯ 1. Yes` / `2. No` / `> 1)` …, ≥ 2 options, one with a caret | `waitingForInput` / `question` | Claude, Codex pickers |
-| 7 | `SessionStatusHeuristic` | the rule 4 list plus `continue?` | `waitingForInput` (no reason) | generic |
-| 8a | interrupt marker | `interrupted · what should claude do instead?`, `interrupted · what should antigravity cli do instead?` | `readyForReview` with **`endsTurn`**: the only screen observation the arbiter lets end a hook-held episode (an interrupt fires no hook) | Claude Code, Antigravity |
+| 7 | `SessionStatusHeuristic` | the rule 4 list (no bare `continue?` — too common in quoted help) | `waitingForInput` (no reason) | generic |
+| 8a | interrupt marker | `interrupted · what should claude do instead?`, `interrupted · what should antigravity cli do instead?` | `readyForReview` with **`endsTurn`**: ends a hook-held episode (an interrupt fires no hook) | Claude Code, Antigravity |
 | 8 | finished marker | `agent exited`, `pane is dead`, `process finished` | `readyForReview`, `suggestsAgentExit` | all (tmux) |
-| 9 | working marker | `esc to interrupt`, `escape to interrupt`, `esc to cancel`, `escape to cancel`, `ctrl+c to interrupt`, `ctrl-c to interrupt`, `ctrl+c to stop` | `working` | Claude (pre-2.1.291), Codex, Cursor (`ctrl+c to stop`) |
-| 10 | composer above transcript, 24-line window | a line starting (after `│┃║`) with `❯`, `> ` or `› `, with a non-decoration line above it | `readyForReview` | Claude (`❯`), Codex (`›`) |
+| 9 | working marker | `esc to interrupt`, `escape to interrupt`, `esc to cancel`, `escape to cancel`, `ctrl+c to interrupt`, `ctrl-c to interrupt`, `ctrl+c to stop`, `thought for` (Claude 2.1.291+ spinner) | `working` | Claude, Codex, Cursor (`ctrl+c to stop`) |
+| 10 | composer above transcript, 24-line window | a line starting (after `│┃║`) with `❯`, `> ` or `› `, with a non-decoration line above it | `readyForReview`; Cursor also sets **`endsTurn`** so a free composer clears a hook-held wait (approvals fire no clearing hook) | Claude (`❯`), Codex (`›`), Cursor |
 | — | nothing matched | | no observation (the status is left alone) | |
 
 Right after rule 1, for Cursor Agent sessions only (`TerminalScreenHeuristic(agent: .cursorAgent)`), `CursorDialog.parse` checks the bottom 60 lines: an approval → `waitingForInput` / `permission`, `Ready to build?` → `planApproval`, a skip-reason/revision prompt → no observation. See `cursor-agent.md`.
@@ -50,7 +50,6 @@ status".
 
 | Provider | Screen | Should be | Is | Fixture |
 | --- | --- | --- | --- | --- |
-| Claude Code 2.1.291 | working spinner `✻ Wibbling… (8m 27s · ↓ 23.4k tokens …)` above `❯` | `working` | `readyForReview` (rule 10). No `esc to interrupt` hint any more; in practice the `UserPromptSubmit` hook holds *working* | `claude-code/screens/working-thinking.txt` |
 | Cursor Agent 2026.10.01 | idle `→ Add a follow-up` | no observation (by design; `stop` hook reports it) | no observation | `cursor-agent/screens/idle.txt` |
 
 ## Prompt delivery: is the composer ready?

@@ -279,12 +279,29 @@ final class CursorTranscriptCodecTests: XCTestCase {
         XCTAssertEqual(images.count, 1, "Read + markdown of the same bytes must collapse to one image")
     }
 
-    func testMissingImagePathIsSkippedGracefully() throws {
+    func testMissingImagePathStillEmitsToolUse() throws {
         let url = try writeTranscript([
             #"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"path":"/tmp/does-not-exist-\#(UUID().uuidString).png"}}]}}"#
         ])
         let entries = try codec.readNative(at: url)
-        XCTAssertTrue(entries.isEmpty)
+        XCTAssertEqual(entries.count, 1)
+        guard case let .toolUse(_, tool, _, _) = entries[0] else {
+            return XCTFail("expected toolUse without image, got \(entries)")
+        }
+        XCTAssertEqual(tool, "Read")
+    }
+
+    func testNonImageToolUseIsEmitted() throws {
+        let url = try writeTranscript([
+            #"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Shell","input":{"command":"ls"}}]}}"#
+        ])
+        let entries = try codec.readNative(at: url)
+        XCTAssertEqual(entries.count, 1)
+        guard case let .toolUse(_, tool, input, _) = entries[0] else {
+            return XCTFail("expected toolUse, got \(entries)")
+        }
+        XCTAssertEqual(tool, "Shell")
+        XCTAssertTrue(String(data: input, encoding: .utf8)?.contains("ls") == true)
     }
 
     func testRemoteMarkdownImageURLIsIgnored() throws {
@@ -296,5 +313,46 @@ final class CursorTranscriptCodecTests: XCTestCase {
         guard case .assistantMessage = entries[0] else {
             return XCTFail("expected only assistant text, got \(entries)")
         }
+    }
+
+    // MARK: - Discovery
+
+    func testDiscoverSessionPrefersEarliestCreationAfterLaunch() throws {
+        let launch = Date(timeIntervalSince1970: 1_700_000_000)
+        let earlierID = "11111111-2222-3333-4444-555555555555"
+        let laterID = "66666666-7777-8888-9999-aaaaaaaaaaaa"
+        let bucket = codec.chatsDirectory.appendingPathComponent(
+            CursorTranscriptCodec.chatBucketHash(for: workingDirectory.path),
+            isDirectory: true
+        )
+
+        func writeChat(id: String, createdAtMs: Int, updatedAtMs: Int) throws {
+            let dir = bucket.appendingPathComponent(id, isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let meta: [String: Any] = [
+                "schemaVersion": 1,
+                "createdAtMs": createdAtMs,
+                "updatedAtMs": updatedAtMs,
+                "cwd": workingDirectory.path,
+            ]
+            let data = try JSONSerialization.data(withJSONObject: meta, options: [.sortedKeys])
+            try data.write(to: dir.appendingPathComponent("meta.json"), options: .atomic)
+        }
+
+        // Older chat created after launch but updated more recently than the
+        // newer chat — recency sort would pick the wrong one.
+        try writeChat(
+            id: earlierID,
+            createdAtMs: Int(launch.addingTimeInterval(1).timeIntervalSince1970 * 1000),
+            updatedAtMs: Int(launch.addingTimeInterval(90).timeIntervalSince1970 * 1000)
+        )
+        try writeChat(
+            id: laterID,
+            createdAtMs: Int(launch.addingTimeInterval(30).timeIntervalSince1970 * 1000),
+            updatedAtMs: Int(launch.addingTimeInterval(40).timeIntervalSince1970 * 1000)
+        )
+
+        let found = try codec.discoverSession(workingDirectory: workingDirectory, since: launch)
+        XCTAssertEqual(found?.sessionID, earlierID)
     }
 }

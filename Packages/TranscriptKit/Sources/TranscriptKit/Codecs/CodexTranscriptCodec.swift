@@ -603,31 +603,59 @@ extension CodexTranscriptCodec {
     public func discoverSession(workingDirectory: URL, since: Date) throws -> (sessionID: String, url: URL)? {
         guard let enumerator = FileManager.default.enumerator(
             at: sessionsDirectory,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else { return nil }
 
         let wanted = workingDirectory.path
-        var best: (sessionID: String, url: URL, modified: Date)?
+        // Earliest creation at/after launch — not latest mtime (see
+        // docs/session-handoff.md). A weeks-old rollout modified today must
+        // not win over the conversation this launch just started.
+        var best: (sessionID: String, url: URL, created: Date)?
 
         for case let url as URL in enumerator {
             guard url.pathExtension == "jsonl",
-                  url.lastPathComponent.hasPrefix("rollout-"),
-                  let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey])
-                      .contentModificationDate,
-                  modified >= since
+                  url.lastPathComponent.hasPrefix("rollout-")
             else { continue }
+
+            let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+            let created = Self.creationDate(fromRolloutFilename: url.lastPathComponent)
+                ?? values?.creationDate
+                ?? values?.contentModificationDate
+            guard let created, created >= since else { continue }
 
             guard let sessionID = (try? embeddedSessionID(at: url)) ?? nil else { continue }
             guard Self.recordedWorkingDirectory(at: url) == wanted else { continue }
 
-            if best == nil || modified > best!.modified {
-                best = (sessionID, url, modified)
+            if best == nil || created < best!.created {
+                best = (sessionID, url, created)
             }
         }
 
         guard let best else { return nil }
         return (best.sessionID, best.url)
+    }
+
+    /// `rollout-2026-09-08T01-18-36-<uuid>.jsonl` → the UTC stamp Codex minted
+    /// the file with (creation time, not last write).
+    static func creationDate(fromRolloutFilename name: String) -> Date? {
+        let base = (name as NSString).deletingPathExtension
+        guard base.hasPrefix("rollout-") else { return nil }
+        let rest = base.dropFirst("rollout-".count)
+        // UUID is 36 chars; preceded by '-'.
+        guard rest.count > 37 else { return nil }
+        let stamp = String(rest.dropLast(37))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let parts = stamp.split(separator: "T")
+        guard parts.count == 2 else { return nil }
+        let day = parts[0].split(separator: "-").compactMap { Int($0) }
+        let time = parts[1].split(separator: "-").compactMap { Int($0) }
+        guard day.count == 3, time.count == 3 else { return nil }
+        return calendar.date(from: DateComponents(
+            year: day[0], month: day[1], day: day[2],
+            hour: time[0], minute: time[1], second: time[2]
+        ))
     }
 
     /// The `cwd` a rollout's `session_meta` claims, without parsing the rest.

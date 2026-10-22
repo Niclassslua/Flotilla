@@ -1247,6 +1247,8 @@ final class AppStore {
 
         let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         try? FileManager.default.removeItem(at: eventFile)
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: eventFile.path + HookConfigurationWriter.cursorFollowupSuffix))
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: eventFile.path + HookConfigurationWriter.antigravityQueueSuffix))
         try? FileManager.default.removeItem(at: HookConfigurationWriter.displayFilePath(for: sessionID, supportDirectory: supportDirectory))
         try? FileManager.default.removeItem(at: SessionAttachment.directory(for: sessionID, supportDirectory: supportDirectory))
         try? FileManager.default.removeItem(at: AgentScreenshotStore.directory(for: sessionID, supportDirectory: supportDirectory))
@@ -1567,6 +1569,8 @@ final class AppStore {
             }
         case .launchedWithoutTmux:
             lastOperationError = "tmux is not answering clients, so the session was started without it."
+        case .hooksConfigurationFailed:
+            lastOperationError = "Session status hooks could not be installed; status may be less reliable until relaunch."
         }
     }
 }

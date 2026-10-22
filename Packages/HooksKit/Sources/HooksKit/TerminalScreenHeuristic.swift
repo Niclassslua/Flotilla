@@ -40,6 +40,9 @@ public struct TerminalScreenHeuristic: Sendable {
         "ctrl+c to interrupt",
         "ctrl-c to interrupt",
         "ctrl+c to stop",
+        // Claude Code 2.1.291+ drops the interrupt hint while thinking; the
+        // spinner still ends with "thought for Ns" above an empty ❯.
+        "thought for",
     ]
 
     /// Approval prompts. Checked before the working markers: some CLIs keep
@@ -53,7 +56,6 @@ public struct TerminalScreenHeuristic: Sendable {
         "permission required",
         "permission requested",
         "requires permission",
-        "press enter to continue",
         "(y/n)",
         "[y/n]",
         "yes/no",
@@ -231,9 +233,15 @@ public struct TerminalScreenHeuristic: Sendable {
             )
         }
         if Self.hasComposerWithTranscript(interactiveTail) {
+            // Cursor approvals/plans fire no clearing hook when the prompt
+            // leaves; a free composer means the wait is over (`endsTurn`).
+            // Other agents keep composer readyForReview soft so a hook-held
+            // working episode is not undone by a redraw that still shows ❯.
+            let endsTurn = agent == .cursorAgent
             return SessionStatusObservation(
                 .readyForReview,
-                cause: "screen: composer prompt above a non-empty transcript"
+                cause: "screen: composer prompt above a non-empty transcript",
+                endsTurn: endsTurn
             )
         }
         return nil

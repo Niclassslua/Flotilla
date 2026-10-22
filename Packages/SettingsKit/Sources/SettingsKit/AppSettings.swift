@@ -734,12 +734,14 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 if !legacyPaths.codexCLIPath.isEmpty { paths["codexCLI"] = legacyPaths.codexCLIPath }
                 if !legacyPaths.openCodePath.isEmpty { paths["openCode"] = legacyPaths.openCodePath }
                 if !legacyPaths.antigravityPath.isEmpty { paths["antigravity"] = legacyPaths.antigravityPath }
+                if !legacyPaths.cursorAgentPath.isEmpty { paths["cursorAgent"] = legacyPaths.cursorAgentPath }
             }
             if let legacyArgs = try container.decodeIfPresent(AgentArgumentOverrides.self, forKey: .agentArguments) {
                 if !legacyArgs.claudeCodeArguments.isEmpty { arguments["claudeCode"] = legacyArgs.claudeCodeArguments }
                 if !legacyArgs.codexCLIArguments.isEmpty { arguments["codexCLI"] = legacyArgs.codexCLIArguments }
                 if !legacyArgs.openCodeArguments.isEmpty { arguments["openCode"] = legacyArgs.openCodeArguments }
                 if !legacyArgs.antigravityArguments.isEmpty { arguments["antigravity"] = legacyArgs.antigravityArguments }
+                if !legacyArgs.cursorAgentArguments.isEmpty { arguments["cursorAgent"] = legacyArgs.cursorAgentArguments }
             }
             self.agentOverrides = AgentOverrides(paths: paths, arguments: arguments)
         }

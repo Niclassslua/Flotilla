@@ -130,19 +130,23 @@ final class SettingsKitTests: XCTestCase {
                 {
                     "agentPaths": {
                         "claudeCodePath": "/bin/claude",
-                        "codexCLIPath": "/bin/codex"
+                        "codexCLIPath": "/bin/codex",
+                        "cursorAgentPath": "/bin/agent"
                     },
                     "agentArguments": {
                         "claudeCodeArguments": ["--verbose"],
-                        "openCodeArguments": ["--log-level", "debug"]
+                        "openCodeArguments": ["--log-level", "debug"],
+                        "cursorAgentArguments": ["--force"]
                     }
                 }
                 """#
             ) { decoded in
                 XCTAssertEqual(decoded.agentOverrides.paths["claudeCode"], "/bin/claude")
                 XCTAssertEqual(decoded.agentOverrides.paths["codexCLI"], "/bin/codex")
+                XCTAssertEqual(decoded.agentOverrides.paths["cursorAgent"], "/bin/agent")
                 XCTAssertEqual(decoded.agentOverrides.arguments["claudeCode"], ["--verbose"])
                 XCTAssertEqual(decoded.agentOverrides.arguments["openCode"], ["--log-level", "debug"])
+                XCTAssertEqual(decoded.agentOverrides.arguments["cursorAgent"], ["--force"])
             },
             Case(
                 name: "pre-namingSources merge defaults to agentManaged",
