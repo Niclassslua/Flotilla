@@ -17,9 +17,11 @@ enum ProtectedFolderAccess {
     }
 
     /// Lists `url` so TCC attributes the request to Flotilla. Throws `Denied`
-    /// on EPERM / no-permission; other errors (missing path, etc.) pass through.
+    /// on EPERM / no-permission. Missing paths are skipped — TCC only applies
+    /// to folders that exist; callers handle not-found separately.
     static func requireReadable(_ url: URL) throws {
         fileScanLog.notice("requireReadable: \(url.path, privacy: .public)")
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             _ = try FileManager.default.contentsOfDirectory(atPath: url.path)
         } catch {
