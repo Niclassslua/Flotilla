@@ -1295,6 +1295,8 @@ final class AppStore {
             selectedSessionID = nil
         }
         sessions.removeAll { $0.id == sessionID }
+        // Reap any `flotilla-<UUID>` left behind if the async kill-session raced.
+        processManager.reapOrphanTmuxSessions(knownSessionIDs: Set(sessions.map(\.id)))
 
         // Capture patch evidence before removing the worktree or branch.
         // Keep the payload available for retry if attribution persistence failed.

@@ -579,7 +579,8 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         // splash/loading UI has settled") rather than guessing a fixed
         // delay that would either be too short for a slow boot or add
         // needless latency to a fast one.
-        waitForPaneToStabilize(sessionName: name, tmuxExecutable: tmuxExecutable)
+        try waitForPaneToStabilize(sessionName: name, tmuxExecutable: tmuxExecutable)
+        try Task.checkCancellation()
         if goal.contains("\n") || goal.contains("\r") {
             try pasteGoal(goal, toSessionNamed: name, tmuxExecutable: tmuxExecutable)
         } else {
@@ -593,7 +594,9 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         // appended to it and both go out as one prompt. A short gap lets the
         // composer take the text first (measured: back-to-back leaves it
         // behind, 50 ms and up clears it); the other agents don't mind it.
+        try Task.checkCancellation()
         Thread.sleep(forTimeInterval: Self.submitSettleDelay)
+        try Task.checkCancellation()
         try runSendKeys(["-t", name, "Enter"], tmuxExecutable: tmuxExecutable)
     }
 
@@ -629,11 +632,12 @@ struct ProcessTmuxGoalDeliverer: TmuxGoalDelivering {
         }
     }
 
-    private func waitForPaneToStabilize(sessionName: String, tmuxExecutable: URL) {
+    private func waitForPaneToStabilize(sessionName: String, tmuxExecutable: URL) throws {
         let deadline = Date().addingTimeInterval(6)
         var previous: String?
         var stableStreak = 0
         while Date() < deadline {
+            try Task.checkCancellation()
             guard let current = capturePane(sessionName: sessionName, tmuxExecutable: tmuxExecutable) else {
                 Thread.sleep(forTimeInterval: 0.1)
                 continue

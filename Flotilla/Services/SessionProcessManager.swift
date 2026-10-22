@@ -328,7 +328,6 @@ final class SessionProcessManager {
                     .error("Companion runtime for \(session.id) unavailable: \(error.localizedDescription)")
             }
         }
-        tmuxWrappedSessions[session.id] = tmuxExecutable
         // Covers an already-running server; the `-f` config passed to
         // `new-session` below covers the cold-socket case this cannot.
         var tmuxConfigurationFile: URL?
@@ -376,13 +375,13 @@ final class SessionProcessManager {
         process.terminationHandler = { [weak self, weak process] exitCode in
             Task { @MainActor [weak self] in
                 guard let self, let process else { return }
-                if self.processes[session.id] === process {
-                    self.processes[session.id] = nil
-                    if self.intentionallyTerminating.remove(session.id) == nil {
-                        self.eventHandler?(.terminated(sessionID: session.id, exitCode: exitCode))
-                    }
-                } else {
-                    self.intentionallyTerminating.remove(session.id)
+                // Only the currently registered process may clear/consume the
+                // intentional-terminate flag. A stale exit from a replaced
+                // client must not clear a newer process's intentional stop.
+                guard self.processes[session.id] === process else { return }
+                self.processes[session.id] = nil
+                if self.intentionallyTerminating.remove(session.id) == nil {
+                    self.eventHandler?(.terminated(sessionID: session.id, exitCode: exitCode))
                 }
             }
         }
@@ -405,27 +404,46 @@ final class SessionProcessManager {
             throw LaunchError.failedToStart(agent: session.agent, message: error.localizedDescription)
         }
 
+        // Mark wrapped only after the PTY actually started — a failed start
+        // must not report `isTmuxWrapped` or invite kill-session on a name
+        // that never ran.
+        tmuxWrappedSessions[session.id] = tmuxExecutable
         processes[session.id] = process
         activeSessions[session.id] = session
-        goalDeliveryTasks[session.id]?.cancel()
-        goalDeliveryTasks[session.id] = nil
-        if plan.initialInput != nil {
-            if let tmuxExecutable {
-                // A raw PTY write only ever gets the goal typed, not
-                // submitted (see TmuxGoalDelivering's doc comment) — tmux
-                // send-keys is the mechanism confirmed to actually work.
-                let deliverer = tmuxGoalDeliverer
-                let trimmedGoal = (effectiveGoal ?? session.goal).trimmingCharacters(in: .whitespacesAndNewlines)
-                let sessionName = TmuxSessionWrapping.sessionName(for: session.id)
-                goalDeliveryTasks[session.id] = Task.detached(priority: .userInitiated) {
-                    guard !Task.isCancelled else { return }
-                    try? deliverer.deliverGoal(trimmedGoal, toSessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
-                }
-            } else if let initialInput = plan.initialInput {
-                process.send(input: initialInput)
-            }
-        }
+        scheduleGoalDelivery(
+            sessionID: session.id,
+            initialInput: plan.initialInput,
+            tmuxExecutable: tmuxExecutable,
+            process: process
+        )
         return process
+    }
+
+    /// Cancels any in-flight delivery for `sessionID`, then either sends
+    /// `initialInput` on the raw PTY or schedules tmux `send-keys` delivery.
+    private func scheduleGoalDelivery(
+        sessionID: UUID,
+        initialInput: Data?,
+        tmuxExecutable: URL?,
+        process: PTYProcessProtocol
+    ) {
+        goalDeliveryTasks[sessionID]?.cancel()
+        goalDeliveryTasks[sessionID] = nil
+        guard let initialInput else { return }
+        if let tmuxExecutable {
+            // Deliver the plan bytes (e.g. `/plan …`), not the bare goal —
+            // Codex plan mode withholds the goal from argv and relies on this.
+            let text = String(decoding: initialInput, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+            let deliverer = tmuxGoalDeliverer
+            let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)
+            goalDeliveryTasks[sessionID] = Task.detached(priority: .userInitiated) {
+                try? deliverer.deliverGoal(text, toSessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
+            }
+        } else {
+            process.send(input: initialInput)
+        }
     }
 
     func isTmuxWrapped(sessionID: UUID) -> Bool {
@@ -462,11 +480,16 @@ final class SessionProcessManager {
             throw MessageDeliveryError.reliableTransportUnavailable
         }
 
+        // One in-flight delivery per session: cancel/replace any goal or
+        // prior message so send-keys cannot interleave into the same pane.
+        goalDeliveryTasks[sessionID]?.cancel()
         let deliverer = tmuxGoalDeliverer
         let sessionName = TmuxSessionWrapping.sessionName(for: sessionID)
-        try await Task.detached(priority: .userInitiated) {
+        let delivery = Task.detached(priority: .userInitiated) {
             try deliverer.deliverGoal(trimmed, toSessionNamed: sessionName, tmuxExecutable: tmuxExecutable)
-        }.value
+        }
+        goalDeliveryTasks[sessionID] = Task { _ = await delivery.result }
+        try await delivery.value
     }
 
     enum MessageDeliveryError: LocalizedError, Equatable {
@@ -680,10 +703,12 @@ final class SessionProcessManager {
         // was created, killing the new agent too).
         if let tmuxExecutable = tmuxWrappedSessions[sessionID] {
             tmuxWrappedSessions[sessionID] = nil
-            tmuxTerminator.killSession(
-                named: TmuxSessionWrapping.sessionName(for: sessionID),
-                tmuxExecutable: tmuxExecutable
-            )
+            let name = TmuxSessionWrapping.sessionName(for: sessionID)
+            tmuxTerminator.killSession(named: name, tmuxExecutable: tmuxExecutable)
+            // A racy/failed kill must not leave `flotilla-<UUID>` until relaunch.
+            if tmuxTerminator.listSessions(tmuxExecutable: tmuxExecutable).contains(name) {
+                tmuxTerminator.killSession(named: name, tmuxExecutable: tmuxExecutable)
+            }
         }
     }
 
@@ -700,6 +725,11 @@ final class SessionProcessManager {
         let name = TmuxSessionWrapping.sessionName(for: sessionID)
         Task.detached(priority: .utility) {
             terminator.killSession(named: name, tmuxExecutable: tmuxExecutable)
+            // Retry once if the session survived the first kill — orphaned
+            // panes must not wait for the next cold `restoreSessions` reap.
+            if terminator.listSessions(tmuxExecutable: tmuxExecutable).contains(name) {
+                terminator.killSession(named: name, tmuxExecutable: tmuxExecutable)
+            }
         }
     }
 

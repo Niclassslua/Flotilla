@@ -114,9 +114,16 @@ final class MockTmuxClientProbe: TmuxClientProbing, @unchecked Sendable {
 final class MockTmuxSessionTerminator: TmuxSessionTerminating, @unchecked Sendable {
     var killedSessions: [String] = []
     var stubbedSessions: [String] = []
+    /// When > 0, the next N kills leave the session listed (simulates a racy fail).
+    var survivingKillCount = 0
 
     func killSession(named name: String, tmuxExecutable: URL) {
         killedSessions.append(name)
+        if survivingKillCount > 0 {
+            survivingKillCount -= 1
+            return
+        }
+        stubbedSessions.removeAll { $0 == name }
     }
 
     func listSessions(tmuxExecutable: URL) -> [String] {
@@ -132,10 +139,28 @@ final class RecordingTmuxGoalDeliverer: TmuxGoalDelivering, @unchecked Sendable 
     }
 
     var shouldFail = false
-    private(set) var deliveries: [(goal: String, sessionName: String, executable: URL)] = []
+    /// Blocks until cancelled or `delay` elapses — for cancel/serialize tests.
+    var delay: TimeInterval = 0
+    private let lock = NSLock()
+    private var _deliveries: [(goal: String, sessionName: String, executable: URL)] = []
+
+    var deliveries: [(goal: String, sessionName: String, executable: URL)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _deliveries
+    }
 
     func deliverGoal(_ goal: String, toSessionNamed name: String, tmuxExecutable: URL) throws {
+        if delay > 0 {
+            let deadline = Date().addingTimeInterval(delay)
+            while Date() < deadline {
+                try Task.checkCancellation()
+                Thread.sleep(forTimeInterval: 0.02)
+            }
+        }
         if shouldFail { throw Failure.rejected }
-        deliveries.append((goal, name, tmuxExecutable))
+        lock.lock()
+        _deliveries.append((goal, name, tmuxExecutable))
+        lock.unlock()
     }
 }

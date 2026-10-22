@@ -147,13 +147,151 @@ final class SessionProcessManagerTests: XCTestCase {
             processFactory: factory,
             tmuxServerProbe: AppLayerTmuxServerProbe(usable: true)
         )
+        let model = session()
 
-        XCTAssertThrowsError(try manager.start(session: session())) { error in
+        XCTAssertThrowsError(try manager.start(session: model)) { error in
             guard case SessionProcessManager.LaunchError.failedToStart(let agent, _) = error else {
                 return XCTFail("unexpected error: \(error)")
             }
             XCTAssertEqual(agent, .codexCLI)
         }
+        XCTAssertFalse(
+            manager.isTmuxWrapped(sessionID: model.id),
+            "failed start must not leave the session marked tmux-wrapped"
+        )
+    }
+
+    func testStalePTYExitDoesNotClearIntentionalTerminateForReplacement() async throws {
+        let factory = RecordingProcessFactory()
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/local/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: true)
+        )
+        let model = session()
+        var terminatedCodes: [Int32] = []
+        manager.eventHandler = { event in
+            if case let .terminated(_, code) = event {
+                terminatedCodes.append(code)
+            }
+        }
+
+        let first = try XCTUnwrap(try manager.start(session: model, deliverGoal: false) as? MockPTYProcess)
+        first.exitOnTerminate = false
+
+        let second = try XCTUnwrap(try manager.reattach(session: model) as? MockPTYProcess)
+        XCTAssertFalse(first === second)
+        second.exitOnTerminate = false
+
+        // Intentional stop of the replacement — flag is set, but neither exit
+        // has landed yet.
+        manager.terminate(sessionID: model.id)
+        // Stale exit from the superseded client arrives first.
+        first.simulateCrash(code: 42)
+        // Then the current process exits.
+        second.simulateCrash(code: 0)
+
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertTrue(
+            terminatedCodes.isEmpty,
+            "stale exit must not clear the intentional flag so the replacement publishes .terminated; got \(terminatedCodes)"
+        )
+    }
+
+    func testTmuxPlanModeDeliversInitialInputNotBareGoal() async throws {
+        let factory = RecordingProcessFactory()
+        let deliverer = RecordingTmuxGoalDeliverer()
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/local/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxGoalDeliverer: deliverer,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: true)
+        )
+        var model = session()
+        model.goal = "Refactor database migrations"
+        model.startingMode = .plan
+
+        _ = try manager.start(session: model)
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline, deliverer.deliveries.isEmpty {
+            await Task.yield()
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(deliverer.deliveries.map(\.goal), ["/plan Refactor database migrations"])
+        XCTAssertNotEqual(
+            deliverer.deliveries.first?.goal,
+            model.goal,
+            "tmux must not strip the /plan prefix Codex needs"
+        )
+    }
+
+    func testDeliverMessageCancelsInFlightGoalDelivery() async throws {
+        let factory = RecordingProcessFactory()
+        let deliverer = RecordingTmuxGoalDeliverer()
+        deliverer.delay = 0.4
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/local/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxGoalDeliverer: deliverer,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: true)
+        )
+        var model = session()
+        model.goal = "first goal"
+        model.startingMode = .plan
+
+        _ = try manager.start(session: model)
+        try await Task.sleep(for: .milliseconds(30))
+        try await manager.deliverMessage("Review feedback", to: model.id)
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline, deliverer.deliveries.count < 1 {
+            await Task.yield()
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(deliverer.deliveries.map(\.goal), ["Review feedback"])
+    }
+
+    func testTerminateForDeletionRetriesSurvivingTmuxSession() async throws {
+        let factory = RecordingProcessFactory()
+        let terminator = MockTmuxSessionTerminator()
+        let model = session()
+        let name = TmuxSessionWrapping.sessionName(for: model.id)
+        terminator.stubbedSessions = [name]
+        terminator.survivingKillCount = 1
+        let manager = SessionProcessManager(
+            locator: AppLayerExecutableLocator(
+                executable: URL(fileURLWithPath: "/usr/bin/env"),
+                tmuxExecutable: URL(fileURLWithPath: "/usr/bin/tmux")
+            ),
+            processFactory: factory,
+            tmuxTerminator: terminator,
+            tmuxServerProbe: AppLayerTmuxServerProbe(usable: true)
+        )
+        _ = try manager.start(session: model, deliverGoal: false)
+
+        manager.terminateForDeletion(sessionID: model.id)
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline, terminator.killedSessions.count < 2 {
+            await Task.yield()
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(terminator.killedSessions, [name, name])
+        XCTAssertFalse(terminator.stubbedSessions.contains(name))
     }
 
     func testAntigravityNativeResumeRefusesConversationOwnedByAnotherCLI() {
