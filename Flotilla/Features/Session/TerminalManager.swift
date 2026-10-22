@@ -68,6 +68,7 @@ final class TerminalManager {
             // stay pinned to the session's original title.
             existing.updateHandlers(
                 accessibilityIdentifier: "TerminalView-\(session.title)",
+                multilineNewlineSequence: multilineNewlineSequence(for: session.agent),
                 customReflowHandler: customReflowHandler,
                 onPTYResize: onPTYResize,
                 outputHandler: outputHandler,

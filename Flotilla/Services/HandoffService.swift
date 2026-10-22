@@ -52,6 +52,8 @@ final class HandoffService {
         case foreignSource(url: URL, embedded: String, expected: String)
         case emptySource
         case targetFailedToStart(String)
+        /// Session was deleted (or otherwise cancelled) while the move was in flight.
+        case aborted
 
         var errorDescription: String? {
             switch self {
@@ -69,6 +71,8 @@ final class HandoffService {
                 return "There is no conversation here to hand over."
             case let .targetFailedToStart(message):
                 return "The destination agent did not start: \(message)"
+            case .aborted:
+                return "The handoff was cancelled."
             }
         }
     }
@@ -80,8 +84,15 @@ final class HandoffService {
     /// How long a destination has to stay alive before the move is considered
     /// settled. An agent that is going to fail on a missing binary or a bad
     /// login does so immediately; one still running after this has read the
-    /// transcript and started work.
+    /// transcript and started work. Live settle and launch-time recovery share
+    /// this value — see `probationWindowSeconds`.
     let probationWindow: Duration
+
+    /// `probationWindow` as a `TimeInterval` for elapsed-time math on restore.
+    var probationWindowSeconds: TimeInterval {
+        let c = probationWindow.components
+        return TimeInterval(c.seconds) + TimeInterval(c.attoseconds) / 1e18
+    }
 
     init(
         processManager: any SessionProcessStarting,
@@ -183,16 +194,17 @@ final class HandoffService {
     ///
     /// The returned session carries a ``PendingHandoff`` and is not settled
     /// until ``finalize(_:)`` or ``rollback(_:)`` runs.
-    func perform(_ plan: Plan) async throws -> Session {
+    ///
+    /// Writes **before** killing the source so a refused write leaves the
+    /// session's process running. `isCancelled` is checked after the write and
+    /// again before start so a delete mid-flight can abort without orphaning a
+    /// destination PTY.
+    func perform(_ plan: Plan, isCancelled: () -> Bool = { false }) async throws -> Session {
         guard let writer = registry.writer(for: plan.target) else {
             throw HandoffError.targetNotWritable(plan.target)
         }
         let session = plan.session
         let sourceSessionID = plan.sourceSessionID
-
-        // Quiesce and kill existing source process before writing destination state
-        processManager.terminate(sessionID: session.id)
-        processManager.killServerSideSession(sessionID: session.id)
 
         // A fresh identity per move. Reusing one risks colliding with a
         // transcript the destination already has, and Codex refuses to resume
@@ -203,6 +215,19 @@ final class HandoffService {
             workingDirectory: session.workingDirectory,
             sessionID: targetSessionID
         )
+
+        if isCancelled() {
+            try? writer.removeNativeState(
+                sessionID: handle.nativeSessionID,
+                workingDirectory: session.workingDirectory
+            )
+            throw HandoffError.aborted
+        }
+
+        // Source stays up until the destination transcript exists — a plan or
+        // write failure must not leave a live session with no process.
+        processManager.terminate(sessionID: session.id)
+        processManager.killServerSideSession(sessionID: session.id)
 
         var moved = session
         moved.agent = plan.target
@@ -227,6 +252,14 @@ final class HandoffService {
             startedAt: now()
         )
 
+        if isCancelled() {
+            try? writer.removeNativeState(
+                sessionID: handle.nativeSessionID,
+                workingDirectory: session.workingDirectory
+            )
+            throw HandoffError.aborted
+        }
+
         do {
             try processManager.startSession(moved, deliverGoal: false)
         } catch {
@@ -236,6 +269,20 @@ final class HandoffService {
         }
 
         return moved
+    }
+
+    /// Session vanished mid-handoff (delete). Drops the unused destination
+    /// transcript and leaves the source on disk — the session row is gone, so
+    /// there is nothing to put back onto.
+    func abandon(_ session: Session) {
+        guard session.pendingHandoff != nil else { return }
+        if let writer = registry.writer(for: session.agent),
+           let targetSessionID = session.agentSessionID {
+            try? writer.removeNativeState(
+                sessionID: targetSessionID,
+                workingDirectory: session.workingDirectory
+            )
+        }
     }
 
     /// The destination survived probation. Releases the source agent's claim on

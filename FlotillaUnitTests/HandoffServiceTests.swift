@@ -226,13 +226,42 @@ final class HandoffServiceTests: XCTestCase {
         XCTAssertEqual(moved.pendingHandoff?.sourceTranscriptPath, source)
 
         // Order matters: a surviving tmux session makes the relaunch reattach
-        // to the old agent instead of starting the new one.
+        // to the old agent instead of starting the new one. Kill happens after
+        // the write (asserted separately) and before start.
         XCTAssertEqual(starter.calls, [
             .terminate(subject.id),
             .killServerSide(subject.id),
             .start(subject.id, deliverGoal: false)
         ])
         XCTAssertEqual(starter.startedSessions.last?.agent, .codexCLI)
+    }
+
+    /// A cancelled perform must not kill the source or leave a destination
+    /// transcript behind (#40 / #41).
+    func testPerformAbortedAfterWriteLeavesSourceProcessAlone() async throws {
+        let source = try writeClaudeTranscript()
+        let plan = try service.plan(for: session(transcript: source), to: .codexCLI)
+
+        do {
+            _ = try await service.perform(plan, isCancelled: { true })
+            XCTFail("expected aborted")
+        } catch {
+            XCTAssertEqual(error as? HandoffService.HandoffError, .aborted)
+        }
+
+        XCTAssertTrue(starter.calls.isEmpty, "source must not be killed when cancelled before quiesce")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    func testProbationWindowSecondsMatchesDuration() {
+        XCTAssertEqual(service.probationWindowSeconds, 6, accuracy: 0.01)
+        let custom = HandoffService(
+            processManager: starter,
+            registry: TranscriptCodecRegistry(readers: [claude], writers: [codex]),
+            probationWindow: .seconds(15),
+            now: { Self.fixedDate }
+        )
+        XCTAssertEqual(custom.probationWindowSeconds, 15, accuracy: 0.01)
     }
 
     /// The whole point of the probation record: until the destination proves
