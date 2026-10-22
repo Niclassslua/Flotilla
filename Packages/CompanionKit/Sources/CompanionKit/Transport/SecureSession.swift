@@ -60,6 +60,22 @@ public final class SecureSession<Outgoing: Encodable & Sendable, Incoming: Decod
         }
     }
 
+    /// Seals and waits until the bytes are handed to the network. Use when the
+    /// next step cancels the connection (phone revoke); plain `send` enqueues
+    /// and `cancel` can drop the outstanding write.
+    public func sendDelivered(_ message: Outgoing) async throws {
+        let sealed: Data = try lock.withLock {
+            guard !isClosed else { throw TransportError.closed }
+            let json = try CompanionJSON.encode(message)
+            let plaintext = try WirePayload.encode(json)
+            guard plaintext.count <= WirePayload.maximumSize else {
+                throw TransportError.frameTooLarge(plaintext.count + 24)
+            }
+            return try channel.seal(plaintext)
+        }
+        try await frames.send(sealed)
+    }
+
     public func onClose(_ handler: @escaping @Sendable (Error?) -> Void) {
         let alreadyClosed = lock.withLock {
             if isClosed { return true }

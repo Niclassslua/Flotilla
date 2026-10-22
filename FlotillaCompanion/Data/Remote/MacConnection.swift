@@ -307,6 +307,15 @@ final class MacConnection {
         }
     }
 
+    /// Asks the Mac to drop trust for this device, then disconnects. Best-effort
+    /// if the link is already down — local removal still proceeds.
+    func revokeTrust() async {
+        if let session {
+            try? await session.sendDelivered(.revoke)
+        }
+        setActive(false)
+    }
+
     func disconnect() {
         receiveTask?.cancel()
         receiveTask = nil

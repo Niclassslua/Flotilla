@@ -121,6 +121,28 @@ final class HandshakeTests: XCTestCase {
         }
     }
 
+    func testAlteredDeviceNameInvalidatesTheProof() throws {
+        var client = try hello(.pair, secret: secret)
+        var modified = client.hello
+        modified.deviceName = "Attacker Phone"
+        client = Handshake.ClientState(ephemeral: client.ephemeral, transcript: client.transcript, hello: modified)
+        XCTAssertThrowsError(try Handshake.respond(to: client.hello, context: context())) { error in
+            XCTAssertEqual(error as? RejectReason, .pairingInvalid)
+        }
+    }
+
+    func testAlteredDeviceNameOnResumeInvalidatesTheProof() throws {
+        var client = try hello(.resume)
+        var modified = client.hello
+        modified.deviceName = "Attacker Phone"
+        client = Handshake.ClientState(ephemeral: client.ephemeral, transcript: client.transcript, hello: modified)
+        XCTAssertThrowsError(
+            try Handshake.respond(to: client.hello, context: context(registered: ["phone-1": phone.publicKey]))
+        ) { error in
+            XCTAssertEqual(error as? RejectReason, .unknownDevice)
+        }
+    }
+
     // MARK: - Channel integrity
 
     private func channels() throws -> (SecureChannel, SecureChannel) {

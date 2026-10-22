@@ -442,6 +442,12 @@ final class CompanionHost {
         try? storage.saveRevoked(revoked)
         try? storage.saveDevices(devices)
         auth.setDevices(devices, revoked: revoked)
+        closePeers(for: deviceID)
+    }
+
+    /// Drops live sessions for `deviceID` so a re-pair or revoke cannot leave
+    /// an old authorized peer beside a new one.
+    private func closePeers(for deviceID: String) {
         for (key, peer) in peers where peer.deviceID == deviceID {
             peer.session.close()
             peers[key] = nil
@@ -456,6 +462,9 @@ final class CompanionHost {
         }
         let hello = connected.hello
         if hello.mode == .pair {
+            // Same as revoke: registry trust is changing; tear down any live
+            // session that still holds the previous key for this deviceID.
+            closePeers(for: hello.deviceID)
             devices.removeAll { $0.id == hello.deviceID }
             let device = PairedDevice(id: hello.deviceID, name: hello.deviceName, publicKey: hello.deviceKey, pairedAt: .now, lastSeen: .now)
             devices.append(device)
@@ -527,6 +536,8 @@ final class CompanionHost {
             try? peer.session.send(.speech(await peer.speech.cancel(requestID: requestID)))
         case .ping:
             try? peer.session.send(.pong)
+        case .revoke:
+            revoke(peer.deviceID)
         case let .subscribe(sessionID):
             let previous = peer.subscribedSessionID
             peer.subscriptionGeneration += 1
