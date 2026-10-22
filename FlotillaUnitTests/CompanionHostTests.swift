@@ -152,8 +152,8 @@ final class CompanionHostPairingTests: XCTestCase {
             },
             pinnedMacKey: firstPayload.macKey
         )
-        var firstClosed = false
-        first.session.onClose { _ in firstClosed = true }
+        let firstClosed = LockedFlag()
+        first.session.onClose { _ in firstClosed.set() }
         let attachedDeadline = Date().addingTimeInterval(5)
         while host.recentlyPairedDevice == nil, Date() < attachedDeadline {
             try await Task.sleep(for: .milliseconds(25))
@@ -176,15 +176,22 @@ final class CompanionHostPairingTests: XCTestCase {
         defer { second.session.close() }
 
         let closeDeadline = Date().addingTimeInterval(5)
-        while !firstClosed, Date() < closeDeadline {
+        while !firstClosed.value, Date() < closeDeadline {
             try await Task.sleep(for: .milliseconds(25))
         }
-        XCTAssertTrue(firstClosed, "Re-pair must close the previous peer for the same deviceID")
+        XCTAssertTrue(firstClosed.value, "Re-pair must close the previous peer for the same deviceID")
         XCTAssertEqual(host.devices.map(\.id), ["phone-1"])
         XCTAssertEqual(host.devices.first?.name, "Second")
         XCTAssertEqual(storage.loadDevices().first?.publicKey, secondPhone.publicKey)
         XCTAssertTrue(host.connectedDeviceIDs.contains("phone-1"))
     }
+}
+
+private final class LockedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+    var value: Bool { lock.withLock { flag } }
+    func set() { lock.withLock { flag = true } }
 }
 
 final class CompanionSnapshotBuilderTests: XCTestCase {
