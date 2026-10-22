@@ -40,9 +40,9 @@ final class AppEnvironment {
     init() {
         isUITesting = ProcessInfo.processInfo.environment["UI_TESTING"] == "1"
         isBoardDemo = ProcessInfo.processInfo.environment["FLOTILLA_DEMO_DATA"] == "1"
-        let supportDirectory = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Flotilla", isDirectory: true)
+        // Same support root as hooks/tmux/companion (`TmuxSessionWrapping`),
+        // so Ephemeral never shares prod sqlite or Worktrees.
+        let supportDirectory = TmuxSessionWrapping.defaultSupportDirectory()
         worktreeBaseDirectory = isUITesting
             ? Self.uiTestWorktreeBasePath
             : supportDirectory.appendingPathComponent("Worktrees", isDirectory: true)
@@ -81,10 +81,15 @@ final class AppEnvironment {
                     ? "The session database was damaged. Flotilla preserved a backup and started with a repaired local database."
                     : nil
             } catch {
-                // The UI remains usable, but an explicit warning prevents a
-                // persistence failure from masquerading as successful storage.
-                sessionRepository = Self.makeInMemoryRepositoryOrCrash()
-                startupWarning = "Persistent session storage is unavailable (\(error.localizedDescription)). This launch is using temporary in-memory storage."
+                // Fail closed: keep a scratch DB so load paths stay empty and
+                // the UI can show the warning, but refuse every mutation so
+                // this launch cannot pretend sessions/projects were saved.
+                let detail = error.localizedDescription
+                sessionRepository = MutationBlockedSessionRepository(
+                    wrapping: Self.makeInMemoryRepositoryOrCrash(),
+                    detail: detail
+                )
+                startupWarning = "Persistent session storage is unavailable (\(detail)). Creating or changing sessions is blocked until storage works again."
             }
         }
     }

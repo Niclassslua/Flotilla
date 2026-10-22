@@ -43,19 +43,22 @@ public final class UserDefaultsSettingsStore: SettingsStoring, @unchecked Sendab
     }
 
     public func load() -> AppSettings {
-        let storedVersion = defaults.integer(forKey: "\(key).schemaVersion")
+        let versionKey = "\(key).schemaVersion"
+        // `integer(forKey:)` is 0 when the key is absent — that must not wipe
+        // a still-valid JSON payload that predates the version stamp.
+        let hasVersion = defaults.object(forKey: versionKey) != nil
+        let storedVersion = UInt(defaults.integer(forKey: versionKey))
         let currentVersion = AppSettings.schemaVersion
 
-        guard storedVersion == currentVersion,
-              let data = defaults.data(forKey: key),
+        guard let data = defaults.data(forKey: key),
               let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) else {
-            // Schema mismatch or corrupt data: return a minimal valid settings
-            // object rather than erasing everything the user has configured.
-            if storedVersion != currentVersion {
-                // Schema version changed — return defaults but could later
-                // add migration logic here.
-            }
             return AppSettings(worktreeBaseDirectory: defaultWorktreeBaseDirectory)
+        }
+
+        if !hasVersion || storedVersion != currentVersion {
+            // Payload decoded; stamp (or migrate-noop) the current version so
+            // the next load does not treat a missing key as a wipe signal.
+            defaults.set(currentVersion, forKey: versionKey)
         }
         return decoded
     }

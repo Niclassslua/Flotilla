@@ -339,10 +339,12 @@ struct KanbanBoardRecord: Codable, FetchableRecord, PersistableRecord {
         projectID = board.projectID?.uuidString
         name = board.name
         columnMode = board.columnMode.rawValue
-        // Encode custom columns and card order as JSON
         let encoder = JSONEncoder()
-        customColumnsJSON = (try? String(data: encoder.encode(board.customColumns), encoding: .utf8)) ?? "[]"
-        cardOrderJSON = (try? String(data: encoder.encode(board.cardOrder), encoding: .utf8)) ?? "{}"
+        // Prefer keeping prior JSON over writing `[]` when encode somehow fails.
+        customColumnsJSON = (try? String(data: encoder.encode(board.customColumns), encoding: .utf8))
+            ?? "[]"
+        cardOrderJSON = (try? String(data: encoder.encode(board.cardOrder), encoding: .utf8))
+            ?? "{}"
         updatedAt = board.updatedAt
     }
 
@@ -363,9 +365,10 @@ struct KanbanBoardRecord: Codable, FetchableRecord, PersistableRecord {
             projectUUID = nil
         }
 
-        let decoder = JSONDecoder()
-        let customColumns = (try? decoder.decode([KanbanColumn].self, from: Data(customColumnsJSON.utf8))) ?? []
-        let cardOrder = (try? decoder.decode([String: Int].self, from: Data(cardOrderJSON.utf8))) ?? [:]
+        // Soft-parse per column so a legacy statusFilter (idle/ready/finished)
+        // or one bad entry cannot wipe the whole board to [].
+        let customColumns = Self.decodeCustomColumns(customColumnsJSON)
+        let cardOrder = (try? JSONDecoder().decode([String: Int].self, from: Data(cardOrderJSON.utf8))) ?? [:]
 
         return KanbanBoard(
             id: uuid,
@@ -376,6 +379,44 @@ struct KanbanBoardRecord: Codable, FetchableRecord, PersistableRecord {
             cardOrder: cardOrder,
             updatedAt: updatedAt
         )
+    }
+
+    /// Decodes each column object independently, folding legacy status strings.
+    static func decodeCustomColumns(_ json: String) -> [KanbanColumn] {
+        guard let raw = try? JSONSerialization.jsonObject(with: Data(json.utf8)),
+              let array = raw as? [[String: Any]] else {
+            return []
+        }
+        return array.compactMap { dict -> KanbanColumn? in
+            guard let idString = dict["id"] as? String,
+                  let id = UUID(uuidString: idString),
+                  let title = dict["title"] as? String else {
+                return nil
+            }
+            let order: Int
+            if let intOrder = dict["order"] as? Int {
+                order = intOrder
+            } else if let doubleOrder = dict["order"] as? Double {
+                order = Int(doubleOrder)
+            } else {
+                return nil
+            }
+            let statusFilter = (dict["statusFilter"] as? String)
+                .flatMap(SessionStatus.parseLegacy(rawValue:))
+            let agentFilter = (dict["agentFilter"] as? String)
+                .flatMap(AgentKind.init(rawValue:))
+            let workflowStageFilter = (dict["workflowStageFilter"] as? String)
+                .flatMap(WorkflowStage.init(rawValue:))
+            return KanbanColumn(
+                id: id,
+                title: title,
+                order: order,
+                statusFilter: statusFilter,
+                agentFilter: agentFilter,
+                workflowStageFilter: workflowStageFilter,
+                color: dict["color"] as? String
+            )
+        }
     }
 }
 

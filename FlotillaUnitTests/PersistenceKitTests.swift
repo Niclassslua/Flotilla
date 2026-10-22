@@ -1,6 +1,7 @@
 import XCTest
+import GRDB
 import SessionKit
-import PersistenceKit
+@testable import PersistenceKit
 
 final class PersistenceKitTests: XCTestCase {
     /// GRDB stores `Date` with millisecond precision; `Date()` carries more
@@ -305,12 +306,125 @@ final class PersistenceKitTests: XCTestCase {
         let notFoundError = NSError(domain: NSCocoaErrorDomain, code: NSFileNoSuchFileError, userInfo: [NSLocalizedDescriptionKey: "No such file"])
         XCTAssertFalse(GRDBSessionRepository.isCorruptionError(notFoundError))
 
-        // Corruption error descriptions
+        // Result-code / exact open-time messages — not loose "malformed" matches
         let corruptError = NSError(domain: "SQLite", code: 11, userInfo: [NSLocalizedDescriptionKey: "database disk image is malformed"])
         XCTAssertTrue(GRDBSessionRepository.isCorruptionError(corruptError))
 
         let notADbError = NSError(domain: "SQLite", code: 26, userInfo: [NSLocalizedDescriptionKey: "file is not a database"])
         XCTAssertTrue(GRDBSessionRepository.isCorruptionError(notADbError))
+
+        let migrateSQL = NSError(
+            domain: "SQLite",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "SQL logic error near malformed column definition"]
+        )
+        XCTAssertFalse(
+            GRDBSessionRepository.isCorruptionError(migrateSQL),
+            "migrate/SQL diagnostics containing 'malformed' must not wipe the DB"
+        )
+    }
+
+    func testLoadAllSkipsUndecodableSessionRows() throws {
+        let dbPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flotilla-skip-\(UUID().uuidString)")
+            .appendingPathComponent("state.sqlite")
+        defer { try? FileManager.default.removeItem(at: dbPath.deletingLastPathComponent()) }
+
+        let good = Session(
+            title: "Good",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working,
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        )
+        do {
+            let disk = try GRDBSessionRepository(path: dbPath)
+            try disk.save(good)
+        }
+
+        let queue = try DatabaseQueue(path: dbPath.path)
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO session (
+                        id, title, goal, agent, workingDirectory, status,
+                        terminalScrollback, createdAt, lastActiveAt
+                    ) VALUES (?, 'Bad', 'x', 'unknownAgent', '/tmp', 'working', ?, ?, ?)
+                    """,
+                arguments: [UUID().uuidString, Data(), Self.fixedDate, Self.fixedDate]
+            )
+        }
+
+        let reopened = try GRDBSessionRepository(path: dbPath)
+        let (_, sessions) = try reopened.loadAll()
+        XCTAssertEqual(sessions.map(\.title), ["Good"])
+    }
+
+    func testUpdateScrollbackDoesNotShrinkNewerBuffer() throws {
+        let repo = try GRDBSessionRepository()
+        let session = Session(
+            title: "Race",
+            goal: "Goal",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            status: .working,
+            terminalScrollback: Data("short\n".utf8),
+            createdAt: Self.fixedDate,
+            lastActiveAt: Self.fixedDate
+        )
+        try repo.save(session)
+
+        var newer = session
+        newer.terminalScrollback = Data("much longer scrollback that won the race\n".utf8)
+        try repo.save(newer)
+
+        try repo.updateScrollback(sessionID: session.id, scrollback: Data("short\n".utf8))
+        let loaded = try XCTUnwrap(try repo.loadAll().sessions.first)
+        XCTAssertEqual(
+            String(decoding: loaded.terminalScrollback, as: UTF8.self),
+            "much longer scrollback that won the race\n"
+        )
+    }
+
+    func testKanbanLegacyStatusFilterInJSONSurvivesLoad() throws {
+        let json = """
+        [{"id":"AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE","title":"Ready","order":0,"statusFilter":"ready"}]
+        """
+        let columns = KanbanBoardRecord.decodeCustomColumns(json)
+        XCTAssertEqual(columns.count, 1)
+        XCTAssertEqual(columns.first?.statusFilter, .readyForReview)
+        XCTAssertEqual(columns.first?.title, "Ready")
+    }
+
+    func testKanbanSkipsBadColumnWithoutWipingSiblings() {
+        let json = """
+        [
+          {"id":"AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE","title":"Working","order":0,"statusFilter":"working"},
+          {"title":"missing-id","order":1},
+          {"id":"BBBBBBBB-BBBB-4CCC-8DDD-EEEEEEEEEEEE","title":"Review","order":2,"statusFilter":"idle"}
+        ]
+        """
+        let columns = KanbanBoardRecord.decodeCustomColumns(json)
+        XCTAssertEqual(columns.map(\.title), ["Working", "Review"])
+        XCTAssertEqual(columns[1].statusFilter, .readyForReview)
+    }
+
+    func testMutationBlockedRepositoryRefusesWrites() throws {
+        let inner = try GRDBSessionRepository()
+        let blocked = MutationBlockedSessionRepository(wrapping: inner, detail: "disk full")
+        XCTAssertFalse(blocked.acceptsMutations)
+        XCTAssertTrue(try blocked.loadAll().sessions.isEmpty)
+        XCTAssertThrowsError(try blocked.save(Session(
+            title: "Nope",
+            goal: "g",
+            agent: .claudeCode,
+            projectID: nil,
+            workingDirectory: URL(fileURLWithPath: "/tmp")
+        )))
     }
 
     func testCorruptionRecoveryPreservesDamagedFileAndRecreates() throws {

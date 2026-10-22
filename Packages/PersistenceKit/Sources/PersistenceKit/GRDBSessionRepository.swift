@@ -49,23 +49,25 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
     }
 
     public static func isCorruptionError(_ error: Error) -> Bool {
+        // Result codes only for GRDB errors — substring "malformed"/"corrupt"
+        // also appears in migrate/SQL diagnostics and must not wipe the DB.
         if let dbError = error as? DatabaseError {
             switch dbError.resultCode {
             case .SQLITE_CORRUPT, .SQLITE_NOTADB:
                 return true
             default:
-                let msg = dbError.description.lowercased()
-                return msg.contains("file is not a database")
-                    || msg.contains("file is encrypted or is not a database")
-                    || msg.contains("malformed")
-                    || msg.contains("corrupt")
+                return false
             }
         }
         let nsError = error as NSError
+        // SQLITE_CORRUPT=11, SQLITE_NOTADB=26 when surfaced as NSError.
+        if nsError.code == 11 || nsError.code == 26 {
+            return true
+        }
         let desc = nsError.localizedDescription.lowercased()
-        return desc.contains("file is not a database")
-            || desc.contains("malformed")
-            || desc.contains("corrupt")
+        return desc == "file is not a database"
+            || desc == "file is encrypted or is not a database"
+            || desc == "database disk image is malformed"
     }
 
     /// In-memory store — used by unit tests and `UI_TESTING=1` runs.
@@ -345,7 +347,11 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
     public func loadAll() throws -> (projects: [Project], sessions: [Session]) {
         try dbQueue.read { db in
             let projects = try ProjectRecord.fetchAll(db).map { try $0.toDomain() }
-            let sessions = try SessionRecord.fetchAll(db).map { try $0.toDomain() }
+            // One undecodable row must not hide the rest of the fleet
+            // (same soft-skip pattern as attribution compactMap).
+            let sessions = try SessionRecord.fetchAll(db).compactMap { record in
+                try? record.toDomain()
+            }
             return (projects, sessions)
         }
     }
@@ -362,10 +368,16 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
     }
 
     public func updateScrollback(sessionID: UUID, scrollback: Data) throws {
+        // Refuse to shrink: a deferred PTY flush must not clobber a newer
+        // full-row save that already wrote a longer buffer.
+        // ponytail: length CAS only; equal-length ring-cap races still possible.
         try dbQueue.write { db in
             try db.execute(
-                sql: "UPDATE session SET terminalScrollback = ? WHERE id = ?",
-                arguments: [scrollback, sessionID.uuidString]
+                sql: """
+                    UPDATE session SET terminalScrollback = ?
+                    WHERE id = ? AND length(terminalScrollback) <= length(?)
+                    """,
+                arguments: [scrollback, sessionID.uuidString, scrollback]
             )
         }
     }
@@ -378,7 +390,7 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
 
     public func save(_ session: Session) throws {
         try dbQueue.write { db in
-            try SessionRecord(session: session).save(db)
+            try Self.saveSessionPreservingLongerScrollback(session, db: db)
         }
     }
 
@@ -388,9 +400,18 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
         guard !sessions.isEmpty else { return }
         try dbQueue.write { db in
             for session in sessions {
-                try SessionRecord(session: session).save(db)
+                try Self.saveSessionPreservingLongerScrollback(session, db: db)
             }
         }
+    }
+
+    private static func saveSessionPreservingLongerScrollback(_ session: Session, db: Database) throws {
+        var record = SessionRecord(session: session)
+        if let existing = try SessionRecord.fetchOne(db, key: record.id),
+           record.terminalScrollback.count < existing.terminalScrollback.count {
+            record.terminalScrollback = existing.terminalScrollback
+        }
+        try record.save(db)
     }
 
     public func delete(sessionID: UUID) throws {
