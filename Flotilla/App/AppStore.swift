@@ -988,6 +988,11 @@ final class AppStore {
             scheduleTitleSync(forSessionID: sessionID)
         } catch {
             lastOperationError = error.localizedDescription
+            // Terminate already killed the previous process; without a start
+            // the session would sit at `.working` with nothing behind it.
+            let crashed = transition(sessions[index], to: .crashed, origin: .restartFailed)
+            sessions[index] = crashed
+            try? repository.save(mergingLiveScrollback(crashed))
         }
     }
 
@@ -1275,8 +1280,15 @@ final class AppStore {
     ) async {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         lastOperationError = nil
-        metadataMonitor.cancel(sessionID)
-        scrollbackStore.remove(sessionID)
+
+        // Durable delete first. Killing the process / wiping scrollback before
+        // this left a visible session with a dead agent when the DB write failed.
+        do {
+            try repository.delete(sessionID: sessionID)
+        } catch {
+            lastOperationError = "The session could not be deleted: \(error.localizedDescription)"
+            return
+        }
 
         // Abort an in-flight or probation handoff so we neither start a
         // destination after the row is gone nor leave its transcript orphaned.
@@ -1286,16 +1298,9 @@ final class AppStore {
             handoffService.abandon(session)
         }
 
+        metadataMonitor.cancel(sessionID)
+        scrollbackStore.remove(sessionID)
         processManager.terminateForDeletion(sessionID: sessionID)
-
-        // The session leaves the UI before the git work below, which can
-        // take a while on a large repository.
-        do {
-            try repository.delete(sessionID: sessionID)
-        } catch {
-            lastOperationError = "The session could not be deleted: \(error.localizedDescription)"
-            return
-        }
 
         let eventFile = HookConfigurationWriter.eventFilePath(for: sessionID, supportDirectory: supportDirectory)
         try? FileManager.default.removeItem(at: eventFile)

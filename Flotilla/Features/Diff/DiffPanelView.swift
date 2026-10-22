@@ -8,7 +8,9 @@ import DesignSystem
 @Observable
 @MainActor
 final class DiffPanelViewModel {
-    let session: Session
+    /// Updated when `WorkspaceNavigator` reuses this VM for another session
+    /// on the same checkout path (PR title/body must follow the current one).
+    var session: Session
     private let gitService: any GitServiceProtocol
     private let ghService: (any GhServiceProtocol)?
     /// Environment for commits made here, attributing them to the session
