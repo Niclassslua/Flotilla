@@ -62,7 +62,7 @@ struct FlotillaShell: View {
             await restoreWorkspaceSelection()
             applyTerminalPreferences()
 #if DEBUG || FLOTILLA_EPHEMERAL
-            await ProjectToolRailVerifier.runIfRequested(navigator: navigator, store: store)
+            await ProjectToolRailVerifier.runIfRequested(navigator: navigator, store: store, settings: settingsViewModel)
 #endif
         }
         .modifier(ShellLifecycleModifier(
@@ -182,7 +182,9 @@ struct FlotillaShell: View {
                 ProjectToolRail(
                     projectID: navigator.railProjectID(sessions: store.sessions),
                     activeTool: navigator.activeRailTool,
+                    isHomeActive: navigator.selection == .overview,
                     showLabels: railLabels,
+                    onSelectHome: { navigator.showHomeDashboard() },
                     onSelect: { tool in
                         guard let projectID = navigator.railProjectID(sessions: store.sessions) else { return }
                         navigator.openProjectTool(tool, projectID: projectID)
@@ -195,8 +197,6 @@ struct FlotillaShell: View {
                     store: store,
                     selection: $navigator.sidebarSelection,
                     searchText: $navigator.searchText,
-                    isHomeSelected: navigator.selection == .overview,
-                    onSelectHome: { navigator.showHomeDashboard() },
                     onOpenSession: { id in
                         navigator.selection = .session(id)
                         store.selectedSessionID = id

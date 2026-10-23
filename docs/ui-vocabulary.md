@@ -24,10 +24,9 @@ The outermost layout. Everything else lives inside one of these three regions.
 | Say | What it is | Code |
 | --- | --- | --- |
 | **Shell** | The whole window's root view: `NavigationSplitView` + overlays + sheets. | `FlotillaShell` — `Features/Shell/FlotillaShell.swift` |
-| **Project tool rail** | Far-left Xcode-style activity strip: **Git · Issues · Files · Skills · Rules**. Opens those tools in the detail column without replacing the session list. Disabled with a “Select a project” tooltip when project context is ambiguous. | `ProjectToolRail` — `Features/Shell/ProjectToolRail.swift` |
-| **Navigator** *(region)* | The split view's sidebar column beside the tool rail: search on top, then **Home**, then each project as a selectable header with its sessions beneath it, then unassigned sessions, over a pinned **New Session** button. | `SessionsSidebar` — `Features/Shell/FleetSidebar.swift` |
-| **Navigator list** | The `List` inside the navigator that holds Home, the projects and their sessions, and General. | `FleetSessionList` — same file |
-| **Navigator row** | A standing destination line in the navigator. Home is the only one. | `NavigatorRow` — same file |
+| **Project tool rail** | Far-left Xcode-style activity strip: **Home**, a hairline, then **Git · Issues · Files · Skills · Rules**. Home is always enabled. The tools open in the detail column without replacing the session list. Disabled with a “Select a project” tooltip when project context is ambiguous. | `ProjectToolRail` — `Features/Shell/ProjectToolRail.swift` |
+| **Navigator** *(region)* | The split view's sidebar column beside the tool rail: search on top, then each project as a selectable header with its sessions beneath it, then unassigned sessions, over a pinned **New Session** button. | `SessionsSidebar` — `Features/Shell/FleetSidebar.swift` |
+| **Navigator list** | The `List` inside the navigator that holds the projects and their sessions, and General. | `FleetSessionList` — same file |
 | **Project header** | A project's line in the navigator, and the header for its sessions: collapse chevron, 28pt project mark, name, home-relative path, and a hairline in the project's accent. Selecting it opens the project workspace. | `ProjectHeaderRow` — same file |
 | **Smart list** | One of the standing fleet questions: **Needs You · Working · Ready**. Reached from the **Workspace** menu; it left the navigator, where its count only restated what every session row already shows. | `FleetSmartList` — `Features/Shell/FleetSmartList.swift` |
 | **Session sidebar row** | One session line in the session list (status dot, title, meta, swipe-to-delete, context menu). | `SessionSidebarRow`, `SwipeToDeleteSession` — same file |
@@ -58,7 +57,7 @@ These are the terms for *state*, not views — use them to say **where** you wan
 
 ## 2. Home / Overview
 
-Shown when the navigator's **Home** row is selected.
+Shown when **Home** at the top of the tool rail is selected.
 
 | Say | What it is | Code |
 | --- | --- | --- |

@@ -7,6 +7,7 @@ public enum AXID: String, Sendable {
     // MARK: - Sidebar
     case sidebarList = "SidebarList"
     case sidebarOverview = "Sidebar.Overview"
+    case sidebarSearch = "Sidebar.Search"
     case sidebarProjectRow = "Sidebar.ProjectRow-"
     case sidebarProjectCollapseToggle = "Sidebar.ProjectRow.CollapseToggle-"
     case sidebarExpandAllProjects = "Sidebar.ExpandAllProjects"

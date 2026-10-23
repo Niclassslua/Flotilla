@@ -2,7 +2,7 @@ import SwiftUI
 import SessionKit
 import DesignSystem
 
-/// The navigator: search on top, then the fleet smart lists, then projects
+/// The navigator: search on top, then projects
 /// with their sessions beneath them, then unassigned sessions, with a floating
 /// New Session control over the list's lower-left corner.
 ///
@@ -13,8 +13,6 @@ struct SessionsSidebar: View {
     @Bindable var store: AppStore
     @Binding var selection: Set<SidebarItem>
     @Binding var searchText: String
-    let isHomeSelected: Bool
-    let onSelectHome: () -> Void
     let onOpenSession: (UUID) -> Void
     let onRequestDelete: (UUID) -> Void
     let onCreateSession: () -> Void
@@ -38,6 +36,7 @@ struct SessionsSidebar: View {
                     .font(FlotillaTypography.caption)
                     .autocorrectionDisabled()
                     .textContentType(nil)
+                    .accessibilityIdentifier(AXID.sidebarSearch.rawValue)
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
                         Image(systemName: "xmark.circle.fill")
@@ -77,16 +76,6 @@ struct SessionsSidebar: View {
             .padding(.horizontal, 10)
             .padding(.top, 10)
             .padding(.bottom, 6)
-
-            if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-                Button(action: onSelectHome) {
-                    NavigatorRow(title: "Home", systemImage: "house", isSelected: isHomeSelected)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(AXID.sidebarOverview.rawValue)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 8)
-            }
 
             FleetSessionList(
                 store: store,
@@ -332,47 +321,11 @@ enum SidebarProjectCollapseState {
 
 // MARK: - Navigator row
 
-/// Home's standalone button label, outside the List's native selection layer.
-private struct NavigatorRow: View {
-    @Environment(\.appearsActive) private var appearsActive
-    let title: String
-    var systemImage: String = "folder.fill"
-    let isSelected: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 12))
-                .frame(width: 18)
-                .foregroundStyle(FlotillaColors.textSecondary)
-
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer(minLength: 4)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .flotillaLiquidSurface(
-            isSelected
-                ? SidebarSelectionFill.color(appearsActive: appearsActive)
-                : FlotillaColors.surfaceElevated.opacity(0.35),
-            cornerRadius: 9,
-            glassTintOpacity: isSelected && appearsActive ? 0.32 : FlotillaGlassTint.sidebar
-        )
-        .contentShape(Rectangle())
-    }
-}
-
 /// A project's line in the navigator, and the header for the sessions beneath
 /// it.
 ///
-/// It used to borrow `NavigatorRow`: a 16pt mark and a 12pt title, sitting
-/// over 13pt session titles and their 28pt provider tiles, so the group read
-/// as smaller than the things inside it. Home draws its project cards at 38pt
+/// A 16pt mark and a 12pt title once sat over 13pt session titles and their
+/// 28pt provider tiles, so the group read as smaller than the things inside it. Home draws its project cards at 38pt
 /// beside an 18pt title; this is the same identity at navigator scale.
 private struct ProjectHeaderRow: View {
     @Environment(\.appearsActive) private var appearsActive

@@ -51,11 +51,14 @@ enum ProjectTool: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
-/// Far-left Xcode-style activity rail for project tools (issue #7).
+/// Far-left Xcode-style activity rail: Home, then the project tools (issue #7).
+/// Home is not project-scoped, so it stays enabled when the tools are not.
 struct ProjectToolRail: View {
     let projectID: UUID?
     let activeTool: ProjectTool?
+    let isHomeActive: Bool
     let showLabels: Bool
+    let onSelectHome: () -> Void
     let onSelect: (ProjectTool) -> Void
 
     private var isEnabled: Bool { projectID != nil }
@@ -65,6 +68,21 @@ struct ProjectToolRail: View {
 
     var body: some View {
         VStack(spacing: showLabels ? 6 : 4) {
+            railButton(
+                title: "Home",
+                isActive: isHomeActive,
+                isEnabled: true,
+                help: "Home",
+                identifier: AXID.sidebarOverview.rawValue,
+                action: onSelectHome
+            ) { isActive in
+                Image(systemName: "house")
+                    .font(.system(size: 16, weight: isActive ? .semibold : .regular))
+            }
+            Rectangle()
+                .fill(FlotillaColors.separator)
+                .frame(width: 24, height: FlotillaBorderWidth.hairline)
+                .padding(.vertical, 2)
             ForEach(ProjectTool.allCases) { tool in
                 railButton(for: tool)
             }
@@ -81,10 +99,38 @@ struct ProjectToolRail: View {
     }
 
     private func railButton(for tool: ProjectTool) -> some View {
-        let isActive = isEnabled && activeTool == tool
-        return Button {
+        railButton(
+            title: tool.title,
+            isActive: isEnabled && activeTool == tool,
+            isEnabled: isEnabled,
+            help: isEnabled ? tool.title : "Select a project",
+            identifier: AXID.projectToolRailItem(tool.title),
+            action: { onSelect(tool) }
+        ) { isActive in
+            if tool == .git {
+                GitIcon(size: 16)
+            } else if tool == .issues {
+                GitHubIssueIcon(size: 16)
+            } else {
+                Image(systemName: tool.systemImage)
+                    .font(.system(size: 16, weight: isActive ? .semibold : .regular))
+                    .symbolRenderingMode(.hierarchical)
+            }
+        }
+    }
+
+    private func railButton<Glyph: View>(
+        title: String,
+        isActive: Bool,
+        isEnabled: Bool,
+        help: String,
+        identifier: String,
+        action: @escaping () -> Void,
+        @ViewBuilder glyph: (Bool) -> Glyph
+    ) -> some View {
+        Button {
             guard isEnabled else { return }
-            onSelect(tool)
+            action()
         } label: {
             VStack(spacing: 3) {
                 ZStack {
@@ -100,24 +146,14 @@ struct ProjectToolRail: View {
                             }
                         }
 
-                    Group {
-                        if tool == .git {
-                            GitIcon(size: 16)
-                        } else if tool == .issues {
-                            GitHubIssueIcon(size: 16)
-                        } else {
-                            Image(systemName: tool.systemImage)
-                                .font(.system(size: 16, weight: isActive ? .semibold : .regular))
-                                .symbolRenderingMode(.hierarchical)
-                        }
-                    }
-                    .foregroundStyle(glyphColor(isActive: isActive))
+                    glyph(isActive)
+                        .foregroundStyle(glyphColor(isActive: isActive, isEnabled: isEnabled))
                     .frame(width: 28, height: 28)
                 }
                 .frame(width: 40, height: 40)
 
                 if showLabels {
-                    Text(tool.title)
+                    Text(title)
                         .font(.system(size: 9, weight: isActive ? .semibold : .medium))
                         .foregroundStyle(isEnabled
                             ? (isActive ? FlotillaColors.textPrimary : FlotillaColors.textSecondary)
@@ -132,14 +168,14 @@ struct ProjectToolRail: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .help(isEnabled ? tool.title : "Select a project")
-        .accessibilityLabel(tool.title)
+        .help(help)
+        .accessibilityLabel(title)
         .accessibilityHint(isEnabled ? "" : "Select a project")
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
-        .accessibilityIdentifier(AXID.projectToolRailItem(tool.title))
+        .accessibilityIdentifier(identifier)
     }
 
-    private func glyphColor(isActive: Bool) -> Color {
+    private func glyphColor(isActive: Bool, isEnabled: Bool) -> Color {
         if !isEnabled { return FlotillaColors.textTertiary }
         return isActive ? FlotillaColors.accent : FlotillaColors.textSecondary
     }

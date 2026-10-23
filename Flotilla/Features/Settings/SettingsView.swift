@@ -276,7 +276,7 @@ private struct GeneralSettingsPane: View {
             Section {
                 Toggle("Show labels on sidebar icons", isOn: $viewModel.settings.workspace.sidebarRailLabels)
                     .toggleStyle(.switch)
-                Text("Labels appear under Git, Issues, Files, Skills, and Rules on the project tool rail, at the cost of a wider rail.")
+                Text("Labels appear under Home, Git, Issues, Files, Skills, and Rules on the tool rail, at the cost of a wider rail.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
