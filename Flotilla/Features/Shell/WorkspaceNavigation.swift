@@ -31,6 +31,8 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
     case showFiles
     case showInstructions
     case showChanges
+    case showIssues
+    case showSkills
     case restoreSessions
     case showSettings
     case showShortcuts
@@ -51,6 +53,8 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showFiles: .projectTool(.files)
         case .showInstructions: .projectTool(.rules)
         case .showChanges: .projectTool(.git)
+        case .showIssues: .projectTool(.issues)
+        case .showSkills: .projectTool(.skills)
         }
     }
 
@@ -66,6 +70,8 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showFiles: "Open Files"
         case .showInstructions: "Open Rules"
         case .showChanges: "Open Git"
+        case .showIssues: "Open Issues"
+        case .showSkills: "Open Skills"
         case .restoreSessions: "Restore stopped sessions"
         case .showSettings: "Open Settings"
         case .showShortcuts: "Keyboard shortcuts"
@@ -84,6 +90,8 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showFiles: "Browse the project's root checkout"
         case .showInstructions: "Project instructions and rules"
         case .showChanges: "Project-wide history, graph, and branches"
+        case .showIssues: "The project's GitHub issues"
+        case .showSkills: "Agent skills available to this project"
         case .restoreSessions: "Restart finished or crashed sessions"
         case .showSettings: "Configure agents, sessions, and worktrees"
         case .showShortcuts: "Reference for navigation and session commands"
@@ -102,6 +110,8 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showFiles: "folder"
         case .showInstructions: "doc.text"
         case .showChanges: "arrow.triangle.branch"
+        case .showIssues: "circle.circle"
+        case .showSkills: "sparkles"
         case .restoreSessions: "arrow.clockwise"
         case .showSettings: "gearshape"
         case .showShortcuts: "keyboard"

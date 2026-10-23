@@ -363,12 +363,8 @@ struct KeyboardShortcutsView: View {
                 ("Grid", "⌘⌃2"),
                 ("Board", "⌘⌃3"),
             ]),
-            ("Session Lens", [
-                ("Files", "⌘⇧F"),
-                ("Rules", "⌘⇧I"),
-                ("Git", "⌘⇧G"),
-                ("Review", "⌘⇧R"),
-            ]),
+            ("Session Lens", ProjectTool.allCases.map { ($0.title, "⌘⇧\($0.shortcutKey.uppercased())") }
+                + [("Review", "⌘⇧R")]),
             ("Session", [
                 ("Previous session", "⌘⌥["),
                 ("Next session", "⌘⌥]"),

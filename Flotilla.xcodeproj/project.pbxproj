@@ -345,7 +345,6 @@
 		6F37A0AA28497E450F273EA9 /* pdf.svg in Resources */ = {isa = PBXBuildFile; fileRef = D5274BAB0BEC19CE71DFFA59 /* pdf.svg */; };
 		6FA6A3C371B6941740633610 /* vite.svg in Resources */ = {isa = PBXBuildFile; fileRef = DB73DD8DFEFD13BC2394C2AC /* vite.svg */; };
 		6FB12D977FF07C62F6BEB96A /* CompanionAdapterRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF217911F49D8B9E7422F635 /* CompanionAdapterRegistry.swift */; };
-		7030246A39981C59F7F34F75 /* ProjectToolRailVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6A47CC8C58C32D247BBD08C /* ProjectToolRailVerifier.swift */; };
 		709AB11ABD963049B45512A8 /* folder-packages.svg in Resources */ = {isa = PBXBuildFile; fileRef = 8C5DEE977614F52F1F9245E5 /* folder-packages.svg */; };
 		718A72AEE9CFFEF2C7AD3936 /* HomeWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E94E1AFE7B5D16F77AA292 /* HomeWidgetView.swift */; };
 		71B9A7667138CC1939F952B5 /* vue.svg in Resources */ = {isa = PBXBuildFile; fileRef = B954B8EC3F165103B7890A21 /* vue.svg */; };
@@ -380,7 +379,6 @@
 		7A9ABEF8EDF0EBC260777DE8 /* folder-gitea.svg in Resources */ = {isa = PBXBuildFile; fileRef = 924030F90624C80233EA5FFB /* folder-gitea.svg */; };
 		7AE60C4F93003C44BBAF0D66 /* KnowledgeChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A15137C679C6CBF7FF6F220 /* KnowledgeChrome.swift */; };
 		7B1F17DE94EC64B7DFE901A8 /* PersistenceKit in Frameworks */ = {isa = PBXBuildFile; productRef = 90BE8C16AC4B2147D4D413C4 /* PersistenceKit */; };
-		7B2AC620C2F68AFD6E5FD581 /* ProjectToolRailVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6A47CC8C58C32D247BBD08C /* ProjectToolRailVerifier.swift */; };
 		7B6EB7582A058A0A695268DE /* ProjectGitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F37756AA07340F3ED847CB /* ProjectGitView.swift */; };
 		7BA7E487AD5AE56637FAADA9 /* ChildProcessEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */; };
 		7BB2C7F73B8A9CA61DB5E93E /* ProjectHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB64AA14F1EB844D92DDB7BD /* ProjectHistoryView.swift */; };
@@ -1144,7 +1142,6 @@
 		A5693139B3928871EAD2ED09 /* ReviewFileList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewFileList.swift; sourceTree = "<group>"; };
 		A632307236D4D1877F74269E /* kotlin.svg */ = {isa = PBXFileReference; path = kotlin.svg; sourceTree = "<group>"; };
 		A69A0B4264114DADAB41DDB9 /* ProjectIconImageLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectIconImageLoader.swift; sourceTree = "<group>"; };
-		A6A47CC8C58C32D247BBD08C /* ProjectToolRailVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectToolRailVerifier.swift; sourceTree = "<group>"; };
 		A6D9DB285AC04C8B673220CB /* ProjectGraphRendering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectGraphRendering.swift; sourceTree = "<group>"; };
 		A7403957F3F54FB0A8391F06 /* ruby.svg */ = {isa = PBXFileReference; path = ruby.svg; sourceTree = "<group>"; };
 		A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionActivityStore.swift; sourceTree = "<group>"; };
@@ -1975,7 +1972,6 @@
 				E26E19A813CF60C404557C40 /* FleetSmartList.swift */,
 				3624D090F6EF105D88197D68 /* FlotillaShell.swift */,
 				55A3008802FCA1C20E4CE525 /* ProjectToolRail.swift */,
-				A6A47CC8C58C32D247BBD08C /* ProjectToolRailVerifier.swift */,
 				378941B275B152A98A0FC856 /* RelaunchToUpdateBanner.swift */,
 				C1A53AAFB27915EB20686B84 /* SessionGroupBar.swift */,
 				0295C0B53AEFADD6762C616A /* WorkspaceNavigation.swift */,
@@ -2897,7 +2893,6 @@
 				14FF37F6A7667A994ABFD8F6 /* ProjectRulesView.swift in Sources */,
 				3AC6DB0C6E0BCCA89BA547FE /* ProjectSkillsView.swift in Sources */,
 				D08705CDD334A47B4FDA528A /* ProjectToolRail.swift in Sources */,
-				7030246A39981C59F7F34F75 /* ProjectToolRailVerifier.swift in Sources */,
 				ED4DC9696B8B6944CBB2A73F /* ProjectWorkspaceChrome.swift in Sources */,
 				FCFF60FB9E0CEB1EA0DA8E48 /* ProjectWorkspaceContext.swift in Sources */,
 				DCD9B37BC4007565D699B9D6 /* ProtectedFolderAccess.swift in Sources */,
@@ -3250,7 +3245,6 @@
 				F88DFD6083A33DBE0CDF69BA /* ProjectRulesView.swift in Sources */,
 				B5785D70AF40B3143A97E8B4 /* ProjectSkillsView.swift in Sources */,
 				CFAD60F5A448F6E56E615D53 /* ProjectToolRail.swift in Sources */,
-				7B2AC620C2F68AFD6E5FD581 /* ProjectToolRailVerifier.swift in Sources */,
 				4C5434D1CEA3C035290C3AAB /* ProjectWorkspaceChrome.swift in Sources */,
 				397936491265D9F333BBAD62 /* ProjectWorkspaceContext.swift in Sources */,
 				345570B12724D1DE11968F0C /* ProtectedFolderAccess.swift in Sources */,

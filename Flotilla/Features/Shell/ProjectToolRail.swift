@@ -19,13 +19,26 @@ enum ProjectTool: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
+    /// SF Symbol for menus and history. The rail draws Git and Issues with
+    /// `GitIcon` / `GitHubIssueIcon` instead.
     var systemImage: String {
         switch self {
-        case .git: "arrow.triangle.branch" // unused — Git uses `GitIcon`
-        case .issues: "circle.circle" // unused — Issues uses `GitHubIssueIcon`
+        case .git: "arrow.triangle.branch"
+        case .issues: "circle.circle"
         case .files: "folder"
         case .skills: "sparkles"
         case .rules: "doc.text"
+        }
+    }
+
+    /// ⌘⇧ key in the Workspace menu. Rules keeps I from its "Instructions" days.
+    var shortcutKey: Character {
+        switch self {
+        case .git: "g"
+        case .issues: "u"
+        case .files: "f"
+        case .skills: "k"
+        case .rules: "i"
         }
     }
 }
@@ -39,6 +52,8 @@ struct ProjectToolRail: View {
     let showLabels: Bool
     let onSelectHome: () -> Void
     let onSelect: (ProjectTool) -> Void
+
+    @State private var hoveredID: String?
 
     private var width: CGFloat {
         showLabels ? FlotillaLayoutWidth.toolRailLabeledWidth : FlotillaLayoutWidth.toolRailWidth
@@ -110,7 +125,11 @@ struct ProjectToolRail: View {
             VStack(spacing: 3) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isActive ? FlotillaColors.accent.opacity(0.28) : .clear)
+                        .fill(isActive
+                            ? FlotillaColors.accent.opacity(0.28)
+                            : (isEnabled && hoveredID == identifier
+                                ? FlotillaColors.textPrimary.opacity(FlotillaStateOpacity.hover)
+                                : .clear))
                         .frame(width: 36, height: 36)
                         .overlay(alignment: .leading) {
                             if isActive {
@@ -142,6 +161,9 @@ struct ProjectToolRail: View {
             .opacity(isEnabled ? 1 : FlotillaStateOpacity.disabled)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { hoveredID = identifier } else if hoveredID == identifier { hoveredID = nil }
+        }
         .disabled(!isEnabled)
         .help(help)
         .accessibilityLabel(title)

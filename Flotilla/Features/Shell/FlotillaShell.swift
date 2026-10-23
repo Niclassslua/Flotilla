@@ -64,9 +64,6 @@ struct FlotillaShell: View {
         .task {
             await restoreWorkspaceSelection()
             applyTerminalPreferences()
-#if DEBUG || FLOTILLA_EPHEMERAL
-            await ProjectToolRailVerifier.runIfRequested(navigator: navigator, store: store, settings: settingsViewModel)
-#endif
         }
         .modifier(ShellLifecycleModifier(
             navigator: navigator,
@@ -564,6 +561,10 @@ struct FlotillaShell: View {
             navigator.openRailTool(.rules, sessions: store.sessions)
         case .showChanges:
             navigator.openRailTool(.git, sessions: store.sessions)
+        case .showIssues:
+            navigator.openRailTool(.issues, sessions: store.sessions)
+        case .showSkills:
+            navigator.openRailTool(.skills, sessions: store.sessions)
         case .restoreSessions:
             navigator.presentedSheet = .restore
         case .showSettings:

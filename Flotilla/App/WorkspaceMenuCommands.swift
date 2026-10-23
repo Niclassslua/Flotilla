@@ -87,21 +87,13 @@ private struct WorkspacePanelItems: View {
         }
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .disabled(store.selectedSession?.status != .readyForReview)
-        Button("Git") {
-            navigator.openRailTool(.git, sessions: store.sessions)
+        ForEach(ProjectTool.allCases) { tool in
+            Button(tool.title) {
+                navigator.openRailTool(tool, sessions: store.sessions)
+            }
+            .keyboardShortcut(KeyEquivalent(tool.shortcutKey), modifiers: [.command, .shift])
+            .disabled(railProjectID == nil)
         }
-        .keyboardShortcut("g", modifiers: [.command, .shift])
-        .disabled(railProjectID == nil)
-        Button("Files") {
-            navigator.openRailTool(.files, sessions: store.sessions)
-        }
-        .keyboardShortcut("f", modifiers: [.command, .shift])
-        .disabled(railProjectID == nil)
-        Button("Rules") {
-            navigator.openRailTool(.rules, sessions: store.sessions)
-        }
-        .keyboardShortcut("i", modifiers: [.command, .shift])
-        .disabled(railProjectID == nil)
     }
 
     private var railProjectID: UUID? {
