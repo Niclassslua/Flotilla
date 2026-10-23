@@ -16,13 +16,13 @@ final class WorkspaceNavigator {
             case .allSessions, .smartList, .session, .projectTool:
                 break
             }
-            // Tool destinations are not List tags — keep the prior list
-            // highlight (or clear for Home) so the session list stays usable.
+            // Tool destinations are not List tags, and the rail already marks
+            // the active tool. Mirroring the project row instead would fold
+            // back through `FlotillaShell` as a click on that row and bounce
+            // the tool to the overview — and leave the row too lit to click.
             switch selection {
-            case .overview:
+            case .overview, .projectTool:
                 sidebarSelection = []
-            case .projectTool(let projectID, _):
-                sidebarSelection = [.project(projectID)]
             case .allSessions, .smartList, .project, .session:
                 sidebarSelection = [selection]
             }
@@ -47,7 +47,6 @@ final class WorkspaceNavigator {
     var columnVisibility: NavigationSplitViewVisibility = .all
     var searchText = ""
     private(set) var lastOverviewSelection: SidebarItem = .overview
-    private var projectTabs: [UUID: ProjectDetailView.ProjectTab] = [:]
     private var projectGitScopes: [UUID: URL] = [:]
     private var projectGitSubTabs: [UUID: ProjectGitView.GitSubTab] = [:]
     @ObservationIgnored private var fileBrowserViewModels: [URL: FileBrowserViewModel] = [:]
@@ -153,7 +152,6 @@ final class WorkspaceNavigator {
         default:
             break
         }
-        projectTabs = projectTabs.filter { projectIDs.contains($0.key) }
         projectGitScopes = projectGitScopes.filter { projectIDs.contains($0.key) }
         projectGitSubTabs = projectGitSubTabs.filter { projectIDs.contains($0.key) }
         if case .project(let id) = lastOverviewSelection, !projectIDs.contains(id) {
@@ -195,7 +193,6 @@ final class WorkspaceNavigator {
         if tool == .git, projectGitSubTabs[projectID] == nil {
             setProjectGitSubTab(.commits, for: projectID)
         }
-        setProjectTab(tool.projectTab, for: projectID)
         selection = .projectTool(projectID, tool)
     }
 
@@ -211,39 +208,12 @@ final class WorkspaceNavigator {
         selection = .overview
     }
 
-    func projectTab(for projectID: UUID) -> ProjectDetailView.ProjectTab {
-        projectTabs[projectID] ?? .overview
-    }
-
-    func setProjectTab(_ tab: ProjectDetailView.ProjectTab, for projectID: UUID) {
-        projectTabs[projectID] = tab
-    }
-
     func projectGitScope(for projectID: UUID) -> URL? {
         projectGitScopes[projectID]
     }
 
     func setProjectGitScope(_ scope: URL?, for projectID: UUID) {
         projectGitScopes[projectID] = scope
-    }
-
-    /// Opens a project tool using an explicit project, or the session's project
-    /// when one is provided. Prefer ``openProjectTool(_:projectID:)`` for rail
-    /// and palette paths that already resolved context.
-    func openProjectPanel(_ tab: ProjectDetailView.ProjectTab, scopedTo session: Session?) {
-        guard let tool = ProjectTool(projectTab: tab) else {
-            if let session, let projectID = session.projectID {
-                selection = .project(projectID)
-            }
-            return
-        }
-        if let session, let projectID = session.projectID {
-            openProjectTool(tool, projectID: projectID)
-            return
-        }
-        if let projectID = selectedProjectID {
-            openProjectTool(tool, projectID: projectID)
-        }
     }
 
     func projectGitSubTab(for projectID: UUID) -> ProjectGitView.GitSubTab {

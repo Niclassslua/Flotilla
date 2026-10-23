@@ -165,7 +165,6 @@ public enum AXID: String, Sendable {
     case projectReturnToOverview = "Project.ReturnToOverview"
 
     // MARK: - Project Tabs
-    case projectTabGit = "ProjectDetail.ModeTab-Git"
     case projectFiles = "ProjectFiles"
     case projectSkills = "ProjectSkills"
     case projectRules = "ProjectRules"

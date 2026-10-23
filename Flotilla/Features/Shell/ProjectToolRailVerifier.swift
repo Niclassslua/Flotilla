@@ -49,22 +49,22 @@ enum ProjectToolRailVerifier {
         record("project_git_enabled", axEnabled("ProjectToolRail.Git") == true)
         record("project_no_active_tool", navigator.activeRailTool == nil)
 
-        navigator.openProjectTool(.git, projectID: project.id)
+        press("ProjectToolRail.Git")
         await settle()
-        record("git_active", navigator.activeRailTool == .git)
+        record("git_active", navigator.activeRailTool == .git, "\(navigator.selection)")
         record(
             "git_surface",
             findElement(identifier: "ProjectGit.SubTab-Commits") != nil
                 || findElement(identifier: "ProjectGit.SubTab-Changes") != nil
         )
 
-        navigator.openProjectTool(.git, projectID: project.id)
+        press("ProjectToolRail.Git")
         await settle()
         record("git_reclick_stays", navigator.selection == .projectTool(project.id, .git))
 
-        navigator.openProjectTool(.files, projectID: project.id)
+        press("ProjectToolRail.Files")
         await settle()
-        record("files_active", navigator.activeRailTool == .files)
+        record("files_active", navigator.activeRailTool == .files, "\(navigator.selection)")
         record("files_destination", navigator.selection == .projectTool(project.id, .files))
 
         if let session = store.sessions.first(where: { $0.projectID == project.id }) {
@@ -86,6 +86,9 @@ enum ProjectToolRailVerifier {
                 findElement(identifier: AXID.sessionBarScreenshotsToggle.rawValue) != nil
                     || findElement(identifierPrefix: "SessionBar") != nil
             )
+            press("ProjectToolRail.Rules")
+            await settle()
+            record("rules_from_session", navigator.selection == .projectTool(project.id, .rules), "\(navigator.selection)")
         } else {
             record("project_session", false, "no project session")
         }
@@ -130,6 +133,12 @@ enum ProjectToolRailVerifier {
             .map { "\($0.passed ? "PASS" : "FAIL")  \($0.name)\($0.detail.isEmpty ? "" : " — \($0.detail)")" }
             .joined(separator: "\n")
         fputs("ProjectToolRailVerifier: \(report.passed ? "PASSED" : "FAILED")\n\(summary)\n→ \(reportURL.path)\n", stderr)
+    }
+
+    /// What a click does, minus the cursor: the button's own action.
+    private static func press(_ identifier: String) {
+        guard let element = findElement(identifier: identifier) else { return }
+        AXUIElementPerformAction(element, kAXPressAction as CFString)
     }
 
     private static func axEnabled(_ identifier: String) -> Bool? {

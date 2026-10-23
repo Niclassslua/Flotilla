@@ -209,7 +209,6 @@ final class SessionGitSidebarNavigationTests: XCTestCase {
         navigator.openProjectCommit(commit, branch: "feature/sidebar", scopedTo: session, gitService: git)
 
         XCTAssertEqual(navigator.selection, .projectTool(projectID, .git))
-        XCTAssertEqual(navigator.projectTab(for: projectID), .git)
         XCTAssertEqual(navigator.projectGitSubTab(for: projectID), .commits)
         XCTAssertEqual(navigator.projectGitScope(for: projectID), repoPath.standardizedFileURL)
         let graph = navigator.projectGraphViewModel(for: repoPath, gitService: git)

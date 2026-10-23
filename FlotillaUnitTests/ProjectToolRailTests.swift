@@ -51,7 +51,7 @@ final class ProjectToolRailTests: XCTestCase {
 
         XCTAssertEqual(navigator.selection, .projectTool(project, .files))
         XCTAssertEqual(navigator.activeRailTool, .files)
-        XCTAssertEqual(navigator.projectTab(for: project), .files)
+        XCTAssertTrue(navigator.sidebarSelection.isEmpty, "a mirrored project row would bounce the tool back to the overview")
         XCTAssertTrue(navigator.canGoBack)
 
         navigator.openProjectTool(.git, projectID: project)
