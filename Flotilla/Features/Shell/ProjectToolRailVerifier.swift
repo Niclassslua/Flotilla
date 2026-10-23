@@ -242,10 +242,12 @@ enum ProjectToolRailVerifier {
         if let general = store.sessions.first(where: { $0.projectID == nil }) {
             navigator.sidebarSelection = [.session(general.id)]
             await settle()
+            shot("06-general-session")
+            record("general_click_opens_terminal", navigator.selection == .session(general.id), "\(navigator.selection)")
             record("general_tools_disabled", toolsEnabled().allSatisfy { $0 == false }, "\(toolsEnabled())")
             record("general_home_enabled", axEnabled(AXID.sidebarOverview.rawValue) == true)
         } else {
-            record("general_session", true, "SKIPPED — no General session in this data")
+            record("general_session", false, "no General session — launch with FLOTILLA_DEMO_DATA=1")
         }
 
         // MARK: Collections

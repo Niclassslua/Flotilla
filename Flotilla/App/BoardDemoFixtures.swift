@@ -32,6 +32,9 @@ enum BoardDemoFixtures {
         let idleMinutes: Int
         /// The agent's last visible line, served by `BoardDemoScreenReader`.
         let lastOutput: String
+        /// A General session: no project, run from `generalDirectory`, so the
+        /// navigator's General group and project-less rail state have data.
+        var isGeneral = false
     }
 
     /// Statuses are spread across the four agents rather than repeated per
@@ -159,6 +162,30 @@ enum BoardDemoFixtures {
             idleMinutes: 2,
             lastOutput: "● Fetching model list from `agent models`…"
         ),
+        Spec(
+            title: "Summarize this week's crash reports",
+            goal: "Group the crash logs in ~/Downloads by signature and rank them.",
+            agent: .claudeCode,
+            status: .working,
+            waitingReason: nil,
+            branch: nil,
+            churn: (0, 0),
+            idleMinutes: 4,
+            lastOutput: "● Reading 23 .ips files…",
+            isGeneral: true
+        ),
+        Spec(
+            title: "Draft release notes for 0.9",
+            goal: "Turn the merged PR titles since 0.8 into user-facing release notes.",
+            agent: .codexCLI,
+            status: .waitingForInput,
+            waitingReason: .question,
+            branch: nil,
+            churn: (0, 0),
+            idleMinutes: 12,
+            lastOutput: "? Should internal refactors be listed under \"Other\"?",
+            isGeneral: true
+        ),
     ]
 
     /// Deterministic per-index ids so `BoardDemoScreenReader` can map a
@@ -166,6 +193,9 @@ enum BoardDemoFixtures {
     static func sessionID(at index: Int) -> UUID {
         UUID(uuid: (0xDE, 0xD0, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, UInt8(index)))
     }
+
+    /// Where General sessions run: outside the project, like a real one.
+    static let generalDirectory = demoRoot.appendingPathComponent("general", isDirectory: true)
 
     static let projectID = UUID(uuid: (0xDE, 0x30, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF))
 
@@ -189,8 +219,10 @@ enum BoardDemoFixtures {
                 title: spec.title,
                 goal: spec.goal,
                 agent: spec.agent,
-                projectID: project.id,
-                workingDirectory: worktree?.worktreePath ?? demoRoot.appendingPathComponent("base"),
+                projectID: spec.isGeneral ? nil : project.id,
+                workingDirectory: spec.isGeneral
+                    ? generalDirectory
+                    : worktree?.worktreePath ?? demoRoot.appendingPathComponent("base"),
                 worktree: worktree,
                 status: spec.status,
                 waitingReason: spec.waitingReason,
@@ -216,6 +248,7 @@ enum BoardDemoFixtures {
         try? fileManager.createDirectory(at: basePath, withIntermediateDirectories: true)
 
         seedBaseRepository(at: basePath)
+        try? fileManager.createDirectory(at: generalDirectory, withIntermediateDirectories: true)
 
         for spec in specs {
             guard let branch = spec.branch else { continue }
