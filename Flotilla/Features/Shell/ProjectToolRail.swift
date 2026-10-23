@@ -22,7 +22,7 @@ enum ProjectTool: String, CaseIterable, Identifiable, Codable, Sendable {
     var systemImage: String {
         switch self {
         case .git: "arrow.triangle.branch" // unused — Git uses `GitIcon`
-        case .issues: "ant"
+        case .issues: "circle.circle" // unused — Issues uses `GitHubIssueIcon`
         case .files: "folder"
         case .skills: "sparkles"
         case .rules: "doc.text"
@@ -103,6 +103,8 @@ struct ProjectToolRail: View {
                     Group {
                         if tool == .git {
                             GitIcon(size: 16)
+                        } else if tool == .issues {
+                            GitHubIssueIcon(size: 16)
                         } else {
                             Image(systemName: tool.systemImage)
                                 .font(.system(size: 16, weight: isActive ? .semibold : .regular))
@@ -140,5 +142,23 @@ struct ProjectToolRail: View {
     private func glyphColor(isActive: Bool) -> Color {
         if !isEnabled { return FlotillaColors.textTertiary }
         return isActive ? FlotillaColors.accent : FlotillaColors.textSecondary
+    }
+}
+
+/// GitHub's `issue-opened` Octicon: a ring with a centre dot, drawn to the
+/// Octicon's 16pt proportions (outer radius 8, ring 1.5, dot radius 1.5).
+private struct GitHubIssueIcon: View {
+    let size: CGFloat
+
+    var body: some View {
+        let unit = size / 16
+        ZStack {
+            Circle()
+                .strokeBorder(lineWidth: 1.5 * unit)
+            Circle()
+                .frame(width: 3 * unit, height: 3 * unit)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
