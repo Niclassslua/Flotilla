@@ -74,7 +74,11 @@ public struct FlotillaBanner: View {
             Text(message)
                 .font(FlotillaTypography.callout)
                 .foregroundStyle(style.foregroundColor)
-                .fixedSize(horizontal: false, vertical: true)
+                // Bounded, not `fixedSize(vertical:)`: a split-view column sizes
+                // its minimum at zero width, where unbounded wrapping reports a
+                // ~900pt height and AppKit loops on constraint passes until it aborts.
+                .lineLimit(3)
+                .help(message)
                 .accessibilityLabel(message)
 
             Spacer(minLength: FlotillaSpacing.medium)
