@@ -61,6 +61,9 @@ struct FlotillaShell: View {
         .task {
             await restoreWorkspaceSelection()
             applyTerminalPreferences()
+#if DEBUG || FLOTILLA_EPHEMERAL
+            await ProjectToolRailVerifier.runIfRequested(navigator: navigator, store: store)
+#endif
         }
         .modifier(ShellLifecycleModifier(
             navigator: navigator,
@@ -156,7 +159,7 @@ struct FlotillaShell: View {
         case .session(let id):
             navigator.selection = .session(id)
             store.selectedSessionID = id
-        case .overview, .allSessions, .smartList, .project:
+        case .overview, .allSessions, .smartList, .project, .projectTool:
             navigator.selection = only
         }
     }
@@ -172,26 +175,42 @@ struct FlotillaShell: View {
     /// `EphemeralWindowStateDisabler` searched by autosave name for a split
     /// view the window never created.
     private var workspaceContent: some View {
-        NavigationSplitView(columnVisibility: $navigator.columnVisibility) {
-            SessionsSidebar(
-                store: store,
-                selection: $navigator.sidebarSelection,
-                searchText: $navigator.searchText,
-                isHomeSelected: navigator.selection == .overview,
-                onSelectHome: { navigator.showHomeDashboard() },
-                onOpenSession: { id in
-                    navigator.selection = .session(id)
-                    store.selectedSessionID = id
-                },
-                onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
-                onCreateSession: { presentCreateSession() },
-                onCreateSessionFromIssue: store.ghService == nil ? nil : { presentCreateSessionFromIssue(projectID: $0) },
-                gridMembership: gridMembership
-            )
+        let railLabels = settingsViewModel.settings.workspace.sidebarRailLabels
+        let navigatorWidths = FlotillaLayoutWidth.navigatorColumnWidth(labelsVisible: railLabels)
+        return NavigationSplitView(columnVisibility: $navigator.columnVisibility) {
+            HStack(spacing: 0) {
+                ProjectToolRail(
+                    projectID: navigator.railProjectID(sessions: store.sessions),
+                    activeTool: navigator.activeRailTool,
+                    showLabels: railLabels,
+                    onSelect: { tool in
+                        guard let projectID = navigator.railProjectID(sessions: store.sessions) else { return }
+                        navigator.openProjectTool(tool, projectID: projectID)
+                    }
+                )
+                Rectangle()
+                    .fill(FlotillaColors.separator)
+                    .frame(width: FlotillaBorderWidth.hairline)
+                SessionsSidebar(
+                    store: store,
+                    selection: $navigator.sidebarSelection,
+                    searchText: $navigator.searchText,
+                    isHomeSelected: navigator.selection == .overview,
+                    onSelectHome: { navigator.showHomeDashboard() },
+                    onOpenSession: { id in
+                        navigator.selection = .session(id)
+                        store.selectedSessionID = id
+                    },
+                    onRequestDelete: { navigator.presentedSheet = .deleteSession($0) },
+                    onCreateSession: { presentCreateSession() },
+                    onCreateSessionFromIssue: store.ghService == nil ? nil : { presentCreateSessionFromIssue(projectID: $0) },
+                    gridMembership: gridMembership
+                )
+            }
             .navigationSplitViewColumnWidth(
-                min: FlotillaLayoutWidth.sidebarMin,
-                ideal: FlotillaLayoutWidth.sidebarIdeal,
-                max: FlotillaLayoutWidth.sidebarMax
+                min: navigatorWidths.min,
+                ideal: navigatorWidths.ideal,
+                max: navigatorWidths.max
             )
         } detail: {
             DetailColumn(
@@ -490,6 +509,12 @@ struct FlotillaShell: View {
         navigator.selection = .project(id)
     }
 
+    private func openRailTool(_ tool: ProjectTool) {
+        guard let projectID = navigator.railProjectID(sessions: store.sessions)
+                ?? store.selectedSession?.projectID else { return }
+        navigator.openProjectTool(tool, projectID: projectID)
+    }
+
     private func applyTerminalPreferences() {
         let preferences = settingsViewModel.settings.terminal
         terminalManager.applyPreferences(
@@ -530,11 +555,11 @@ struct FlotillaShell: View {
                 navigator.presentation = .focus
             }
         case .showFiles:
-            navigator.openProjectPanel(.files, scopedTo: store.selectedSession)
+            openRailTool(.files)
         case .showInstructions:
-            navigator.openProjectPanel(.rules, scopedTo: store.selectedSession)
+            openRailTool(.rules)
         case .showChanges:
-            navigator.openProjectPanel(.git, scopedTo: store.selectedSession)
+            openRailTool(.git)
         case .restoreSessions:
             navigator.presentedSheet = .restore
         case .showSettings:
@@ -563,7 +588,9 @@ private struct ShellLifecycleModifier: ViewModifier {
             // A deleted project must not leave the fleet filtered to a group
             // whose chip is no longer in the bar to explain the emptiness.
             .onChange(of: store.projects.map(\.id)) { _, ids in
-                navigator.pruneSessionGroup(against: Set(ids))
+                let projectIDs = Set(ids)
+                navigator.pruneSessionGroup(against: projectIDs)
+                navigator.pruneProjectDestinations(against: projectIDs)
             }
             .onChange(of: store.selectedSessionID) { _, sessionID in
                 navigator.selectedSessionID = sessionID

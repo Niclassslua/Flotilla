@@ -20,7 +20,8 @@ launch dashboard" in the palette) and "Overview" *also* named a tab inside every
 | --- | --- | --- | --- | --- |
 | The app's landing surface — attention, activity, projects, composer | **Home** | `.overview` | `Sidebar.Overview` | Matches what the code already calls it: `HomeDashboardView`, `HomeComponents`, `AXID.homeDashboard`. Frees "Overview" for the project tab. |
 | Every running agent, as a collection | **Sessions** | `.allSessions` | `Sidebar.AllSessions` | The destination. **All Sessions** is reached from the **Workspace** menu (⌘2), not a second name for the place. |
-| One project's durable workspace | **the project's name** | `.project(UUID)` | `Sidebar.ProjectRow-<name>` | Never the literal word "Project" in user-facing copy — a project is always named. |
+| One project's durable workspace | **the project's name** | `.project(UUID)` | `Sidebar.ProjectRow-<name>` | Never the literal word "Project" in user-facing copy — a project is always named. Always the overview; tools are separate destinations. |
+| A project tool in the main content | **Git / Issues / Files / Skills / Rules** | `.projectTool(UUID, ProjectTool)` | `ProjectToolRail.<Title>` | Opened from the far-left **project tool rail**. Does not filter the session list. |
 | One session, full screen | **the session's title** | `.session(UUID)` | `SessionRow-<title>` | The presentation is **Focus**; the destination is the session. Its **session bar** states `project / name`. |
 | The sessions belonging to no project | **General** | — (a group, not a destination) | `Sessions.Group-General` | Never "Unassigned". `Session.projectID == nil` is an ordinary shipping case, and `AGENTS.md` already called it general; the navigator section header and the group chip now agree. |
 

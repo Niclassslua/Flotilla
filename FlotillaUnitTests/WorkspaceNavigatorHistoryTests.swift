@@ -74,7 +74,8 @@ final class WorkspaceNavigatorHistoryTests: XCTestCase {
         let project = UUID()
 
         for selection: SidebarItem in [
-            .session(session), .project(project), .allSessions, .smartList(.working)
+            .session(session), .project(project), .projectTool(project, .git),
+            .allSessions, .smartList(.working)
         ] {
             navigator.selection = selection
             navigator.showHomeDashboard()

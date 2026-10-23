@@ -9,7 +9,6 @@ struct SessionBarActions {
     var onToggleGitSidebar: () -> Void = {}
     var onToggleScreenshots: () -> Void = {}
     var hasScreenshots: Bool = false
-    var onBrowseFiles: () -> Void = {}
     var onFocus: () -> Void = {}
     var onRemoveFromGrid: () -> Void = {}
     /// Destinations offered in the handoff menu. Empty hides the control
@@ -375,17 +374,6 @@ struct SessionBar: View {
                 .disabled(!isReviewable)
                 .accessibilityLabel("Review changes")
                 .accessibilityIdentifier(AXID.sessionBarReview(session.title))
-
-                barButton(
-                    "folder",
-                    help: hasProject
-                        ? "Browse and edit files"
-                        : "This session is not assigned to a project, so there is no file tree to browse.",
-                    action: actions.onBrowseFiles
-                )
-                .disabled(!hasProject)
-                .accessibilityLabel("Browse files")
-                .accessibilityIdentifier(AXID.toolbarOpenProjectFiles.rawValue)
 
                 barButton(
                     "sidebar.right",

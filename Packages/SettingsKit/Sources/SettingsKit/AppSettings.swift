@@ -557,8 +557,8 @@ public struct WorkspacePreferences: Codable, Equatable, Sendable {
     public var gridDimEnabled: Bool
     /// 0...0.8 — how much to fade unfocused tiles when dimming is on.
     public var gridDimIntensity: Double
-    /// Shows a text label under each sidebar rail icon (Overview/Sessions/
-    /// Projects/New) instead of icon-only with a hover tooltip.
+    /// Shows a text label under each project tool rail icon (Git, Issues,
+    /// Files, Skills, Rules) instead of icon-only with a hover tooltip.
     public var sidebarRailLabels: Bool
     /// Which slice of the fleet the Sessions destination is showing, as
     /// chosen in the session group bar: `"all"`, `"general"`, or a project's

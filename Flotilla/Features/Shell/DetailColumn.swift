@@ -37,6 +37,8 @@ struct DetailColumn: View {
                 sessionsContent
             case .project(let projectID):
                 projectContent(projectID: projectID)
+            case .projectTool(let projectID, let tool):
+                projectToolContent(projectID: projectID, tool: tool)
             case .session(let sessionID):
                 sessionContent(sessionID: sessionID)
             }
@@ -161,10 +163,8 @@ struct DetailColumn: View {
         }
     }
 
-    /// Files still lands on the project scope. The sidebar toggle opens the
-    /// compact, session-scoped Git inspector without unmounting the terminal
-    /// beneath it; the full Changes workspace is reached from the View menu
-    /// (⇧⌘G) rather than from a button on the bar.
+    /// The session Git sidebar, Review, and screenshots stay on the bar.
+    /// Files lives on the project tool rail (issue #7).
     private func sessionBarActions(for session: Session) -> SessionBarActions {
         SessionBarActions(
             onRename: { store.renameSession(sessionID: session.id, newTitle: $0) },
@@ -189,7 +189,6 @@ struct DetailColumn: View {
                 }
             },
             hasScreenshots: !screenshotMonitor.screenshots.isEmpty,
-            onBrowseFiles: { navigator.openProjectPanel(.files, scopedTo: session) },
             handoffTargets: store.handoffTargets(for: session),
             onHandoff: { target in Task { await store.handoffSession(sessionID: session.id, to: target) } },
             onReview: { openWindow(id: SessionReviewWindow.sceneID, value: session.id) },
@@ -210,7 +209,7 @@ struct DetailColumn: View {
             store.sessions.first { $0.id == sessionID }
         case .allSessions, .smartList:
             navigator.presentation == .focus ? store.selectedSession : nil
-        case .overview, .project:
+        case .overview, .project, .projectTool:
             nil
         }
     }
@@ -490,6 +489,35 @@ struct DetailColumn: View {
     }
 
     @ViewBuilder
+    private func projectToolContent(projectID: UUID, tool: ProjectTool) -> some View {
+        if let project = store.projects.first(where: { $0.id == projectID }) {
+            let context = ProjectWorkspaceContext(
+                project: project,
+                sessions: store.sessions(for: project),
+                store: store,
+                terminalManager: terminalManager,
+                activityStore: activityStore,
+                openSession: onOpenSession,
+                openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
+                highlightUnseenCommits: settingsViewModel.settings.git.highlightUnseenCommits,
+                createWorktreeByDefault: settingsViewModel.settings.sessionDefaults.createWorktreeByDefault,
+                fetchBeforeCreatingWorktree: settingsViewModel.settings.git.fetchBeforeCreatingWorktree,
+                defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode
+            )
+            VStack(spacing: 0) {
+                SurfaceReturnBar(context: context, tab: tool.projectTab)
+                Divider()
+                ProjectSurfaceHost(tab: tool.projectTab, context: context)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
+        } else {
+            ContentUnavailableView("Project Not Found", systemImage: "folder.badge.questionmark")
+        }
+    }
+
+    @ViewBuilder
     private func sessionContent(sessionID: UUID) -> some View {
         if let session = store.sessions.first(where: { $0.id == sessionID }) {
             VStack(spacing: 0) {
@@ -508,6 +536,9 @@ struct DetailColumn: View {
         case .smartList(let list): return list.title
         case .project(let id):
             return store.projects.first(where: { $0.id == id })?.name ?? "Project"
+        case .projectTool(let id, let tool):
+            let name = store.projects.first(where: { $0.id == id })?.name ?? "Project"
+            return "\(tool.title) · \(name)"
         case .session(let id):
             return store.sessions.first(where: { $0.id == id })?.title ?? "Session"
         }
@@ -525,6 +556,9 @@ struct DetailColumn: View {
         case .smartList(let list):
             let matching = list.filter(store.sessions).count
             return "\(matching) of \(store.sessions.count) session\(store.sessions.count == 1 ? "" : "s")"
+        case .projectTool(let id, let tool):
+            let name = store.projects.first(where: { $0.id == id })?.name ?? "Project"
+            return "\(name) · \(tool.title)"
         case .project(let id):
             let sessions = store.sessions.filter { $0.projectID == id }
             let working = sessions.filter { $0.status == .working }.count

@@ -6,17 +6,15 @@ import GitKit
 final class ProjectOverviewTests: XCTestCase {
 
     @MainActor
-    func testOverviewSelectionRestoresProjectAndTabAfterVisitingSessions() {
+    func testOverviewSelectionRestoresProjectAfterVisitingSessions() {
         let navigator = WorkspaceNavigator()
         let projectID = UUID()
 
         navigator.selection = .project(projectID)
-        navigator.setProjectTab(.files, for: projectID)
         navigator.selection = .allSessions
         navigator.restoreHomeSelection()
 
         XCTAssertEqual(navigator.selection, .project(projectID))
-        XCTAssertEqual(navigator.projectTab(for: projectID), .files)
     }
 
     @MainActor
@@ -43,18 +41,16 @@ final class ProjectOverviewTests: XCTestCase {
     }
 
     @MainActor
-    func testGitCommitsSubTabIsRetainedAfterVisitingSessions() {
+    func testGitCommitsSubTabIsRetainedAcrossToolNavigation() {
         let navigator = WorkspaceNavigator()
         let projectID = UUID()
 
-        navigator.selection = .project(projectID)
-        navigator.setProjectTab(.git, for: projectID)
+        navigator.openProjectTool(.git, projectID: projectID)
         navigator.setProjectGitSubTab(.commits, for: projectID)
-        navigator.selection = .allSessions
-        navigator.restoreHomeSelection()
+        navigator.selection = .session(UUID())
+        navigator.openProjectTool(.git, projectID: projectID)
 
-        XCTAssertEqual(navigator.selection, .project(projectID))
-        XCTAssertEqual(navigator.projectTab(for: projectID), .git)
+        XCTAssertEqual(navigator.selection, .projectTool(projectID, .git))
         XCTAssertEqual(navigator.projectGitSubTab(for: projectID), .commits)
     }
 

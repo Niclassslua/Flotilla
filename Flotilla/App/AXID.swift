@@ -11,6 +11,7 @@ public enum AXID: String, Sendable {
     case sidebarProjectCollapseToggle = "Sidebar.ProjectRow.CollapseToggle-"
     case sidebarExpandAllProjects = "Sidebar.ExpandAllProjects"
     case sidebarCollapseAllProjects = "Sidebar.CollapseAllProjects"
+    case projectToolRail = "ProjectToolRail"
 
     // MARK: - Toolbar
     case toolbarCommandPalette = "Toolbar.CommandPalette"
@@ -396,6 +397,11 @@ public enum AXID: String, Sendable {
     /// Creates a git sidebar branch row identifier
     public static func gitSidebarBranchesRow(_ branch: String) -> String {
         "GitSidebar.Branches.Row-\(branch)"
+    }
+
+    /// Creates a project tool rail item identifier
+    public static func projectToolRailItem(_ title: String) -> String {
+        "ProjectToolRail.\(title)"
     }
 
     /// Creates a sidebar project row identifier

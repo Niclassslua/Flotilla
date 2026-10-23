@@ -16,8 +16,8 @@ enum WorkspaceDestination: Hashable {
     case sessions(WorkspacePresentation)
     /// The currently selected session, full screen.
     case focusedSession
-    /// A project-owned panel scoped to the selected session.
-    case sessionPanel(ProjectDetailView.ProjectTab)
+    /// A project tool opened from the rail / palette / shortcuts.
+    case projectTool(ProjectTool)
 }
 
 enum WorkspaceCommand: String, CaseIterable, Identifiable {
@@ -48,9 +48,9 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showGrid: .sessions(.grid)
         case .showBoard: .sessions(.board)
         case .showTerminal: .focusedSession
-        case .showFiles: .sessionPanel(.files)
-        case .showInstructions: .sessionPanel(.rules)
-        case .showChanges: .sessionPanel(.git)
+        case .showFiles: .projectTool(.files)
+        case .showInstructions: .projectTool(.rules)
+        case .showChanges: .projectTool(.git)
         }
     }
 
@@ -63,9 +63,9 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showGrid: "Show session grid"
         case .showBoard: "Show Kanban board"
         case .showTerminal: "Open Terminal"
-        case .showFiles: "Browse project files"
-        case .showInstructions: "View instructions"
-        case .showChanges: "Review changes"
+        case .showFiles: "Open Files"
+        case .showInstructions: "Open Rules"
+        case .showChanges: "Open Git"
         case .restoreSessions: "Restore stopped sessions"
         case .showSettings: "Open Settings"
         case .showShortcuts: "Keyboard shortcuts"
@@ -81,9 +81,9 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showGrid: "Tile every live terminal"
         case .showBoard: "Visualize sessions on a Kanban board"
         case .showTerminal: "Focus the selected session's terminal"
-        case .showFiles: "Open the selected worktree's file editor"
-        case .showInstructions: "View all instruction documents"
-        case .showChanges: "Review Git changes"
+        case .showFiles: "Browse the project's root checkout"
+        case .showInstructions: "Project instructions and rules"
+        case .showChanges: "Project-wide history, graph, and branches"
         case .restoreSessions: "Restart finished or crashed sessions"
         case .showSettings: "Configure agents, sessions, and worktrees"
         case .showShortcuts: "Reference for navigation and session commands"
@@ -100,11 +100,14 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showBoard: "square.grid.2x2.fill"
         case .showTerminal: "terminal"
         case .showFiles: "folder"
-        case .showInstructions: "doc.badge.gearshape"
-        case .showChanges: "arrow.triangle.branch"
+        case .showInstructions: "doc.text"
+        case .showChanges: "git" // palette should prefer GitIcon when rendering
         case .restoreSessions: "arrow.clockwise"
         case .showSettings: "gearshape"
         case .showShortcuts: "keyboard"
         }
     }
+
+    /// Whether the command palette should draw the Git brand mark instead of an SF Symbol.
+    var usesGitLogo: Bool { self == .showChanges }
 }

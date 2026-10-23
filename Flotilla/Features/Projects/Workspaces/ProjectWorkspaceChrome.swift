@@ -21,6 +21,7 @@ struct SurfaceReturnBar: View {
         HStack(spacing: FlotillaSpacing.small) {
             Button {
                 withAnimation(FlotillaMotion.fast.curve) {
+                    navigator.selection = .project(context.project.id)
                     navigator.setProjectTab(.overview, for: context.project.id)
                 }
             } label: {
@@ -29,7 +30,16 @@ struct SurfaceReturnBar: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(FlotillaColors.textSecondary)
-            .accessibilityIdentifier("Project.ReturnToOverview")
+            .accessibilityIdentifier(AXID.projectReturnToOverview.rawValue)
+
+            Text("/")
+                .font(FlotillaTypography.caption)
+                .foregroundStyle(FlotillaColors.textTertiary)
+
+            Text(context.project.name)
+                .font(FlotillaTypography.caption.weight(.medium))
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .lineLimit(1)
 
             Text("/")
                 .font(FlotillaTypography.caption)
@@ -44,5 +54,7 @@ struct SurfaceReturnBar: View {
         .padding(.horizontal, FlotillaSpacing.large)
         .padding(.vertical, FlotillaSpacing.small)
         .background(FlotillaColors.surface)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(context.project.name), \(tab.title)")
     }
 }

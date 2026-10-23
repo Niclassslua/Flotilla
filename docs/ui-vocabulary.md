@@ -24,7 +24,8 @@ The outermost layout. Everything else lives inside one of these three regions.
 | Say | What it is | Code |
 | --- | --- | --- |
 | **Shell** | The whole window's root view: `NavigationSplitView` + overlays + sheets. | `FlotillaShell` — `Features/Shell/FlotillaShell.swift` |
-| **Navigator** *(region)* | The split view's sidebar column, present in every scope: search on top, then **Home**, then each project as a selectable header with its sessions beneath it, then unassigned sessions, over a pinned **New Session** button. | `SessionsSidebar` — `Features/Shell/FleetSidebar.swift` |
+| **Project tool rail** | Far-left Xcode-style activity strip: **Git · Issues · Files · Skills · Rules**. Opens those tools in the detail column without replacing the session list. Disabled with a “Select a project” tooltip when project context is ambiguous. | `ProjectToolRail` — `Features/Shell/ProjectToolRail.swift` |
+| **Navigator** *(region)* | The split view's sidebar column beside the tool rail: search on top, then **Home**, then each project as a selectable header with its sessions beneath it, then unassigned sessions, over a pinned **New Session** button. | `SessionsSidebar` — `Features/Shell/FleetSidebar.swift` |
 | **Navigator list** | The `List` inside the navigator that holds Home, the projects and their sessions, and General. | `FleetSessionList` — same file |
 | **Navigator row** | A standing destination line in the navigator. Home is the only one. | `NavigatorRow` — same file |
 | **Project header** | A project's line in the navigator, and the header for its sessions: collapse chevron, 28pt project mark, name, home-relative path, and a hairline in the project's accent. Selecting it opens the project workspace. | `ProjectHeaderRow` — same file |
@@ -47,7 +48,7 @@ These are the terms for *state*, not views — use them to say **where** you wan
 | Say | Meaning | Code |
 | --- | --- | --- |
 | **Scope** | Which subset of the fleet a collection surface renders — a project, a smart list, or everything. Shared by Grid, Board and Focus. | `SessionScope` — `Features/Shell/FleetSmartList.swift` |
-| **Selection** | What the detail column is showing: `.overview`, `.allSessions`, `.project(id)`, `.session(id)`. | `SidebarItem` |
+| **Selection** | What the detail column is showing: `.overview`, `.allSessions`, `.project(id)`, `.projectTool(id, tool)`, `.session(id)`. | `SidebarItem` |
 | **Presentation** | How the fleet is rendered: **Grid**, **Board**, or **Focus**. Changes *how*, never *what* — that is the scope's job. | `WorkspacePresentation` |
 | **Group** | Which slice of the fleet the group bar has lit: **All**, one project, or **General**. One of the two axes of a scope; it survives switching presentation. | `SessionGroup` — `Features/Shell/FleetSmartList.swift` |
 | **Scope** | Shorthand for a selection kind — "fleet scope", "session scope", "project scope". | — |
@@ -151,17 +152,16 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 | Say | What it is | Code |
 | --- | --- | --- |
 | **Project detail** | Thin entry point: builds the workspace context and renders the Stream workspace. | `ProjectDetailView` — `Features/Projects/` |
-| **Project workspace** *(or "the Stream")* | The whole project surface: a masthead over a two-region body — the activity feed on the left, the context column on the right. Git / Files / Skills / Rules render through it under a return breadcrumb. | `StreamProjectWorkspace` — `Features/Projects/Workspaces/` |
-| **Masthead** | The `surface`-banded header: project mark, name, path, the monospace **instrument row** (branch · drift · working-copy delta · commits/wk), and the surface links. | `StreamProjectWorkspace.masthead` |
-| **Surface links** | The **Git · Files · Skills · Rules** row in the masthead; each carries the `ProjectDetail.ModeTab-<Title>` identifier. The surface model is still `ProjectDetailView.ProjectTab`. | `StreamProjectWorkspace.surfaceNav` |
+| **Project workspace** *(or "the Stream")* | The project overview: a masthead over a two-region body — the activity feed on the left, the context column on the right. Tools open from the **project tool rail**, not from links here. | `StreamProjectWorkspace` — `Features/Projects/Workspaces/` |
+| **Masthead** | The `surface`-banded header: project mark, name, path, and the monospace **instrument row** (branch · drift · working-copy delta · commits/wk). | `StreamProjectWorkspace.masthead` |
 | **Activity feed** | The centred timeline: sessions and recent commits interleaved by recency down a spine, day-banded, with hero rows for live / waiting / ready sessions and an "earlier commits" footer. | `StreamProjectWorkspace.feed` / `timeline` |
 | **Context column** | The full-height right panel: **Worktrees** (list + show-all), **Working tree** (diff / branch / ahead → Git), **This week** (commits / sessions / churn). | `StreamProjectWorkspace.contextColumn` |
-| **Surface return bar** | The `← Overview / Git` breadcrumb shown above a routed-through surface. | `SurfaceReturnBar` — `Workspaces/ProjectWorkspaceChrome.swift` |
-| **Git tab** | Hosts the sub-tab bar and the scope picker. | `ProjectGitView` |
-| **Git sub-tabs** | **Changes** and **Commits**, inside the Git tab. | `ProjectGitView.GitSubTab` |
-| **Scope picker** | The control choosing which worktree/checkout the Git tab is looking at. | `ProjectGitView.scopePicker` |
-| **Files tab** | The file browser for the project root. | `FileBrowserView` |
-| **Skills tab** / **Rules tab** | Thin hosts over the shared knowledge catalog. | `ProjectSkillsView`, `ProjectRulesView` |
+| **Surface return bar** | The `← Overview / Project / Tool` breadcrumb above a rail-opened tool. | `SurfaceReturnBar` — `Workspaces/ProjectWorkspaceChrome.swift` |
+| **Git (rail)** | Project-wide history: commit list, graph, detail, branch filter. Distinct from the session Git sidebar. | `ProjectGitView` |
+| **Git sub-tabs** | **Changes** and **Commits**, inside rail Git. Session-scoped Changes also live in the **session git sidebar**. | `ProjectGitView.GitSubTab` |
+| **Scope picker** | The control choosing which worktree/checkout rail Git is looking at. | `ProjectGitView.scopePicker` |
+| **Files (rail)** | The file browser for the project root checkout. | `FileBrowserView` |
+| **Skills** / **Rules** | Thin hosts over the shared knowledge catalog, opened from the tool rail. | `ProjectSkillsView`, `ProjectRulesView` |
 | **Project command card** | The dense project card (live branch, diff stats, agent telemetry, Quick Launch / Terminal / Editor / Finder shortcuts). | `ProjectCommandCard` |
 | **Project mark** | The project's generated identity glyph. | `ProjectMark` |
 | **Project icon picker sheet** | The modal sheet for selecting an icon symbol, color, or custom image for a project. | `ProjectIconPickerSheet` — `Features/Projects/` |

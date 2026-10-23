@@ -24,22 +24,15 @@ final class DiffAndFilesUITests: XCTestCase {
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 8))
         sessionRow.click()
 
-        // 1. Test Diff panel via View > Changes, scoped to this session's
-        // worktree. The session bar's Git button is gone, so the menu's
-        // keyboard shortcut is now the entry point this covers.
-        let filesButton = element(app, .toolbarOpenProjectFiles)
-        XCTAssertTrue(filesButton.waitForExistence(timeout: 3))
-        app.typeKey("g", modifierFlags: [.command, .shift])
+        // 1. Rail Git opens project history; Changes sub-tab hosts DiffPanel.
+        let gitRail = element(app, "ProjectToolRail.Git")
+        XCTAssertTrue(gitRail.waitForExistence(timeout: 3))
+        gitRail.click()
 
-        // Longer timeout than the other checks: navigating here now goes
-        // through the project's worktree resolution first, which is slower
-        // than the old in-place lens swap was.
-        //
-        // Either resting state counts. `simulateEditForAutomation` below
-        // writes to the fixture checkout's README and nothing reverts it, so
-        // whether this run starts on a clean tree depends on whether a
-        // previous run finished. Asserting specifically on "No Changes" made
-        // the test pass or fail on leftover state rather than on the panel.
+        let changesSubTab = element(app, "ProjectGit.SubTab-Changes")
+        XCTAssertTrue(changesSubTab.waitForExistence(timeout: 5))
+        changesSubTab.click()
+
         let emptyState = element(app, .diffPanelEmpty)
         let populatedState = element(app, .diffPanelList)
         let panelOpened = XCTNSPredicateExpectation(
@@ -49,7 +42,7 @@ final class DiffAndFilesUITests: XCTestCase {
         XCTAssertEqual(
             XCTWaiter().wait(for: [panelOpened], timeout: 8),
             .completed,
-            "the diff panel should open in one of its resting states"
+            "the project Changes panel should open in one of its resting states"
         )
 
         let simulateEditButton = element(app, .diffPanelSimulateEditButton)
@@ -64,16 +57,10 @@ final class DiffAndFilesUITests: XCTestCase {
         refreshButton.click()
         XCTAssertTrue(element(app, AXID.diffPanelFile("README.md")).waitForExistence(timeout: 3))
 
-        // 2. Test Files panel via the sidebar session row, then the toolbar's "File Browser" jump.
-        // Reviewing changes above navigated away to the project's Git tab, so
-        // get back to the session the same way a user would: through the sidebar.
-        let secondSessionRow = element(app, AXID.sessionRow("Refactor sidebar"))
-        XCTAssertTrue(secondSessionRow.waitForExistence(timeout: 3))
-        secondSessionRow.click()
-
-        let openFilesButton = element(app, .toolbarOpenProjectFiles)
-        XCTAssertTrue(openFilesButton.waitForExistence(timeout: 3))
-        openFilesButton.click()
+        // 2. Files via the project tool rail (replaces the session folder button).
+        let filesRail = element(app, "ProjectToolRail.Files")
+        XCTAssertTrue(filesRail.waitForExistence(timeout: 3))
+        filesRail.click()
 
         let readmeRow = element(app, AXID.fileBrowserRow("README.md"))
         XCTAssertTrue(readmeRow.waitForExistence(timeout: 3))

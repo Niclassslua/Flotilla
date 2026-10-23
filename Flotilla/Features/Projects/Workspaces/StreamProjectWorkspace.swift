@@ -3,10 +3,10 @@ import SessionKit
 import GitKit
 import DesignSystem
 
-/// Design — **Stream**. The project workspace as one calm activity feed:
+/// Design — **Stream**. The project overview as one calm activity feed:
 /// sessions and recent commits interleaved by recency down a timeline spine,
-/// under a fixed masthead carrying the project name, a monospace instrument
-/// row, and quiet links to the four deeper surfaces.
+/// under a fixed masthead carrying the project name and a monospace instrument
+/// row. Deeper surfaces open from the shell's project tool rail.
 ///
 /// Continuous surfaces, hairline rules, a real type scale — no cards, no
 /// gradients. The signature is the spine: each entry's node sits on a single
@@ -44,7 +44,6 @@ struct StreamProjectWorkspace: View {
     private var project: Project {
         context.store.projects.first(where: { $0.id == context.project.id }) ?? context.project
     }
-    private var selectedTab: ProjectDetailView.ProjectTab { navigator.projectTab(for: project.id) }
     private var sessionsThisWeek: Int {
         ProjectOverviewViewModel.sessionsUsedThisWeek(in: context.sessions)
     }
@@ -52,32 +51,23 @@ struct StreamProjectWorkspace: View {
     private var contentLeading: CGFloat { gutterWidth + columnGap + laneWidth + columnGap }
 
     var body: some View {
-        Group {
-            if selectedTab == .overview {
-                HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        masthead
-                        feed
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    Rectangle()
-                        .fill(FlotillaColors.separatorStrong)
-                        .frame(width: 1)
-
-                    contextColumn
-                        .frame(width: contextWidth, alignment: .top)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                        .flotillaInspectorSurface()
-                }
-            } else {
-                VStack(spacing: 0) {
-                    SurfaceReturnBar(context: context, tab: selectedTab)
-                    Divider()
-                    ProjectSurfaceHost(tab: selectedTab, context: context)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+        // Tools open from the shell rail into the detail column; this surface
+        // is only the project overview.
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                masthead
+                feed
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Rectangle()
+                .fill(FlotillaColors.separatorStrong)
+                .frame(width: 1)
+
+            contextColumn
+                .frame(width: contextWidth, alignment: .top)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .flotillaInspectorSurface()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
@@ -172,11 +162,6 @@ struct StreamProjectWorkspace: View {
                 }
 
                 Spacer(minLength: FlotillaSpacing.medium)
-
-                // The links keep their full labels; the path truncates
-                // instead, since it already middle-truncates gracefully.
-                surfaceNav
-                    .fixedSize()
             }
 
             // Sits under the name/path column rather than under the icon.
@@ -262,47 +247,6 @@ struct StreamProjectWorkspace: View {
 
     private func instrumentDot() -> some View {
         Text("·").foregroundStyle(FlotillaColors.separatorStrong)
-    }
-
-    private var surfaceNav: some View {
-        HStack(spacing: FlotillaSpacing.medium) {
-            surfaceLink(.git, "Git", "arrow.triangle.branch")
-            surfaceLink(.issues, "Issues", "number")
-            surfaceLink(.files, "Files", "folder")
-            surfaceLink(.skills, "Skills", "sparkles")
-            surfaceLink(.rules, "Rules", "doc.badge.gearshape")
-        }
-    }
-
-    private func surfaceLink(_ tab: ProjectDetailView.ProjectTab, _ title: String, _ symbol: String) -> some View {
-        Button {
-            withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(tab, for: project.id) }
-        } label: {
-            HStack(spacing: 5) {
-                // Git gets the real Git mark, the way the command palette,
-                // settings, and the session sidebar draw it — the SF Symbol
-                // branch glyph belongs next to a branch name, not on the
-                // link that opens the Git surface.
-                if tab == .git {
-                    GitIcon(size: 11)
-                } else {
-                    Image(systemName: symbol).font(.system(size: 11, weight: .medium))
-                }
-                Text(title).font(.system(size: 12, weight: .medium))
-            }
-            .foregroundStyle(FlotillaColors.textPrimary)
-            .padding(.horizontal, FlotillaSpacing.small)
-            .padding(.vertical, 5)
-            .flotillaChromeCapsule(
-                fallback: FlotillaColors.surfaceElevated
-            )
-            .overlay {
-                Capsule().strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-            }
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(projectSurfaceAXID(tab))
     }
 
     // MARK: - Feed
@@ -561,7 +505,9 @@ struct StreamProjectWorkspace: View {
 
     private func openWorktreeInGit(_ worktree: GitWorktree) {
         navigator.setProjectGitScope(worktree.path, for: project.id)
-        withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(.git, for: project.id) }
+        withAnimation(FlotillaMotion.fast.curve) {
+            navigator.openProjectTool(.git, projectID: project.id)
+        }
     }
 
     // MARK: This week
@@ -633,7 +579,9 @@ struct StreamProjectWorkspace: View {
         if let commit = pulse.recentCommits.first(where: { calendar.isDate($0.authorDate, inSameDayAs: day) }) {
             navigator.projectGraphViewModel(for: root, gitService: context.store.gitService).selectedSHA = commit.sha
         }
-        withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(.git, for: project.id) }
+        withAnimation(FlotillaMotion.fast.curve) {
+            navigator.openProjectTool(.git, projectID: project.id)
+        }
     }
 
     private var weekDays: [CommitWeekChart.Day] {
@@ -932,15 +880,18 @@ struct StreamProjectWorkspace: View {
 
     private func openGit() {
         navigator.setProjectGitScope(project.rootPath, for: project.id)
-        withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(.git, for: project.id) }
+        withAnimation(FlotillaMotion.fast.curve) {
+            navigator.openProjectTool(.git, projectID: project.id)
+        }
     }
 
     private func openCommit(_ commit: GitCommit) {
         let root = project.rootPath.standardizedFileURL
         navigator.setProjectGitScope(root, for: project.id)
-        navigator.setProjectGitSubTab(.commits, for: project.id)
         navigator.projectGraphViewModel(for: root, gitService: context.store.gitService).selectedSHA = commit.sha
-        withAnimation(FlotillaMotion.fast.curve) { navigator.setProjectTab(.git, for: project.id) }
+        withAnimation(FlotillaMotion.fast.curve) {
+            navigator.openProjectTool(.git, projectID: project.id)
+        }
     }
 }
 

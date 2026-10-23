@@ -141,7 +141,8 @@ struct CommandPaletteView: View {
                         PaletteRow(
                             title: command.title,
                             subtitle: command.subtitle,
-                            systemImage: command.systemImage
+                            systemImage: command.systemImage,
+                            usesGitLogo: command.usesGitLogo
                         ) {
                             onDismiss()
                             perform(command)
@@ -250,12 +251,13 @@ private struct PaletteRow: View {
     let title: String
     let subtitle: String
     let systemImage: String
+    var usesGitLogo: Bool = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                if systemImage == "arrow.triangle.branch" {
+                if usesGitLogo || systemImage == "arrow.triangle.branch" || systemImage == "git" {
                     GitIcon(size: 16)
                         .foregroundStyle(.tint)
                         .frame(width: 24)
@@ -365,8 +367,8 @@ struct KeyboardShortcutsView: View {
             ]),
             ("Session Lens", [
                 ("Files", "⌘⇧F"),
-                ("Instructions", "⌘⇧I"),
-                ("Changes", "⌘⇧G"),
+                ("Rules", "⌘⇧I"),
+                ("Git", "⌘⇧G"),
                 ("Review", "⌘⇧R"),
             ]),
             ("Session", [

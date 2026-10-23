@@ -54,8 +54,8 @@ final class KanbanUITests: XCTestCase {
 
         openItem.click()
         // Confirms navigation actually landed on a focused session (this
-        // toolbar button only renders in session scope), not just any window.
-        let sessionToolbar = element(app, .toolbarOpenProjectFiles)
+        // control only renders on the session bar), not just any window.
+        let sessionToolbar = element(app, .sessionBarGitSidebarToggle)
         XCTAssertTrue(sessionToolbar.waitForExistence(timeout: 5))
     }
 }

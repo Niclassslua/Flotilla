@@ -112,6 +112,7 @@
 		20E750BFF982493B3CCF34E8 /* LauncherTriggers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67229BCF6F5B418491733FFE /* LauncherTriggers.swift */; };
 		212E46AC1118DE58C0036A98 /* TerminalKit in Frameworks */ = {isa = PBXBuildFile; productRef = 27492FBB4FC22084DB25FEAA /* TerminalKit */; };
 		21BE2B863D29E11590936C59 /* folder-node.svg in Resources */ = {isa = PBXBuildFile; fileRef = 446F1EB2161B52565A40137C /* folder-node.svg */; };
+		222B3A56C311CD652926F5E9 /* ProjectToolRailUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF568C810AD4E863D6402944 /* ProjectToolRailUITests.swift */; };
 		222CBE71880A1BC48CA71CB7 /* zig.svg in Resources */ = {isa = PBXBuildFile; fileRef = CE4999D5E0106AF58800F11A /* zig.svg */; };
 		22A5ED3D399C63A8D188D5C3 /* Flotilla.icon in Resources */ = {isa = PBXBuildFile; fileRef = C5EB5FF1FDC1128604459E68 /* Flotilla.icon */; };
 		22D07401DDBD8084087F20C7 /* OpenCodeCompanionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA61233CF542DD4926EE5776 /* OpenCodeCompanionAdapter.swift */; };
@@ -339,12 +340,14 @@
 		6B373F47DE80855892A472D1 /* ClaudePermissionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1906AD4C60E7FDA4269B3C9 /* ClaudePermissionBridge.swift */; };
 		6B53DD0E7F2C9F4DB5916056 /* GitIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = E178BD5EBC01AC5A04E68745 /* GitIcon.swift */; };
 		6B676C54D4112E8D710A7494 /* CodexAppServerStatusObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11396C81765213B69BC3CE /* CodexAppServerStatusObserver.swift */; };
+		6D0510FE83A109838622151F /* ProjectToolRailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E543929B8EFC31B0737417D /* ProjectToolRailTests.swift */; };
 		6E3915096877CB887D89E2E7 /* ProjectGraphRendering.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6D9DB285AC04C8B673220CB /* ProjectGraphRendering.swift */; };
 		6EB66F8AA646686BF21F626C /* PermissionPattern.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6415EC250034B6947E09FEE5 /* PermissionPattern.swift */; };
 		6F0853E1B477497AA28CF49E /* MacConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D1494C7DAD53508C73BBD70 /* MacConnection.swift */; };
 		6F37A0AA28497E450F273EA9 /* pdf.svg in Resources */ = {isa = PBXBuildFile; fileRef = D5274BAB0BEC19CE71DFFA59 /* pdf.svg */; };
 		6FA6A3C371B6941740633610 /* vite.svg in Resources */ = {isa = PBXBuildFile; fileRef = DB73DD8DFEFD13BC2394C2AC /* vite.svg */; };
 		6FB12D977FF07C62F6BEB96A /* CompanionAdapterRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF217911F49D8B9E7422F635 /* CompanionAdapterRegistry.swift */; };
+		7030246A39981C59F7F34F75 /* ProjectToolRailVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6A47CC8C58C32D247BBD08C /* ProjectToolRailVerifier.swift */; };
 		709AB11ABD963049B45512A8 /* folder-packages.svg in Resources */ = {isa = PBXBuildFile; fileRef = 8C5DEE977614F52F1F9245E5 /* folder-packages.svg */; };
 		718A72AEE9CFFEF2C7AD3936 /* HomeWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E94E1AFE7B5D16F77AA292 /* HomeWidgetView.swift */; };
 		71B9A7667138CC1939F952B5 /* vue.svg in Resources */ = {isa = PBXBuildFile; fileRef = B954B8EC3F165103B7890A21 /* vue.svg */; };
@@ -379,6 +382,7 @@
 		7A9ABEF8EDF0EBC260777DE8 /* folder-gitea.svg in Resources */ = {isa = PBXBuildFile; fileRef = 924030F90624C80233EA5FFB /* folder-gitea.svg */; };
 		7AE60C4F93003C44BBAF0D66 /* KnowledgeChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A15137C679C6CBF7FF6F220 /* KnowledgeChrome.swift */; };
 		7B1F17DE94EC64B7DFE901A8 /* PersistenceKit in Frameworks */ = {isa = PBXBuildFile; productRef = 90BE8C16AC4B2147D4D413C4 /* PersistenceKit */; };
+		7B2AC620C2F68AFD6E5FD581 /* ProjectToolRailVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6A47CC8C58C32D247BBD08C /* ProjectToolRailVerifier.swift */; };
 		7B6EB7582A058A0A695268DE /* ProjectGitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F37756AA07340F3ED847CB /* ProjectGitView.swift */; };
 		7BA7E487AD5AE56637FAADA9 /* ChildProcessEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473E943C152A794C44E66258 /* ChildProcessEnvironment.swift */; };
 		7BB2C7F73B8A9CA61DB5E93E /* ProjectHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB64AA14F1EB844D92DDB7BD /* ProjectHistoryView.swift */; };
@@ -642,7 +646,9 @@
 		CF19D65AAD333F78AE02354D /* cursor.svg in Resources */ = {isa = PBXBuildFile; fileRef = BB467BE02FE06069A33C2FA4 /* cursor.svg */; };
 		CF37BA83760C54A9CFCD1406 /* TranscriptKit in Frameworks */ = {isa = PBXBuildFile; productRef = BBE1005D5A490B63C6B0C56F /* TranscriptKit */; };
 		CF710782BD48C5525D032701 /* EffortLevelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E145E46FA66C4B797A708D /* EffortLevelPicker.swift */; };
+		CFAD60F5A448F6E56E615D53 /* ProjectToolRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A3008802FCA1C20E4CE525 /* ProjectToolRail.swift */; };
 		CFAF5D17DA2611161C0F3013 /* CompanionRuntimeLaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6134E93D903DF7A2C70C094C /* CompanionRuntimeLaunch.swift */; };
+		D08705CDD334A47B4FDA528A /* ProjectToolRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A3008802FCA1C20E4CE525 /* ProjectToolRail.swift */; };
 		D0D76B80443E5420ED745D61 /* next.svg in Resources */ = {isa = PBXBuildFile; fileRef = 0D81B338EB6C55CEF1B88F7F /* next.svg */; };
 		D0E2D0BC65F85CBD34E69797 /* folder-components.svg in Resources */ = {isa = PBXBuildFile; fileRef = 748E930383D36285416CD109 /* folder-components.svg */; };
 		D13E9805C0BEC6E01EAB756B /* FleetSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D17E25AD62D144EB77DF189 /* FleetSidebar.swift */; };
@@ -999,6 +1005,7 @@
 		5253C4FE0F3C9418B5B45F38 /* lock.svg */ = {isa = PBXFileReference; path = lock.svg; sourceTree = "<group>"; };
 		53EC857A8CBE65A402545C21 /* FlotillaCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlotillaCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		555E4B7984B36066BEE0FFE8 /* KnowledgeActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeActions.swift; sourceTree = "<group>"; };
+		55A3008802FCA1C20E4CE525 /* ProjectToolRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectToolRail.swift; sourceTree = "<group>"; };
 		55AC108CFFA20A3D4EE6A5C1 /* SessionLaunchPreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchPreviewTests.swift; sourceTree = "<group>"; };
 		574B82EAE6596EA2D265D335 /* folder-config.svg */ = {isa = PBXFileReference; path = "folder-config.svg"; sourceTree = "<group>"; };
 		57E99A85EFCE693B30D4B589 /* SessionGroupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGroupTests.swift; sourceTree = "<group>"; };
@@ -1120,6 +1127,7 @@
 		9C7A3A8B4DE935213297C06D /* DiffStatBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffStatBadge.swift; sourceTree = "<group>"; };
 		9CBBB0DF6922595B183EAA56 /* AgentBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBrand.swift; sourceTree = "<group>"; };
 		9DACC60263A2A5F34577829B /* KanbanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanStore.swift; sourceTree = "<group>"; };
+		9E543929B8EFC31B0737417D /* ProjectToolRailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectToolRailTests.swift; sourceTree = "<group>"; };
 		9E981131F173F30668314C97 /* SkillFrontmatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillFrontmatterTests.swift; sourceTree = "<group>"; };
 		9EEC3877A940FA74B92114BD /* HomePreviewFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePreviewFixtures.swift; sourceTree = "<group>"; };
 		9F96ABC2AD26A307651C2D5B /* SessionReviewModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReviewModels.swift; sourceTree = "<group>"; };
@@ -1139,6 +1147,7 @@
 		A5693139B3928871EAD2ED09 /* ReviewFileList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewFileList.swift; sourceTree = "<group>"; };
 		A632307236D4D1877F74269E /* kotlin.svg */ = {isa = PBXFileReference; path = kotlin.svg; sourceTree = "<group>"; };
 		A69A0B4264114DADAB41DDB9 /* ProjectIconImageLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectIconImageLoader.swift; sourceTree = "<group>"; };
+		A6A47CC8C58C32D247BBD08C /* ProjectToolRailVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectToolRailVerifier.swift; sourceTree = "<group>"; };
 		A6D9DB285AC04C8B673220CB /* ProjectGraphRendering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectGraphRendering.swift; sourceTree = "<group>"; };
 		A7403957F3F54FB0A8391F06 /* ruby.svg */ = {isa = PBXFileReference; path = ruby.svg; sourceTree = "<group>"; };
 		A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionActivityStore.swift; sourceTree = "<group>"; };
@@ -1158,6 +1167,7 @@
 		AE12192DD4181FFD86FF5A16 /* ClaudeTranscriptCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeTranscriptCodecTests.swift; sourceTree = "<group>"; };
 		AEA58B78299AE64F6052CFB3 /* SessionReviewViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReviewViewModelTests.swift; sourceTree = "<group>"; };
 		AEF0C6CC00972656A789C78E /* CompanionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionPersistence.swift; sourceTree = "<group>"; };
+		AF568C810AD4E863D6402944 /* ProjectToolRailUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectToolRailUITests.swift; sourceTree = "<group>"; };
 		AF9FCFE487E7C501795C38FF /* EphemeralWindowStateDisabler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EphemeralWindowStateDisabler.swift; sourceTree = "<group>"; };
 		AFA78B3B753464372AF1F635 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AFCB8938BFF70D0F65BFA50B /* SessionDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDraft.swift; sourceTree = "<group>"; };
@@ -1423,6 +1433,7 @@
 				18295747B6538E5931B709FE /* KanbanUITests.swift */,
 				EE89D74F35F795F9E1002456 /* OverlayDismissalUITests.swift */,
 				44C721ECC732427A1B4EE485 /* PerfUtils.swift */,
+				AF568C810AD4E863D6402944 /* ProjectToolRailUITests.swift */,
 				E66DA9DABD1725C0E701BD2A /* RestartSessionUITests.swift */,
 				03D27B2FAF659497F64E9D32 /* RulesPanelUITests.swift */,
 				5153FA2B72647A5FB0F9FD2A /* SessionBarsUITests.swift */,
@@ -1966,6 +1977,8 @@
 				8D17E25AD62D144EB77DF189 /* FleetSidebar.swift */,
 				E26E19A813CF60C404557C40 /* FleetSmartList.swift */,
 				3624D090F6EF105D88197D68 /* FlotillaShell.swift */,
+				55A3008802FCA1C20E4CE525 /* ProjectToolRail.swift */,
+				A6A47CC8C58C32D247BBD08C /* ProjectToolRailVerifier.swift */,
 				378941B275B152A98A0FC856 /* RelaunchToUpdateBanner.swift */,
 				C1A53AAFB27915EB20686B84 /* SessionGroupBar.swift */,
 				0295C0B53AEFADD6762C616A /* WorkspaceNavigation.swift */,
@@ -2139,6 +2152,7 @@
 				32755AB364C02E6E8EF9A23D /* ProjectIconTests.swift */,
 				06139D34425C214C310367A5 /* ProjectKnowledgeViewModelTests.swift */,
 				B41054091FCCC2049FDE7864 /* ProjectOverviewTests.swift */,
+				9E543929B8EFC31B0737417D /* ProjectToolRailTests.swift */,
 				C42082385FF7DFE8A8E25E78 /* ProtectedFolderAccessTests.swift */,
 				5E76204A2C5756D357926A7B /* ProviderFixtureTests.swift */,
 				C8B15FCD1B68428DB2360D62 /* RealHandoffPipelineTests.swift */,
@@ -2887,6 +2901,8 @@
 				2497E9C2DBCE70864A7AEF13 /* ProjectPulse.swift in Sources */,
 				14FF37F6A7667A994ABFD8F6 /* ProjectRulesView.swift in Sources */,
 				3AC6DB0C6E0BCCA89BA547FE /* ProjectSkillsView.swift in Sources */,
+				D08705CDD334A47B4FDA528A /* ProjectToolRail.swift in Sources */,
+				7030246A39981C59F7F34F75 /* ProjectToolRailVerifier.swift in Sources */,
 				ED4DC9696B8B6944CBB2A73F /* ProjectWorkspaceChrome.swift in Sources */,
 				FCFF60FB9E0CEB1EA0DA8E48 /* ProjectWorkspaceContext.swift in Sources */,
 				DCD9B37BC4007565D699B9D6 /* ProtectedFolderAccess.swift in Sources */,
@@ -3017,6 +3033,7 @@
 				26D4165627E365FABD28B3C6 /* ProjectIconTests.swift in Sources */,
 				23E2949459594CA93F188A9C /* ProjectKnowledgeViewModelTests.swift in Sources */,
 				1D4E8803E7662F52088203AA /* ProjectOverviewTests.swift in Sources */,
+				6D0510FE83A109838622151F /* ProjectToolRailTests.swift in Sources */,
 				7D6F2F5F56ED3A61E26243DB /* ProtectedFolderAccessTests.swift in Sources */,
 				20CDA884950DAF9F8A53B72D /* ProviderFixtureTests.swift in Sources */,
 				A4FF45CE4C7733A084B52ACE /* RealHandoffPipelineTests.swift in Sources */,
@@ -3238,6 +3255,8 @@
 				552B2F38FAB153A69DFE6626 /* ProjectPulse.swift in Sources */,
 				F88DFD6083A33DBE0CDF69BA /* ProjectRulesView.swift in Sources */,
 				B5785D70AF40B3143A97E8B4 /* ProjectSkillsView.swift in Sources */,
+				CFAD60F5A448F6E56E615D53 /* ProjectToolRail.swift in Sources */,
+				7B2AC620C2F68AFD6E5FD581 /* ProjectToolRailVerifier.swift in Sources */,
 				4C5434D1CEA3C035290C3AAB /* ProjectWorkspaceChrome.swift in Sources */,
 				397936491265D9F333BBAD62 /* ProjectWorkspaceContext.swift in Sources */,
 				345570B12724D1DE11968F0C /* ProtectedFolderAccess.swift in Sources */,
@@ -3335,6 +3354,7 @@
 				10D65E7D1ABDBA7423577988 /* KanbanUITests.swift in Sources */,
 				600E6983114516A27AE5210F /* OverlayDismissalUITests.swift in Sources */,
 				69323D20110EE84B01033EF8 /* PerfUtils.swift in Sources */,
+				222B3A56C311CD652926F5E9 /* ProjectToolRailUITests.swift in Sources */,
 				81C78C6DD775CB433EF6872E /* RestartSessionUITests.swift in Sources */,
 				92981189172EDE458B22BB9E /* RulesPanelUITests.swift in Sources */,
 				C4306E8FC990AC7BDF29E237 /* SessionBarsUITests.swift in Sources */,

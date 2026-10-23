@@ -13,10 +13,19 @@ final class WorkspaceNavigator {
             switch selection {
             case .overview, .project:
                 lastOverviewSelection = selection
-            case .allSessions, .smartList, .session:
+            case .allSessions, .smartList, .session, .projectTool:
                 break
             }
-            sidebarSelection = selection == .overview ? [] : [selection]
+            // Tool destinations are not List tags — keep the prior list
+            // highlight (or clear for Home) so the session list stays usable.
+            switch selection {
+            case .overview:
+                sidebarSelection = []
+            case .projectTool(let projectID, _):
+                sidebarSelection = [.project(projectID)]
+            case .allSessions, .smartList, .project, .session:
+                sidebarSelection = [selection]
+            }
             recordHistory(from: oldValue)
         }
     }
@@ -59,8 +68,10 @@ final class WorkspaceNavigator {
 
     var selectedProjectID: UUID? {
         get {
-            if case .project(let id) = selection { return id }
-            return nil
+            switch selection {
+            case .project(let id), .projectTool(let id, _): return id
+            default: return nil
+            }
         }
         set {
             if let newValue { selection = .project(newValue) }
@@ -121,7 +132,7 @@ final class WorkspaceNavigator {
     var sessionScope: SessionScope {
         switch selection {
         case .smartList(let list): SessionScope(group: sessionGroup, smartList: list)
-        case .project(let id): SessionScope(group: .project(id), smartList: nil)
+        case .project(let id), .projectTool(let id, _): SessionScope(group: .project(id), smartList: nil)
         case .overview, .allSessions, .session: SessionScope(group: sessionGroup, smartList: nil)
         }
     }
@@ -132,6 +143,60 @@ final class WorkspaceNavigator {
     func pruneSessionGroup(against projectIDs: Set<UUID>) {
         guard case .project(let id) = sessionGroup, !projectIDs.contains(id) else { return }
         sessionGroup = .all
+    }
+
+    /// Clears a tool/overview destination that still points at a deleted project.
+    func pruneProjectDestinations(against projectIDs: Set<UUID>) {
+        switch selection {
+        case .project(let id), .projectTool(let id, _):
+            if !projectIDs.contains(id) { selection = .overview }
+        default:
+            break
+        }
+        projectTabs = projectTabs.filter { projectIDs.contains($0.key) }
+        projectGitScopes = projectGitScopes.filter { projectIDs.contains($0.key) }
+        projectGitSubTabs = projectGitSubTabs.filter { projectIDs.contains($0.key) }
+        if case .project(let id) = lastOverviewSelection, !projectIDs.contains(id) {
+            lastOverviewSelection = .overview
+        }
+    }
+
+    /// Unambiguous project for the tool rail, palette, and shortcuts.
+    /// Home, General, and all-projects collections return `nil` — never the
+    /// previously selected project. A one-project Grid/Board group enables tools.
+    func railProjectID(sessions: [Session]) -> UUID? {
+        switch selection {
+        case .project(let id), .projectTool(let id, _):
+            return id
+        case .session(let id):
+            return sessions.first(where: { $0.id == id })?.projectID
+        case .allSessions, .smartList:
+            // One-project Grid/Board filter enables tools; focusing a tile
+            // must not silently change this collection's project context.
+            if case .project(let id) = sessionGroup { return id }
+            return nil
+        case .overview:
+            return nil
+        }
+    }
+
+    /// Tool highlighted in the rail. Nil on overview and terminals.
+    var activeRailTool: ProjectTool? {
+        if case .projectTool(_, let tool) = selection { return tool }
+        return nil
+    }
+
+    /// Opens a project tool in the main content column without filtering the
+    /// session list. Git lands on the project history (Commits) surface and
+    /// does not reset an existing branch/commit selection.
+    func openProjectTool(_ tool: ProjectTool, projectID: UUID) {
+        // First visit to Git lands on history (Commits). Later visits keep
+        // whatever sub-tab the user left on so tool state survives navigation.
+        if tool == .git, projectGitSubTabs[projectID] == nil {
+            setProjectGitSubTab(.commits, for: projectID)
+        }
+        setProjectTab(tool.projectTab, for: projectID)
+        selection = .projectTool(projectID, tool)
     }
 
     /// Returns to the place the user last occupied on the Home side.
@@ -162,16 +227,23 @@ final class WorkspaceNavigator {
         projectGitScopes[projectID] = scope
     }
 
-    /// Jumps from a focused session into the project's Git/Files/Rules tab,
-    /// scoping the Git tab to that session's own worktree so "Review this
-    /// session's changes" lands on the right diff, not the project default.
+    /// Opens a project tool using an explicit project, or the session's project
+    /// when one is provided. Prefer ``openProjectTool(_:projectID:)`` for rail
+    /// and palette paths that already resolved context.
     func openProjectPanel(_ tab: ProjectDetailView.ProjectTab, scopedTo session: Session?) {
-        guard let session, let projectID = session.projectID else { return }
-        if tab == .git {
-            setProjectGitScope(session.worktree?.worktreePath ?? session.workingDirectory, for: projectID)
+        guard let tool = ProjectTool(projectTab: tab) else {
+            if let session, let projectID = session.projectID {
+                selection = .project(projectID)
+            }
+            return
         }
-        setProjectTab(tab, for: projectID)
-        selection = .project(projectID)
+        if let session, let projectID = session.projectID {
+            openProjectTool(tool, projectID: projectID)
+            return
+        }
+        if let projectID = selectedProjectID {
+            openProjectTool(tool, projectID: projectID)
+        }
     }
 
     func projectGitSubTab(for projectID: UUID) -> ProjectGitView.GitSubTab {
@@ -200,8 +272,7 @@ final class WorkspaceNavigator {
         graphViewModel.selectedBranchFilter = branch
         graphViewModel.selectedSHA = commit.sha
 
-        setProjectTab(.git, for: projectID)
-        selection = .project(projectID)
+        openProjectTool(.git, projectID: projectID)
     }
 
     /// File browser models outlive the conditional project/session surfaces
@@ -310,6 +381,9 @@ enum SidebarItem: Hashable, Codable, Sendable {
     /// values of those unchanged.
     case smartList(FleetSmartList)
     case project(UUID)
+    /// A project tool in the main content column (issue #7). Distinct from
+    /// `.project`, which is always the overview.
+    case projectTool(UUID, ProjectTool)
     case session(UUID)
 
     var title: String {
@@ -318,6 +392,7 @@ enum SidebarItem: Hashable, Codable, Sendable {
         case .allSessions: return "All Sessions"
         case .smartList(let list): return list.title
         case .project: return "Project"
+        case .projectTool(_, let tool): return tool.title
         case .session: return "Session"
         }
     }
@@ -328,6 +403,7 @@ enum SidebarItem: Hashable, Codable, Sendable {
         case .allSessions: return "square.stack.3d.up"
         case .smartList(let list): return list.systemImage
         case .project: return "folder.fill"
+        case .projectTool(_, let tool): return tool.systemImage
         case .session: return "terminal.fill"
         }
     }
@@ -337,7 +413,7 @@ enum SidebarItem: Hashable, Codable, Sendable {
     var isCollection: Bool {
         switch self {
         case .allSessions, .smartList: return true
-        case .overview, .project, .session: return false
+        case .overview, .project, .projectTool, .session: return false
         }
     }
 }

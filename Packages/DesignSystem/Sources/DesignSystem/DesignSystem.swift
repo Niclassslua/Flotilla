@@ -76,6 +76,10 @@ public enum FlotillaLayoutWidth: Sendable {
     public static let sidebarMin: CGFloat = 260
     public static let sidebarIdeal: CGFloat = 360
     public static let sidebarMax: CGFloat = 560
+    /// Far-left project tool rail (issue #7). Icons-only default; labeled when
+    /// `workspace.sidebarRailLabels` is on.
+    public static let toolRailWidth: CGFloat = 56
+    public static let toolRailLabeledWidth: CGFloat = 72
     /// Shared by docked detail surfaces. The Git sidebar needs enough room
     /// for a filename, path, and diff stat while remaining subordinate to the
     /// live terminal it supplements.
@@ -108,9 +112,16 @@ public enum FlotillaLayoutWidth: Sendable {
     /// freshly launched, minimum-size window (`windowMin - sidebarIdeal`).
     public static let detailIdeal: CGFloat = sidebarMax + detailMin - sidebarIdeal
     // Guarantees the detail column can always reach `detailMin`, even with
-    // the sidebar dragged all the way to `sidebarMax`.
-    public static let windowMin: CGFloat = sidebarMax + detailMin
+    // the sidebar dragged all the way to `sidebarMax`, and the tool rail
+    // showing labels.
+    public static let windowMin: CGFloat = sidebarMax + toolRailLabeledWidth + detailMin
     public static let windowHeightMin: CGFloat = 640
+
+    /// Sidebar column width including the persistent project tool rail.
+    public static func navigatorColumnWidth(labelsVisible: Bool) -> (min: CGFloat, ideal: CGFloat, max: CGFloat) {
+        let rail = labelsVisible ? toolRailLabeledWidth : toolRailWidth
+        return (sidebarMin + rail, sidebarIdeal + rail, sidebarMax + rail)
+    }
 }
 
 // MARK: - State Opacity
