@@ -467,22 +467,28 @@ struct DetailColumn: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
+    private func workspaceContext(for project: Project) -> ProjectWorkspaceContext {
+        let settings = settingsViewModel.settings
+        return ProjectWorkspaceContext(
+            project: project,
+            sessions: store.sessions(for: project),
+            store: store,
+            terminalManager: terminalManager,
+            activityStore: activityStore,
+            openSession: onOpenSession,
+            openCodeSubscription: settings.openCodeSubscription,
+            highlightUnseenCommits: settings.git.highlightUnseenCommits,
+            createWorktreeByDefault: settings.sessionDefaults.createWorktreeByDefault,
+            fetchBeforeCreatingWorktree: settings.git.fetchBeforeCreatingWorktree,
+            defaultAgent: AgentKind(rawValue: settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode
+        )
+    }
+
     @ViewBuilder
     private func projectContent(projectID: UUID) -> some View {
         if let project = store.projects.first(where: { $0.id == projectID }) {
-            ProjectDetailView(
-                project: project,
-                sessions: store.sessions(for: project),
-                store: store,
-                terminalManager: terminalManager,
-                activityStore: activityStore,
-                openSession: onOpenSession,
-                openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
-                highlightUnseenCommits: settingsViewModel.settings.git.highlightUnseenCommits,
-                createWorktreeByDefault: settingsViewModel.settings.sessionDefaults.createWorktreeByDefault,
-                fetchBeforeCreatingWorktree: settingsViewModel.settings.git.fetchBeforeCreatingWorktree,
-                defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode
-            )
+            StreamProjectWorkspace(context: workspaceContext(for: project))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ContentUnavailableView("Project Not Found", systemImage: "folder.badge.questionmark")
         }
@@ -491,23 +497,11 @@ struct DetailColumn: View {
     @ViewBuilder
     private func projectToolContent(projectID: UUID, tool: ProjectTool) -> some View {
         if let project = store.projects.first(where: { $0.id == projectID }) {
-            let context = ProjectWorkspaceContext(
-                project: project,
-                sessions: store.sessions(for: project),
-                store: store,
-                terminalManager: terminalManager,
-                activityStore: activityStore,
-                openSession: onOpenSession,
-                openCodeSubscription: settingsViewModel.settings.openCodeSubscription,
-                highlightUnseenCommits: settingsViewModel.settings.git.highlightUnseenCommits,
-                createWorktreeByDefault: settingsViewModel.settings.sessionDefaults.createWorktreeByDefault,
-                fetchBeforeCreatingWorktree: settingsViewModel.settings.git.fetchBeforeCreatingWorktree,
-                defaultAgent: AgentKind(rawValue: settingsViewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode
-            )
+            let context = workspaceContext(for: project)
             VStack(spacing: 0) {
-                SurfaceReturnBar(context: context, tab: tool.projectTab)
+                SurfaceReturnBar(context: context, tool: tool)
                 Divider()
-                ProjectSurfaceHost(tab: tool.projectTab, context: context)
+                ProjectSurfaceHost(tool: tool, context: context)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

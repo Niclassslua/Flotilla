@@ -180,15 +180,12 @@ struct FlotillaShell: View {
         return NavigationSplitView(columnVisibility: $navigator.columnVisibility) {
             HStack(spacing: 0) {
                 ProjectToolRail(
-                    projectID: navigator.railProjectID(sessions: store.sessions),
+                    isEnabled: navigator.railProjectID(sessions: store.sessions) != nil,
                     activeTool: navigator.activeRailTool,
                     isHomeActive: navigator.selection == .overview,
                     showLabels: railLabels,
                     onSelectHome: { navigator.showHomeDashboard() },
-                    onSelect: { tool in
-                        guard let projectID = navigator.railProjectID(sessions: store.sessions) else { return }
-                        navigator.openProjectTool(tool, projectID: projectID)
-                    }
+                    onSelect: { navigator.openRailTool($0, sessions: store.sessions) }
                 )
                 Rectangle()
                     .fill(FlotillaColors.separator)
@@ -509,12 +506,6 @@ struct FlotillaShell: View {
         navigator.selection = .project(id)
     }
 
-    private func openRailTool(_ tool: ProjectTool) {
-        guard let projectID = navigator.railProjectID(sessions: store.sessions)
-                ?? store.selectedSession?.projectID else { return }
-        navigator.openProjectTool(tool, projectID: projectID)
-    }
-
     private func applyTerminalPreferences() {
         let preferences = settingsViewModel.settings.terminal
         terminalManager.applyPreferences(
@@ -555,11 +546,11 @@ struct FlotillaShell: View {
                 navigator.presentation = .focus
             }
         case .showFiles:
-            openRailTool(.files)
+            navigator.openRailTool(.files, sessions: store.sessions)
         case .showInstructions:
-            openRailTool(.rules)
+            navigator.openRailTool(.rules, sessions: store.sessions)
         case .showChanges:
-            openRailTool(.git)
+            navigator.openRailTool(.git, sessions: store.sessions)
         case .restoreSessions:
             navigator.presentedSheet = .restore
         case .showSettings:

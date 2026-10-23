@@ -184,6 +184,13 @@ final class WorkspaceNavigator {
         return nil
     }
 
+    /// Opens a tool for the rail's project context; inert without one. Shared by
+    /// the rail, the Workspace menu, and the command palette.
+    func openRailTool(_ tool: ProjectTool, sessions: [Session]) {
+        guard let projectID = railProjectID(sessions: sessions) else { return }
+        openProjectTool(tool, projectID: projectID)
+    }
+
     /// Opens a project tool in the main content column without filtering the
     /// session list. Git lands on the project history (Commits) surface and
     /// does not reset an existing branch/commit selection.

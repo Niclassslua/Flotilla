@@ -32,7 +32,7 @@ launch dashboard" in the palette) and "Overview" *also* named a tab inside every
 
 Reserved words that mean exactly one thing:
 
-- **Overview** — a tab inside a project workspace (`ProjectDetailView.ProjectTab.overview`). Never the app landing surface.
+- **Overview** — a project's own workspace (`SidebarItem.project`), reached from its navigator header. Never the app landing surface.
 - **Grid**, **Board**, **Focus** — presentations of the Sessions collection (`WorkspacePresentation`). Never destinations.
 - **Group** — a slice of the fleet in the session group bar: All, one project, or General (`SessionGroup`). One axis of a *scope*; never a presentation and never a destination.
 - **Fleet** — internal vocabulary for the whole set of sessions (`FleetSidebar`, `FleetSessionList`). Correct in code and in review comments; does not appear in user-facing copy.

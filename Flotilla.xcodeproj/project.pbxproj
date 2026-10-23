@@ -253,7 +253,6 @@
 		4B437C8992CF4870736A9F4F /* PresenceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450290A29D767A2FE28CAF6E /* PresenceMonitor.swift */; };
 		4B6810F6670AB2FB305F47B7 /* DetailColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D35127C7CA13C7F14A7A21D /* DetailColumn.swift */; };
 		4B699214651D87380BB08844 /* TerminalManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1301A0CFAE4DF97657770E3D /* TerminalManager.swift */; };
-		4B733F632936F80343509855 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524067025CC0F020E1592028 /* ProjectDetailView.swift */; };
 		4C5434D1CEA3C035290C3AAB /* ProjectWorkspaceChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096ED8CE6B6F1EE531BD480C /* ProjectWorkspaceChrome.swift */; };
 		4C6ED34B87B3AF3DC7B0F9A7 /* typescript.svg in Resources */ = {isa = PBXBuildFile; fileRef = E4129D9B51A69DC7D9B98130 /* typescript.svg */; };
 		4CE20EC5B13803A2C5207824 /* console.svg in Resources */ = {isa = PBXBuildFile; fileRef = A00F006FA99E0448BF7D2195 /* console.svg */; };
@@ -320,7 +319,6 @@
 		6406A5EDCFDAB379E4C4B57B /* HomeScreenshotFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D353638D362604EBEEC0C9A /* HomeScreenshotFeed.swift */; };
 		644FCEA7D4BB6A77F34CB0D7 /* AgentManagedWorktreeAndTitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1D5E06B90B0528533B4EC2 /* AgentManagedWorktreeAndTitleTests.swift */; };
 		6487C3349D2437B1C79A6820 /* ProjectGitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F37756AA07340F3ED847CB /* ProjectGitView.swift */; };
-		655A0D0BA322AEE4918A52AB /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524067025CC0F020E1592028 /* ProjectDetailView.swift */; };
 		6577A54498BA80C8BD5B1E24 /* svg.svg in Resources */ = {isa = PBXBuildFile; fileRef = A2B50E34FD372A5B5B90A202 /* svg.svg */; };
 		658BD4C332826A3D21778DA2 /* SessionActivityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B88C5DBAEBCCFEB9B68491 /* SessionActivityStore.swift */; };
 		65A0C5DF6D0EA6406B9CE77A /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4A98AEF98A101073B3ECE81 /* SettingsUITests.swift */; };
@@ -1001,7 +999,6 @@
 		5153FA2B72647A5FB0F9FD2A /* SessionBarsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionBarsUITests.swift; sourceTree = "<group>"; };
 		51EEFE8DDCE6D58053355B91 /* folder-test.svg */ = {isa = PBXFileReference; path = "folder-test.svg"; sourceTree = "<group>"; };
 		51F1D5325BAF7C2345DB7D56 /* FlotillaUnitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaUnitTests.swift; sourceTree = "<group>"; };
-		524067025CC0F020E1592028 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
 		5253C4FE0F3C9418B5B45F38 /* lock.svg */ = {isa = PBXFileReference; path = lock.svg; sourceTree = "<group>"; };
 		53EC857A8CBE65A402545C21 /* FlotillaCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlotillaCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		555E4B7984B36066BEE0FFE8 /* KnowledgeActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeActions.swift; sourceTree = "<group>"; };
@@ -2253,7 +2250,6 @@
 				5FEA3357E84747D12870D13A /* KanbanCard.swift */,
 				9DACC60263A2A5F34577829B /* KanbanStore.swift */,
 				433D3BE507D2D44750EAEDF9 /* KanbanViews.swift */,
-				524067025CC0F020E1592028 /* ProjectDetailView.swift */,
 				03F37756AA07340F3ED847CB /* ProjectGitView.swift */,
 				A6D9DB285AC04C8B673220CB /* ProjectGraphRendering.swift */,
 				1F1924AF9773A5CAB5DC34C4 /* ProjectGraphView.swift */,
@@ -2883,7 +2879,6 @@
 				6EB66F8AA646686BF21F626C /* PermissionPattern.swift in Sources */,
 				4B437C8992CF4870736A9F4F /* PresenceMonitor.swift in Sources */,
 				41858820CAE816013548FD8D /* ProjectChoice.swift in Sources */,
-				655A0D0BA322AEE4918A52AB /* ProjectDetailView.swift in Sources */,
 				7B6EB7582A058A0A695268DE /* ProjectGitView.swift in Sources */,
 				14FA2F0DCCFB21BD69587AFB /* ProjectGraphRendering.swift in Sources */,
 				C78045B28D14426E8C096936 /* ProjectGraphView.swift in Sources */,
@@ -3237,7 +3232,6 @@
 				A5575BDCC864E8F7C299D9F5 /* PermissionPattern.swift in Sources */,
 				2B89AF33610BE313E326C81E /* PresenceMonitor.swift in Sources */,
 				7F51622808C590C08DEF81A2 /* ProjectChoice.swift in Sources */,
-				4B733F632936F80343509855 /* ProjectDetailView.swift in Sources */,
 				6487C3349D2437B1C79A6820 /* ProjectGitView.swift in Sources */,
 				6E3915096877CB887D89E2E7 /* ProjectGraphRendering.swift in Sources */,
 				E8FF643C0DC5D0ACB17C5ED4 /* ProjectGraphView.swift in Sources */,

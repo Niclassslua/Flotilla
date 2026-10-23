@@ -141,8 +141,7 @@ struct CommandPaletteView: View {
                         PaletteRow(
                             title: command.title,
                             subtitle: command.subtitle,
-                            systemImage: command.systemImage,
-                            usesGitLogo: command.usesGitLogo
+                            systemImage: command.systemImage
                         ) {
                             onDismiss()
                             perform(command)
@@ -251,13 +250,12 @@ private struct PaletteRow: View {
     let title: String
     let subtitle: String
     let systemImage: String
-    var usesGitLogo: Bool = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                if usesGitLogo || systemImage == "arrow.triangle.branch" || systemImage == "git" {
+                if systemImage == "arrow.triangle.branch" {
                     GitIcon(size: 16)
                         .foregroundStyle(.tint)
                         .frame(width: 24)

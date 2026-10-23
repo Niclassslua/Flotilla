@@ -22,8 +22,6 @@ struct CreateSessionView: View {
     /// dismissed by clicking outside it, which a genuine AppKit sheet can
     /// never support) — an overlay gets no environment dismiss action from
     /// SwiftUI, so that call site must supply this explicitly.
-    /// `ProjectDetailView` still presents through a real `.sheet(isPresented:)`
-    /// and leaves this `nil`, relying on the environment as before.
     let onDismiss: (() -> Void)?
 
     @State private var draft: SessionDraft

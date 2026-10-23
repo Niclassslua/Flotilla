@@ -150,7 +150,6 @@ Reached by selecting a project's row in the navigator, or a project tile on Home
 
 | Say | What it is | Code |
 | --- | --- | --- |
-| **Project detail** | Thin entry point: builds the workspace context and renders the Stream workspace. | `ProjectDetailView` — `Features/Projects/` |
 | **Project workspace** *(or "the Stream")* | The project overview: a masthead over a two-region body — the activity feed on the left, the context column on the right. Tools open from the **project tool rail**, not from links here. | `StreamProjectWorkspace` — `Features/Projects/Workspaces/` |
 | **Masthead** | The `surface`-banded header: project mark, name, path, and the monospace **instrument row** (branch · drift · working-copy delta · commits/wk). | `StreamProjectWorkspace.masthead` |
 | **Activity feed** | The centred timeline: sessions and recent commits interleaved by recency down a spine, day-banded, with hero rows for live / waiting / ready sessions and an "earlier commits" footer. | `StreamProjectWorkspace.feed` / `timeline` |

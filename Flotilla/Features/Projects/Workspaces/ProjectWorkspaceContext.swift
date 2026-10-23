@@ -5,8 +5,8 @@ import DesignSystem
 import SettingsKit
 
 /// Everything the project workspace needs, bundled so the parameter list stays
-/// in one place. `ProjectDetailView` builds one and hands it to
-/// `StreamProjectWorkspace`.
+/// in one place. `DetailColumn` builds one for `StreamProjectWorkspace` and
+/// for every rail tool.
 struct ProjectWorkspaceContext {
     let project: Project
     let sessions: [Session]
@@ -21,19 +21,15 @@ struct ProjectWorkspaceContext {
     let defaultAgent: AgentKind
 }
 
-/// The "route through" for every non-Overview surface. The workspace owns its
-/// own Overview and navigation chrome; Git / Files / Skills / Rules render
-/// through this single switch so their heavy view models stay shared.
+/// Renders a rail tool. Git / Issues / Files / Skills / Rules go through this
+/// single switch so their heavy view models stay shared.
 struct ProjectSurfaceHost: View {
     @Environment(\.workspaceNavigator) private var navigator
-    let tab: ProjectDetailView.ProjectTab
+    let tool: ProjectTool
     let context: ProjectWorkspaceContext
 
     var body: some View {
-        switch tab {
-        case .overview:
-            // The workspace renders Overview itself; nothing to route.
-            Color.clear
+        switch tool {
         case .git:
             ProjectGitView(
                 project: context.project,

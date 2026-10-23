@@ -88,29 +88,24 @@ private struct WorkspacePanelItems: View {
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .disabled(store.selectedSession?.status != .readyForReview)
         Button("Git") {
-            openRailTool(.git)
+            navigator.openRailTool(.git, sessions: store.sessions)
         }
         .keyboardShortcut("g", modifiers: [.command, .shift])
         .disabled(railProjectID == nil)
         Button("Files") {
-            openRailTool(.files)
+            navigator.openRailTool(.files, sessions: store.sessions)
         }
         .keyboardShortcut("f", modifiers: [.command, .shift])
         .disabled(railProjectID == nil)
         Button("Rules") {
-            openRailTool(.rules)
+            navigator.openRailTool(.rules, sessions: store.sessions)
         }
         .keyboardShortcut("i", modifiers: [.command, .shift])
         .disabled(railProjectID == nil)
     }
 
     private var railProjectID: UUID? {
-        navigator.railProjectID(sessions: store.sessions) ?? store.selectedSession?.projectID
-    }
-
-    private func openRailTool(_ tool: ProjectTool) {
-        guard let projectID = railProjectID else { return }
-        navigator.openProjectTool(tool, projectID: projectID)
+        navigator.railProjectID(sessions: store.sessions)
     }
 }
 

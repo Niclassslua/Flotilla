@@ -28,40 +28,18 @@ enum ProjectTool: String, CaseIterable, Identifiable, Codable, Sendable {
         case .rules: "doc.text"
         }
     }
-
-    var projectTab: ProjectDetailView.ProjectTab {
-        switch self {
-        case .git: .git
-        case .issues: .issues
-        case .files: .files
-        case .skills: .skills
-        case .rules: .rules
-        }
-    }
-
-    init?(projectTab: ProjectDetailView.ProjectTab) {
-        switch projectTab {
-        case .overview: return nil
-        case .git: self = .git
-        case .issues: self = .issues
-        case .files: self = .files
-        case .skills: self = .skills
-        case .rules: self = .rules
-        }
-    }
 }
 
 /// Far-left Xcode-style activity rail: Home, then the project tools (issue #7).
 /// Home is not project-scoped, so it stays enabled when the tools are not.
 struct ProjectToolRail: View {
-    let projectID: UUID?
+    let isEnabled: Bool
     let activeTool: ProjectTool?
     let isHomeActive: Bool
     let showLabels: Bool
     let onSelectHome: () -> Void
     let onSelect: (ProjectTool) -> Void
 
-    private var isEnabled: Bool { projectID != nil }
     private var width: CGFloat {
         showLabels ? FlotillaLayoutWidth.toolRailLabeledWidth : FlotillaLayoutWidth.toolRailWidth
     }
@@ -128,10 +106,7 @@ struct ProjectToolRail: View {
         action: @escaping () -> Void,
         @ViewBuilder glyph: (Bool) -> Glyph
     ) -> some View {
-        Button {
-            guard isEnabled else { return }
-            action()
-        } label: {
+        Button(action: action) {
             VStack(spacing: 3) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)

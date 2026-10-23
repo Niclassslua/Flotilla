@@ -8,7 +8,7 @@ import DesignSystem
 struct SurfaceReturnBar: View {
     @Environment(\.workspaceNavigator) private var navigator
     let context: ProjectWorkspaceContext
-    let tab: ProjectDetailView.ProjectTab
+    let tool: ProjectTool
 
     var body: some View {
         HStack(spacing: FlotillaSpacing.small) {
@@ -37,7 +37,7 @@ struct SurfaceReturnBar: View {
                 .font(FlotillaTypography.caption)
                 .foregroundStyle(FlotillaColors.textTertiary)
 
-            Text(tab.title)
+            Text(tool.title)
                 .font(FlotillaTypography.caption.weight(.semibold))
                 .foregroundStyle(FlotillaColors.textPrimary)
 
@@ -47,6 +47,6 @@ struct SurfaceReturnBar: View {
         .padding(.vertical, FlotillaSpacing.small)
         .background(FlotillaColors.surface)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(context.project.name), \(tab.title)")
+        .accessibilityLabel("\(context.project.name), \(tool.title)")
     }
 }

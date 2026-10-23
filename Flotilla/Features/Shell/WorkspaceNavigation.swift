@@ -101,13 +101,10 @@ enum WorkspaceCommand: String, CaseIterable, Identifiable {
         case .showTerminal: "terminal"
         case .showFiles: "folder"
         case .showInstructions: "doc.text"
-        case .showChanges: "git" // palette should prefer GitIcon when rendering
+        case .showChanges: "arrow.triangle.branch"
         case .restoreSessions: "arrow.clockwise"
         case .showSettings: "gearshape"
         case .showShortcuts: "keyboard"
         }
     }
-
-    /// Whether the command palette should draw the Git brand mark instead of an SF Symbol.
-    var usesGitLogo: Bool { self == .showChanges }
 }
