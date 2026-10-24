@@ -78,7 +78,12 @@ public final class GRDBSessionRepository: SessionRepository, @unchecked Sendable
     }
 
     private static func openAndMigrate(at path: URL) throws -> DatabaseQueue {
-        let queue = try DatabaseQueue(path: path.path)
+        var configuration = Configuration()
+        // Other app instances/readers must not block commits or race a read-to-write upgrade.
+        configuration.journalMode = .wal
+        configuration.busyMode = .timeout(5)
+        configuration.defaultTransactionKind = .immediate
+        let queue = try DatabaseQueue(path: path.path, configuration: configuration)
         try migrator.migrate(queue)
         return queue
     }

@@ -94,8 +94,10 @@ final class PersistenceKitTests: XCTestCase {
         let repo = try GRDBSessionRepository(path: dbPath)
 
         XCTAssertTrue(repo.recoveredFromCorruption)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: walPath.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: shmPath.path))
+        let backupName = try XCTUnwrap(FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .first { $0.hasPrefix("state.sqlite.corrupt-") && !$0.hasSuffix("-wal") && !$0.hasSuffix("-shm") })
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent(backupName)),
+                       Data("this is not a sqlite database".utf8))
         let (projects, sessions) = try repo.loadAll()
         XCTAssertTrue(projects.isEmpty)
         XCTAssertTrue(sessions.isEmpty)
@@ -146,6 +148,67 @@ final class PersistenceKitTests: XCTestCase {
         XCTAssertEqual(sessions, [session])
 
         try? FileManager.default.removeItem(at: dbPath.deletingLastPathComponent())
+    }
+
+    func testStatusSaveCommitsWhileAnotherConnectionReads() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("state.sqlite")
+        let repo = try GRDBSessionRepository(path: path)
+        var session = Session(title: "Active", goal: "Goal", agent: .codexCLI,
+                              projectID: nil, workingDirectory: directory, status: .working)
+        try repo.save(session)
+        let reader = try DatabaseQueue(path: path.path)
+
+        try reader.read { db in
+            XCTAssertEqual(try String.fetchOne(db, sql: "SELECT status FROM session"), "working")
+            session = SessionStatusMachine().transition(session, to: .waitingForInput)
+            try repo.save(session)
+            // The reader retains its snapshot while the status commit succeeds.
+            XCTAssertEqual(try String.fetchOne(db, sql: "SELECT status FROM session"), "working")
+        }
+        let reopened = try GRDBSessionRepository(path: path)
+        XCTAssertEqual(try reopened.loadAll().sessions.first?.status, .waitingForInput)
+        XCTAssertFalse(reopened.recoveredFromCorruption)
+    }
+
+    func testStatusSaveWaitsForAnotherWriter() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("state.sqlite")
+        let repo = try GRDBSessionRepository(path: path)
+        var session = Session(title: "Active", goal: "Goal", agent: .codexCLI,
+                              projectID: nil, workingDirectory: directory, status: .working)
+        try repo.save(session)
+        let writer = try DatabaseQueue(path: path.path)
+        let locked = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let finished = expectation(description: "Other writer committed")
+        DispatchQueue.global().async {
+            defer { finished.fulfill() }
+            do {
+                try writer.write { db in
+                    try db.execute(sql: "UPDATE session SET title = 'Other writer'")
+                    locked.signal()
+                    guard release.wait(timeout: .now() + 5) == .success else {
+                        XCTFail("Timed out releasing the other writer")
+                        return
+                    }
+                }
+            } catch {
+                XCTFail("Other writer failed: \(error)")
+            }
+        }
+        defer {
+            release.signal()
+            wait(for: [finished], timeout: 5)
+        }
+        XCTAssertEqual(locked.wait(timeout: .now() + 5), .success)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { release.signal() }
+
+        session = SessionStatusMachine().transition(session, to: .waitingForInput)
+        try repo.save(session)
+        XCTAssertEqual(try repo.loadAll().sessions.first?.status, .waitingForInput)
     }
 
     func testHandoffOwnershipColumnsRoundTrip() throws {
