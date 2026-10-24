@@ -24,7 +24,10 @@ TEST_FLAGS ?=
 # with a stable identity so TCC grants (Documents access, Handy approval)
 # survive rebuilds. Without the ignored local signing
 # config, the project keeps its ad-hoc signing for CI and other contributors.
-EPHEMERAL_DEVELOPMENT_TEAM := $(shell awk -F= '/^[[:space:]]*DEVELOPMENT_TEAM[[:space:]]*=/ {gsub(/[[:space:]]/, "", $$2); print $$2; exit}' Config/CompanionSigning.local.xcconfig 2>/dev/null)
+# The config is untracked, so it is read from the main checkout: a worktree
+# `make install` would otherwise ship ad-hoc and silently void those grants.
+MAIN_CHECKOUT := $(shell dirname "$$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" 2>/dev/null)
+EPHEMERAL_DEVELOPMENT_TEAM := $(shell awk -F= '/^[[:space:]]*DEVELOPMENT_TEAM[[:space:]]*=/ {gsub(/[[:space:]]/, "", $$2); print $$2; exit}' "$(MAIN_CHECKOUT)/Config/CompanionSigning.local.xcconfig" 2>/dev/null)
 EPHEMERAL_SIGNING_OVERRIDE ?= $(if $(EPHEMERAL_DEVELOPMENT_TEAM),CODE_SIGN_IDENTITY=Apple\ Development DEVELOPMENT_TEAM=$(EPHEMERAL_DEVELOPMENT_TEAM))
 # Local/CI Release stays -O but uses incremental compilation (not wholemodule)
 # and skips dSYMs, the unused Intel slice, and the compiler index store so warm
