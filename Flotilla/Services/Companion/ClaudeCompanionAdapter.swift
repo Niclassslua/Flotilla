@@ -42,7 +42,12 @@ final class ClaudeCompanionAdapter: CompanionSessionAdapter {
                 endStreaming()
             case "PostToolUse", "PostToolUseFailure", "PermissionDenied":
                 bridge.retractCompleted(sessionID: session.id, toolUseID: object["tool_use_id"] as? String)
-            case "UserPromptSubmit", "Stop":
+            case "UserPromptSubmit":
+                // The host pins failure notes below the native transcript;
+                // a new turn means the failure is over.
+                transcript.events.removeAll()
+                endStreaming()
+            case "Stop":
                 endStreaming()
             default: break
             }

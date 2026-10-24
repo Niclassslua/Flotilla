@@ -94,6 +94,17 @@ final class ClaudeCompanionAdapterTests: XCTestCase {
         XCTAssertEqual(message, "Claude stopped (rate limit): 429 Too Many Requests")
     }
 
+    func testTheNextPromptClearsTheFailureNote() async throws {
+        let adapter = makeAdapter()
+        try append([#"{"hook_event_name":"StopFailure","error":"server_error","error_details":"529 Overloaded"}"#], to: eventFile)
+        try await adapter.refresh()
+        XCTAssertEqual(adapter.transcript.events.count, 1)
+
+        try append([#"{"hook_event_name":"UserPromptSubmit","prompt":"continue"}"#], to: eventFile)
+        try await adapter.refresh()
+        XCTAssertTrue(adapter.transcript.events.isEmpty, "a resumed session no longer shows the old failure")
+    }
+
     func testFailureMessageFallsBackWhenFieldsAreMissing() {
         XCTAssertEqual(ClaudeCompanionAdapter.failureMessage(["error": "overloaded"]), "Claude stopped (overloaded).")
         XCTAssertEqual(ClaudeCompanionAdapter.failureMessage(["last_assistant_message": "API Error"]), "Claude stopped: API Error")

@@ -346,6 +346,9 @@ final class CodexCompanionAdapter: CompanionSessionAdapter {
             // Whoever starts the next turn — this peer or the TUI — has
             // answered or passed over an async question.
             clearTurnInteractions()
+            // The host pins failure notes below the native transcript;
+            // a new turn means the failure is over.
+            transcript.events.removeAll { if case .turnFailed = $0.content { true } else { false } }
         case "turn/completed":
             if let completed = (params["turn"] as? [String: Any])?["id"] as? String,
                let turnID, completed != turnID { return }
