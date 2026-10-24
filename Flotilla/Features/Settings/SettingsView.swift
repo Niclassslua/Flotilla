@@ -426,7 +426,7 @@ private struct SessionSettingsPane: View {
                     get: { AgentKind(rawValue: viewModel.settings.sessionDefaults.defaultAgentRawValue) ?? .claudeCode },
                     set: { viewModel.settings.sessionDefaults.defaultAgentRawValue = $0.rawValue }
                 )) {
-                    ForEach(AgentKind.allCases) { kind in
+                    ForEach(viewModel.settings.sessionDefaults.enabledAgents) { kind in
                         Text(kind.displayName).tag(kind)
                     }
                 }
@@ -651,7 +651,25 @@ private struct AgentSettingsPane: View {
 
     var body: some View {
         Form {
-            ForEach(AgentKind.allCases) { agent in
+            Section {
+                ForEach(AgentKind.allCases) { agent in
+                    Toggle(isOn: enabledBinding(for: agent)) {
+                        Label {
+                            Text(agent.displayName)
+                        } icon: {
+                            ProviderLogo(agent: agent).frame(width: 16, height: 16)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .accessibilityIdentifier("Settings.AgentEnabled.\(agent.rawValue)")
+                }
+            } header: {
+                SettingsSectionHeader("Your Agents", systemImage: "person.3")
+            } footer: {
+                Text("Flotilla only offers the agents you turn on — in the launcher, for handoffs, and for reviews. At least one stays on.")
+            }
+
+            ForEach(viewModel.settings.sessionDefaults.enabledAgents) { agent in
                 Section {
                     LabeledContent("Executable") {
                         HStack(spacing: 8) {
@@ -714,6 +732,17 @@ private struct AgentSettingsPane: View {
             }
         }
         .flotillaSettingsFormLayout()
+    }
+
+    private func enabledBinding(for agent: AgentKind) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.settings.sessionDefaults.enabledAgents.contains(agent) },
+            set: { isOn in
+                var agents = Set(viewModel.settings.sessionDefaults.enabledAgents)
+                if isOn { agents.insert(agent) } else { agents.remove(agent) }
+                viewModel.settings.sessionDefaults.setEnabledAgents(agents)
+            }
+        )
     }
 
     private func pathBinding(for agent: AgentKind) -> Binding<String> {

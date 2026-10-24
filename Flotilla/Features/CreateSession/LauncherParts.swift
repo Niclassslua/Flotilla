@@ -191,7 +191,7 @@ struct LauncherAgentSegments: View {
 
     var body: some View {
         HStack(spacing: FlotillaSpacing.xSmall) {
-            ForEach(AgentKind.allCases) { kind in
+            ForEach(draft.availableAgents) { kind in
                 let isSelected = kind == draft.agent
                 Button {
                     draft.selectAgent(kind)

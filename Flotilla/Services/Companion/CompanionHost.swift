@@ -855,7 +855,7 @@ final class CompanionHost {
             macName: macName,
             sessions: store.sessions,
             projects: store.projects,
-            catalog: cachedCatalog,
+            catalog: .init(entries: cachedCatalog.entries.filter { store.enabledAgents.contains($0.key) }),
             // The 1s publish tick picks up accent changes within a second.
             accentColor: FlotillaAccent.currentID,
             context: { session in

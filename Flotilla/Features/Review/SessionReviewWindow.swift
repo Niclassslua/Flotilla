@@ -91,6 +91,7 @@ struct SessionReviewWindow: View {
                 candidates: sendCandidates(for: session),
                 prompt: prompt(for: session, viewModel: viewModel),
                 commentCount: viewModel.unsentComments.count,
+                availableAgents: store.enabledAgents,
                 onSend: { target in
                     send(to: target, session: session, viewModel: viewModel)
                 },

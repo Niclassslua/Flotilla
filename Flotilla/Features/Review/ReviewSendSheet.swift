@@ -12,6 +12,8 @@ struct ReviewSendSheet: View {
     let candidates: [Session]
     let prompt: String
     let commentCount: Int
+    /// The agents the user works with; the reviewed session's own is always offered.
+    let availableAgents: [AgentKind]
     let onSend: (Session) -> Void
     let onSendToNewAgent: (AgentKind) -> Void
     let onCancel: () -> Void
@@ -76,11 +78,11 @@ struct ReviewSendSheet: View {
         .frame(width: 320)
     }
 
-    /// The reviewed session's own agent first, then the rest in catalogue
-    /// order — same-agent is the common choice, but any agent is allowed.
+    /// The reviewed session's own agent first, then the user's other agents in
+    /// catalogue order — same-agent is the common choice.
     private var orderedAgents: [AgentKind] {
         let mine = reviewedSession.agent
-        return [mine] + AgentKind.allCases.filter { $0 != mine }
+        return [mine] + availableAgents.filter { $0 != mine }
     }
 
     private func newAgentRow(_ kind: AgentKind) -> some View {

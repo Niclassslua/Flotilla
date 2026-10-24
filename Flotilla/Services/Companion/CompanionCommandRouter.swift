@@ -59,6 +59,9 @@ final class CompanionCommandRouter {
             return .answer(bridge.answer(sessionID: sessionID, interactionID: interactionID, with: answer))
 
         case .createSession(let request):
+            guard store.enabledAgents.contains(request.agent) else {
+                return .failure(message: "Enable this agent in Flotilla Settings first.")
+            }
             let project = request.projectID.flatMap { id in store.projects.first { $0.id == id } }
             if request.projectID != nil, project == nil {
                 return .failure(message: "That project no longer exists on the Mac.")

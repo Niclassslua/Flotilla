@@ -72,6 +72,15 @@ public enum AXID: String, Sendable {
     case commandPaletteSearch = "CommandPalette.Search"
 
     // MARK: - Create Session
+    // MARK: - Onboarding
+    case onboardingSheet = "Onboarding.Sheet"
+    case onboardingSkipButton = "Onboarding.SkipButton"
+    case onboardingPrimaryButton = "Onboarding.PrimaryButton"
+    case onboardingBetaBadge = "Onboarding.BetaBadge"
+    case onboardingAgentToggle = "Onboarding.Agent."
+    case onboardingNotificationsToggle = "Onboarding.NotificationsToggle"
+    case onboardingChooseProjectButton = "Onboarding.ChooseProjectButton"
+
     case createSessionGoalField = "CreateSession.GoalField"
     case createSessionProjectPicker = "CreateSession.ProjectPicker"
     case createSessionEffortPicker = "CreateSession.EffortPicker"

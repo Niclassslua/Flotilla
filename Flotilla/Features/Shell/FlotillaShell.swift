@@ -64,6 +64,9 @@ struct FlotillaShell: View {
         .task {
             await restoreWorkspaceSelection()
             applyTerminalPreferences()
+            if navigator.presentedSheet == nil, OnboardingSheet.shouldPresent(settings: settingsViewModel.settings) {
+                navigator.presentedSheet = .onboarding
+            }
         }
         .modifier(ShellLifecycleModifier(
             navigator: navigator,
@@ -283,7 +286,7 @@ struct FlotillaShell: View {
     private func isOverlayStyleSheet(_ sheet: WorkspaceSheet) -> Bool {
         switch sheet {
         case .createSession, .commandPalette: true
-        case .shortcuts, .restore, .deleteSession: false
+        case .shortcuts, .restore, .deleteSession, .onboarding: false
         }
     }
 
@@ -358,6 +361,9 @@ struct FlotillaShell: View {
                 if let newValue {
                     navigator.presentedSheet = newValue
                 } else if let current = navigator.presentedSheet, !isOverlayStyleSheet(current) {
+                    if current == .onboarding {
+                        settingsViewModel.settings.onboardingVersion = OnboardingSheet.currentVersion
+                    }
                     navigator.presentedSheet = nil
                 }
             }
@@ -483,6 +489,13 @@ struct FlotillaShell: View {
             } else {
                 Color.clear.onAppear { navigator.presentedSheet = nil }
             }
+        case .onboarding:
+            OnboardingPresenter(
+                store: store,
+                settingsViewModel: settingsViewModel,
+                startupCheck: startupCheck,
+                navigator: navigator
+            )
         }
     }
 

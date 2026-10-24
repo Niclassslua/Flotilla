@@ -20,13 +20,14 @@ final class StartupCheckViewModel {
     private(set) var foundToolPaths: [String: URL] = [:]
     var isDismissed = false
 
-    var warningItems: [String] {
-        missingRequiredTools
+    /// Warns about a missing agent only if the user works with it. Before they
+    /// choose (`chosenAgents == nil`), opencode, antigravity and cursor count
+    /// as optional bonus agents — detected, but never nagged about.
+    func warningItems(chosenAgents: [AgentKind]?) -> [String] {
+        let watched = chosenAgents ?? [.claudeCode, .codexCLI]
+        return missingRequiredTools
             + missingOptionalTools
-            // opencode and antigravity are optional bonus agents — their absence is detected
-            // (visible in the check summary) but not warned about, so a
-            // missing opencode/antigravity never blocks or nags.
-            + missingAgents.filter { $0 != .openCode && $0 != .antigravity && $0 != .cursorAgent }.map(\.displayName)
+            + missingAgents.filter { watched.contains($0) }.map(\.displayName)
     }
 
     init(

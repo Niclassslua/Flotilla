@@ -75,6 +75,7 @@ struct TilesDesign: View {
         }
         .launcherSurface()
         .background { LauncherHiddenShortcuts(actions: actions) }
+        .onChange(of: draft.availableAgents) { draft.syncEnabledAgent() }
         .task(id: draft.agent) { await coordinator.refresh(for: draft.agent) }
         // Fetched up front, so the issue picker opens with its list ready.
         .task(id: draft.issueRepository) {

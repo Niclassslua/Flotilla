@@ -496,6 +496,7 @@ enum WorkspaceSheet: Identifiable, Equatable, Codable, Sendable {
     case shortcuts
     case restore
     case deleteSession(UUID)
+    case onboarding
 
     static var createSession: WorkspaceSheet { .createSession() }
 
@@ -507,6 +508,7 @@ enum WorkspaceSheet: Identifiable, Equatable, Codable, Sendable {
         case .shortcuts: "shortcuts"
         case .restore: "restore"
         case .deleteSession(let id): "delete-session-\(id)"
+        case .onboarding: "onboarding"
         }
     }
 }

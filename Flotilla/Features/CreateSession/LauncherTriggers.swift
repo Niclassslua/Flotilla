@@ -46,8 +46,8 @@ final class LauncherTriggers {
     func agentChoices(_ draft: SessionDraft) -> [AgentKind] {
         guard mode == .agent else { return [] }
         let query = String(draft.goal.dropFirst()).trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return AgentKind.allCases }
-        return AgentKind.allCases.filter { $0.displayName.localizedCaseInsensitiveContains(query) }
+        guard !query.isEmpty else { return draft.availableAgents }
+        return draft.availableAgents.filter { $0.displayName.localizedCaseInsensitiveContains(query) }
     }
 
     /// Includes the trailing "Choose folder…" row in project mode — it's a

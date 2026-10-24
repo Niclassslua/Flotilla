@@ -77,7 +77,7 @@ struct CreateSessionSheet: View {
                     }
                 }
 
-                AgentModelEffortControls(agent: $agent, model: $model, effort: $effort, catalog: catalog)
+                AgentModelEffortControls(agent: $agent, model: $model, effort: $effort, catalog: catalog, agents: AgentKind.allCases.filter { catalog.entries[$0] != nil })
             }
             .tint(FlotillaColors.accent)
             .navigationTitle("New Session")
@@ -109,6 +109,7 @@ struct CreateSessionSheet: View {
                 applyRememberedChoice(for: projectID)
             }
             .onChange(of: projectID) { _, newValue in applyRememberedChoice(for: newValue) }
+            .onChange(of: catalog) { applyRememberedChoice(for: projectID) }
             .onChange(of: goal) { _, newValue in
                 if SessionMode.planCommandGoal(in: newValue) != nil,
                    newValue.trimmingCharacters(in: .whitespacesAndNewlines) != "/plan" {
@@ -120,11 +121,15 @@ struct CreateSessionSheet: View {
     }
 
     private func applyRememberedChoice(for project: UUID?) {
-        if let choice = store.rememberedChoice(for: project) {
+        let catalog = store.catalog(on: macID)
+        if let choice = store.rememberedChoice(for: project), catalog.entries[choice.agent] != nil {
             agent = choice.agent
             model = choice.model
             effort = choice.effort
-        } else if model.isEmpty {
+        } else if model.isEmpty || catalog.entries[agent] == nil {
+            if catalog.entries[agent] == nil {
+                agent = AgentKind.allCases.first { catalog.entries[$0] != nil } ?? .claudeCode
+            }
             let entry = store.catalog(on: macID).entry(for: agent)
             model = entry.defaultModel
             effort = entry.defaultEffort

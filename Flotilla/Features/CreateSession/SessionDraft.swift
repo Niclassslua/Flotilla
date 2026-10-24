@@ -32,6 +32,8 @@ final class SessionDraft {
     /// back instead of leaving the issue text behind.
     private var goalBeforeIssue: String?
     var agent: AgentKind
+    /// The agents offered for picking: the ones the user works with.
+    var availableAgents: [AgentKind] { store.enabledAgents }
     var model = ""
     var effort: AgentEffort = .medium
     var initialMode: SessionMode = .act
@@ -64,7 +66,7 @@ final class SessionDraft {
         self.requiresGoal = requiresGoal
         self.goal = initialGoal
         self.projectChoice = initialProject.map { ProjectChoice.known($0) } ?? .general
-        self.agent = defaultAgent
+        self.agent = store.enabledAgents.contains(defaultAgent) ? defaultAgent : store.enabledAgents[0]
         self.createWorktree = createWorktreeByDefault
         self.fetchBeforeCreatingWorktree = fetchBeforeCreatingWorktree
         self.openCodeSubscription = openCodeSubscription
@@ -203,6 +205,10 @@ final class SessionDraft {
     /// A model chosen for one agent is almost never valid for another, so
     /// switching agents resets it rather than carrying a stale value forward.
     /// Effort is clamped by `EffortLevelPicker` against the new agent's catalog.
+    func syncEnabledAgent() {
+        if !availableAgents.contains(agent) { selectAgent(availableAgents[0]) }
+    }
+
     func selectAgent(_ newAgent: AgentKind) {
         guard newAgent != agent else { return }
         agent = newAgent
@@ -224,6 +230,7 @@ final class SessionDraft {
     /// case `store.lastCreationError` carries the reason and the window stays
     /// open so the user can correct and retry.
     func launch(opensSession: Bool = true) async -> UUID? {
+        syncEnabledAgent()
         isCreating = true
         defer { isCreating = false }
 

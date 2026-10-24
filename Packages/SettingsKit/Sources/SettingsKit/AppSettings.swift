@@ -221,15 +221,21 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
     /// `SessionNamingSource`'s doc comment for why this used to be two
     /// settings and isn't anymore.
     public var namingSource: SessionNamingSource
+    /// The agents the user works with, as `AgentKind` raw values. `nil` means
+    /// every agent — the state of anyone who never chose, including everyone
+    /// whose settings predate the choice.
+    public var enabledAgentRawValues: [String]?
 
     public init(
         createWorktreeByDefault: Bool = true,
         defaultAgentRawValue: String = "claudeCode",
-        namingSource: SessionNamingSource = .appleIntelligence
+        namingSource: SessionNamingSource = .appleIntelligence,
+        enabledAgentRawValues: [String]? = nil
     ) {
         self.createWorktreeByDefault = createWorktreeByDefault
         self.defaultAgentRawValue = defaultAgentRawValue
         self.namingSource = namingSource
+        self.enabledAgentRawValues = enabledAgentRawValues
     }
 
     /// Not `private`: `AppSettings.init(from:)` reads `.namingSource` and
@@ -241,6 +247,7 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
         case namingSource
         case titleNamingSource
         case agentManagedTitleEnabled
+        case enabledAgentRawValues
     }
 
     // Hand-written rather than synthesized: `SettingsStoring` decodes the
@@ -279,6 +286,7 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
         } else {
             defaultAgentRawValue = "claudeCode"
         }
+        enabledAgentRawValues = try container.decodeIfPresent([String].self, forKey: .enabledAgentRawValues)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -286,6 +294,7 @@ public struct SessionDefaults: Codable, Equatable, Sendable {
         try container.encode(createWorktreeByDefault, forKey: .createWorktreeByDefault)
         try container.encode(defaultAgentRawValue, forKey: .defaultAgentRawValue)
         try container.encode(namingSource, forKey: .namingSource)
+        try container.encodeIfPresent(enabledAgentRawValues, forKey: .enabledAgentRawValues)
     }
 }
 
@@ -679,6 +688,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var terminal: TerminalPreferences
     public var notifications: NotificationPreferences
     public var git: GitPreferences
+    /// The onboarding version the user has been through; 0 means never.
+    /// Compared against the app's current onboarding version, so a redesign
+    /// worth seeing again only has to bump that constant.
+    public var onboardingVersion: Int
 
     public init(
         agentOverrides: AgentOverrides = AgentOverrides(),
@@ -691,7 +704,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         sessionDefaults: SessionDefaults = SessionDefaults(),
         terminal: TerminalPreferences = TerminalPreferences(),
         notifications: NotificationPreferences = NotificationPreferences(),
-        git: GitPreferences = GitPreferences()
+        git: GitPreferences = GitPreferences(),
+        onboardingVersion: Int = 0
     ) {
         self.agentOverrides = agentOverrides
         self.openCodeSubscription = openCodeSubscription
@@ -704,6 +718,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.terminal = terminal
         self.notifications = notifications
         self.git = git
+        self.onboardingVersion = onboardingVersion
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -720,6 +735,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case terminal
         case notifications
         case git
+        case onboardingVersion
     }
 
     public init(from decoder: any Decoder) throws {
@@ -755,6 +771,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         terminal = try container.decodeIfPresent(TerminalPreferences.self, forKey: .terminal) ?? TerminalPreferences()
         notifications = try container.decodeIfPresent(NotificationPreferences.self, forKey: .notifications) ?? NotificationPreferences()
         git = try container.decodeIfPresent(GitPreferences.self, forKey: .git) ?? GitPreferences()
+        onboardingVersion = try container.decodeIfPresent(Int.self, forKey: .onboardingVersion) ?? 0
 
         // Migrate a settings file from before title and worktree naming were
         // merged into `sessionDefaults.namingSource`. `SessionDefaults` above
@@ -795,5 +812,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try container.encode(terminal, forKey: .terminal)
         try container.encode(notifications, forKey: .notifications)
         try container.encode(git, forKey: .git)
+        try container.encode(onboardingVersion, forKey: .onboardingVersion)
     }
 }

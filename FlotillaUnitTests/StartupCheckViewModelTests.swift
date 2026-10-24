@@ -18,7 +18,7 @@ final class StartupCheckViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.missingAgents, [.openCode])
-        XCTAssertTrue(viewModel.warningItems.isEmpty)
+        XCTAssertTrue(viewModel.warningItems(chosenAgents: nil).isEmpty)
     }
 
     func testOtherMissingAgentStillAppearsInWarningItems() {
@@ -29,6 +29,14 @@ final class StartupCheckViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.missingAgents, [.codexCLI])
-        XCTAssertEqual(viewModel.warningItems, [AgentKind.codexCLI.displayName])
+        XCTAssertEqual(viewModel.warningItems(chosenAgents: nil), [AgentKind.codexCLI.displayName])
     }
+    func testWarningsOnlyExpectAgentsTheUserSelected() {
+        let viewModel = StartupCheckViewModel(locator: SelectiveExecutableLocator(
+            availableNames: ["git", "tmux", "gh", "claude"]
+        ))
+        XCTAssertTrue(viewModel.warningItems(chosenAgents: [.claudeCode]).isEmpty)
+        XCTAssertEqual(viewModel.warningItems(chosenAgents: [.openCode]), [AgentKind.openCode.displayName])
+    }
+
 }

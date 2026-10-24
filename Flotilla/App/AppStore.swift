@@ -1003,8 +1003,15 @@ final class AppStore {
     /// Empty when no codec can write the destination — which is how Antigravity
     /// stays out of the picker without anyone hardcoding the rule — and while a
     /// move is already in flight.
+    /// The agents the user works with; see `SessionDefaults.enabledAgents`.
+    var enabledAgents: [AgentKind] { settingsProvider().sessionDefaults.enabledAgents }
+
+    /// Only agents the user works with — a handoff to one they never set up
+    /// would fail to launch.
     func handoffTargets(for session: Session) -> [AgentKind] {
-        handoffService.canHandOff(session) ? handoffService.targets(for: session) : []
+        guard handoffService.canHandOff(session) else { return [] }
+        let enabled = enabledAgents
+        return handoffService.targets(for: session).filter { enabled.contains($0) }
     }
 
     /// Moves a session to another agent, carrying its conversation across.

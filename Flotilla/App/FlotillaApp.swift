@@ -70,7 +70,10 @@ struct FlotillaApp: App {
         if environment.isUITesting {
             // A unique suite prevents one UI-test launch from leaking layout,
             // paths, or appearance into another launch or the user's app.
-            let defaults = UserDefaults(suiteName: "FlotillaUITests-\(ProcessInfo.processInfo.processIdentifier)")!
+            let testSuite = ProcessInfo.processInfo.environment["UI_TESTING_SETTINGS_SUITE"]
+                .flatMap { $0.hasPrefix("FlotillaUITests-") ? $0 : nil }
+                ?? "FlotillaUITests-\(ProcessInfo.processInfo.processIdentifier)"
+            let defaults = UserDefaults(suiteName: testSuite)!
             settingsStore = UserDefaultsSettingsStore(
                 defaults: defaults,
                 defaultWorktreeBaseDirectory: environment.worktreeBaseDirectory.path
@@ -108,6 +111,10 @@ struct FlotillaApp: App {
             settingsProvider: { settingsViewModel.settings },
             nameGenerator: environment.isUITesting ? nil : AppleIntelligenceSessionNameGenerator()
         )
+        OnboardingSheet.markExistingUser(
+            settings: &settingsViewModel.settings,
+            hasWorkspace: environment.isUITesting ? false : (!appStore.projects.isEmpty || !appStore.sessions.isEmpty)
+        )
         appStore.lastOperationError = environment.startupWarning
         settingsViewModel.deleteLocalAttributionRecords = { [appStore] in
             appStore.commitAttribution.deleteLocalRecords()
@@ -129,7 +136,7 @@ struct FlotillaApp: App {
                 terminalManager: terminalManager,
                 tmuxExecutable: locator.locate("tmux")
             ),
-            requestsAuthorization: !environment.isUITesting,
+            requestsAuthorization: false,
             isConfiguredToNotify: {
                 settingsViewModel.settings.notifications.isConfiguredToNotify
             },
@@ -247,6 +254,7 @@ struct FlotillaApp: App {
                     ? BoardDemoScreenReader()
                     : hookCoordinator.screenReader
             )
+            .environment(companionHost)
             .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
             .environment(\.editorFontSize, settingsViewModel.settings.terminal.editorFontSize)
             .onChange(of: settingsViewModel.settings.notifications.delivery) { _, delivery in
@@ -265,6 +273,9 @@ struct FlotillaApp: App {
                 .keyboardShortcut("n", modifiers: .command)
             }
             WorkspaceMenuCommands(store: store, navigator: navigator)
+            CommandGroup(after: .help) {
+                Button("Welcome to Flotilla (Beta)…") { navigator.presentedSheet = .onboarding }
+            }
         }
         .defaultSize(width: 1_280, height: 820)
         .windowResizability(.contentMinSize)

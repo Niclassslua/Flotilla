@@ -571,7 +571,11 @@ struct DetailColumn: View {
         VStack(spacing: 0) {
             RelaunchToUpdateBanner()
             StartupWarningBanner(
-                missingTools: startupCheck.warningItems,
+                missingTools: startupCheck.warningItems(
+                    chosenAgents: settingsViewModel.settings.sessionDefaults.hasChosenAgents
+                        ? settingsViewModel.settings.sessionDefaults.enabledAgents
+                        : nil
+                ),
                 isDismissed: $startupCheck.isDismissed
             )
             if let warning = store.lastOperationError {
