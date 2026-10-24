@@ -74,6 +74,9 @@ targets:
       path: Flotilla/Info.plist
       properties:
         NSScreenCaptureUsageDescription: Flotilla allows coding agents to inspect screen and window previews.
+        NSDocumentsFolderUsageDescription: Flotilla runs coding agents in your project folders, including projects you keep in Documents.
+        NSDesktopFolderUsageDescription: Flotilla runs coding agents in your project folders, including projects you keep on the Desktop.
+        NSDownloadsFolderUsageDescription: Flotilla runs coding agents in your project folders, including projects you keep in Downloads.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla
@@ -119,6 +122,9 @@ targets:
       path: Flotilla/Info.plist
       properties:
         NSScreenCaptureUsageDescription: Flotilla allows coding agents to inspect screen and window previews.
+        NSDocumentsFolderUsageDescription: Flotilla runs coding agents in your project folders, including projects you keep in Documents.
+        NSDesktopFolderUsageDescription: Flotilla runs coding agents in your project folders, including projects you keep on the Desktop.
+        NSDownloadsFolderUsageDescription: Flotilla runs coding agents in your project folders, including projects you keep in Downloads.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla.ephemeral
