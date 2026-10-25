@@ -572,9 +572,8 @@ The certificate must belong to team `UWAHVC4JTL`, which the Makefile's
 `ARCHIVE_SIGNING_OVERRIDE` names.
 
 `Flotilla.icon` is an Icon Composer bundle using features (`specular-location`,
-`refractivity`) that Xcode 26.6's `actool` crashes on. CI used to swap in
-`FlotillaFallback.appiconset` for that; on the `xcode-27` image it compiles
-the real icon, so both workflows build it as-is.
+`refractivity`) that Xcode 26.6's `actool` crashes on, so CI must stay on the
+`xcode-27` image.
 
 ## Design System
 

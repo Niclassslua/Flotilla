@@ -63,13 +63,8 @@ targets:
     platform: macOS
     sources:
       - path: Flotilla
-      # `optional: true` lets CI move this directory out of the way before
-      # `xcodegen generate` runs — actool on GitHub's Xcode 26.6 runners
-      # crashes compiling this Icon Composer bundle. See AGENTS.md's CI/CD
-      # section and .github/workflows/build.yml's "Use fallback app icon" step.
       - path: Flotilla.icon
         buildPhase: resources
-        optional: true
     info:
       path: Flotilla/Info.plist
       properties:
@@ -162,7 +157,6 @@ targets:
       - path: FlotillaCompanion
       - path: Flotilla.icon
         buildPhase: resources
-        optional: true
     info:
       path: FlotillaCompanion/Info.plist
       properties:
