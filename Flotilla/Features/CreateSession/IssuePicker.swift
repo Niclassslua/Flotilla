@@ -260,7 +260,7 @@ struct IssuePickerView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 if !issue.labels.isEmpty {
-                    HStack(spacing: 5) {
+                    TagFlowLayout(spacing: 5) {
                         ForEach(issue.labels, id: \.self) { label in
                             IssueLabelTag(name: label, hex: issue.labelColors[label], size: .large)
                         }
@@ -274,6 +274,16 @@ struct IssuePickerView: View {
                     }
                     .font(FlotillaTypography.caption)
                     .foregroundStyle(FlotillaColors.textTertiary)
+                }
+                ScrollView {
+                    let body = issue.body.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if body.isEmpty {
+                        Text("No description provided.")
+                            .font(FlotillaTypography.callout)
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    } else {
+                        MarkdownView(markdown: body)
+                    }
                 }
                 Text("The issue’s title and body become the session goal, and the branch is named after it.")
                     .font(FlotillaTypography.caption)
@@ -356,6 +366,49 @@ struct IssuePickerView: View {
         let next = (highlighted ?? (delta > 0 ? -1 : issues.count)) + delta
         highlighted = min(max(next, 0), issues.count - 1)
         return .handled
+    }
+}
+
+/// Wraps whole tags onto new rows. Tags are measured at their ideal (single-line)
+/// size, so a narrow column moves a tag down a row instead of breaking its text.
+struct TagFlowLayout: Layout {
+    var spacing: CGFloat = 5
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var width: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            width = max(width, x - spacing)
+        }
+        return CGSize(width: width, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }
 
