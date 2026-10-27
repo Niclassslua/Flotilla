@@ -285,10 +285,6 @@ struct IssuePickerView: View {
                         MarkdownView(markdown: body)
                     }
                 }
-                Text("The issue’s title and body become the session goal, and the branch is named after it.")
-                    .font(FlotillaTypography.caption)
-                    .foregroundStyle(FlotillaColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 HStack {
                     Button("Open on GitHub", systemImage: "arrow.up.right") { openURL(issue.url) }
