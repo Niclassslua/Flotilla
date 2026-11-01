@@ -133,7 +133,14 @@ archive: xcodegen
 # running: quitting it would end the very session running this target and
 # every other one. The bundle is swapped by rename instead, so the running
 # process keeps its open files, and the app offers a relaunch on its own.
+#
+# The replaced bundle must NOT be deleted while that process still runs:
+# tccd resolves the requesting app via its executable's path, and once the
+# file is unlinked it fails (`proc_pidpath_audittoken() ... No such file`)
+# and denies Documents/Desktop/Downloads until relaunch. Old bundles are
+# parked in REPLACED_APPS and pruned once nothing runs from them.
 INSTALLED_APP := /Applications/Flotilla.app
+REPLACED_APPS := $(HOME)/Library/Caches/Flotilla/replaced-builds
 install: build-release
 	@if [ -n "$$FLOTILLA_HOST_APP" ]; then \
 		echo "Inside a Flotilla session: installing without quitting Flotilla; it will offer to relaunch."; \
@@ -141,10 +148,14 @@ install: build-release
 		pgrep -x Flotilla >/dev/null && osascript -e 'tell application id "com.niclassslua.flotilla" to quit' || true; \
 	fi
 	rm -rf "$(INSTALLED_APP).new" "$(INSTALLED_APP).old"
+	mkdir -p "$(REPLACED_APPS)"
+	for old in "$(REPLACED_APPS)"/*.app; do \
+		[ -e "$$old" ] || continue; \
+		lsof -t "$$old/Contents/MacOS/Flotilla" >/dev/null 2>&1 || rm -rf "$$old"; \
+	done
 	ditto "$(DERIVED_DATA)/Build/Products/Release/Flotilla.app" "$(INSTALLED_APP).new"
-	if [ -e "$(INSTALLED_APP)" ]; then mv "$(INSTALLED_APP)" "$(INSTALLED_APP).old"; fi
+	if [ -e "$(INSTALLED_APP)" ]; then mv "$(INSTALLED_APP)" "$(REPLACED_APPS)/Flotilla-$$(date +%Y%m%d-%H%M%S).app"; fi
 	mv "$(INSTALLED_APP).new" "$(INSTALLED_APP)"
-	rm -rf "$(INSTALLED_APP).old"
 
 run: build
 	open "$(DERIVED_DATA)/Build/Products/Debug/Flotilla.app"
