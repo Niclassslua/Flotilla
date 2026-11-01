@@ -30,7 +30,12 @@ struct LedgerDesign: View {
                     .frame(minWidth: FlotillaLayoutWidth.inspectorMin, idealWidth: 620, maxHeight: .infinity)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // An `HSplitView` reports its panes' current widths as its minimum, and
+        // the workspace `NavigationSplitView` treats that as the detail floor:
+        // widening the sidebar then snaps it to its max and slides the whole
+        // split view off the window's leading edge. The panes still hold their
+        // own minimums inside the split, so zero here is safe.
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         // Opening onto an empty pane beside truncated rows told the user
         // nothing; the first row is a better default than no row.

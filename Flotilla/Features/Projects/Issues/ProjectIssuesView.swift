@@ -44,6 +44,9 @@ struct ProjectIssuesView: View {
                             .frame(minWidth: FlotillaLayoutWidth.inspectorMin, idealWidth: 600, maxHeight: .infinity)
                     }
                 }
+                // `minWidth: 0` — see `LedgerDesign`: an `HSplitView` otherwise drags the
+                // workspace sidebar off the window's leading edge.
+                .frame(minWidth: 0, maxWidth: .infinity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

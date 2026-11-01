@@ -46,7 +46,9 @@ struct FileBrowserView: View {
                 .frame(minWidth: 400, maxWidth: .infinity)
                 .frame(maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // `minWidth: 0` — see `LedgerDesign`: an `HSplitView` otherwise drags the
+        // workspace sidebar off the window's leading edge.
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
         .task(id: rootURL) {
             await viewModel.loadIfNeeded()
