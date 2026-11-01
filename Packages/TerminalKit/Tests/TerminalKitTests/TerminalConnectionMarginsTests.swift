@@ -79,6 +79,24 @@ final class TerminalConnectionMarginsTests: XCTestCase {
         XCTAssertTrue(process.sentInput.isEmpty)
     }
 
+    func testWideningKeepsLiveMarginsFullWidth() {
+        // tmux enables DECLRMM for the whole attach and never re-sends margins
+        // it believes are already full width. Growing must not leave the right
+        // margin at the old width (only the left band would wrap and scroll).
+        let controller = TerminalController(
+            sessionID: UUID(), process: MockPTYProcess(), accessibilityIdentifier: "GrowMargins"
+        )
+        // Non-authoritative renderer: every view must be fixed, not just the live one.
+        let view = controller.terminalView(for: .grid)
+        let terminal = view.getTerminal()
+        terminal.resize(cols: 90, rows: 30)
+        view.feed(text: "\u{1B}[?69h")
+        terminal.resize(cols: 140, rows: 30)
+        controller.sizeChanged(source: view, newCols: 140, newRows: 30)
+        view.feed(text: "\u{1B}[2J\u{1B}[1;1H" + String(repeating: "X", count: 139))
+        XCTAssertEqual(terminal.getCharacter(col: 138, row: 0), "X")
+    }
+
     private func assertFullWidthPaint(
         _ controller: TerminalController, presentation: TerminalPresentation,
         file: StaticString = #filePath, line: UInt = #line

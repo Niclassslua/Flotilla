@@ -745,6 +745,16 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     }
 
     public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+        // SwiftTerm clamps the right margin when the terminal narrows but never
+        // widens it. tmux keeps DECLRMM on, so after growing, text wraps at the
+        // old width and only that column band scrolls — the rest of the screen
+        // drifts out of line. tmux forgets its margin state on resize and
+        // re-sends margins before relying on them, so full width is correct.
+        // Every renderer, authoritative or not, needs this.
+        let buffer = source.getTerminal().buffer
+        buffer.marginLeft = 0
+        buffer.marginRight = newCols - 1
+
         // Only the renderer the user is actually looking at may resize the
         // agent — see `authoritativePresentation`.
         guard let presentation = terminalViews.first(where: { $0.value === source })?.key,
