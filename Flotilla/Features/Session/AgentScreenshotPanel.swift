@@ -1,21 +1,76 @@
 import AppKit
 import SwiftUI
+import ImageIO
 import UniformTypeIdentifiers
 import DesignSystem
 
-/// A temporary inspector panel for screenshots the agent just sent. It only
-/// exists while something is pending — closing it hands the inspector back to
-/// whatever it showed before.
+/// A temporary inspector panel for screenshots the agent sent. It opens on its
+/// own when a new one arrives; closing it hands the inspector back to whatever
+/// it showed before.
 struct AgentScreenshotPanel: View {
     let screenshots: [AgentScreenshot]
     let onClose: () -> Void
 
-    /// Index into `screenshots`; `nil` follows the newest as more arrive.
-    @State private var pinnedIndex: Int?
-    @State private var isViewerPresented = false
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        AgentScreenshotBrowser(
+            screenshots: screenshots,
+            usesKeyboardShortcuts: false,
+            onOpenInWindow: { openWindow(id: AgentScreenshotWindow.sceneID) },
+            onClose: onClose
+        )
+        .flotillaInspectorSurface(ignoresSafeAreaEdges: .top)
+        .onExitCommand(perform: onClose)
+        .accessibilityIdentifier(AXID.agentScreenshotPanel.rawValue)
+    }
+}
+
+/// A standalone, non-modal viewer that follows the focused session's screenshots.
+struct AgentScreenshotWindow: View {
+    static let sceneID = "agent-screenshots"
+
+    @Environment(AgentScreenshotMonitor.self) private var monitor
+
+    var body: some View {
+        Group {
+            if monitor.screenshots.isEmpty {
+                ContentUnavailableView(
+                    "No Screenshots",
+                    systemImage: "photo",
+                    description: Text("Screenshots the focused session's agent sends appear here.")
+                )
+            } else {
+                AgentScreenshotBrowser(screenshots: monitor.screenshots, usesKeyboardShortcuts: true)
+            }
+        }
+        .frame(minWidth: 640, minHeight: 480)
+        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
+        .accessibilityIdentifier(AXID.agentScreenshotWindow.rawValue)
+    }
+}
+
+/// Image viewer shared by the panel and the window: metadata, a zoomable
+/// image, zoom/export controls, and a thumbnail strip.
+private struct AgentScreenshotBrowser: View {
+    let screenshots: [AgentScreenshot]
+    /// Only the window binds keys; in the panel arrows and ⌘C belong to the terminal.
+    let usesKeyboardShortcuts: Bool
+    var onOpenInWindow: (() -> Void)?
+    var onClose: (() -> Void)?
+
+    /// Selected screenshot; `nil` follows the newest as more arrive.
+    @State private var pinnedID: String?
+    @State private var zoom = ImageZoomController()
+    @State private var copied = false
 
     private var index: Int {
-        min(pinnedIndex ?? screenshots.count - 1, screenshots.count - 1)
+        pinnedID.flatMap { id in screenshots.firstIndex { $0.id == id } } ?? screenshots.count - 1
+    }
+
+    private func select(_ newIndex: Int) {
+        guard screenshots.indices.contains(newIndex) else { return }
+        pinnedID = newIndex == screenshots.count - 1 ? nil : screenshots[newIndex].id
     }
 
     var body: some View {
@@ -23,30 +78,25 @@ struct AgentScreenshotPanel: View {
             header
             Divider()
             if screenshots.indices.contains(index) {
-                content(for: screenshots[index])
+                let screenshot = screenshots[index]
+                metadata(for: screenshot)
+                ZoomableImageView(image: screenshot.image, controller: zoom) { select(index + $0) }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .accessibilityLabel("Screenshot from \(screenshot.agent.displayName)")
+                    .accessibilityIdentifier(AXID.agentScreenshotPanelImage.rawValue)
+                Divider()
+                controls(for: screenshot)
+                Divider()
+                thumbnails
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .flotillaInspectorSurface(ignoresSafeAreaEdges: .top)
-        .onExitCommand(perform: onClose)
-        .sheet(isPresented: $isViewerPresented) {
-            if screenshots.indices.contains(index) {
-                AgentScreenshotViewerSheet(
-                    screenshots: screenshots,
-                    selectedIndex: Binding(
-                        get: { index },
-                        set: { newIndex in
-                            guard screenshots.indices.contains(newIndex) else { return }
-                            pinnedIndex = newIndex == screenshots.count - 1 ? nil : newIndex
-                        }
-                    ),
-                    onClose: { isViewerPresented = false }
-                )
-            }
-        }
+        .onChange(of: index) { _, _ in copied = false }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AXID.agentScreenshotPanel.rawValue)
     }
+
+    // MARK: Header
 
     private var header: some View {
         HStack(spacing: FlotillaSpacing.small) {
@@ -54,459 +104,164 @@ struct AgentScreenshotPanel: View {
                 .font(.system(size: FlotillaIconSize.small, weight: .medium))
                 .foregroundStyle(FlotillaColors.accent)
                 .accessibilityHidden(true)
-            Text("Screenshot")
+            Text(screenshots.count == 1 ? "Screenshot" : "Screenshots")
                 .font(FlotillaTypography.callout.weight(.semibold))
                 .foregroundStyle(FlotillaColors.textPrimary)
-            if screenshots.count > 1 {
-                pager
-            }
+            if screenshots.count > 1 { pager }
             Spacer(minLength: 0)
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
-                    .frame(width: FlotillaControlHeight.small, height: FlotillaControlHeight.small)
-                    .contentShape(Rectangle())
+            if let onOpenInWindow {
+                iconButton("macwindow", help: "Open in window", action: onOpenInWindow)
+                    .accessibilityIdentifier(AXID.agentScreenshotPanelOpenWindow.rawValue)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(FlotillaColors.textSecondary)
-            .help("Close screenshot")
-            .accessibilityLabel("Close screenshot")
-            .accessibilityIdentifier(AXID.agentScreenshotPanelClose.rawValue)
+            if let onClose {
+                iconButton("xmark", help: "Close screenshot", action: onClose)
+                    .accessibilityIdentifier(AXID.agentScreenshotPanelClose.rawValue)
+            }
         }
         .padding(.horizontal, FlotillaSpacing.medium)
         .frame(height: 38)
-        .background(Color.clear)
     }
 
     private var pager: some View {
         HStack(spacing: 2) {
-            Button {
-                pinnedIndex = max(index - 1, 0)
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .disabled(index == 0)
-            .accessibilityLabel("Previous screenshot")
+            iconButton("chevron.left", help: "Previous screenshot") { select(index - 1) }
+                .disabled(index == 0)
+                .shortcut(.leftArrow, enabled: usesKeyboardShortcuts)
+                .accessibilityIdentifier(AXID.agentScreenshotViewerPrevious.rawValue)
             Text("\(index + 1) of \(screenshots.count)")
                 .font(FlotillaTypography.caption2.monospacedDigit())
                 .foregroundStyle(FlotillaColors.textTertiary)
-            Button {
-                let next = index + 1
-                pinnedIndex = next >= screenshots.count - 1 ? nil : next
-            } label: {
-                Image(systemName: "chevron.right")
-            }
-            .disabled(index >= screenshots.count - 1)
-            .accessibilityLabel("Next screenshot")
+                .fixedSize()
+            iconButton("chevron.right", help: "Next screenshot") { select(index + 1) }
+                .disabled(index >= screenshots.count - 1)
+                .shortcut(.rightArrow, enabled: usesKeyboardShortcuts)
+                .accessibilityIdentifier(AXID.agentScreenshotViewerNext.rawValue)
         }
-        .buttonStyle(.borderless)
-        .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
     }
 
-    private func content(for screenshot: AgentScreenshot) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: FlotillaSpacing.medium) {
-                if let filename = screenshot.filename {
-                    Text(filename)
-                        .font(FlotillaTypography.caption.weight(.medium))
-                        .foregroundStyle(FlotillaColors.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+    // MARK: Metadata
 
-                Button {
-                    isViewerPresented = true
-                } label: {
-                    ZStack(alignment: .bottomTrailing) {
-                        Image(nsImage: screenshot.image)
-                            .resizable()
-                            .interpolation(.high)
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: .infinity)
-                            .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: FlotillaRadius.card, style: .continuous)
-                                    .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-                            )
-
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus.magnifyingglass")
-                                .font(.system(size: 10, weight: .semibold))
-                            Text("Zoom")
-                                .font(FlotillaTypography.caption2.weight(.medium))
-                        }
-                        .foregroundStyle(FlotillaColors.textPrimary)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(
-                            FlotillaColors.surfaceElevated.opacity(0.9),
-                            in: Capsule()
-                        )
-                        .overlay(
-                            Capsule().strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-                        )
-                        .padding(8)
-                    }
-                }
-                .buttonStyle(.plain)
-                .help("Click to view full size and zoom")
-                .accessibilityLabel("Screenshot from \(screenshot.agent.displayName), click to zoom")
-                .accessibilityIdentifier(AXID.agentScreenshotPanelImage.rawValue)
-
-                Text("Sent by \(screenshot.agent.displayName) · \(screenshot.timestamp, style: .relative) ago")
-                    .font(FlotillaTypography.caption)
-                    .foregroundStyle(FlotillaColors.textSecondary)
+    private func metadata(for screenshot: AgentScreenshot) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let filename = screenshot.filename {
+                Text(filename)
+                    .font(FlotillaTypography.caption.weight(.medium))
+                    .foregroundStyle(FlotillaColors.textPrimary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
-            .padding(FlotillaSpacing.medium)
+            Text("Sent by \(screenshot.agent.displayName) · \(screenshot.timestamp, style: .relative) ago · \(pixelDimensions(screenshot))")
+                .font(FlotillaTypography.caption2)
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .lineLimit(1)
         }
-        .id(screenshot.id)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, FlotillaSpacing.medium)
+        .padding(.vertical, FlotillaSpacing.small)
     }
-}
 
-/// Full-size interactive zoomable and pannable image viewer modal sheet for macOS.
-struct AgentScreenshotViewerSheet: View {
-    let screenshots: [AgentScreenshot]
-    @Binding var selectedIndex: Int
-    let onClose: () -> Void
-
-    @State private var scale: CGFloat = 1.0
-    @State private var baseScale: CGFloat = 1.0
-    @State private var offset: CGSize = .zero
-    @State private var baseOffset: CGSize = .zero
-    @State private var copied = false
-
-    private var pixelDimensions: String {
-        if let rep = screenshot.image.representations.first {
+    private func pixelDimensions(_ screenshot: AgentScreenshot) -> String {
+        if let rep = screenshot.image.representations.first, rep.pixelsWide > 0 {
             return "\(rep.pixelsWide) × \(rep.pixelsHigh)"
         }
-        let size = screenshot.image.size
-        return "\(Int(size.width)) × \(Int(size.height))"
+        return "\(Int(screenshot.image.size.width)) × \(Int(screenshot.image.size.height))"
     }
 
-    private var zoomPercentage: Int {
-        Int(round(scale * 100))
-    }
+    // MARK: Controls
 
-    private var screenshot: AgentScreenshot {
-        screenshots[selectedIndex]
-    }
-
-    private var canShowPrevious: Bool {
-        selectedIndex > 0
-    }
-
-    private var canShowNext: Bool {
-        selectedIndex < screenshots.count - 1
-    }
-
-    var body: some View {
-        Group {
-            if screenshots.indices.contains(selectedIndex) {
-                VStack(spacing: 0) {
-                    header
-                    Divider()
-                    viewport
-                }
-            }
-        }
-        .frame(minWidth: 960, idealWidth: 1280, maxWidth: 1920, minHeight: 680, idealHeight: 900, maxHeight: 1280)
-        .flotillaLiquidSurface(FlotillaColors.canvas, glassTintOpacity: FlotillaGlassTint.detail)
-        .onExitCommand(perform: onClose)
-        .onChange(of: screenshot.id) { _, _ in
-            resetZoom()
-            copied = false
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AXID.agentScreenshotViewerSheet.rawValue)
-    }
-
-    private var header: some View {
-        HStack(spacing: FlotillaSpacing.large) {
-            HStack(spacing: FlotillaSpacing.small) {
-                ProviderLogo(agent: screenshot.agent)
-                    .frame(width: 16, height: 16)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(screenshot.filename ?? "\(screenshot.agent.displayName) Screenshot")
-                        .font(FlotillaTypography.callout.weight(.semibold))
-                        .foregroundStyle(FlotillaColors.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    HStack(spacing: 6) {
-                        Text("\(screenshot.timestamp, style: .relative) ago")
-                        if !pixelDimensions.isEmpty {
-                            Text("·")
-                            Text(pixelDimensions)
-                        }
-                    }
-                    .font(FlotillaTypography.caption2)
-                    .foregroundStyle(FlotillaColors.textTertiary)
-                }
-            }
-            .layoutPriority(-1)
-
-            Spacer(minLength: FlotillaSpacing.small)
-
-            if screenshots.count > 1 {
-                screenshotPager
-                    .layoutPriority(1)
-            }
-
-            // Zoom Controls
-            HStack(spacing: 3) {
-                Button {
-                    zoomOut()
-                } label: {
-                    Image(systemName: "minus.magnifyingglass")
-                        .font(.system(size: FlotillaIconSize.small))
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(scale <= 0.25)
-                .help("Zoom out (⌘-)")
-                .keyboardShortcut("-", modifiers: .command)
-
-                Text("\(zoomPercentage)%")
-                    .font(FlotillaTypography.caption2.monospacedDigit().weight(.medium))
-                    .foregroundStyle(FlotillaColors.textSecondary)
-                    .frame(width: 44)
-
-                Button {
-                    zoomIn()
-                } label: {
-                    Image(systemName: "plus.magnifyingglass")
-                        .font(.system(size: FlotillaIconSize.small))
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(scale >= 6.0)
-                .help("Zoom in (⌘+)")
-                .keyboardShortcut("=", modifiers: .command)
-
-                Divider()
-                    .frame(height: 16)
-                    .padding(.horizontal, 4)
-
-                Button("Fit") {
-                    resetZoom()
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .font(FlotillaTypography.caption2)
-                .help("Fit to window (⌘9)")
-                .keyboardShortcut("9", modifiers: .command)
-
-                Button("100%") {
-                    zoomToActualSize()
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .font(FlotillaTypography.caption2)
-                .help("Actual size (⌘0)")
-                .keyboardShortcut("0", modifiers: .command)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                FlotillaColors.surfaceElevated,
-                in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                    .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-            )
-            .layoutPriority(1)
-
-            Spacer(minLength: FlotillaSpacing.small)
-
-            // Actions
-            HStack(spacing: FlotillaSpacing.small) {
-                Button {
-                    copy()
-                } label: {
-                    Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .fixedSize()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Copy image to clipboard (⌘C)")
-                .keyboardShortcut("c", modifiers: .command)
-
-                Button {
-                    save()
-                } label: {
-                    Label("Save…", systemImage: "square.and.arrow.down")
-                        .fixedSize()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Save image to file (⌘S)")
-                .keyboardShortcut("s", modifiers: .command)
-
-                Button("Done", action: onClose)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(FlotillaColors.accent)
-                    .fixedSize()
-                    .accessibilityIdentifier(AXID.agentScreenshotViewerClose.rawValue)
-            }
-            .layoutPriority(1)
-        }
-        .padding(.horizontal, FlotillaSpacing.large)
-        .frame(height: 56)
-        .background(FlotillaColors.surface)
-    }
-
-    private var screenshotPager: some View {
-        HStack(spacing: 3) {
-            Button {
-                selectedIndex = max(selectedIndex - 1, 0)
-            } label: {
-                Image(systemName: "chevron.left")
-                    .frame(width: 30, height: 30)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canShowPrevious)
-            .help("Previous screenshot (←)")
-            .keyboardShortcut(.leftArrow)
-            .accessibilityLabel("Previous screenshot")
-            .accessibilityIdentifier(AXID.agentScreenshotViewerPrevious.rawValue)
-
-            Text("\(selectedIndex + 1) of \(screenshots.count)")
+    private func controls(for screenshot: AgentScreenshot) -> some View {
+        HStack(spacing: 2) {
+            iconButton("minus.magnifyingglass", help: "Zoom out (⌘−)", action: zoom.zoomOut)
+                .shortcut("-", modifiers: .command, enabled: usesKeyboardShortcuts)
+            Text("\(Int((zoom.zoom * 100).rounded()))%")
                 .font(FlotillaTypography.caption2.monospacedDigit().weight(.medium))
                 .foregroundStyle(FlotillaColors.textSecondary)
-                .frame(minWidth: 48)
-
-            Button {
-                selectedIndex = min(selectedIndex + 1, screenshots.count - 1)
-            } label: {
-                Image(systemName: "chevron.right")
-                    .frame(width: 30, height: 30)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canShowNext)
-            .help("Next screenshot (→)")
-            .keyboardShortcut(.rightArrow)
-            .accessibilityLabel("Next screenshot")
-            .accessibilityIdentifier(AXID.agentScreenshotViewerNext.rawValue)
+                .frame(minWidth: 38)
+            iconButton("plus.magnifyingglass", help: "Zoom in (⌘+)", action: zoom.zoomIn)
+                .shortcut("=", modifiers: .command, enabled: usesKeyboardShortcuts)
+            Button("Fit", action: zoom.fit)
+                .help("Fit (⌘9)")
+                .disabled(zoom.isFitted)
+                .shortcut("9", modifiers: .command, enabled: usesKeyboardShortcuts)
+            Button("100%", action: zoom.actualSize)
+                .help("Actual pixels (⌘0)")
+                .shortcut("0", modifiers: .command, enabled: usesKeyboardShortcuts)
+            Spacer(minLength: FlotillaSpacing.small)
+            iconButton(copied ? "checkmark" : "doc.on.doc", help: "Copy image") { copy(screenshot) }
+                .shortcut("c", modifiers: .command, enabled: usesKeyboardShortcuts)
+            iconButton("square.and.arrow.down", help: "Save image…") { save(screenshot) }
+                .shortcut("s", modifiers: .command, enabled: usesKeyboardShortcuts)
         }
-        .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
-        .padding(.horizontal, 5)
-        .padding(.vertical, 3)
-        .background(
-            FlotillaColors.surfaceElevated,
-            in: RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
-                .strokeBorder(FlotillaColors.separator, lineWidth: FlotillaBorderWidth.hairline)
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Screenshot navigation")
-        .accessibilityValue("Screenshot \(selectedIndex + 1) of \(screenshots.count)")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment:
-                guard canShowNext else { return }
-                selectedIndex += 1
-            case .decrement:
-                guard canShowPrevious else { return }
-                selectedIndex -= 1
-            @unknown default:
-                break
-            }
-        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .font(FlotillaTypography.caption2)
+        .padding(.horizontal, FlotillaSpacing.small)
+        .frame(height: 32)
     }
 
-    private var viewport: some View {
-        GeometryReader { geometry in
-            ZStack {
-                FlotillaColors.canvas
-                    .ignoresSafeArea()
+    // MARK: Thumbnails
 
-                Image(nsImage: screenshot.image)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .scaleEffect(scale)
-                    .offset(offset)
-                    .gesture(
-                        MagnifyGesture()
-                            .onChanged { value in
-                                scale = max(0.2, min(8.0, baseScale * value.magnification))
-                            }
-                            .onEnded { _ in
-                                baseScale = scale
-                            }
-                    )
-                    .simultaneousGesture(
-                        DragGesture()
-                            .onChanged { value in
-                                offset = CGSize(
-                                    width: baseOffset.width + value.translation.width,
-                                    height: baseOffset.height + value.translation.height
+    private var thumbnails: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: FlotillaSpacing.small) {
+                    ForEach(Array(screenshots.enumerated()), id: \.element.id) { offset, screenshot in
+                        Button { select(offset) } label: {
+                            Image(nsImage: screenshot.image)
+                                .resizable()
+                                .interpolation(.medium)
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 64, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: FlotillaRadius.control, style: .continuous)
+                                        .strokeBorder(
+                                            offset == index ? FlotillaColors.accent : FlotillaColors.separator,
+                                            lineWidth: offset == index ? 2 : FlotillaBorderWidth.hairline
+                                        )
                                 )
-                            }
-                            .onEnded { _ in
-                                baseOffset = offset
-                            }
-                    )
-                    .onTapGesture(count: 2) {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                            if abs(scale - 1.0) < 0.15 {
-                                scale = 2.5
-                                baseScale = 2.5
-                            } else {
-                                resetZoom()
-                            }
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .help(screenshot.filename ?? "Screenshot \(offset + 1)")
+                        .accessibilityLabel(screenshot.filename ?? "Screenshot \(offset + 1)")
+                        .accessibilityAddTraits(offset == index ? .isSelected : [])
+                        .id(screenshot.id)
                     }
+                }
+                .padding(FlotillaSpacing.small)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .clipped()
+            .onAppear { proxy.scrollTo(screenshots.last?.id, anchor: .trailing) }
+            .onChange(of: index) { _, newIndex in
+                withAnimation { proxy.scrollTo(screenshots[newIndex].id) }
+            }
+            .onChange(of: screenshots.last?.id) { _, id in
+                guard pinnedID == nil else { return }
+                withAnimation { proxy.scrollTo(id, anchor: .trailing) }
+            }
         }
+        .frame(height: 60)
+        .accessibilityIdentifier(AXID.agentScreenshotThumbnails.rawValue)
     }
 
-    private func zoomIn() {
-        withAnimation(.easeInOut(duration: 0.15)) {
-            scale = min(8.0, scale * 1.3)
-            baseScale = scale
+    // MARK: Actions
+
+    private func iconButton(_ systemName: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: FlotillaIconSize.xSmall, weight: .semibold))
+                .frame(width: FlotillaControlHeight.small, height: FlotillaControlHeight.small)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .foregroundStyle(FlotillaColors.textSecondary)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
-    private func zoomOut() {
-        withAnimation(.easeInOut(duration: 0.15)) {
-            scale = max(0.2, scale / 1.3)
-            baseScale = scale
-        }
-    }
-
-    private func resetZoom() {
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-            scale = 1.0
-            baseScale = 1.0
-            offset = .zero
-            baseOffset = .zero
-        }
-    }
-
-    private func zoomToActualSize() {
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-            scale = 1.5
-            baseScale = 1.5
-            offset = .zero
-            baseOffset = .zero
-        }
-    }
-
-    private func copy() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([screenshot.image])
+    private func copy(_ screenshot: AgentScreenshot) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([screenshot.image])
         copied = true
         Task {
             try? await Task.sleep(for: .seconds(2))
@@ -514,11 +269,21 @@ struct AgentScreenshotViewerSheet: View {
         }
     }
 
-    private func save() {
+    private func save(_ screenshot: AgentScreenshot) {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.jpeg, .png]
-        panel.nameFieldStringValue = screenshot.filename ?? "Screenshot-\(screenshot.agent.displayName).jpg"
+        let type = CGImageSourceCreateWithData(screenshot.data as CFData, nil)
+            .flatMap(CGImageSourceGetType)
+            .flatMap { UTType($0 as String) } ?? .png
+        panel.allowedContentTypes = [type]
+        panel.nameFieldStringValue = screenshot.filename ?? "Screenshot-\(screenshot.agent.displayName).\(type.preferredFilenameExtension ?? "png")"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         try? screenshot.data.write(to: url, options: .atomic)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func shortcut(_ key: KeyEquivalent, modifiers: EventModifiers = [], enabled: Bool) -> some View {
+        if enabled { keyboardShortcut(key, modifiers: modifiers) } else { self }
     }
 }

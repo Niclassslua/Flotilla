@@ -20,6 +20,8 @@ struct FlotillaApp: App {
     @State private var notificationDelegate: FlotillaNotificationDelegate
     @State private var companionHost: CompanionHost
     @State private var dockBadge: DockBadgeController
+    /// Shared by the shell's inspector and the screenshot window.
+    @State private var screenshotMonitor = AgentScreenshotMonitor()
 
     /// Held so the review scene — which is not a descendant of the shell and
     /// therefore inherits nothing from it — can build its own view model.
@@ -255,6 +257,7 @@ struct FlotillaApp: App {
                     : hookCoordinator.screenReader
             )
             .environment(companionHost)
+            .environment(screenshotMonitor)
             .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
             .environment(\.editorFontSize, settingsViewModel.settings.terminal.editorFontSize)
             .onChange(of: settingsViewModel.settings.notifications.delivery) { _, delivery in
@@ -296,6 +299,17 @@ struct FlotillaApp: App {
             }
         }
         .defaultSize(width: 1280, height: 860)
+#if FLOTILLA_EPHEMERAL
+        .restorationBehavior(.disabled)
+#endif
+
+        // One non-modal viewer that follows whichever session the shell focuses.
+        Window("Screenshots", id: AgentScreenshotWindow.sceneID) {
+            AgentScreenshotWindow()
+                .environment(screenshotMonitor)
+                .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
+        }
+        .defaultSize(width: 1100, height: 800)
 #if FLOTILLA_EPHEMERAL
         .restorationBehavior(.disabled)
 #endif

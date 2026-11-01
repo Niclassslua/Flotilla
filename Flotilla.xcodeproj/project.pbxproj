@@ -695,10 +695,12 @@
 		DCD9B37BC4007565D699B9D6 /* ProtectedFolderAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2873B38CFD98A17CA55C5AC1 /* ProtectedFolderAccess.swift */; };
 		DD0D904178162BB1A4B33DC1 /* CompanionCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58113A191F9820A7236B1A8F /* CompanionCommandRouter.swift */; };
 		DD51E194539B5DF7A12DA2E2 /* CommitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9E093A8C26CA753EA9C323 /* CommitDetailView.swift */; };
+		DD58C49FEEBF43585119FCD9 /* ZoomableImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 760E38E54C8030EE82CEA041 /* ZoomableImageView.swift */; };
 		DDBD53C823B04728ECC26044 /* ReviewFixtureContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6460C3400F65BAB84C0513A4 /* ReviewFixtureContent.swift */; };
 		DDEA9EAAC1F0DE9C644DBEE0 /* CursorCompanionAdapterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF4723676EBB9EFDE478DBC9 /* CursorCompanionAdapterTests.swift */; };
 		DDEAF468EAE1353733FC0787 /* KanbanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 433D3BE507D2D44750EAEDF9 /* KanbanViews.swift */; };
 		DE3C3E3A908D92B34712F6C0 /* WorkspaceToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F5B48EC4DF04020E549FAE6 /* WorkspaceToolbar.swift */; };
+		DE602938B9BCEE1B32251DD3 /* ZoomableImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 760E38E54C8030EE82CEA041 /* ZoomableImageView.swift */; };
 		DEFFE6D15AF134DCB153AC57 /* UnreachableBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E92FA759CF38C84575BF058 /* UnreachableBanner.swift */; };
 		DFA843AB85C9272568B14003 /* HandySpeechClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D144DD3648F458208978127 /* HandySpeechClient.swift */; };
 		DFD7C33B4C388D3EA7376B37 /* HomeWidgetGallerySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99892CDB2FE43BEF149EC8C9 /* HomeWidgetGallerySheet.swift */; };
@@ -1072,6 +1074,7 @@
 		748E930383D36285416CD109 /* folder-components.svg */ = {isa = PBXFileReference; path = "folder-components.svg"; sourceTree = "<group>"; };
 		749D2FC6B87D43FD5AA8B80C /* HooksUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HooksUITests.swift; sourceTree = "<group>"; };
 		7508BD39FAA916569EF572C8 /* ReviewDiffPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffPane.swift; sourceTree = "<group>"; };
+		760E38E54C8030EE82CEA041 /* ZoomableImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomableImageView.swift; sourceTree = "<group>"; };
 		761DC27E7FA9F1BBA78CB09A /* ChildProcessEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChildProcessEnvironmentTests.swift; sourceTree = "<group>"; };
 		7691AF71738A2917DCFA2797 /* LANBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LANBrowser.swift; sourceTree = "<group>"; };
 		76F9F1111444810A711C843D /* proto.svg */ = {isa = PBXFileReference; path = proto.svg; sourceTree = "<group>"; };
@@ -1477,6 +1480,7 @@
 				22BC89FA739AB982526D7A98 /* SyntaxHighlightedTextEditor.swift */,
 				94A5A3A97EA3DF9A5D933D80 /* TerminalHostView.swift */,
 				1301A0CFAE4DF97657770E3D /* TerminalManager.swift */,
+				760E38E54C8030EE82CEA041 /* ZoomableImageView.swift */,
 			);
 			path = Session;
 			sourceTree = "<group>";
@@ -2998,6 +3002,7 @@
 				4AC1EB92525C60E9AEFFB5D4 /* WorkspaceNavigator.swift in Sources */,
 				DE3C3E3A908D92B34712F6C0 /* WorkspaceToolbar.swift in Sources */,
 				A72DEFF63F25C182CB8849A2 /* WorktreeSnapshot.swift in Sources */,
+				DD58C49FEEBF43585119FCD9 /* ZoomableImageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3356,6 +3361,7 @@
 				1EE083B23BC3D3935B8148E9 /* WorkspaceNavigator.swift in Sources */,
 				083EA44A9ACE8EFFB94A9377 /* WorkspaceToolbar.swift in Sources */,
 				33DF7438DDF33C40266843E7 /* WorktreeSnapshot.swift in Sources */,
+				DE602938B9BCEE1B32251DD3 /* ZoomableImageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

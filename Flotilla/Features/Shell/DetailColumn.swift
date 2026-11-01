@@ -21,7 +21,8 @@ struct DetailColumn: View {
 
     @State private var activeGridSessionID: UUID?
     @State private var gitSidebarSessionID: UUID?
-    @State private var screenshotMonitor = AgentScreenshotMonitor()
+    /// App-owned so the screenshot window follows the same session.
+    @Environment(AgentScreenshotMonitor.self) private var screenshotMonitor
     @State private var isScreenshotsExplicitlyPresented = false
     /// Lives here rather than in Home so revisiting Home shows the last
     /// answer at once instead of re-reading every repository.

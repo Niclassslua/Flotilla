@@ -48,10 +48,11 @@ public enum AXID: String, Sendable {
     case agentScreenshotPanel = "AgentScreenshotPanel"
     case agentScreenshotPanelClose = "AgentScreenshotPanel.Close"
     case agentScreenshotPanelImage = "AgentScreenshotPanel.Image"
-    case agentScreenshotViewerSheet = "AgentScreenshotViewerSheet"
-    case agentScreenshotViewerPrevious = "AgentScreenshotViewerSheet.Previous"
-    case agentScreenshotViewerNext = "AgentScreenshotViewerSheet.Next"
-    case agentScreenshotViewerClose = "AgentScreenshotViewerSheet.Close"
+    case agentScreenshotPanelOpenWindow = "AgentScreenshotPanel.OpenWindow"
+    case agentScreenshotThumbnails = "AgentScreenshotPanel.Thumbnails"
+    case agentScreenshotViewerPrevious = "AgentScreenshotPanel.Previous"
+    case agentScreenshotViewerNext = "AgentScreenshotPanel.Next"
+    case agentScreenshotWindow = "AgentScreenshotWindow"
 
     // MARK: - Git Sidebar
     case gitSidebar = "GitSidebar"
