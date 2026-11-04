@@ -63,6 +63,7 @@ private struct AgentScreenshotBrowser: View {
     @State private var pinnedID: String?
     @State private var zoom = ImageZoomController()
     @State private var copied = false
+    @AppStorage("agentScreenshotDesign") private var design = 0
 
     private var index: Int {
         pinnedID.flatMap { id in screenshots.firstIndex { $0.id == id } } ?? screenshots.count - 1
@@ -79,21 +80,80 @@ private struct AgentScreenshotBrowser: View {
             Divider()
             if screenshots.indices.contains(index) {
                 let screenshot = screenshots[index]
-                metadata(for: screenshot)
-                ZoomableImageView(image: screenshot.image, controller: zoom) { select(index + $0) }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .accessibilityLabel("Screenshot from \(screenshot.agent.displayName)")
-                    .accessibilityIdentifier(AXID.agentScreenshotPanelImage.rawValue)
-                Divider()
-                controls(for: screenshot)
-                Divider()
-                thumbnails
+                switch design {
+                case 1:
+                    image(for: screenshot)
+                        .padding(12)
+                    metadata(for: screenshot)
+                    controls(for: screenshot)
+                    Divider()
+                    thumbnails
+                case 2:
+                    metadata(for: screenshot)
+                    Divider()
+                    HStack(spacing: 0) {
+                        image(for: screenshot)
+                        Divider()
+                        thumbnailRail
+                    }
+                    Divider()
+                    controls(for: screenshot)
+                case 3:
+                    controls(for: screenshot)
+                    Divider()
+                    image(for: screenshot)
+                        .padding(8)
+                    Divider()
+                    metadata(for: screenshot)
+                    thumbnails
+                default:
+                    thumbnails
+                    Divider()
+                    image(for: screenshot)
+                    Divider()
+                    metadata(for: screenshot)
+                    controls(for: screenshot)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: index) { _, _ in copied = false }
         .accessibilityElement(children: .contain)
+    }
+
+    private func image(for screenshot: AgentScreenshot) -> some View {
+        ZoomableImageView(image: screenshot.image, controller: zoom) { select(index + $0) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .accessibilityLabel("Screenshot from \(screenshot.agent.displayName)")
+            .accessibilityIdentifier(AXID.agentScreenshotPanelImage.rawValue)
+    }
+
+    private var thumbnailRail: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                ForEach(Array(screenshots.enumerated()), id: \.element.id) { offset, screenshot in
+                    Button { select(offset) } label: {
+                        Image(nsImage: screenshot.image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 54, height: 40)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(
+                                offset == index ? FlotillaColors.accent : FlotillaColors.separator,
+                                lineWidth: offset == index ? 2 : FlotillaBorderWidth.hairline
+                            ))
+                    }
+                    .buttonStyle(.plain)
+                    .help(screenshot.filename ?? "Screenshot \(offset + 1)")
+                    .accessibilityLabel(screenshot.filename ?? "Screenshot \(offset + 1)")
+                    .accessibilityAddTraits(offset == index ? .isSelected : [])
+                }
+            }
+            .padding(8)
+        }
+        .frame(width: 70)
+        .accessibilityIdentifier(AXID.agentScreenshotThumbnails.rawValue)
     }
 
     // MARK: Header
@@ -109,6 +169,21 @@ private struct AgentScreenshotBrowser: View {
                 .foregroundStyle(FlotillaColors.textPrimary)
             if screenshots.count > 1 { pager }
             Spacer(minLength: 0)
+            Menu {
+                Picker("Screenshot design", selection: $design) {
+                    Text("1 · Contact sheet").tag(0)
+                    Text("2 · Gallery").tag(1)
+                    Text("3 · Filmstrip").tag(2)
+                    Text("4 · Studio").tag(3)
+                }
+            } label: {
+                Image(systemName: "rectangle.3.group")
+                    .frame(width: FlotillaControlHeight.small, height: FlotillaControlHeight.small)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Choose screenshot design")
+            .accessibilityLabel("Choose screenshot design")
             if let onOpenInWindow {
                 iconButton("macwindow", help: "Open in window", action: onOpenInWindow)
                     .accessibilityIdentifier(AXID.agentScreenshotPanelOpenWindow.rawValue)
