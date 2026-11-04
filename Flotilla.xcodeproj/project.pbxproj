@@ -3543,6 +3543,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.flotilla;
 				SDKROOT = macosx;
 			};
@@ -3590,6 +3591,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.flotilla;
 				SDKROOT = macosx;
 			};
@@ -4008,6 +4010,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niclassslua.flotilla.ephemeral;
 				PRODUCT_NAME = "Flotilla Ephemeral";
 				SDKROOT = macosx;

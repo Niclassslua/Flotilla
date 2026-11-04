@@ -74,6 +74,7 @@ targets:
         NSDownloadsFolderUsageDescription: Flotilla runs coding agents in your project folders, including projects you keep in Downloads.
     settings:
       base:
+        MARKETING_VERSION: "0.1.1"
         PRODUCT_BUNDLE_IDENTIFIER: com.niclassslua.flotilla
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
