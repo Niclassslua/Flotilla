@@ -14,6 +14,7 @@
 		02176474DA0AB08F3A934184 /* SettingsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1C861503EB2892EBB8DBBC16 /* SettingsKit */; };
 		022035952AA3995F0C429B93 /* FlotillaNotificationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B8F05E680043FBA0A1BDE3 /* FlotillaNotificationDelegate.swift */; };
 		0291E3C0C76AD118F3E9ACCF /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774460E09372B50991B8E9AB /* StatusBadge.swift */; };
+		02D27B7B00BAD1F134BC1715 /* HomeProjectsEmptyState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1CD8A969FB81E83890DA40 /* HomeProjectsEmptyState.swift */; };
 		030D3246587D6AAA1988B7E2 /* ReviewFileTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF52E23E5825D2C1CF1796F3 /* ReviewFileTree.swift */; };
 		03413C675E2AB68E736D920C /* ProjectIconCropRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A49C602902EB174670B2079 /* ProjectIconCropRenderer.swift */; };
 		03786A992829AAB575ADB3A4 /* CursorCompanionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3C58F96C850B4BD58B3D39 /* CursorCompanionAdapter.swift */; };
@@ -791,6 +792,7 @@
 		FD4FD368DD072C7D234024EF /* SessionReviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E7DFAC12BBB78D34E52F99A /* SessionReviewViewModel.swift */; };
 		FD6E434C8B3BBA0EED995AB0 /* document.svg in Resources */ = {isa = PBXBuildFile; fileRef = 887223A2AD875BE94A7BB8BF /* document.svg */; };
 		FD77CB39A0456E6E19448FAF /* AgentScreenshotsWidgetContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932E8201D5826FB2CACE4D6D /* AgentScreenshotsWidgetContent.swift */; };
+		FE3AE98A654846FB655467D8 /* HomeProjectsEmptyState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1CD8A969FB81E83890DA40 /* HomeProjectsEmptyState.swift */; };
 		FE980159B5B422911D14CDCD /* AntigravityCompanionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10D27AEBADE66FC94B1B842A /* AntigravityCompanionAdapter.swift */; };
 		FEA2F12A52A275CA08671BFA /* CIStatusStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAEF1F1F164CC43EFF1FE78E /* CIStatusStore.swift */; };
 		FED88A86153E3F5DD04D03D3 /* OpenCodeTranscriptCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C63F73DEF25FEB4C95FF8659 /* OpenCodeTranscriptCodecTests.swift */; };
@@ -1255,6 +1257,7 @@
 		D9BD989755A64D4561511867 /* react_ts.svg */ = {isa = PBXFileReference; path = react_ts.svg; sourceTree = "<group>"; };
 		D9CA8721FFE982E28B49BC12 /* DiffAndFilesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffAndFilesUITests.swift; sourceTree = "<group>"; };
 		D9DD107B5B362EE14AC7C49F /* CreateSessionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSessionSheet.swift; sourceTree = "<group>"; };
+		DB1CD8A969FB81E83890DA40 /* HomeProjectsEmptyState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeProjectsEmptyState.swift; sourceTree = "<group>"; };
 		DB73DD8DFEFD13BC2394C2AC /* vite.svg */ = {isa = PBXFileReference; path = vite.svg; sourceTree = "<group>"; };
 		DBB09520705F6CDBFB636A6A /* ProcessCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessCommandRunnerTests.swift; sourceTree = "<group>"; };
 		DBBF22BAAA880A4B600D72C8 /* HomeWidgetGridGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeWidgetGridGeometryTests.swift; sourceTree = "<group>"; };
@@ -1667,6 +1670,7 @@
 				EADF22401AA1CA2426BA2730 /* HomeInsights.swift */,
 				9EEC3877A940FA74B92114BD /* HomePreviewFixtures.swift */,
 				AA02460F4F5673A59322470A /* HomeProjectCard.swift */,
+				DB1CD8A969FB81E83890DA40 /* HomeProjectsEmptyState.swift */,
 				015B36473D14B352EB911BFA /* Widgets */,
 			);
 			path = Home;
@@ -2875,6 +2879,7 @@
 				8EDDEEC79270471D8587328F /* HomeInsights.swift in Sources */,
 				B1CE6424B0AA4B88D0305673 /* HomePreviewFixtures.swift in Sources */,
 				81BCD0197239D4122E74AC3C /* HomeProjectCard.swift in Sources */,
+				02D27B7B00BAD1F134BC1715 /* HomeProjectsEmptyState.swift in Sources */,
 				0765A7AE3AAD068318BA2D21 /* HomeScreenshotFeed.swift in Sources */,
 				1516C7E1436DE835D37C330E /* HomeWidgetCard.swift in Sources */,
 				A2166E082B6D1293B5A4B972 /* HomeWidgetEditor.swift in Sources */,
@@ -3234,6 +3239,7 @@
 				050DA004C932759910E1419F /* HomeInsights.swift in Sources */,
 				BF74FC31666638764CB78DCA /* HomePreviewFixtures.swift in Sources */,
 				5B80D5A3B348B32DFF6F239A /* HomeProjectCard.swift in Sources */,
+				FE3AE98A654846FB655467D8 /* HomeProjectsEmptyState.swift in Sources */,
 				6406A5EDCFDAB379E4C4B57B /* HomeScreenshotFeed.swift in Sources */,
 				3C3781625C75203514FBDF3D /* HomeWidgetCard.swift in Sources */,
 				96BDF94D359B13DF6722F49F /* HomeWidgetEditor.swift in Sources */,
