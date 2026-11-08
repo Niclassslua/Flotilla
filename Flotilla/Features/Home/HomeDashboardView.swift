@@ -20,6 +20,7 @@ struct HomeDashboardView: View {
     @State private var presentedSheet: ProjectSheetType?
     @Environment(\.flotillaLiquidGlassEnabled) private var liquidGlassEnabled
     @State private var widgetEditor: HomeWidgetEditor
+    @FocusState private var greetingFocused: Bool
 
     init(
         store: AppStore,
@@ -66,6 +67,7 @@ struct HomeDashboardView: View {
             .frame(maxWidth: .infinity)
         }
         .background { backdrop.ignoresSafeArea() }
+        .defaultFocus($greetingFocused, true)
         .sheet(item: $presentedSheet) { sheet in
             ProjectPathSheet(importsWorkspace: sheet == .importWorkspace) { paths in
                 for path in paths { store.addProject(at: path) }
@@ -89,6 +91,9 @@ struct HomeDashboardView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(AXID.homeGreeting.rawValue)
+        .focusable()
+        .focusEffectDisabled()
+        .focused($greetingFocused)
     }
 
     static var greetingText: String {
@@ -113,27 +118,29 @@ struct HomeDashboardView: View {
             HStack(alignment: .firstTextBaseline, spacing: FlotillaSpacing.small) {
                 HomeSectionTitle("Projects", count: store.projects.count)
                 Spacer(minLength: FlotillaSpacing.medium)
-                Button {
-                    presentedSheet = .importWorkspace
-                } label: {
-                    Label("Import Workspace", systemImage: "square.and.arrow.down")
+                if !projects.isEmpty {
+                    Button {
+                        presentedSheet = .importWorkspace
+                    } label: {
+                        Label("Import Workspace", systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Scan a folder for local Git repositories")
+                    Button {
+                        presentedSheet = .add
+                    } label: {
+                        Label("Add Project", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(FlotillaColors.accent)
+                    .help("Add a repository to Flotilla")
+                    .accessibilityIdentifier("Projects.ImportButton")
                 }
-                .buttonStyle(.bordered)
-                .help("Scan a folder for local Git repositories")
-                Button {
-                    presentedSheet = .add
-                } label: {
-                    Label("Add Project", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(FlotillaColors.accent)
-                .help("Add a repository to Flotilla")
-                .accessibilityIdentifier("Projects.ImportButton")
             }
             .controlSize(.regular)
 
             if projects.isEmpty {
-                emptyProjects
+                HomeEmptyProjectsDesign(add: { presentedSheet = .add }, importWorkspace: { presentedSheet = .importWorkspace })
             } else {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 340, maximum: 420), spacing: FlotillaSpacing.large)],
@@ -159,28 +166,6 @@ struct HomeDashboardView: View {
                 .accessibilityIdentifier(AXID.homeRecentProjects.rawValue)
             }
         }
-    }
-
-    private var emptyProjects: some View {
-        VStack(spacing: FlotillaSpacing.small) {
-            Image(systemName: "folder.badge.plus")
-                .font(.system(size: 28, weight: .regular))
-                .foregroundStyle(FlotillaColors.accent)
-            Text("Add your first repository")
-                .font(FlotillaTypography.headline)
-                .foregroundStyle(FlotillaColors.textPrimary)
-            Text("Projects you add show up here with their branch, uncommitted work and unpushed commits.")
-                .font(FlotillaTypography.callout)
-                .foregroundStyle(FlotillaColors.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(FlotillaSpacing.xxLarge)
-        .flotillaLiquidSurface(
-            FlotillaColors.surface,
-            cornerRadius: FlotillaRadius.modal,
-            glassTintOpacity: FlotillaGlassTint.elevated
-        )
     }
 
     // MARK: - Background
@@ -226,6 +211,60 @@ struct HomeDashboardView: View {
     }
 }
 
+private struct HomeEmptyProjectsDesign: View {
+    let add: () -> Void
+    let importWorkspace: () -> Void
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.small) {
+            Text("Your projects start here")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(FlotillaColors.textPrimary)
+            Text("Add a repository to see its branches, changes and sessions in one place.")
+                .font(FlotillaTypography.callout)
+                .foregroundStyle(FlotillaColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: FlotillaSpacing.small) {
+            Button(action: add) { Label("Add Project", systemImage: "plus") }
+                .buttonStyle(.borderedProminent)
+                .tint(FlotillaColors.accent)
+                .accessibilityIdentifier("Projects.ImportButton")
+            Button(action: importWorkspace) { Label("Import Workspace", systemImage: "square.and.arrow.down") }
+                .buttonStyle(.bordered)
+                .help("Scan a folder for local Git repositories")
+        }
+        .controlSize(.regular)
+    }
+
+    private var symbol: some View {
+        Image(systemName: "folder.badge.plus")
+            .font(.system(size: 22, weight: .medium))
+            .foregroundStyle(FlotillaColors.accent)
+            .frame(width: 48, height: 48)
+            .background(FlotillaColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: FlotillaRadius.card))
+            .accessibilityHidden(true)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FlotillaSpacing.large) {
+            HStack(spacing: FlotillaSpacing.medium) {
+                symbol
+                heading
+                Spacer(minLength: 0)
+            }
+            Divider()
+            actions
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(FlotillaSpacing.xLarge)
+        .flotillaLiquidSurface(FlotillaColors.surface, cornerRadius: FlotillaRadius.modal, glassTintOpacity: FlotillaGlassTint.elevated)
+    }
+}
+
 /// Section heading on Home: rounded, sentence case, with an optional count.
 struct HomeSectionTitle: View {
     let title: String
@@ -251,6 +290,10 @@ struct HomeSectionTitle: View {
 }
 
 #if DEBUG
+#Preview("Empty projects") {
+    HomeEmptyProjectsDesign(add: {}, importWorkspace: {}).padding().background(FlotillaColors.canvas)
+}
+
 #Preview("Home") {
     HomeDashboardView(
         store: HomePreviewData.makeStore(),
