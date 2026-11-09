@@ -621,6 +621,147 @@ struct ToolCallRow: View {
     }
 }
 
+/// The questions an agent asked and what was chosen, always visible instead
+/// of being folded into a tool group.
+struct QuestionsRow: View {
+    let rowID: String
+    let call: ToolCall
+    let questions: [TranscriptQuestion]
+    let isWaiting: Bool
+    @Binding var expanded: [String: Bool]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(questions.count == 1 ? "Question" : "Questions", systemImage: "questionmark.bubble")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(FlotillaColors.textSecondary)
+            ForEach(questions) { question in
+                block(for: question)
+            }
+            // A rejection, or a result whose format we couldn't read.
+            if questions.allSatisfy(\.answers.isEmpty), let output = call.output, !output.isEmpty {
+                Text(output)
+                    .font(.caption)
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                    .lineLimit(4)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(FlotillaColors.surfaceElevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(FlotillaColors.separator, lineWidth: 1)
+        }
+    }
+
+    private func block(for question: TranscriptQuestion) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let header = question.header {
+                Text(header.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+            }
+            Text(question.prompt)
+                .font(.footnote)
+                .foregroundStyle(FlotillaColors.textSecondary)
+            if question.answers.isEmpty {
+                Text(unansweredText)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+                options(question.options)
+            } else {
+                ForEach(question.answers, id: \.self) { answer($0, in: question) }
+                if let note = question.note {
+                    Text(note)
+                        .font(.footnote)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                }
+                otherOptions(of: question)
+            }
+        }
+    }
+
+    private var unansweredText: String {
+        if isWaiting { return "Waiting for an answer" }
+        return call.output == nil ? "No answer recorded" : "Not answered"
+    }
+
+    private func answer(_ text: String, in question: TranscriptQuestion) -> some View {
+        let option = question.option(forAnswer: text)
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "checkmark")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(FlotillaColors.success)
+                .accessibilityLabel("Chosen")
+            VStack(alignment: .leading, spacing: 2) {
+                optionTitle(text, isRecommended: option?.isRecommended ?? false)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(FlotillaColors.textPrimary)
+                if let description = option?.description {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func otherOptions(of question: TranscriptQuestion) -> some View {
+        let others = question.otherOptions
+        if !others.isEmpty {
+            let key = TranscriptQuestions.disclosureKey(rowID: rowID, question: question)
+            let isExpanded = expanded[key] ?? false
+            Button {
+                withAnimation(.snappy) { expanded[key] = !isExpanded }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    Text(others.count == 1 ? "1 other option" : "\(others.count) other options")
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(FlotillaColors.textTertiary)
+                .contentShape(Rectangle())
+                .padding(.vertical, 2)
+            }
+            .buttonStyle(.plain)
+            if isExpanded { options(others) }
+        }
+    }
+
+    private func options(_ options: [TranscriptQuestion.Option]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(options, id: \.label) { option in
+                VStack(alignment: .leading, spacing: 2) {
+                    optionTitle(option.label, isRecommended: option.isRecommended)
+                        .font(.footnote)
+                        .foregroundStyle(FlotillaColors.textSecondary)
+                    if let description = option.description {
+                        Text(description)
+                            .font(.caption)
+                            .foregroundStyle(FlotillaColors.textTertiary)
+                    }
+                }
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.top, 2)
+    }
+
+    private func optionTitle(_ text: String, isRecommended: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(text)
+            if isRecommended {
+                Text("Recommended")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(FlotillaColors.textTertiary)
+            }
+        }
+    }
+}
+
 struct ResolvedInteractionRow: View, @preconcurrency Equatable {
     let text: String
     let isPositive: Bool

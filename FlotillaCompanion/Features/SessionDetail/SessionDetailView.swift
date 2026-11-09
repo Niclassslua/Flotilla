@@ -376,6 +376,14 @@ struct SessionDetailView: View {
                             set: { expandedGroups[id] = $0 }
                         )
                     )
+                case .questions(let id, let call, let questions):
+                    QuestionsRow(
+                        rowID: id,
+                        call: call,
+                        questions: questions,
+                        isWaiting: isInProgress && call.isRunning && items.last?.id == id,
+                        expanded: $expandedGroups
+                    )
                 case .system(_, let text):
                     SystemNoteRow(text: text)
                         .equatable()

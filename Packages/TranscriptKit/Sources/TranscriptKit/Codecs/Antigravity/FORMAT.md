@@ -15,7 +15,7 @@ database per conversation. The table that matters:
 ```sql
 CREATE TABLE `steps` (
   `idx` integer,                 -- step order; PRIMARY KEY
-  `step_type` integer,           -- 14=user, 15=assistant, 101=system notice, 132=tool call
+  `step_type` integer,           -- 14=user, 15=assistant, 101=system notice, 132=tool call, 138=ask_question tool call
   `status` integer,
   `has_subtrajectory` numeric,
   `metadata` blob,               -- == the envelope embedded at step_payload field 5, byte for byte

@@ -143,11 +143,11 @@ public struct AntigravityTranscriptCodec: TranscriptReading, TranscriptWriting {
             guard let text = AntigravityWireFormat.string(content, 1), !text.isEmpty else { return [] }
             return [.systemNote(text: text, timestamp: timestamp)]
 
-        case 132: // tool call
+        case 132, 138: // tool call; 138 is `ask_question`, same envelope
             return Self.decodeToolCall(envelope: envelope, timestamp: timestamp)
 
         default:
-            // Unmapped step types (ask_question, permission prompts, subagent
+            // Unmapped step types (permission prompts, subagent
             // battle-mode steps) are skipped, not thrown — this format is
             // undocumented and gains fields between releases, so a strict
             // reader would break on every upstream version bump.

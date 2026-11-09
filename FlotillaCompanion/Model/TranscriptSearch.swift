@@ -5,13 +5,14 @@ struct TranscriptSearchMatch: Identifiable, Equatable {
     let id: String
     /// The `TranscriptItem` to scroll to — a tool match's item is its group.
     let itemID: String
-    /// Set when the match lives inside a tool group, so it can be expanded.
+    /// Set when the match is inside a tool group or a question's collapsed
+    /// options: the `expandedGroups` key that reveals it.
     let groupID: String?
     let excerpt: String
 }
 
 /// Searches only what's already loaded: user/assistant text, system notes,
-/// failed-turn messages, and tool call input/output. Never fetches older
+/// failed-turn messages, question cards, and tool call input/output. Never fetches older
 /// history.
 enum TranscriptSearch {
     static func matches(in items: [TranscriptItem], query: String) -> [TranscriptSearchMatch] {
@@ -42,6 +43,26 @@ enum TranscriptSearch {
                         results.append(TranscriptSearchMatch(id: "\(groupID)#\(call.id)#output", itemID: groupID, groupID: groupID, excerpt: excerpt))
                     }
                 }
+            case .questions(let id, let call, let questions):
+                func add(_ text: String?, key: String, disclosure: String? = nil) {
+                    guard let text, let excerpt = excerpt(in: text, matching: needle) else { return }
+                    results.append(TranscriptSearchMatch(id: "\(id)#\(key)", itemID: id, groupID: disclosure, excerpt: excerpt))
+                }
+                for question in questions {
+                    add(question.header, key: "\(question.id)#header")
+                    add(question.prompt, key: "\(question.id)#prompt")
+                    add(question.note, key: "\(question.id)#note")
+                    for (index, answer) in question.answers.enumerated() {
+                        add(answer, key: "\(question.id)#answer\(index)")
+                        add(question.option(forAnswer: answer)?.description, key: "\(question.id)#answerDetail\(index)")
+                    }
+                    let disclosure = TranscriptQuestions.disclosureKey(rowID: id, question: question)
+                    for (index, option) in question.otherOptions.enumerated() {
+                        add(option.label, key: "\(question.id)#option\(index)", disclosure: disclosure)
+                        add(option.description, key: "\(question.id)#optionDetail\(index)", disclosure: disclosure)
+                    }
+                }
+                if questions.allSatisfy(\.answers.isEmpty) { add(call.output, key: "output") }
             case .image, .handoff, .resolved:
                 continue
             }

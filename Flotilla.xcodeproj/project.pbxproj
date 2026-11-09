@@ -144,6 +144,7 @@
 		2A85ECD3F2C8BEB9A5CAE34F /* HomeWidgetPacker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68166A49155B417A14460A0E /* HomeWidgetPacker.swift */; };
 		2AEFC68DC75CCB367314DCA5 /* python.svg in Resources */ = {isa = PBXBuildFile; fileRef = 855986A922FD6FCB156C0658 /* python.svg */; };
 		2B0D1FB04888BF6917C4D7EF /* folder-docs.svg in Resources */ = {isa = PBXBuildFile; fileRef = 72E6849A9EDE0B904EBA6500 /* folder-docs.svg */; };
+		2B374B5D2C1E3B9ED2BE963A /* TranscriptQuestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D4A0D2D3D5EDAF70ED494D /* TranscriptQuestions.swift */; };
 		2B89AF33610BE313E326C81E /* PresenceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450290A29D767A2FE28CAF6E /* PresenceMonitor.swift */; };
 		2B95A03ABC30C6F6A63AC3C3 /* folder-debug.svg in Resources */ = {isa = PBXBuildFile; fileRef = 049E0C337CE5FC398BE3AC76 /* folder-debug.svg */; };
 		2C15A78E3C6B06BEBAC35D2E /* GitKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 874C07585626CF8D03699AB0 /* GitKitTests.swift */; };
@@ -928,6 +929,7 @@
 		264B5BE4E6D4D8B548110E6E /* SessionDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDraftTests.swift; sourceTree = "<group>"; };
 		26771FCDBA36102292542377 /* AgentModelEffortControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModelEffortControls.swift; sourceTree = "<group>"; };
 		26D1F33C25387BC4967D4692 /* MaterialFileIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaterialFileIcon.swift; sourceTree = "<group>"; };
+		26D4A0D2D3D5EDAF70ED494D /* TranscriptQuestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptQuestions.swift; sourceTree = "<group>"; };
 		270ECA3B80B9504D0C9BEC66 /* ComposerSlot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerSlot.swift; sourceTree = "<group>"; };
 		27690C7020A5B76FB7B45419 /* DeleteSessionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteSessionSheet.swift; sourceTree = "<group>"; };
 		277BB213566A0015BB8F8CC9 /* AgentScreenshotMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentScreenshotMonitorTests.swift; sourceTree = "<group>"; };
@@ -1987,6 +1989,7 @@
 				175C12E738E296887FE18F76 /* MacHost.swift */,
 				09F427E1215571CD448FC68B /* ProviderCapabilities.swift */,
 				A3DD030B490E8C57712D5908 /* TranscriptLayout.swift */,
+				26D4A0D2D3D5EDAF70ED494D /* TranscriptQuestions.swift */,
 				EAA9AE1868B199B23A35B91E /* TranscriptSearch.swift */,
 			);
 			path = Model;
@@ -3155,6 +3158,7 @@
 				C32AA8C7F70671B741CF7E14 /* SessionRowView.swift in Sources */,
 				88E51DEBE34A51C197CC0DBC /* StreamingCadence.swift in Sources */,
 				AF9C8169A38F20D681B8A762 /* TranscriptLayout.swift in Sources */,
+				2B374B5D2C1E3B9ED2BE963A /* TranscriptQuestions.swift in Sources */,
 				00578555C57896DC8F3DD16C /* TranscriptRows.swift in Sources */,
 				591BE56C98E7462CA96F3C07 /* TranscriptSearch.swift in Sources */,
 				B2611563F5D4E20C095C8CB8 /* TranscriptSearchBar.swift in Sources */,

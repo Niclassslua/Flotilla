@@ -543,6 +543,91 @@ final class TranscriptLayoutTests: XCTestCase {
     }
 }
 
+final class TranscriptQuestionsTests: XCTestCase {
+    private let date = Date()
+
+    private func questionItem(_ tool: String, questions: String, output: String?, isError: Bool = false) throws -> (ToolCall, [TranscriptQuestion]) {
+        var events: [TranscriptEvent.Content] = [.toolUse(id: "q", tool: tool, input: ["questions": questions], timestamp: date)]
+        if let output { events.append(.toolResult(toolUseID: "q", output: output, isError: isError, timestamp: date)) }
+        let items = TranscriptLayout.items(from: events.enumerated().map { TranscriptEvent(id: String($0.offset), content: $0.element) })
+        guard case .questions(_, let call, let parsed)? = items.first else { throw NSError(domain: "expected a questions item, got \(items)", code: 0) }
+        return (call, parsed)
+    }
+
+    private let claudeInput = #"[{"question":"Kind?","header":"App kind","multiSelect":false,"options":[{"label":"Mac (Recommended)","description":"Native"},{"label":"Web","description":"Browser"}]},{"question":"Which, exactly?","header":"Extras","multiSelect":true,"options":[{"label":"Tests","description":""},{"label":"Docs","description":""},{"label":"CI","description":""}]}]"#
+
+    func testClaudeAnswersWithRecommendedLabelAndMultiSelect() throws {
+        let output = #"Your questions have been answered: "Kind?"="Mac (Recommended)", "Which, exactly?"="Tests, CI". You can now continue with these answers in mind."#
+        let (_, questions) = try questionItem("AskUserQuestion", questions: claudeInput, output: output)
+        XCTAssertEqual(questions[0].answers, ["Mac"])
+        XCTAssertEqual(questions[0].options[0].isRecommended, true)
+        XCTAssertEqual(questions[0].otherOptions.map(\.label), ["Web"])
+        XCTAssertEqual(questions[1].answers, ["Tests", "CI"])
+    }
+
+    func testClaudeFreeTextNotesAndPreviewStayIntact() throws {
+        let output = #"The user answered: "Kind?"="An "odd", typed answer" user notes: because, "Which, exactly?"="Docs" selected preview:\#nsome preview. Read the answers carefully."#
+        let (_, questions) = try questionItem("AskUserQuestion", questions: claudeInput, output: output)
+        XCTAssertEqual(questions[0].answers, [#"An "odd", typed answer"#])
+        XCTAssertEqual(questions[0].note, "because")
+        XCTAssertEqual(questions[1].answers, ["Docs"])
+    }
+
+    func testRejectedAndDeclinedCallsKeepTheQuestions() throws {
+        let rejected = try questionItem("AskUserQuestion", questions: claudeInput, output: "The user doesn't want to proceed", isError: true)
+        XCTAssertTrue(rejected.1.allSatisfy(\.answers.isEmpty))
+        let declined = try questionItem("AskUserQuestion", questions: claudeInput, output: "The user did not answer the questions.")
+        XCTAssertTrue(declined.1.allSatisfy(\.answers.isEmpty))
+    }
+
+    func testCodexOpenCodeCursorAndAntigravityShapes() throws {
+        let codex = try questionItem("request_user_input", questions: #"[{"id":"kind","header":"Kind","question":"Which?","options":[{"label":"A","description":"a"},{"label":"B","description":"b"}]}]"#, output: #"{"answers":{"kind":{"answers":["B"]}}}"#)
+        XCTAssertEqual(codex.1[0].answers, ["B"])
+
+        let opencode = try questionItem("question", questions: #"[{"question":"Toppings?","header":"Pizza","multiple":true,"options":[{"label":"Cheese","description":""},{"label":"Basil","description":""}]}]"#, output: #"User has answered your questions: "Toppings?"="Cheese, Basil". You can now continue with the user's answers in mind."#)
+        XCTAssertEqual(opencode.1[0].answers, ["Cheese", "Basil"])
+
+        let cursor = try questionItem("AskQuestion", questions: #"[{"id":"x","prompt":"Where?","options":[{"id":"1","label":"Here"}]}]"#, output: nil)
+        XCTAssertEqual(cursor.1[0].prompt, "Where?")
+        XCTAssertEqual(cursor.1[0].options.map(\.label), ["Here"])
+
+        let antigravity = try questionItem("ask_question", questions: #"[{"is_multi_select":false,"question":"Direction?","options":["(Recommended) All","One"]}]"#, output: nil)
+        XCTAssertEqual(antigravity.1[0].options.map(\.label), ["All", "One"])
+        XCTAssertEqual(antigravity.1[0].options[0].isRecommended, true)
+    }
+
+    func testUnreadableInputStaysAToolCallAndQuestionSplitsTheGroup() {
+        let events: [TranscriptEvent.Content] = [
+            .toolUse(id: "a", tool: "Read", input: ["file_path": "a"], timestamp: date),
+            .toolUse(id: "b", tool: "question", input: ["questions": "not json"], timestamp: date),
+            .toolUse(id: "q", tool: "AskUserQuestion", input: ["questions": claudeInput], timestamp: date),
+            .toolUse(id: "c", tool: "Read", input: ["file_path": "c"], timestamp: date),
+        ]
+        let transcript = events.enumerated().map { TranscriptEvent(id: String($0.offset), content: $0.element) }
+        let items = TranscriptLayout.items(from: transcript)
+        XCTAssertEqual(items.count, 3)
+        guard case .toolGroup(_, let calls) = items[0], case .questions = items[1], case .toolGroup = items[2] else { return XCTFail("\(items)") }
+        XCTAssertEqual(calls.map(\.id), ["a", "b"])
+        XCTAssertEqual(TranscriptLayout.inFlightCall(in: Array(transcript.prefix(3)))?.summary, "Ask question")
+    }
+
+    func testSearchRevealsOnlyTheCollapsedOptionItMatched() throws {
+        let events: [TranscriptEvent.Content] = [
+            .toolUse(id: "q", tool: "AskUserQuestion", input: ["questions": claudeInput], timestamp: date),
+            .toolResult(toolUseID: "q", output: #"Your questions have been answered: "Kind?"="Mac (Recommended)", "Which, exactly?"="Tests". You can now continue."#, isError: false, timestamp: date),
+        ]
+        let items = TranscriptLayout.items(from: events.enumerated().map { TranscriptEvent(id: String($0.offset), content: $0.element) })
+
+        let hidden = TranscriptSearch.matches(in: items, query: "Browser")
+        XCTAssertEqual(hidden.map(\.groupID), ["0#0"])
+        XCTAssertEqual(hidden.first?.itemID, "0")
+
+        let chosen = TranscriptSearch.matches(in: items, query: "Mac")
+        XCTAssertEqual(chosen.count, 1, "the chosen option counts once")
+        XCTAssertNil(chosen.first?.groupID)
+    }
+}
+
 final class TranscriptSearchTests: XCTestCase {
     private func items(_ events: [TranscriptEvent.Content]) -> [TranscriptItem] {
         TranscriptLayout.items(from: events.enumerated().map { TranscriptEvent(id: String($0.offset), content: $0.element) })
