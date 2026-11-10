@@ -17,6 +17,8 @@ public struct SystemNotificationDispatcher: NotificationDispatching {
     /// access to. Kept as a literal on both sides rather than a shared
     /// constant, since HooksKit cannot depend on the app target.
     public static let waitingForInputCategoryIdentifier = "WAITING_FOR_INPUT"
+    /// Same arrangement: registered by the app, along with "Fix with Agent".
+    public static let ciFailedCategoryIdentifier = "CI_FAILED"
 
     public init() {}
 
@@ -59,6 +61,7 @@ public struct SystemNotificationDispatcher: NotificationDispatching {
         content.sound = .default
         content.userInfo = ["sessionID": sessionID.uuidString]
         content.threadIdentifier = sessionID.uuidString
+        content.categoryIdentifier = Self.ciFailedCategoryIdentifier
         return UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
     }
 

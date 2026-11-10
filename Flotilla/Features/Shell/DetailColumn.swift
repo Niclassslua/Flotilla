@@ -62,6 +62,11 @@ struct DetailColumn: View {
                     max: FlotillaLayoutWidth.inspectorMax
                 )
         }
+        .onChange(of: navigator.checksRequest, initial: true) { _, sessionID in
+            guard let sessionID else { return }
+            navigator.checksRequest = nil
+            showChecks(sessionID: sessionID)
+        }
         .onChange(of: activeGitSidebarSession?.id) { _, sessionID in
             guard gitSidebarSessionID != nil else { return }
             gitSidebarSessionID = sessionID
@@ -78,6 +83,7 @@ struct DetailColumn: View {
             store: store,
             openProject: onOpenProject,
             openSession: onOpenSession,
+            openChecks: { navigator.requestChecks(for: $0) },
             settingsViewModel: settingsViewModel,
             insights: homeInsights
         )
@@ -97,6 +103,7 @@ struct DetailColumn: View {
                     terminalManager: terminalManager,
                     activeSessionID: $activeGridSessionID,
                     openSession: onOpenSession,
+                    showChecks: { navigator.requestChecks(for: $0) },
                     onCreateSession: onCreateSession,
                     scope: navigator.sessionScope,
                     settingsViewModel: settingsViewModel
@@ -193,14 +200,16 @@ struct DetailColumn: View {
             handoffTargets: store.handoffTargets(for: session),
             onHandoff: { target in Task { await store.handoffSession(sessionID: session.id, to: target) } },
             onReview: { openWindow(id: SessionReviewWindow.sceneID, value: session.id) },
-            onShowChecks: {
-                guard session.projectID != nil else { return }
-                isScreenshotsExplicitlyPresented = false
-                screenshotMonitor.dismiss()
-                navigator.sessionGitSidebarViewModel(for: session, gitService: store.gitService).selectedTab = .checks
-                gitSidebarSessionID = session.id
-            }
+            onShowChecks: { showChecks(sessionID: session.id) }
         )
+    }
+
+    private func showChecks(sessionID: UUID) {
+        guard let session = store.sessions.first(where: { $0.id == sessionID }), session.projectID != nil else { return }
+        isScreenshotsExplicitlyPresented = false
+        screenshotMonitor.dismiss()
+        navigator.sessionGitSidebarViewModel(for: session, gitService: store.gitService).selectedTab = .checks
+        gitSidebarSessionID = session.id
     }
 
     /// The one session shown full-size, if any. Agent screenshots follow it.
@@ -549,7 +558,7 @@ struct DetailColumn: View {
             let ready = store.sessions.filter { $0.status == .readyForReview }.count
             return "\(working) working · \(needsInput) need input · \(ready) ready"
         case .smartList(let list):
-            let matching = list.filter(store.sessions).count
+            let matching = list.filter(store.sessions, ciNeedsYou: store.ciStatusStore.needsYouSessionIDs).count
             return "\(matching) of \(store.sessions.count) session\(store.sessions.count == 1 ? "" : "s")"
         case .projectTool(let id, let tool):
             let name = store.projects.first(where: { $0.id == id })?.name ?? "Project"

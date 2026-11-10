@@ -30,19 +30,19 @@ enum FleetSmartList: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
-    /// `needsYou` deliberately spans two statuses: a crashed agent and a
-    /// blocked one both need a human. The distinction survives in each row's
+    /// `needsYou` deliberately spans two statuses and red CI: a crashed agent,
+    /// a blocked one, and a broken build all need a human. The distinction survives in each row's
     /// own status word — it is not lost, just not made into a fourth list.
-    func matches(_ session: Session) -> Bool {
+    func matches(_ session: Session, ciNeedsYou: Set<UUID> = []) -> Bool {
         switch self {
-        case .needsYou: session.status == .waitingForInput || session.status == .crashed
+        case .needsYou: session.status == .waitingForInput || session.status == .crashed || ciNeedsYou.contains(session.id)
         case .working: session.status == .working
         case .ready: session.status == .readyForReview
         }
     }
 
-    func filter(_ sessions: [Session]) -> [Session] {
-        sessions.filter(matches)
+    func filter(_ sessions: [Session], ciNeedsYou: Set<UUID> = []) -> [Session] {
+        sessions.filter { matches($0, ciNeedsYou: ciNeedsYou) }
     }
 }
 
@@ -102,7 +102,7 @@ struct SessionScope: Equatable, Sendable {
 
     var isEverything: Bool { group == .all && smartList == nil }
 
-    func apply(to sessions: [Session]) -> [Session] {
+    func apply(to sessions: [Session], ciNeedsYou: Set<UUID> = []) -> [Session] {
         var result = sessions
         switch group {
         case .all:
@@ -113,7 +113,7 @@ struct SessionScope: Equatable, Sendable {
             result = result.filter { $0.projectID == nil }
         }
         if let smartList {
-            result = smartList.filter(result)
+            result = smartList.filter(result, ciNeedsYou: ciNeedsYou)
         }
         return result
     }

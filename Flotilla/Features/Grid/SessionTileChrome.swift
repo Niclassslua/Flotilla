@@ -9,6 +9,7 @@ import TerminalKit
 struct SessionTileActions {
     var onActivate: () -> Void = {}
     var onOpenSession: () -> Void = {}
+    var onShowChecks: () -> Void = {}
     var onDelete: () -> Void = {}
     var onRestart: () -> Void = {}
     var onRevealInFinder: () -> Void = {}

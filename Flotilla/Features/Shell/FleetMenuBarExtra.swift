@@ -10,7 +10,7 @@ struct FleetMenuBarLabel: View {
     let store: AppStore
 
     var body: some View {
-        let waitingCount = FleetAttention(sessions: store.sessions, ciFailing: store.ciStatusStore.failingSessionIDs).waiting.count
+        let waitingCount = FleetAttention(sessions: store.sessions, ciFailing: store.ciStatusStore.needsYouSessionIDs).waiting.count
         HStack(spacing: 3) {
             Image(systemName: waitingCount > 0 ? "sailboat.fill" : "sailboat")
             if waitingCount > 0 {
@@ -34,7 +34,7 @@ struct FleetMenuBarMenu: View {
     private static let rowLimit = 8
 
     var body: some View {
-        let attention = FleetAttention(sessions: store.sessions, ciFailing: store.ciStatusStore.failingSessionIDs)
+        let attention = FleetAttention(sessions: store.sessions, ciFailing: store.ciStatusStore.needsYouSessionIDs)
 
         if attention.waiting.isEmpty && attention.readyForReview.isEmpty && attention.crashed.isEmpty {
             Text(attention.working.isEmpty ? "No sessions need you" : "All clear · \(attention.working.count) working")
@@ -65,7 +65,11 @@ struct FleetMenuBarMenu: View {
                 ForEach(sessions.prefix(Self.rowLimit)) { session in
                     Button {
                         showMainWindow()
-                        navigator.selection = .session(session.id)
+                        if ciFailing.contains(session.id), session.status != .waitingForInput {
+                            navigator.requestChecks(for: session.id)
+                        } else {
+                            navigator.selection = .session(session.id)
+                        }
                     } label: {
                         if ciFailing.contains(session.id), session.status != .waitingForInput {
                             Label(rowTitle(for: session, ciFailing: true), systemImage: "xmark.seal")
@@ -87,7 +91,7 @@ struct FleetMenuBarMenu: View {
             parts.append(project.name)
         }
         if ciFailing {
-            let check = store.ciStatusStore.status(for: session.id)?.failingChecks.first?.name
+            let check = store.ciStatusStore.status(for: session.id)?.failuresToFix.first?.name
             parts.append(check.map { "CI failing: \($0)" } ?? "CI failing")
         } else if session.status == .waitingForInput {
             parts.append(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))

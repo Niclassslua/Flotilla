@@ -134,6 +134,10 @@ final class AppStore {
         if reload() { restoreSessions() }
         loadKanbanBoards()
         ciStatusStore.sessions = { [weak self] in self?.sessions ?? [] }
+        ciStatusStore.showsCIBeforeSessionCommits = { settingsProvider().git.showCIBeforeSessionCommits }
+        ciStatusStore.deliver = { [weak self] prompt, sessionID in
+            try await self?.deliverMessage(prompt, to: sessionID)
+        }
     }
 
     /// Disk-backed under the app's support directory in normal use; an

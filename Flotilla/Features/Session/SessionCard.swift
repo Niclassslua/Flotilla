@@ -15,9 +15,9 @@ struct SessionCard<Terminal: View>: View {
     let variant: SessionCardVariant
     let diffStatStore: DiffStatStore?
     let activityStore: SessionActivityStore?
-    /// CI for the session's branch, shown in the sidebar row when it is red
-    /// or running. `nil` where CI is not tracked.
-    let ciState: CICheckState?
+    /// CI for the session's branch, shown on the sidebar row. `nil` where CI
+    /// is not tracked.
+    let ci: CISnapshot?
     let isSelected: Bool
     let isActive: Bool
     let onTap: () -> Void
@@ -33,7 +33,7 @@ struct SessionCard<Terminal: View>: View {
         variant: SessionCardVariant = .row,
         diffStatStore: DiffStatStore? = nil,
         activityStore: SessionActivityStore? = nil,
-        ciState: CICheckState? = nil,
+        ci: CISnapshot? = nil,
         isSelected: Bool = false,
         isActive: Bool = false,
         onTap: @escaping () -> Void = {},
@@ -48,7 +48,7 @@ struct SessionCard<Terminal: View>: View {
         self.variant = variant
         self.diffStatStore = diffStatStore
         self.activityStore = activityStore
-        self.ciState = ciState
+        self.ci = ci
         self.isSelected = isSelected
         self.isActive = isActive
         self.onTap = onTap
@@ -90,12 +90,20 @@ struct SessionCard<Terminal: View>: View {
     /// no inline delete control.
     private var rowView: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 ProviderLogo(agent: session.agent)
                     .frame(width: 13, height: 13)
+                    .padding(.trailing, 1)
                     .accessibilityHidden(true)
                 Text(session.model ?? session.agent.displayName)
                     .lineLimit(1)
+                    .fixedSize()
+                if let branch = session.worktree?.branchName {
+                    Text("·")
+                    Text(BranchNaming.displayName(for: branch))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
                 Spacer(minLength: 4)
                 Text(compactTimestamp(for: session.lastActiveAt))
                     .monospacedDigit()
@@ -118,20 +126,18 @@ struct SessionCard<Terminal: View>: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(StatusPresentation.label(for: session.status, waitingReason: session.waitingReason))
                     .accessibilityIdentifier("SessionRow-\(session.title)-Status")
-                if let branch = session.worktree?.branchName {
+                if let ci, let badge = CIRowBadge(status: ci.status, isFixing: ci.fix != nil) {
                     Text("·")
                         .foregroundStyle(isSelected ? FlotillaColors.textSecondary : FlotillaColors.textTertiary)
-                    Text(BranchNaming.displayName(for: branch))
-                        .foregroundStyle(isSelected ? FlotillaColors.textSecondary : FlotillaColors.textTertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    CISessionRowBadge(badge: badge, isForOlderCommit: ci.isForOlderCommit)
                 }
                 Spacer(minLength: 0)
-                CIStatusGlyph(state: ciState, quiet: true)
                 if let diffStatStore {
                     SessionDiffStatView(session: session, diffStatStore: diffStatStore, style: .plain)
                 }
             }
+            // The pill is taller than the text; rows keep one height with or without it.
+            .frame(height: 13)
             .font(.system(size: 10, weight: .medium))
         }
         .padding(.vertical, 6)

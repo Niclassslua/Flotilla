@@ -415,53 +415,93 @@ enum BoardDemoFixtures {
     }
 
     /// The demo checkouts have no GitHub remote, so CI is seeded rather than
-    /// polled: one red PR, one running, one green and approved — the three
-    /// states the session bar chip and the Checks tab have to render.
+    /// polled: enough cases to render every verdict the chip and the Checks
+    /// tab lead with, on pull requests and bare commits alike.
     @MainActor
     static func seedCI(into store: CIStatusStore) {
         let now = Date()
         let repo = "https://github.com/example/flotilla"
-        func check(_ name: String, _ state: CICheckState, run: Int, minutesAgo: Int, took: Int?) -> CICheck {
+        func check(_ name: String, _ state: CICheckState, job: Int, minutesAgo: Int, took: Int?, required: Bool? = nil) -> CICheck {
             CICheck(
                 name: name,
                 workflowName: "Build",
                 state: state,
-                url: URL(string: "\(repo)/actions/runs/\(run)/job/\(run + 1)"),
-                runID: run,
+                url: URL(string: "\(repo)/actions/runs/9100/job/\(job)"),
+                runID: 9100,
+                jobID: job,
+                isRequired: required,
                 startedAt: now.addingTimeInterval(-Double(minutesAgo) * 60),
                 completedAt: took.map { now.addingTimeInterval(-Double(minutesAgo) * 60 + Double($0)) }
             )
         }
-        store.seed([
-            // "Cache provider logos" — the agent thinks it is done; CI disagrees.
-            sessionID(at: 5): CIStatus(
-                pullRequest: GhPullRequest(number: 142, url: URL(string: "\(repo)/pull/142")!, state: .open, reviewDecision: "REVIEW_REQUIRED"),
-                checks: [
-                    check("build (macos-26)", .passing, run: 9101, minutesAgo: 14, took: 412),
-                    check("unit tests", .failing, run: 9102, minutesAgo: 14, took: 268),
-                    check("ui tests", .failing, run: 9103, minutesAgo: 14, took: 531),
-                    check("swiftlint", .passing, run: 9104, minutesAgo: 14, took: 38),
-                ]
-            ),
-            // "Fix login redirect on Safari" — pushed, still running.
-            sessionID(at: 0): CIStatus(
-                pullRequest: GhPullRequest(number: 145, url: URL(string: "\(repo)/pull/145")!, state: .open, isDraft: true),
-                checks: [
-                    check("build (macos-26)", .pending, run: 9201, minutesAgo: 3, took: nil),
-                    check("swiftlint", .passing, run: 9202, minutesAgo: 3, took: 41),
-                ]
-            ),
-            // "Tidy the session status machine" — green and approved.
-            sessionID(at: 6): CIStatus(
-                pullRequest: GhPullRequest(number: 139, url: URL(string: "\(repo)/pull/139")!, state: .open, reviewDecision: "APPROVED"),
-                checks: [
-                    check("build (macos-26)", .passing, run: 9001, minutesAgo: 52, took: 398),
-                    check("unit tests", .passing, run: 9002, minutesAgo: 52, took: 251),
-                    check("ui tests", .passing, run: 9003, minutesAgo: 52, took: 515),
-                    check("swiftlint", .passing, run: 9004, minutesAgo: 52, took: 36),
-                ]
-            ),
-        ])
+        func pullRequest(_ number: Int, draft: Bool = false, review: String? = nil, merge: String? = "BLOCKED", head: String) -> GhPullRequest {
+            GhPullRequest(number: number, url: URL(string: "\(repo)/pull/\(number)")!, state: .open, isDraft: draft, reviewDecision: review, headSHA: head, mergeStateStatus: merge)
+        }
+        let green = [
+            check("build (macos-26)", .passing, job: 9001, minutesAgo: 52, took: 398),
+            check("unit tests", .passing, job: 9002, minutesAgo: 52, took: 251),
+            check("swiftlint", .passing, job: 9004, minutesAgo: 52, took: 36),
+        ]
+        store.seed(
+            [
+                // "Cache provider logos" — the agent thinks it is done; CI disagrees.
+                sessionID(at: 5): CIStatus(
+                    pullRequest: pullRequest(142, review: "REVIEW_REQUIRED", head: "a1b2c3d4e5"),
+                    checks: [
+                        check("build (macos-26)", .passing, job: 9101, minutesAgo: 14, took: 412),
+                        check("unit tests", .failing, job: 9102, minutesAgo: 14, took: 268),
+                        check("ui tests", .failing, job: 9103, minutesAgo: 14, took: 531),
+                        check("swiftlint", .passing, job: 9104, minutesAgo: 14, took: 38),
+                    ],
+                    commitSHA: "a1b2c3d4e5"
+                ),
+                // "Fix login redirect on Safari" — pushed, still running.
+                sessionID(at: 0): CIStatus(
+                    pullRequest: pullRequest(145, draft: true, merge: "DRAFT", head: "b2c3d4e5f6"),
+                    checks: [
+                        check("build (macos-26)", .pending, job: 9201, minutesAgo: 3, took: nil),
+                        check("swiftlint", .passing, job: 9202, minutesAgo: 3, took: 41),
+                    ],
+                    commitSHA: "b2c3d4e5f6"
+                ),
+                // "Tidy the session status machine" — green and approved.
+                sessionID(at: 6): CIStatus(
+                    pullRequest: pullRequest(139, review: "APPROVED", merge: "CLEAN", head: "c3d4e5f6a7"),
+                    checks: green,
+                    commitSHA: "c3d4e5f6a7"
+                ),
+                // A direct push with no pull request: red, and handed to the agent.
+                sessionID(at: 1): CIStatus(
+                    checks: [
+                        check("build", .passing, job: 9301, minutesAgo: 9, took: 300),
+                        check("unit tests", .failing, job: 9302, minutesAgo: 9, took: 180),
+                    ],
+                    commitSHA: "d4e5f6a7b8"
+                ),
+                // A direct push that is green, but the worktree has moved on.
+                sessionID(at: 2): CIStatus(checks: green, commitSHA: "e5f6a7b8c9"),
+            ],
+            tips: [sessionID(at: 2): CILocalTip(sha: "f6a7b8c9d0", unpushedCount: 2)],
+            // Dated ahead so the demo's fix stays visible past the grace period.
+            fixes: [sessionID(at: 1): CIFixAttempt(commitSHA: "d4e5f6a7b8", sentAt: .distantFuture)],
+            excerpts: [
+                9102: """
+                Failing tests:
+                \tChatViewTests.testScrollRestoresPosition()
+                ** TEST FAILED **
+                ChatViewTests.swift:42: error: XCTAssertEqual failed: ("12") is not equal to ("0")
+                ##[error]Process completed with exit code 65.
+                """,
+                9103: """
+                Test case 'SidebarUITests.testRenameKeepsFocus()' failed on 'My Mac' (12.4 seconds)
+                ##[error]Process completed with exit code 65.
+                """,
+                9302: """
+                LoginTests.swift:18: error: XCTAssertTrue failed
+                ##[error]Process completed with exit code 65.
+                """,
+            ]
+        )
     }
 
     /// Seeds realistic permission requests for the demo fleet, so Home's Top Permissions

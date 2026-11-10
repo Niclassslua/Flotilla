@@ -219,10 +219,12 @@ struct SessionBar: View {
                 .accessibilityIdentifier("SessionBar.LinkedIssue")
             }
 
-            if let ciStatus = store.ciStatusStore.status(for: session.id) {
-                CIStatusChip(status: ciStatus, action: actions.onShowChecks)
-                    .fixedSize()
-            }
+            CIStatusChip(
+                snapshot: store.ciStatusStore.snapshot(for: session.id),
+                agentName: session.agent.displayName,
+                action: actions.onShowChecks
+            )
+            .fixedSize()
 
             metaLabel(worktreeName, systemImage: "folder")
                 .accessibilityIdentifier(AXID.sessionBarWorktree(session.title))

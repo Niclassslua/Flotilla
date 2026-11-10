@@ -47,6 +47,7 @@ struct HomeWidgetView: View {
     var editor: HomeWidgetEditor?
     var isPreview = false
     var openSession: (UUID) -> Void = { _ in }
+    var openChecks: (UUID) -> Void = { _ in }
     /// Drives the corner handle; `nil` hides it (single-size widgets,
     /// previews). Reports the handle's translation, then its end.
     var onResizeChanged: ((CGSize) -> Void)?
@@ -248,7 +249,7 @@ struct HomeWidgetView: View {
     private func liveContent(for kind: HomeWidgetKind) -> some View {
         switch kind {
         case .needsYou:
-            NeedsYouWidgetContent(size: size, items: filteredWaiting, openSession: openSession)
+            NeedsYouWidgetContent(size: size, items: filteredWaiting, openSession: openSession, openChecks: openChecks)
         case .reviewQueue:
             ReviewQueueWidgetContent(size: size, items: filteredReview, openSession: openSession)
         case .looseEnds:

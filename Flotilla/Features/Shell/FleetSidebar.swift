@@ -488,7 +488,7 @@ struct SessionSidebarRow: View {
             variant: .row,
             diffStatStore: store.diffStatStore,
             activityStore: nil,
-            ciState: store.ciStatusStore.status(for: session.id)?.state,
+            ci: store.ciStatusStore.snapshot(for: session.id),
             isSelected: isSelected,
             onTap: { onOpenSession(session.id) },
             onDelete: { onRequestDelete(session.id) },

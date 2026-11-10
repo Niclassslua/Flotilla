@@ -97,9 +97,7 @@ private struct MissionControlTile: View {
                 onRename: actions.onRename,
                 onFocus: actions.onOpenSession,
                 onRemoveFromGrid: actions.onRemoveFromGrid,
-                // A tile has no inspector; the chip opens the session, whose
-                // bar then leads to the Checks tab.
-                onShowChecks: actions.onOpenSession
+                onShowChecks: actions.onShowChecks
             )
         )
         .contentShape(Rectangle())

@@ -68,7 +68,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .permissions: "permissions screen recording capture privacy security"
         case .sessions: "session defaults coding agent prompt worktree"
         case .terminal: "terminal font size scroll option meta editor monaco curly braces"
-        case .git: "git branch worktree delete lifecycle keep remove session"
+        case .git: "git branch worktree delete lifecycle keep remove session ci checks github commit"
         case .notifications: "notifications waiting input sound privacy never active always delivery dock badge menu bar status item ci checks github actions failed"
         case .companion: "iphone phone companion remote pair pairing qr tailscale lan network devices speech dictation audio handy stt transcribe"
         case .agents: "claude codex opencode agy antigravity cursor agent executable arguments authentication developer tools git github gh tmux path"
@@ -581,6 +581,17 @@ private struct GitSettingsPane: View {
                 }
             } header: {
                 SettingsSectionHeader("Commit History", systemImage: "clock.arrow.circlepath")
+            }
+
+            Section {
+                Toggle("Show CI before a session's first commit", isOn: $viewModel.settings.git.showCIBeforeSessionCommits)
+                    .toggleStyle(.switch)
+                    .accessibilityIdentifier("Settings.ShowCIBeforeSessionCommits")
+                Text("Off, a session shows CI once it has committed, or when its branch has a pull request. On, a new worktree also shows the CI of the commit it started from, so a red main counts against it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                SettingsSectionHeader("GitHub Checks", systemImage: "checklist")
             }
         }
         .flotillaSettingsFormLayout()

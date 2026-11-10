@@ -152,7 +152,7 @@ struct KanbanColumnView: View {
     }
 
     private var filteredSessions: [Session] {
-        scope.apply(to: columnSessions)
+        scope.apply(to: columnSessions, ciNeedsYou: store.ciStatusStore.needsYouSessionIDs)
     }
 
     /// Resolved once per render rather than per card. Empty unless the board

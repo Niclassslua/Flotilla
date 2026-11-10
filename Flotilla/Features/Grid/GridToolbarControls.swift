@@ -95,7 +95,7 @@ struct GridAddAllButton: View {
     /// that the group is filtering straight back out.
     var scope: SessionScope = .everything
 
-    private var candidates: [Session] { scope.apply(to: store.sessions) }
+    private var candidates: [Session] { scope.apply(to: store.sessions, ciNeedsYou: store.ciStatusStore.needsYouSessionIDs) }
 
     private var memberIDs: Set<UUID> {
         GridSelection.memberIDs(

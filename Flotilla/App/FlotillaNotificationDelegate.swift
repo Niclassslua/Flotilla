@@ -13,18 +13,22 @@ import HooksKit
 /// (`navigator`, `onReply`) is never touched off the main actor.
 final class FlotillaNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     static let replyActionIdentifier = "REPLY_ACTION"
+    static let fixCIActionIdentifier = "FIX_CI_ACTION"
 
     private let navigator: WorkspaceNavigator
     private let onReply: @MainActor (UUID, String) -> Void
+    private let onFixCI: @MainActor (UUID) -> Void
     private let shouldPresentInForeground: @Sendable () -> Bool
 
     init(
         navigator: WorkspaceNavigator,
         onReply: @escaping @MainActor (UUID, String) -> Void,
+        onFixCI: @escaping @MainActor (UUID) -> Void = { _ in },
         shouldPresentInForeground: @escaping @Sendable () -> Bool = { true }
     ) {
         self.navigator = navigator
         self.onReply = onReply
+        self.onFixCI = onFixCI
         self.shouldPresentInForeground = shouldPresentInForeground
         super.init()
         registerCategories()
@@ -44,7 +48,13 @@ final class FlotillaNotificationDelegate: NSObject, UNUserNotificationCenterDele
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([category])
+        let ciFailed = UNNotificationCategory(
+            identifier: SystemNotificationDispatcher.ciFailedCategoryIdentifier,
+            actions: [UNNotificationAction(identifier: Self.fixCIActionIdentifier, title: "Fix with Agent", options: [])],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category, ciFailed])
     }
 
     static func presentationOptions(shouldPresentInForeground: Bool) -> UNNotificationPresentationOptions {
@@ -74,8 +84,20 @@ final class FlotillaNotificationDelegate: NSObject, UNUserNotificationCenterDele
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let navigator = self.navigator
         let onReply = self.onReply
+        let onFixCI = self.onFixCI
+        let isCIFailure = response.notification.request.content.categoryIdentifier
+            == SystemNotificationDispatcher.ciFailedCategoryIdentifier
+        let isFixRequest = response.actionIdentifier == Self.fixCIActionIdentifier
         Task { @MainActor in
-            navigator.selection = .session(sessionID)
+            if isFixRequest {
+                onFixCI(sessionID)
+                return
+            }
+            if isCIFailure {
+                navigator.requestChecks(for: sessionID)
+            } else {
+                navigator.selection = .session(sessionID)
+            }
             if let replyText, !replyText.isEmpty {
                 onReply(sessionID, replyText)
             }

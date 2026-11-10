@@ -17,6 +17,7 @@ struct GridView: View {
     let terminalManager: TerminalManager
     @Binding var activeSessionID: UUID?
     let openSession: (UUID) -> Void
+    var showChecks: (UUID) -> Void = { _ in }
     let onCreateSession: () -> Void
     /// What subset of the fleet this grid draws from. Shared with Board and
     /// Focus, so switching presentation changes how the fleet is shown and
@@ -37,7 +38,7 @@ struct GridView: View {
     }
 
     private var scopedSessions: [Session] {
-        scope.apply(to: store.sessions)
+        scope.apply(to: store.sessions, ciNeedsYou: store.ciStatusStore.needsYouSessionIDs)
     }
 
     /// The sessions assigned to the grid, capped at what the picker's
@@ -186,6 +187,7 @@ struct GridView: View {
         SessionTileActions(
             onActivate: { activeSessionID = session.id },
             onOpenSession: { openSession(session.id) },
+            onShowChecks: { showChecks(session.id) },
             onDelete: { pendingDeletion = session },
             onRestart: { store.restartSession(sessionID: session.id) },
             onRevealInFinder: {

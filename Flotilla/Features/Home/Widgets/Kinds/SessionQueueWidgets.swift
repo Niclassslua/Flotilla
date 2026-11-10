@@ -22,6 +22,7 @@ struct NeedsYouWidgetContent: View {
     let size: HomeWidgetSize
     let items: [HomeWaitingItem]
     let openSession: (UUID) -> Void
+    var openChecks: (UUID) -> Void = { _ in }
 
     var body: some View {
         if items.isEmpty {
@@ -55,7 +56,9 @@ struct NeedsYouWidgetContent: View {
     private func list(max: Int) -> some View {
         VStack(spacing: 6) {
             ForEach(items.prefix(max)) { item in
-                Button { openSession(item.session.id) } label: {
+                Button {
+                    if item.failingCheck != nil { openChecks(item.session.id) } else { openSession(item.session.id) }
+                } label: {
                     row(item)
                 }
                 .buttonStyle(.plain)

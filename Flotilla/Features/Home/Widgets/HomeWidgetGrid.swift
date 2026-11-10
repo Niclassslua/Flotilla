@@ -11,6 +11,7 @@ struct HomeWidgetGrid: View {
     @Bindable var insights: HomeInsights
     let editor: HomeWidgetEditor
     let openSession: (UUID) -> Void
+    let openChecks: (UUID) -> Void
 
     @State private var width: CGFloat
     @State private var presentsGallery = false
@@ -22,11 +23,12 @@ struct HomeWidgetGrid: View {
 
     /// `initialWidth` lets an offscreen render lay out at a known width;
     /// on screen the grid measures itself and updates immediately.
-    init(store: AppStore, insights: HomeInsights, editor: HomeWidgetEditor, openSession: @escaping (UUID) -> Void, initialWidth: CGFloat = 0) {
+    init(store: AppStore, insights: HomeInsights, editor: HomeWidgetEditor, openSession: @escaping (UUID) -> Void, openChecks: @escaping (UUID) -> Void = { _ in }, initialWidth: CGFloat = 0) {
         self.store = store
         self.insights = insights
         self.editor = editor
         self.openSession = openSession
+        self.openChecks = openChecks
         _width = State(initialValue: initialWidth)
     }
 
@@ -176,6 +178,7 @@ struct HomeWidgetGrid: View {
             insights: insights,
             editor: editor,
             openSession: openSession,
+            openChecks: openChecks,
             onResizeChanged: resizable ? { resizeChanged(entry, frame: frame, translation: $0, geometry: geometry) } : nil,
             onResizeEnded: resizable ? { resizeEnded(entry) } : nil
         )

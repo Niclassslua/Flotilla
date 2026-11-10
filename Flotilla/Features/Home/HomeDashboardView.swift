@@ -14,6 +14,7 @@ struct HomeDashboardView: View {
     @Bindable var store: AppStore
     let openProject: (UUID) -> Void
     let openSession: (UUID) -> Void
+    let openChecks: (UUID) -> Void
     @Bindable var settingsViewModel: SettingsViewModel
     let insights: HomeInsights
 
@@ -26,12 +27,14 @@ struct HomeDashboardView: View {
         store: AppStore,
         openProject: @escaping (UUID) -> Void,
         openSession: @escaping (UUID) -> Void,
+        openChecks: @escaping (UUID) -> Void = { _ in },
         settingsViewModel: SettingsViewModel,
         insights: HomeInsights
     ) {
         self.store = store
         self.openProject = openProject
         self.openSession = openSession
+        self.openChecks = openChecks
         self.settingsViewModel = settingsViewModel
         self.insights = insights
         _widgetEditor = State(initialValue: HomeWidgetEditor(settings: .init(
@@ -57,7 +60,7 @@ struct HomeDashboardView: View {
                 greeting
                 projectsSection
                 if !store.projects.isEmpty {
-                    HomeWidgetGrid(store: store, insights: insights, editor: widgetEditor, openSession: openSession)
+                    HomeWidgetGrid(store: store, insights: insights, editor: widgetEditor, openSession: openSession, openChecks: openChecks)
                 }
             }
             .padding(.horizontal, FlotillaSpacing.xxLarge + FlotillaSpacing.small)

@@ -16,7 +16,7 @@ struct SessionGitSidebar: View {
     @State private var isCreatingBranch = false
     @State private var branchDraft = ""
     @State private var pendingDeletion: PendingBranchDeletion?
-    @State private var pendingCIFailure: CICheck?
+    @State private var isReviewingCIPrompt = false
     @FocusState private var isBranchFieldFocused: Bool
     @FocusState private var isCommitFieldFocused: Bool
 
@@ -41,9 +41,9 @@ struct SessionGitSidebar: View {
         .task(id: viewModel.monitorKey) {
             await viewModel.monitorSelection()
         }
-        .sheet(item: $pendingCIFailure) { check in
-            CIFailureSendSheet(session: session, check: check, store: store) {
-                pendingCIFailure = nil
+        .sheet(isPresented: $isReviewingCIPrompt) {
+            CIFailureSendSheet(session: session, store: store) {
+                isReviewingCIPrompt = false
             }
         }
         .confirmationDialog(
@@ -162,8 +162,8 @@ struct SessionGitSidebar: View {
         case .log:
             logView
         case .checks:
-            SessionChecksView(session: session, store: store) { check in
-                pendingCIFailure = check
+            SessionChecksView(session: session, store: store) {
+                isReviewingCIPrompt = true
             }
         }
     }

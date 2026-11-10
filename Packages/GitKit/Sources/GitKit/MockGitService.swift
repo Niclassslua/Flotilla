@@ -240,7 +240,9 @@ public final class MockGhService: GhServiceProtocol, @unchecked Sendable {
 
     public var ciStatusByBranch: [String: CIStatus] = [:]
     public var ciErrorToThrow: Error?
-    public var failedLogToReturn = ""
+    public var jobLogToReturn = ""
+    public var jobLogError: Error?
+    public var localTipToReturn: CILocalTip?
     @Locked public private(set) var ciStatusCalls: [String] = []
 
     public func ciStatus(forBranch branch: String, at repoPath: URL) async throws -> CIStatus? {
@@ -249,8 +251,13 @@ public final class MockGhService: GhServiceProtocol, @unchecked Sendable {
         return ciStatusByBranch[branch]
     }
 
-    public func failedLog(runID: Int, at repoPath: URL) async throws -> String {
-        failedLogToReturn
+    public func jobLog(jobID: Int, at repoPath: URL) async throws -> String {
+        if let jobLogError { throw jobLogError }
+        return jobLogToReturn
+    }
+
+    public func localTip(at repoPath: URL) async throws -> CILocalTip? {
+        localTipToReturn
     }
 
     public var issuesToReturn: [GhIssue] = []

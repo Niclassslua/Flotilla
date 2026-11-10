@@ -160,6 +160,15 @@ struct FlotillaApp: App {
             onReply: { sessionID, text in
                 appStore.process(for: sessionID)?.send(input: Data((text + "\n").utf8))
             },
+            onFixCI: { sessionID in
+                Task {
+                    do {
+                        try await appStore.ciStatusStore.sendFailuresToAgent(sessionID: sessionID)
+                    } catch {
+                        appStore.lastOperationError = "Couldn’t send the CI failure to the agent: \(error.localizedDescription)"
+                    }
+                }
+            },
             shouldPresentInForeground: {
                 foregroundGate.withLock { $0 }
             }
@@ -200,7 +209,7 @@ struct FlotillaApp: App {
 
         let dockBadge = DockBadgeController(
             sessions: { appStore.sessions },
-            ciFailing: { appStore.ciStatusStore.failingSessionIDs },
+            ciFailing: { appStore.ciStatusStore.needsYouSessionIDs },
             isEnabled: { settingsViewModel.settings.notifications.dockBadgeEnabled }
         )
         dockBadge.start()
@@ -293,7 +302,8 @@ struct FlotillaApp: App {
                     sessionID: reviewedSessionID,
                     store: store,
                     gitService: gitService,
-                    repository: sessionRepository
+                    repository: sessionRepository,
+                    onShowChecks: { navigator.requestChecks(for: $0) }
                 )
                 .preferredColorScheme(settingsViewModel.settings.appearance.colorScheme)
             }

@@ -112,10 +112,11 @@ Three ways to render many sessions; Grid and Board are opened from the global ba
 | **Issues tab** | A project's open GitHub issues (left) and the selected one (right): rendered body, the sessions started from it with their status and CI, Start Session, Open on GitHub. Filters All / No Session / Has Session. Read-only — issues are edited on GitHub. | `ProjectIssuesView`, `ProjectIssuesViewModel` — `Features/Projects/Issues/` |
 | **Issue picker** | The launcher's "From Issue…" popover: search a project's open issues and link one, which fills the goal and names the session `#<n> <title>` on an `issue-<n>-…` branch. Also opened by "New Session from Issue…" (project context menu, palette). | `IssuePickerView`, `LauncherIssueControl` — `Features/CreateSession/IssuePicker.swift` |
 | **Linked issue** | The issue a session was started from (`Session.linkedIssue`), shown as a `#<n>` link in the session bar. | `IssueLink` — SessionKit |
-| **Checks tab** | The session git sidebar's fourth tab: the branch's pull request (state, review decision) and every CI check on its newest commit, failures first. A dot on the tab means CI is failing or running. | `SessionChecksView` — `Features/Session/SessionChecksViews.swift` |
-| **CI chip** | The session bar's one-glance CI answer — `✗ 2/4 failing #142`, `CI running`, `CI passing`. Opens the Checks tab. | `CIStatusChip` |
-| **CI glyph** | CI reduced to one icon on sidebar rows (only when red or running) and board cards (any state). | `CIStatusGlyph` |
-| **Send failure sheet** | Shows the prompt built from a failing check's log, editable, before it goes to the session's agent. | `CIFailureSendSheet` |
+| **Checks tab** | The session git sidebar's fourth tab, built around the next action: a verdict (Failing, Running, Ready to merge, Commit passing, Not pushed…), **Fix N failures with \<agent\>**, Dismiss, then failures that expand to the part of the log explaining them. Works the same for pull requests and direct pushes; merging stays on GitHub. A dot on the tab means CI is failing or running. | `SessionChecksView` — `Features/Session/SessionChecksViews.swift` |
+| **CI chip** | The session bar's one-glance CI answer — `✗ 2/4 failing #142`, `3/5 done`, `Claude is fixing`, `Ready to merge`. Dims when the result is for an older commit. Opens the Checks tab. | `CIStatusChip` |
+| **CI badge** | CI on a session list row, after the status: `⊗ 2/4`, a progress ring with `2/5`, `Fixing`, or a bare green check. The branch sits beside the agent name to make room. | `CISessionRowBadge` |
+| **CI glyph** | CI reduced to one icon on board cards and issue rows. | `CIStatusGlyph` |
+| **Send failure sheet** | "Review Prompt First…" on the Fix button: the prompt covering every failure, editable, before it goes to the session's agent. | `CIFailureSendSheet` |
 | **Screenshot panel** | The drawer displaying real-time UI previews and visual tool outputs captured by the agent during its task. | `AgentScreenshotPanel` — `Features/Session/` |
 
 ---

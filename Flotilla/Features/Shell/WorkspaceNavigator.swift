@@ -7,6 +7,15 @@ import SwiftUI
 @Observable
 @MainActor
 final class WorkspaceNavigator {
+    /// One-shot: a session whose Checks tab should open. `DetailColumn` owns
+    /// the inspector, so it consumes this and clears it.
+    var checksRequest: UUID?
+
+    func requestChecks(for sessionID: UUID) {
+        selection = .session(sessionID)
+        checksRequest = sessionID
+    }
+
     var selection: SidebarItem = .overview {
         didSet {
             guard selection != oldValue else { return }

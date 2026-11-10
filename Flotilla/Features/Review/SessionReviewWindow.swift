@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import GitKit
 import SessionKit
 import DesignSystem
@@ -17,7 +18,9 @@ struct SessionReviewWindow: View {
     @Bindable var store: AppStore
     let gitService: any GitServiceProtocol
     let repository: any SessionRepository
+    var onShowChecks: (UUID) -> Void = { _ in }
 
+    @Environment(\.openWindow) private var openWindow
     @State private var viewModel: SessionReviewViewModel?
     @State private var draft: ReviewCommentDraft?
     @State private var draftText = ""
@@ -77,6 +80,7 @@ struct SessionReviewWindow: View {
             )
             Divider()
 
+            ciBanner(sessionID: session.id)
             banners(viewModel: viewModel)
 
             HStack(spacing: 0) {
@@ -101,6 +105,31 @@ struct SessionReviewWindow: View {
                 onCancel: { isPresentingSend = false }
             )
         }
+    }
+
+    /// Whether CI agrees with the diff is part of deciding to ship it.
+    @ViewBuilder
+    private func ciBanner(sessionID: UUID) -> some View {
+        let snapshot = store.ciStatusStore.snapshot(for: sessionID)
+        if snapshot.status != nil, snapshot.verdict.isWorthAChip {
+            banner("CI: \(snapshot.verdict.title)", systemImage: snapshot.verdict.systemImage, tint: snapshot.verdict.tint) {
+                Button("Show Checks") { showChecks(sessionID: sessionID) }
+                    .font(FlotillaTypography.caption2)
+            }
+            .accessibilityIdentifier("ReviewWindow.CIVerdict")
+            Divider()
+        }
+    }
+
+    /// The Checks tab lives in the workspace window, so bring that forward.
+    private func showChecks(sessionID: UUID) {
+        NSApp.activate()
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix(FlotillaApp.mainWindowSceneID) == true && $0.isVisible }) {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow(id: FlotillaApp.mainWindowSceneID)
+        }
+        onShowChecks(sessionID)
     }
 
     @ViewBuilder

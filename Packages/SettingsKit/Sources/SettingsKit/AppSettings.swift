@@ -478,6 +478,9 @@ public struct GitPreferences: Codable, Equatable, Sendable {
     /// Per-project choices, keyed by the project's UUID string. A project
     /// without an entry follows `defaultCommitAttribution`.
     public var projectCommitAttribution: [String: CommitAttributionMode]
+    /// Shows the CI of the commit a worktree started from, before the session
+    /// has committed anything. Off means CI waits for the session's own work.
+    public var showCIBeforeSessionCommits: Bool
 
     public init(
         deleteBranchWithWorktree: Bool = true,
@@ -485,7 +488,8 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         fetchBeforeCreatingWorktree: Bool = false,
         highlightUnseenCommits: Bool = true,
         defaultCommitAttribution: CommitAttributionMode = .local,
-        projectCommitAttribution: [String: CommitAttributionMode] = [:]
+        projectCommitAttribution: [String: CommitAttributionMode] = [:],
+        showCIBeforeSessionCommits: Bool = false
     ) {
         self.deleteBranchWithWorktree = deleteBranchWithWorktree
         self.worktreeOnSessionDelete = worktreeOnSessionDelete
@@ -493,6 +497,7 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         self.highlightUnseenCommits = highlightUnseenCommits
         self.defaultCommitAttribution = defaultCommitAttribution
         self.projectCommitAttribution = projectCommitAttribution
+        self.showCIBeforeSessionCommits = showCIBeforeSessionCommits
     }
 
     /// The mode that applies to a project: its own choice, else the default.
@@ -510,6 +515,7 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         case highlightUnseenCommits
         case defaultCommitAttribution
         case projectCommitAttribution
+        case showCIBeforeSessionCommits
     }
 
     /// `stampAgentTrailer` is the on/off toggle attribution modes replaced —
@@ -548,6 +554,7 @@ public struct GitPreferences: Codable, Equatable, Sendable {
         // instead of failing the whole settings file.
         let rawProjectModes = (try? container.decodeIfPresent([String: String].self, forKey: .projectCommitAttribution)) ?? [:]
         projectCommitAttribution = rawProjectModes.compactMapValues(CommitAttributionMode.init(rawValue:))
+        showCIBeforeSessionCommits = try container.decodeIfPresent(Bool.self, forKey: .showCIBeforeSessionCommits) ?? false
     }
 }
 

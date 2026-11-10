@@ -370,12 +370,13 @@ final class HomeInsights {
             // Red CI outranks Ready for Review — the same rule `FleetAttention`
             // applies to the Dock badge and menu bar.
             if session.status != .waitingForInput,
-               let ci = store.ciStatusStore.status(for: session.id), ci.state == .failing {
+               store.ciStatusStore.needsYouSessionIDs.contains(session.id),
+               let ci = store.ciStatusStore.status(for: session.id) {
                 waiting.append(HomeWaitingItem(
                     session: session,
                     project: project,
                     since: session.statusChangedAt ?? session.lastActiveAt,
-                    failingCheck: ci.failingChecks.first?.name
+                    failingCheck: ci.failuresToFix.first?.name
                 ))
                 continue
             }
