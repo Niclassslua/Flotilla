@@ -106,7 +106,7 @@ final class RemoteCompanionDataSource: CompanionDataSource {
 
     var macs: [MacHost] {
         connections.map {
-            MacHost(id: $0.record.macID, name: $0.record.name, connection: $0.state, lastSeen: $0.record.lastSeen)
+            MacHost(id: $0.record.macID, name: $0.record.name, connection: $0.state, lastSeen: $0.record.lastSeen, isConfirmingReconnect: $0.isConfirmingReconnect)
         }
     }
 

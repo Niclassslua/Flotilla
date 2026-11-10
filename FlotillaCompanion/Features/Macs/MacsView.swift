@@ -115,7 +115,7 @@ private struct MacRow: View {
     private var dotColor: Color {
         switch mac.connection {
         case .connected: FlotillaColors.statusWorking
-        case .connecting: FlotillaColors.statusWaitingForInput
+        case .connecting, .reconnecting: FlotillaColors.statusWaitingForInput
         case .unreachable: FlotillaColors.statusIdle
         case .needsRepairing: FlotillaColors.danger
         }
@@ -125,7 +125,7 @@ private struct MacRow: View {
         switch mac.connection {
         case .needsRepairing:
             return Text("Needs pairing again").foregroundStyle(FlotillaColors.danger)
-        case .unreachable:
+        case .unreachable, .reconnecting:
             return Text("Unreachable · last seen \(mac.lastSeen.formatted(date: .omitted, time: .shortened))")
                 .foregroundStyle(FlotillaColors.textTertiary)
         case .connecting where summary.total == 0:

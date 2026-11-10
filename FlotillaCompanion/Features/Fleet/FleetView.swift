@@ -55,12 +55,12 @@ struct FleetView: View {
         .animation(.snappy, value: sessions.map(\.id))
         .animation(.snappy, value: needsYou.map(\.id))
         .safeAreaInset(edge: .top, spacing: 0) {
-            if let mac, mac.showsConnectionLostBanner {
+            if let mac, mac.showsConnectionBanner {
                 UnreachableBanner(mac: mac, asOf: store.fleetReceivedAt(macID))
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.snappy, value: mac?.showsConnectionLostBanner)
+        .animation(.snappy, value: mac?.showsConnectionBanner)
         .navigationTitle(mac?.name ?? "Mac")
         .toolbar {
             #if DEBUG

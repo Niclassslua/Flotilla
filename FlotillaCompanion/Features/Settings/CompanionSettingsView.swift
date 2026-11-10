@@ -128,6 +128,7 @@ struct CompanionSettingsView: View {
         case .connected(let path, _): "Connected · \(path.displayName)"
         case .connecting: "Connecting…"
         case .unreachable: "Unreachable"
+        case .reconnecting: "Reconnecting…"
         case .needsRepairing: "Needs pairing"
         }
     }
@@ -152,8 +153,8 @@ struct MacConnectionDetailView: View {
                         LabeledContent("Connected", value: "\(path.displayName) · \(address)")
                     case .connecting:
                         LabeledContent("Status", value: "Connecting…")
-                    case .unreachable:
-                        LabeledContent("Status", value: "Unreachable")
+                    case .unreachable, .reconnecting:
+                        LabeledContent("Status", value: mac.connection == .reconnecting ? "Reconnecting…" : "Unreachable")
                         LabeledContent("Last seen", value: mac.lastSeen.formatted(date: .abbreviated, time: .shortened))
                     case .needsRepairing(let reason):
                         Text(reason.message).foregroundStyle(FlotillaColors.danger)

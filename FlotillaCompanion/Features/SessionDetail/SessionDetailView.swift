@@ -121,9 +121,14 @@ struct SessionDetailView: View {
                     inFlight: inFlight,
                     diffStat: headerDiffStat(session)
                 )
-                if let mac, mac.showsConnectionLostBanner {
-                    UnreachableBanner(mac: mac, asOf: store.transcriptReceivedAt(sessionID))
+                VStack(spacing: 0) {
+                    if let mac, mac.showsConnectionBanner {
+                        UnreachableBanner(mac: mac, asOf: store.transcriptReceivedAt(sessionID))
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
+                .clipped()
+                .animation(reduceMotion ? nil : .snappy, value: mac?.showsConnectionBanner)
                 if isSearching {
                     TranscriptSearchBar(
                         query: $searchQuery,

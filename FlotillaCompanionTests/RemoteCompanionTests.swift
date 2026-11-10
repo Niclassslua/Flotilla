@@ -402,13 +402,43 @@ final class RemoteCompanionTests: XCTestCase {
         // Dropping the peer without revoking anything schedules the normal
         // ~1s backoff retry (sessionClosed's first retryDelays entry).
         mac.lock.withLock { mac.peers }.forEach { $0.close() }
-        await waitUntil { data.macs.first?.connection == .unreachable }
+        await waitUntil { data.macs.first?.isReachable == false }
 
         data.reconnect(macID)
         // A manual reconnect must land well inside the natural backoff
         // window, proving it didn't just wait the delay out.
         await waitUntil(0.5) { data.macs.first?.isReachable == true }
         XCTAssertEqual(data.macs.first { $0.id == macID }?.isReachable, true)
+        // No diagnosis was recorded, so there was no banner to confirm away.
+        XCTAssertEqual(data.macs.first { $0.id == macID }?.showsConnectionBanner, false)
+    }
+
+    func testBannerStaysUpOnlyToConfirmARealReconnect() {
+        func host(_ connection: MacConnectionState, confirming: Bool) -> MacHost {
+            MacHost(id: "m", name: "M", connection: connection, lastSeen: .now, isConfirmingReconnect: confirming)
+        }
+        XCTAssertTrue(host(.connected(path: .lan, address: "a"), confirming: true).showsConnectionBanner)
+        XCTAssertFalse(host(.connected(path: .lan, address: "a"), confirming: false).showsConnectionBanner)
+        // A confirmation left over from before the link dropped again means nothing.
+        XCTAssertFalse(host(.connecting, confirming: true).showsConnectionBanner)
+    }
+
+    func testManualRetryDuringOutageKeepsBannerUp() async throws {
+        let mac = FakeMac(sessions: [])
+        try await mac.start()
+        let data = RemoteCompanionDataSource(store: .temporary(), identityStore: InMemoryDeviceIdentityStore(), deviceName: "Test iPhone")
+        data.setActive(true)
+        let macID = try await data.pair(with: mac.payload) { _, _ in }
+        await waitUntil { data.macs.first?.isReachable == true }
+
+        mac.server.stop()
+        mac.lock.withLock { mac.peers }.forEach { $0.close() }
+        await waitUntil(10) { data.macs.first?.connection == .unreachable }
+
+        data.reconnect(macID)
+        let host = try XCTUnwrap(data.macs.first)
+        XCTAssertEqual(host.connection, .reconnecting)
+        XCTAssertTrue(host.showsConnectionBanner)
     }
 
     func testForegroundResumeMarksConnectingImmediately() async throws {
@@ -423,7 +453,7 @@ final class RemoteCompanionTests: XCTestCase {
         data.setActive(false)
         let host = try XCTUnwrap(data.macs.first)
         XCTAssertEqual(host.connection, .unreachable)
-        XCTAssertTrue(host.showsConnectionLostBanner)
+        XCTAssertTrue(host.showsConnectionBanner)
 
         // Foreground must not leave `.unreachable` for even one frame — the
         // banner keys off that state and would flash until the connect Task runs.
@@ -431,7 +461,7 @@ final class RemoteCompanionTests: XCTestCase {
         let resumed = try XCTUnwrap(data.macs.first)
         switch resumed.connection {
         case .connecting, .connected:
-            XCTAssertFalse(resumed.showsConnectionLostBanner)
+            XCTAssertFalse(resumed.showsConnectionBanner)
         default:
             XCTFail("expected connecting/connected after resume, got \(resumed.connection)")
         }
@@ -470,6 +500,43 @@ final class ConnectionDiagnosisTests: XCTestCase {
         XCTAssertTrue(diagnosis.advice(for: tailscale).first!.contains("isn't connected on this iPhone"))
         let lanReport = diagnosis.paths.first { $0.path == .lan }!
         XCTAssertTrue(diagnosis.advice(for: lanReport).contains { $0.contains("same Wi-Fi") })
+    }
+
+    func testOutageLinesSayWhatFailedOnEachPath() {
+        func lines(_ attempts: [ConnectTarget: AttemptStatus], tailnet hasTailnet: Bool, wifi: Bool = true) -> (lan: String?, tailscale: String?) {
+            let diagnosis = ConnectionDiagnosis.diagnose(
+                error: ConnectError.unreachable([:]), attempts: attempts, offeredPaths: [.lan, .tailscale],
+                phoneHasTailnet: hasTailnet, localNetworkDenied: false, phoneOnWiFi: wifi
+            )
+            return (diagnosis.outageLine(for: diagnosis.paths.first { $0.path == .lan }!),
+                    diagnosis.outageLine(for: diagnosis.paths.first { $0.path == .tailscale }!))
+        }
+
+        let refused = lines([lan: .failed(.unreachable("Connection refused")), tailnet: .failed(.unreachable("Connection refused"))], tailnet: true)
+        XCTAssertTrue(refused.lan!.contains("Flotilla isn't accepting"))
+        XCTAssertTrue(refused.tailscale!.contains("Flotilla isn't accepting"))
+
+        let timedOut = lines([lan: .failed(.timedOut), tailnet: .failed(.timedOut)], tailnet: false)
+        XCTAssertTrue(timedOut.lan!.contains("No answer on this Wi-Fi"))
+        XCTAssertTrue(timedOut.tailscale!.contains("Tailscale app"))
+
+        XCTAssertEqual(lines([lan: .failed(.timedOut)], tailnet: true, wifi: false).lan, "This iPhone isn't on Wi-Fi.")
+    }
+
+    func testShortReasonPicksTheMostUsefulCause() {
+        func reason(_ attempts: [ConnectTarget: AttemptStatus], tailnet hasTailnet: Bool, denied: Bool = false, wifi: Bool = true) -> String {
+            ConnectionDiagnosis.diagnose(
+                error: ConnectError.unreachable([:]), attempts: attempts, offeredPaths: [.lan, .tailscale],
+                phoneHasTailnet: hasTailnet, localNetworkDenied: denied, phoneOnWiFi: wifi
+            ).shortReason
+        }
+        let bothTimedOut: [ConnectTarget: AttemptStatus] = [lan: .failed(.timedOut), tailnet: .failed(.timedOut)]
+
+        XCTAssertEqual(reason(bothTimedOut, tailnet: true), "Mac isn't answering")
+        XCTAssertEqual(reason(bothTimedOut, tailnet: false), "Turn on Tailscale to connect")
+        XCTAssertEqual(reason(bothTimedOut, tailnet: false, wifi: false), "Connect to Wi-Fi or Tailscale")
+        XCTAssertEqual(reason(bothTimedOut, tailnet: true, denied: true), "Allow Local Network access")
+        XCTAssertEqual(reason([lan: .failed(.unreachable("Connection refused")), tailnet: .failed(.timedOut)], tailnet: true), "Flotilla isn't listening")
     }
 
     func testMissingTailscaleAddressIsReportedAsNotOffered() {

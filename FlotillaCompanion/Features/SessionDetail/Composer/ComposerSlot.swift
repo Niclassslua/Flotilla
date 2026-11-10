@@ -333,10 +333,10 @@ private struct PromptComposer: View {
 
     private var placeholder: String {
         if !isActionable {
-            if case .connecting = store.mac(forSession: session.id)?.connection {
-                return "Reconnecting…"
+            switch store.mac(forSession: session.id)?.connection {
+            case .connecting, .reconnecting: return "Reconnecting…"
+            default: return "Mac unreachable"
             }
-            return "Mac unreachable"
         }
         return session.status == .working ? "Queue a message" : "Message \(session.agent.displayName)"
     }

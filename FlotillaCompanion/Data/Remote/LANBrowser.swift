@@ -110,6 +110,7 @@ struct ConnectionDiagnosis: Equatable {
     var paths: [PathReport]
     var phoneHasTailnet: Bool
     var localNetworkDenied: Bool
+    var phoneOnWiFi: Bool = true
 
     var title: String {
         switch headline {
@@ -181,6 +182,70 @@ struct ConnectionDiagnosis: Equatable {
         }
     }
 
+    /// One short line per path for the outage banner: what happened on that
+    /// path and, where the phone can tell, what to do about it.
+    func outageLine(for report: PathReport) -> String? {
+        let macAnswered = "Mac reached, but Flotilla isn't accepting connections. Check that iPhone Companion is on."
+        switch (report.path, report.outcome) {
+        case (_, .succeeded), (_, .notNeeded):
+            return nil
+        case (.lan, .notOffered):
+            return "This Mac has no local address yet."
+        case (.tailscale, .notOffered):
+            return "Not connected on the Mac."
+        case (.lan, .failed(let failures)):
+            if localNetworkDenied { return "Blocked. Turn on Local Network for Flotilla in iOS Settings." }
+            if failures.values.contains(Self.refused) { return macAnswered }
+            return phoneOnWiFi ? "No answer on this Wi-Fi. The Mac may be asleep or on another network." : "This iPhone isn't on Wi-Fi."
+        case (.tailscale, .failed(let failures)):
+            if !phoneHasTailnet { return "Not connected on this iPhone. Turn it on in the Tailscale app." }
+            if failures.values.contains(Self.refused) { return macAnswered }
+            return "No answer. The Mac may be asleep or off Tailscale."
+        }
+    }
+
+    /// A two-word verdict for one path, or `nil` when it isn't worth a row.
+    func pathStatus(for report: PathReport) -> String? {
+        switch (report.path, report.outcome) {
+        case (_, .succeeded), (_, .notNeeded):
+            return nil
+        case (_, .notOffered):
+            return "Not set up"
+        case (.lan, .failed(let failures)):
+            if localNetworkDenied { return "Blocked" }
+            if failures.values.contains(Self.refused) { return "Flotilla off" }
+            return phoneOnWiFi ? "No answer" : "No Wi-Fi"
+        case (.tailscale, .failed(let failures)):
+            if !phoneHasTailnet { return "Off on iPhone" }
+            return failures.values.contains(Self.refused) ? "Flotilla off" : "No answer"
+        }
+    }
+
+    /// The single most useful thing to say, short enough for the capsule.
+    var shortReason: String {
+        if case .other = headline { return "Couldn't connect" }
+        func failed(_ path: NetworkPath) -> [String: String]? {
+            guard case let .failed(failures)? = paths.first(where: { $0.path == path })?.outcome else { return nil }
+            return failures
+        }
+        let lan = failed(.lan), tailscale = failed(.tailscale)
+        if localNetworkDenied, lan != nil { return "Allow Local Network access" }
+        if [lan, tailscale].contains(where: { $0?.values.contains(Self.refused) == true }) { return "Flotilla isn't listening" }
+        if tailscale != nil, !phoneHasTailnet {
+            return phoneOnWiFi ? "Turn on Tailscale to connect" : "Connect to Wi-Fi or Tailscale"
+        }
+        if lan != nil, !phoneOnWiFi { return "Connect to Wi-Fi" }
+        return "Mac isn't answering"
+    }
+
+    /// Names the paths a running retry can actually use.
+    var tryingNote: String {
+        let names = paths
+            .filter { $0.outcome != .notOffered && ($0.path != .tailscale || phoneHasTailnet) }
+            .map { $0.path == .lan ? "local network" : "Tailscale" }
+        return names.isEmpty ? "Trying…" : "Trying \(names.joined(separator: " and "))…"
+    }
+
     /// Builds a diagnosis from a connection failure and the attempt log.
     static func diagnose(
         error: Error,
@@ -188,6 +253,7 @@ struct ConnectionDiagnosis: Equatable {
         offeredPaths: Set<NetworkPath>,
         phoneHasTailnet: Bool,
         localNetworkDenied: Bool,
+        phoneOnWiFi: Bool = true,
         payloadExpired: Bool = false
     ) -> ConnectionDiagnosis {
         let paths = NetworkPath.allCases.map { path -> PathReport in
@@ -233,8 +299,10 @@ struct ConnectionDiagnosis: Equatable {
                 headline = .other(error.localizedDescription)
             }
         }
-        return ConnectionDiagnosis(headline: headline, paths: paths, phoneHasTailnet: phoneHasTailnet, localNetworkDenied: lanDenied)
+        return ConnectionDiagnosis(headline: headline, paths: paths, phoneHasTailnet: phoneHasTailnet, localNetworkDenied: lanDenied, phoneOnWiFi: phoneOnWiFi)
     }
+
+    private static let refused = "connection refused"
 
     static func describe(_ error: TransportError) -> String {
         switch error {
@@ -244,7 +312,7 @@ struct ConnectionDiagnosis: Equatable {
         case .frameTooLarge: "unexpected data"
         case .backpressure: "connection busy"
         case .unreachable(let detail):
-            if detail.localizedCaseInsensitiveContains("refused") { "connection refused" }
+            if detail.localizedCaseInsensitiveContains("refused") { refused }
             else if detail.localizedCaseInsensitiveContains("unreachable") || detail.localizedCaseInsensitiveContains("no route") { "no route to host" }
             else if detail.localizedCaseInsensitiveContains("dns") || detail.localizedCaseInsensitiveContains("resolve") { "name not found" }
             else { "unreachable" }

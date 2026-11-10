@@ -24,6 +24,7 @@ final class MacConnection {
     /// The last connection attempt, per address, for the diagnostics screen.
     private(set) var lastAttempts: [ConnectTarget: AttemptStatus] = [:]
     private(set) var lastDiagnosis: ConnectionDiagnosis?
+    private(set) var isConfirmingReconnect = false
 
     private(set) var queuedPrompts: [UUID: [QueuedPrompt]] = [:]
     private(set) var acknowledgedReviews: Set<UUID> = []
@@ -44,6 +45,8 @@ final class MacConnection {
     @ObservationIgnored private var commitLoads: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var fileLoads: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var connectTask: Task<Void, Never>?
+    @ObservationIgnored private var connectGeneration: UInt64 = 0
+    @ObservationIgnored private var confirmReconnectTask: Task<Void, Never>?
     @ObservationIgnored private var receiveTask: Task<Void, Never>?
     @ObservationIgnored private var retryAttempt = 0
     @ObservationIgnored private var isActive = false
@@ -63,6 +66,7 @@ final class MacConnection {
     @ObservationIgnored var onSpeechAvailabilityChange: () -> Void = {}
 
     static let requestTimeout: Duration = .seconds(45)
+    static let reconnectConfirmation: Duration = .seconds(5)
     static let retryDelays: [Double] = [1, 2, 5, 10, 20, 30]
 
     init(
@@ -121,8 +125,8 @@ final class MacConnection {
         retryAttempt = 0
         // Eagerly leave `.unreachable` so the UI doesn't flash the lost-
         // connection banner during the async hop into `attemptConnection`
-        // (notably when returning from background).
-        state = .connecting
+        // (notably when returning from background). A known outage stays one.
+        state = lastDiagnosis == nil ? .connecting : .reconnecting
         scheduleConnect(after: 0)
     }
 
@@ -137,25 +141,34 @@ final class MacConnection {
         connectTask?.cancel()
         connectTask = nil
         retryAttempt = 0
-        state = .connecting
+        state = .reconnecting
         scheduleConnect(after: 0)
     }
 
     private func scheduleConnect(after delay: Double) {
         connectTask?.cancel()
+        let generation = connectGeneration &+ 1
+        connectGeneration = generation
         connectTask = Task { [weak self] in
             if delay > 0 {
                 try? await Task.sleep(for: .seconds(delay))
             }
             guard !Task.isCancelled, let self else { return }
             await self.attemptConnection()
-            self.connectTask = nil
+            // A failed attempt has already scheduled its retry; keep that handle.
+            if self.connectGeneration == generation {
+                self.connectTask = nil
+            }
         }
     }
 
     private func attemptConnection() async {
         guard isActive else { return }
-        state = .connecting
+        if case .connecting = state {
+            // First attempt since launch, foreground, or a dropped link.
+        } else {
+            state = .reconnecting
+        }
         let targets = connectTargets()
         let log = AttemptLog()
         do {
@@ -175,9 +188,11 @@ final class MacConnection {
                 return
             }
             lastAttempts = log.snapshot
-            lastDiagnosis = nil
             adopt(result.session, target: result.target, macName: result.serverHello.macName)
         } catch {
+            // Superseded by `reconnectNow`/`setActive(false)`; its failure must
+            // not cancel the newer attempt or overwrite its state.
+            guard !Task.isCancelled else { return }
             lastAttempts = log.snapshot
             handleConnectFailure(error, offered: Set(targets.map(\.path)))
         }
@@ -189,7 +204,8 @@ final class MacConnection {
             attempts: lastAttempts,
             offeredPaths: offered,
             phoneHasTailnet: NetworkInterfaces.hasTailnetAddress,
-            localNetworkDenied: browser?.permission == .denied
+            localNetworkDenied: browser?.permission == .denied,
+            phoneOnWiFi: NetworkInterfaces.current().contains { $0.path == .lan && $0.interface.hasPrefix("en") }
         )
         switch error {
         case ConnectError.handshake(.rejected(.revoked)):
@@ -247,6 +263,11 @@ final class MacConnection {
         fleetRevision = nil
         retryAttempt = 0
         state = .connected(path: target.path, address: target.label)
+        // A diagnosis means the outage banner was on screen; a quiet blip has none.
+        if lastDiagnosis != nil {
+            confirmReconnect()
+        }
+        lastDiagnosis = nil
         record.name = macName
         record.lastSeen = .now
         record.repairReason = nil
@@ -285,6 +306,16 @@ final class MacConnection {
                     self.onSpeechAvailabilityChange()
                 }
             }
+        }
+    }
+
+    private func confirmReconnect() {
+        isConfirmingReconnect = true
+        confirmReconnectTask?.cancel()
+        confirmReconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.reconnectConfirmation)
+            guard !Task.isCancelled else { return }
+            self?.isConfirmingReconnect = false
         }
     }
 
@@ -350,7 +381,8 @@ final class MacConnection {
         if case .needsRepairing = state {
             return
         }
-        state = .unreachable
+        // A dropped link gets one quiet attempt; the banner waits for it to fail.
+        state = isActive ? .connecting : .unreachable
         if isSpeechAvailable {
             isSpeechAvailable = false
             onSpeechAvailabilityChange()

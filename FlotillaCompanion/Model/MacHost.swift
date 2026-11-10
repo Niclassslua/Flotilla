@@ -8,6 +8,8 @@ struct MacHost: Identifiable, Hashable, Sendable {
     var connection: MacConnectionState
     /// When the link last delivered anything. Shown only while unreachable.
     var lastSeen: Date
+    /// Back online after a visible outage: the banner stays briefly to say so.
+    var isConfirmingReconnect = false
 
     var isReachable: Bool {
         if case .connected = connection { return true }
@@ -16,11 +18,14 @@ struct MacHost: Identifiable, Hashable, Sendable {
 
     /// Banner for a confirmed outage — not for `.connecting`, which is the
     /// normal brief window after returning from background (the link is
-    /// dropped while inactive and re-opened on foreground).
-    var showsConnectionLostBanner: Bool {
+    /// dropped while inactive and re-opened on foreground). Stays up through
+    /// `.reconnecting` so retries during an outage don't flicker it, and
+    /// briefly into `.connected` to confirm the link is back.
+    var showsConnectionBanner: Bool {
         switch connection {
-        case .unreachable, .needsRepairing: true
-        case .connecting, .connected: false
+        case .unreachable, .reconnecting, .needsRepairing: true
+        case .connecting: false
+        case .connected: isConfirmingReconnect
         }
     }
 }
@@ -30,6 +35,8 @@ enum MacConnectionState: Hashable, Sendable {
     case connected(path: NetworkPath, address: String)
     /// Not reachable right now; retried automatically.
     case unreachable
+    /// Still in a confirmed outage, with a retry running right now.
+    case reconnecting
     /// The Mac refused this phone or proved to be a different Mac. Not retried
     /// until the user pairs again.
     case needsRepairing(RepairReason)
