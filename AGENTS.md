@@ -420,6 +420,44 @@ DeleteSessionDialog.Cancel
 DeleteSessionDialog.DeleteWithWorktree
 ```
 
+### Companion UI on a real iPhone (`agent-device`)
+
+Xcode's `DeviceInteraction*` agent tools only offer simulators, and clicking through DeviceHub takes over the user's pointer. To tap, read, and record the companion on a physical iPhone, use [`agent-device`](https://github.com/callstack/agent-device) (Node 22.12+). It drives the phone through an XCTest runner it installs there.
+
+One-time setup:
+
+```bash
+npm install -g agent-device@latest
+sudo DevToolsSecurity -enable   # the user has to run this; it needs their password
+```
+
+The iPhone must be paired, unlocked, and in Developer Mode. **Connect it by USB:** over Wi-Fi, reads and screenshots work, but taps fail with `socket hang up` and `record` produces no video.
+
+```bash
+# Signing for the runner. Export before the first agent-device command: its
+# background daemon keeps the environment it started with. If it started
+# without these, run `agent-device daemon stop --state-dir ~/.agent-device`.
+export AGENT_DEVICE_IOS_TEAM_ID=<DEVELOPMENT_TEAM from Config/CompanionSigning.local.xcconfig>
+export AGENT_DEVICE_IOS_BUNDLE_ID=com.<you>.agentdevice.runner
+
+UDID=<from `xcrun devicectl list devices`>
+APP=com.niclassslua.flotilla.companion
+
+make run-companion-device DEVICE=$UDID
+agent-device open $APP --udid $UDID --platform ios --foreground --session phone
+agent-device snapshot -i --session phone                 # refs such as @e4
+agent-device press 'id="UnreachableBanner"' --session phone
+agent-device screenshot /tmp/phone.png --session phone
+agent-device record start /tmp/phone.mp4 --scope device --fps 30 --session phone
+agent-device record stop --session phone
+agent-device close --session phone
+```
+
+- The first run builds the runner, which takes a few minutes. Refs go stale after any interaction, so prefer `id="…"` selectors or take a new `snapshot -i`.
+- Jump straight to a screen: `xcrun devicectl device process launch --device $UDID --payload-url "flotilla://fleet/<macID>" $APP` (or `flotilla://session/<uuid>`).
+- To cause a real connection outage, turn off **Settings ▸ iPhone Companion ▸ Allow iPhone companion** on the Mac and turn it back on afterwards. While it's off, running agents fall back to their terminal permission prompts.
+- These are manual, agent-driven checks. Nothing in CI or `FlotillaUITests` runs them.
+
 ### Accessibility
 
 - Extensive use of `.accessibilityIdentifier()` with dot-notation namespacing
