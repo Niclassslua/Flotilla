@@ -26,33 +26,7 @@ private struct MockCommandRunner: CommandRunning {
     }
 }
 
-/// Claude Code needs two different queries answered (`/model` and `/effort`),
-/// so responses are keyed by the slash command in the arguments.
-private struct ScriptedCommandRunner: CommandRunning {
-    let responses: [String: String]
-
-    func run(_ arguments: [String], executable: URL, workingDirectory: URL) async throws -> CommandResult {
-        guard let key = arguments.last, let stdout = responses[key] else { throw MockRunnerError() }
-        return CommandResult(exitCode: 0, stdout: stdout, stderr: "")
-    }
-}
-
 final class ModelCatalogTests: XCTestCase {
-    func testFetchModelsParsesClaudeAvailableListDroppingLongContextAndDefault() async {
-        let stdout = """
-        Current model: Sonnet 5 (effort: high)
-        Usage: /model <name>. Available: sonnet, opus, haiku, fable, best, sonnet[1m], opus[1m], fable[1m], opusplan, default, or a full model ID.
-        """
-        let fetcher = ModelCatalogFetcher(
-            locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
-            runner: MockCommandRunner(outcome: .success(CommandResult(exitCode: 0, stdout: stdout, stderr: "")))
-        )
-
-        let models = await fetcher.fetchModels(for: .claudeCode)
-
-        XCTAssertEqual(models, ["sonnet", "opus", "haiku", "fable", "best", "opusplan"])
-    }
-
     func testFetchModelsParsesCodexCatalogFilteringHiddenAndSortingByPriority() async {
         let json = """
         {"models":[
@@ -135,82 +109,47 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(profiles[1].effortOptions.last?.label, "Extra High")
     }
 
-    func testClaudeProfilesReadEffortLevelsFromTheCLIDroppingAuto() async {
-        let runner = ScriptedCommandRunner(responses: [
-            "/model": "Usage: /model <name>. Available: sonnet, opus, default, or a full model ID.",
-            "/effort": "Usage: /effort <low|medium|high|xhigh|max|auto>",
-        ])
+    // MARK: - Claude Code models (stream-json `initialize`)
+
+    private static let claudeInitializeOutput = """
+    {"type":"system","subtype":"hook_started","hook_name":"SessionStart:startup"}
+    {"type":"control_response","response":{"subtype":"success","request_id":"r1","response":{"models":[
+      {"value":"default","displayName":"Default (recommended)","description":"Sonnet 5.5","supportsEffort":true,"supportedEffortLevels":["low","medium","high"]},
+      {"value":"opus","displayName":"Opus 5.5","description":"For complex work","supportsEffort":true,"supportedEffortLevels":["max","low","turbo","medium","high","xhigh"]},
+      {"value":"claude-haiku-4-5-20251001","displayName":"Haiku 4.5","description":"Fastest for quick answers"},
+      {"value":"claude-opus-4-6","displayName":"Opus 4.6","description":"Best for everyday, complex tasks","supportsEffort":true,"supportedEffortLevels":["low","medium","high","max"]}
+    ]}}}
+    """
+
+    func testClaudeProfilesComeFromTheInitializeControlResponse() async {
         let fetcher = ModelCatalogFetcher(
             locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
-            runner: runner
+            runner: MockCommandRunner(outcome: .success(CommandResult(exitCode: 0, stdout: Self.claudeInitializeOutput, stderr: "")))
         )
 
         let profiles = await fetcher.fetchProfiles(for: .claudeCode)
 
-        XCTAssertEqual(profiles.map(\.slug), ["sonnet", "opus"])
-        // `auto` is a slash-command-only option; `--effort auto` is rejected.
-        for profile in profiles {
-            XCTAssertEqual(profile.effortOptions.map(\.level), [.low, .medium, .high, .xhigh, .max])
-            XCTAssertNil(profile.defaultEffort)
-        }
+        // `default` is dropped: the picker's empty slug already means "let Claude choose".
+        XCTAssertEqual(profiles.map(\.slug), ["opus", "claude-haiku-4-5-20251001", "claude-opus-4-6"])
+        XCTAssertEqual(profiles[0].displayName, "Opus 5.5")
+        XCTAssertEqual(profiles[0].description, "For complex work")
+        // Unknown levels are skipped and the rest ordered by depth.
+        XCTAssertEqual(profiles[0].effortOptions.map(\.level), [.low, .medium, .high, .xhigh, .max])
+        // A model that doesn't support effort offers no levels at all.
+        XCTAssertEqual(profiles[1].effortOptions, [])
+        // Levels are per model: Opus 4.6 has no X-High.
+        XCTAssertEqual(profiles[2].effortOptions.map(\.level), [.low, .medium, .high, .max])
     }
 
-    func testClaudeEffortParsingIgnoresUnknownLevelsAndOrdersByDepth() async {
+    func testClaudeFallsBackToStaticProfilesWhenInitializeYieldsNoModels() async {
         let fetcher = ModelCatalogFetcher(
             locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
-            runner: ScriptedCommandRunner(responses: [
-                "/model": "Usage: /model <name>. Available: opus, or a full model ID.",
-                "/effort": "Usage: /effort <max|low|turbo|medium>",
-            ])
+            runner: MockCommandRunner(outcome: .success(CommandResult(exitCode: 0, stdout: "{\"type\":\"system\"}", stderr: "")))
         )
 
-        let profiles = await fetcher.fetchProfiles(for: .claudeCode)
+        let models = await fetcher.fetchModels(for: .claudeCode)
 
-        XCTAssertEqual(profiles.first?.effortOptions.map(\.level), [.low, .medium, .max])
-    }
-
-    // MARK: - Claude Code display names/descriptions
-    //
-    // `claude --print "/model"` only lists bare ids (`sonnet`, `opusplan`,
-    // …) with no metadata, unlike Codex's `debug models` JSON or OpenCode's
-    // `--verbose` listing. A static table fills in the human-facing name and
-    // description the model picker shows.
-
-    func testClaudeProfilesGetDisplayNamesAndDescriptionsFromTheStaticTable() async {
-        let runner = ScriptedCommandRunner(responses: [
-            "/model": "Usage: /model <name>. Available: sonnet, opus, haiku, fable, best, opusplan, default, or a full model ID.",
-            "/effort": "Usage: /effort <low|medium|high|xhigh|max|auto>",
-        ])
-        let fetcher = ModelCatalogFetcher(
-            locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
-            runner: runner
-        )
-
-        let profiles = await fetcher.fetchProfiles(for: .claudeCode)
-
-        let sonnet = profiles.first { $0.slug == "sonnet" }
-        XCTAssertEqual(sonnet?.displayName, "Sonnet")
-        XCTAssertNotNil(sonnet?.description)
-        for profile in profiles {
-            XCTAssertNotNil(profile.displayName, "\(profile.slug) is missing a display name")
-            XCTAssertNotNil(profile.description, "\(profile.slug) is missing a description")
-        }
-    }
-    func testClaudeFallsBackToTheStaticLevelTableWhenTheEffortQueryFails() async {
-        let fetcher = ModelCatalogFetcher(
-            locator: FixedLocator(url: URL(fileURLWithPath: "/usr/local/bin/claude")),
-            runner: ScriptedCommandRunner(responses: [
-                "/model": "Usage: /model <name>. Available: opus, or a full model ID."
-            ])
-        )
-
-        let profiles = await fetcher.fetchProfiles(for: .claudeCode)
-
-        XCTAssertEqual(profiles.map(\.slug), ["opus"])
-        XCTAssertEqual(
-            profiles.first?.effortOptions.map(\.level),
-            AgentEffortCatalog.supportedLevels(for: .claudeCode)
-        )
+        XCTAssertEqual(models, ModelCatalog.staticFallback(for: .claudeCode))
     }
 
     func testEffortOptionsForAnUnpinnedModelOfferOnlyWhatEveryModelAccepts() {

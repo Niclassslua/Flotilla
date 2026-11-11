@@ -24,9 +24,26 @@ public protocol CommandRunning: Sendable {
         workingDirectory: URL,
         environment: [String: String]
     ) async throws -> CommandResult
+    /// Runs with `input` written to the child's stdin, then stdin closed.
+    func run(
+        _ arguments: [String],
+        executable: URL,
+        workingDirectory: URL,
+        input: Data
+    ) async throws -> CommandResult
 }
 
 public extension CommandRunning {
+    /// Runners that never feed stdin run unchanged, ignoring `input`.
+    func run(
+        _ arguments: [String],
+        executable: URL,
+        workingDirectory: URL,
+        input: Data
+    ) async throws -> CommandResult {
+        try await run(arguments, executable: executable, workingDirectory: workingDirectory)
+    }
+
     /// Runners with no environment of their own to extend run unchanged.
     func run(
         _ arguments: [String],
@@ -55,6 +72,15 @@ public struct ProcessCommandRunner: CommandRunning {
         _ arguments: [String],
         executable: URL,
         workingDirectory: URL,
+        input: Data
+    ) async throws -> CommandResult {
+        try await execute(arguments, executable: executable, workingDirectory: workingDirectory, extraEnvironment: [:], input: input)
+    }
+
+    public func run(
+        _ arguments: [String],
+        executable: URL,
+        workingDirectory: URL,
         environment: [String: String]
     ) async throws -> CommandResult {
         try await execute(arguments, executable: executable, workingDirectory: workingDirectory, extraEnvironment: environment)
@@ -64,13 +90,15 @@ public struct ProcessCommandRunner: CommandRunning {
         _ arguments: [String],
         executable: URL,
         workingDirectory: URL,
-        extraEnvironment: [String: String]
+        extraEnvironment: [String: String],
+        input: Data? = nil
     ) async throws -> CommandResult {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
         process.currentDirectoryURL = workingDirectory
-        process.standardInput = nil
+        let inPipe = input.map { _ in Pipe() }
+        process.standardInput = inPipe
         // Held locally rather than re-read from `process.standardOutput`/
         // `standardError` (typed `Any?`): those force-cast back to `Pipe`
         // crashed intermittently, so we just keep the references we made.
@@ -122,6 +150,15 @@ public struct ProcessCommandRunner: CommandRunning {
                 } catch {
                     state.terminateProcess()
                     state.complete(with: .failure(error))
+                    return
+                }
+
+                if let inPipe, let input {
+                    // A child that exits before reading would otherwise
+                    // SIGPIPE the app on write.
+                    _ = fcntl(inPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+                    try? inPipe.fileHandleForWriting.write(contentsOf: input)
+                    try? inPipe.fileHandleForWriting.close()
                 }
             }
         } onCancel: {

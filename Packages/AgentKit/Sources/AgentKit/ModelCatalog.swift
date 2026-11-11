@@ -5,8 +5,8 @@ import SettingsKit
 
 /// One model as the agent's CLI describes it, including which reasoning-effort
 /// levels it accepts. Codex narrows the levels per model (and publishes a
-/// per-level description plus its own default); Claude Code applies the same
-/// five levels to every model.
+/// per-level description plus its own default); Claude Code lists them per
+/// model too, without descriptions.
 public struct AgentModelProfile: Sendable, Equatable, Identifiable {
     public let slug: String
     public let displayName: String?
@@ -59,8 +59,7 @@ public struct ModelCatalogFetcher: Sendable {
     }
 
     /// Same query as `fetchModels`, keeping the per-model reasoning-effort
-    /// levels the CLI reports. Only Codex publishes them; Claude Code's five
-    /// levels are attached from `AgentEffortCatalog`'s static table, and
+    /// levels the CLI reports. Codex and Claude Code publish them per model;
     /// OpenCode's profiles carry none.
     public func fetchProfiles(
         for agent: AgentKind,
@@ -207,73 +206,78 @@ public struct ModelCatalogFetcher: Sendable {
         let name: String?
     }
 
-    private func fetchClaudeModels(executable: URL) async throws -> [String]? {
+    /// Claude Code's `initialize` control request answers with the same
+    /// model list `/model` shows — names, descriptions, and the effort levels
+    /// each model accepts — so nothing is hardcoded. It needs stream-json on
+    /// both sides (and `--verbose`, which `--print` demands for stream-json
+    /// output); closing stdin after the request lets the CLI exit on its own.
+    private func fetchClaudeProfiles(executable: URL) async throws -> [AgentModelProfile]? {
+        let request = #"{"type":"control_request","request_id":"flotilla-models","request":{"subtype":"initialize"}}"# + "\n"
         let result = try await runner.run(
-            ["--print", "/model"],
+            ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
             executable: executable,
-            workingDirectory: FileManager.default.temporaryDirectory
+            workingDirectory: FileManager.default.temporaryDirectory,
+            input: Data(request.utf8)
         )
         guard result.exitCode == 0 else { return nil }
-        return Self.parseClaudeModelList(result.stdout)
+        return Self.parseClaudeInitializeModels(result.stdout)
     }
 
-    /// Claude Code applies `--effort` uniformly to every model, so one query
-    /// for the level list covers the whole catalog. The two queries run
-    /// concurrently because both shell out to the same CLI and neither
-    /// depends on the other.
-    private func fetchClaudeProfiles(executable: URL) async throws -> [AgentModelProfile]? {
-        async let modelsTask = fetchClaudeModels(executable: executable)
-        async let levelsTask = fetchClaudeEffortLevels(executable: executable)
-        guard let models = try await modelsTask, !models.isEmpty else {
-            _ = try? await levelsTask
-            return nil
+    private struct ClaudeInitializeLine: Decodable {
+        struct Outer: Decodable {
+            struct Inner: Decodable { let models: [ClaudeModelEntry]? }
+            let response: Inner?
         }
-        let levels = (try? await levelsTask) ?? nil
+        let type: String
+        let response: Outer?
+    }
 
-        let options: [AgentEffortOption] = levels.map { levels in
-            levels.map { level in
-                AgentEffortOption(
-                    level: level,
-                    label: AgentEffortCatalog.label(for: level, agent: .claudeCode),
-                    summary: AgentEffortCatalog.summary(for: level, agent: .claudeCode)
+    private struct ClaudeModelEntry: Decodable {
+        let value: String
+        let displayName: String?
+        let description: String?
+        let supportsEffort: Bool?
+        let supportedEffortLevels: [String]?
+    }
+
+    /// Finds the `control_response` line among the stream-json output (session
+    /// hooks print their own lines first) and turns its `models` into
+    /// profiles. `default` is dropped — the picker's empty slug already means
+    /// "let Claude Code choose". Models without `supportsEffort` get no
+    /// levels; unknown level names from a newer CLI are skipped.
+    static func parseClaudeInitializeModels(_ output: String) -> [AgentModelProfile]? {
+        let decoder = JSONDecoder()
+        for line in output.split(whereSeparator: \.isNewline) where line.contains("\"control_response\"") {
+            guard let data = line.data(using: .utf8),
+                  let parsed = try? decoder.decode(ClaudeInitializeLine.self, from: data),
+                  parsed.type == "control_response",
+                  let models = parsed.response?.response?.models else { continue }
+            let profiles = models.filter { $0.value != "default" }.map { entry in
+                let levels = (entry.supportedEffortLevels ?? [])
+                    .compactMap(AgentEffort.init(rawValue:))
+                    .sorted { $0.rank < $1.rank }
+                let options: [AgentEffortOption]
+                if levels.isEmpty {
+                    options = entry.supportsEffort == true ? AgentEffortCatalog.staticOptions(for: .claudeCode) : []
+                } else {
+                    options = levels.map {
+                        AgentEffortOption(
+                            level: $0,
+                            label: AgentEffortCatalog.label(for: $0, agent: .claudeCode),
+                            summary: AgentEffortCatalog.summary(for: $0, agent: .claudeCode)
+                        )
+                    }
+                }
+                return AgentModelProfile(
+                    slug: entry.value,
+                    displayName: entry.displayName,
+                    description: entry.description,
+                    effortOptions: options
                 )
             }
-        } ?? AgentEffortCatalog.staticOptions(for: .claudeCode)
-
-        return models.map { slug in
-            AgentModelProfile(
-                slug: slug,
-                displayName: ModelCatalog.claudeModelDisplayName(for: slug),
-                description: ModelCatalog.claudeModelDescription(for: slug),
-                effortOptions: options
-            )
+            return profiles.isEmpty ? nil : profiles
         }
-    }
-
-    private func fetchClaudeEffortLevels(executable: URL) async throws -> [AgentEffort]? {
-        let result = try await runner.run(
-            ["--print", "/effort"],
-            executable: executable,
-            workingDirectory: FileManager.default.temporaryDirectory
-        )
-        guard result.exitCode == 0 else { return nil }
-        let levels = Self.parseClaudeEffortLevels(result.stdout)
-        return levels.isEmpty ? nil : levels
-    }
-
-    /// `claude --print "/effort"` prints its own usage line, e.g.
-    /// "Usage: /effort <low|medium|high|xhigh|max|auto>". `auto` is dropped:
-    /// it is a slash-command-only option, and `--effort auto` warns and falls
-    /// back to the default. Unknown level names from a newer CLI are dropped
-    /// too rather than guessed at.
-    static func parseClaudeEffortLevels(_ output: String) -> [AgentEffort] {
-        guard let open = output.firstIndex(of: "<"),
-              let close = output[open...].firstIndex(of: ">") else { return [] }
-        return output[output.index(after: open)..<close]
-            .split(separator: "|")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .compactMap(AgentEffort.init(rawValue:))
-            .sorted { $0.rank < $1.rank }
+        return nil
     }
 
     public struct AntigravityModelEntry: Equatable, Sendable {
@@ -488,21 +492,6 @@ public struct ModelCatalogFetcher: Sendable {
         )
     }
 
-    /// `claude --print "/model"` (skips the workspace-trust dialog and any
-    /// interactive UI because it's non-interactive/piped) prints e.g.:
-    /// "Usage: /model <name>. Available: sonnet, opus, haiku, fable, best,
-    /// sonnet[1m], opus[1m], fable[1m], opusplan, default, or a full model ID."
-    /// The `[1m]` long-context variants and the "default"/"or a full model
-    /// ID" prose are dropped — still reachable via the picker's "Custom…".
-    static func parseClaudeModelList(_ output: String) -> [String] {
-        guard let range = output.range(of: "Available: ") else { return [] }
-        let tail = output[range.upperBound...]
-        return tail
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && !$0.contains(" ") && $0 != "default" && !$0.contains("[1m]") }
-    }
-
     struct CodexModelCatalog: Decodable {
         let models: [CodexModelEntry]
     }
@@ -636,12 +625,9 @@ public enum ModelCatalog {
         }
     }
 
-    /// Claude Code's CLI has no per-model metadata query — `claude --print
-    /// "/model"` only lists bare ids like `sonnet` or `opusplan`, unlike
-    /// Codex's `debug models` JSON or OpenCode's `--verbose` listing. This
-    /// static table supplies the human-facing name and description the model
-    /// picker shows, keyed by the ids that command emits. A slug missing here
-    /// (a newer CLI's model) falls back to showing its raw id, same as before.
+    /// Offline-only names and descriptions for Claude Code's bare aliases.
+    /// With the CLI installed, `parseClaudeInitializeModels` supplies the real
+    /// ones; this table backs `staticFallbackProfiles` when it can't be asked.
     private static let claudeModelMetadata: [String: (displayName: String, description: String)] = [
         "sonnet": ("Sonnet", "Balanced speed and capability for everyday coding tasks."),
         "opus": ("Opus", "Most capable model — best for complex reasoning and hard problems."),
