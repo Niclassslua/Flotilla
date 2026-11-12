@@ -1,0 +1,44 @@
+name: CodeQL
+
+# Weekly only: the Swift analysis rebuilds the whole app under the CodeQL
+# tracer (20-35 min), far too slow to run on every push.
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: swift
+            runner: xcode-27
+            build-mode: manual
+          - language: actions
+            runner: ubuntu-latest
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        if: matrix.language == 'swift'
+        run: brew install xcodegen && xcodebuild -downloadComponent MetalToolchain
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - name: Build
+        if: matrix.language == 'swift'
+        run: >
+          make build
+          SIGNING_OVERRIDE="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

@@ -40,10 +40,6 @@ jobs:
       - name: Run package tests
         run: make test-packages
 
-      # Release only: it's what ships, and Xcode compiles Debug on every Run.
-      - name: Build (Release)
-        run: make build-release
-
       - name: Run app unit tests
         # A hung test fails after 2 minutes instead of eating the job timeout.
         run: >
