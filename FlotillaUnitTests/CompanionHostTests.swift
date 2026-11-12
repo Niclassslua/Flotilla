@@ -685,6 +685,23 @@ final class CompanionBridgeHookTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
+    /// `NWListener.start` returns before the socket file exists, and the hook
+    /// script exits silently when `[ -S socket ]` is false — so a hook spawned
+    /// straight after `start` can run first and never reach the bridge.
+    private func startAndAwaitSocket(_ bridge: ClaudePermissionBridge) async {
+        let socket = HookConfigurationWriter.companionSocketPath(supportDirectory: directory)
+        bridge.start(socketURL: socket)
+        await awaitSocket(socket)
+    }
+
+    private func awaitSocket(_ socket: URL) async {
+        let deadline = Date().addingTimeInterval(5)
+        var info = stat()
+        while !(stat(socket.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFSOCK), Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
     private func permissionCommand() throws -> String {
         let arguments = HookConfigurationWriter.launchArguments(for: .claudeCode, supportDirectory: directory)
         let json = try XCTUnwrap(arguments.last)
@@ -735,6 +752,7 @@ final class CompanionBridgeHookTests: XCTestCase {
         let first = ClaudePermissionBridge()
         let second = ClaudePermissionBridge()
         XCTAssertTrue(first.start(socketURL: socket))
+        await awaitSocket(socket)
         defer {
             first.stop()
             second.stop()
@@ -847,7 +865,7 @@ final class CompanionBridgeHookTests: XCTestCase {
         let sessionID = UUID()
         let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
         let bridge = ClaudePermissionBridge()
-        bridge.start(socketURL: HookConfigurationWriter.companionSocketPath(supportDirectory: directory))
+        await startAndAwaitSocket(bridge)
         defer { bridge.stop() }
 
         let command = try permissionCommand()
@@ -881,7 +899,7 @@ final class CompanionBridgeHookTests: XCTestCase {
         XCTAssertTrue(config.contains(" PermissionRequest"))
         XCTAssertTrue(config.contains("timeout=86400"))
         let bridge = ClaudePermissionBridge()
-        bridge.start(socketURL: HookConfigurationWriter.companionSocketPath(supportDirectory: directory))
+        await startAndAwaitSocket(bridge)
         defer { bridge.stop() }
         let script = directory.appendingPathComponent("hooks/flotilla-codex.sh")
         let payload = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"printf 'a\\nb'","description":"Write the session title"}}"#
@@ -916,7 +934,7 @@ final class CompanionBridgeHookTests: XCTestCase {
             for: .codexCLI, sessionID: sessionID, workingDirectory: directory, supportDirectory: directory
         ))
         let bridge = ClaudePermissionBridge()
-        bridge.start(socketURL: HookConfigurationWriter.companionSocketPath(supportDirectory: directory))
+        await startAndAwaitSocket(bridge)
         defer { bridge.stop() }
         let script = directory.appendingPathComponent("hooks/flotilla-codex.sh")
         let payload = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"touch title.json"}}"#
@@ -955,7 +973,7 @@ final class CompanionBridgeHookTests: XCTestCase {
         let sessionID = UUID()
         let eventFile = directory.appendingPathComponent("\(sessionID.uuidString).jsonl")
         let bridge = ClaudePermissionBridge()
-        bridge.start(socketURL: HookConfigurationWriter.companionSocketPath(supportDirectory: directory))
+        await startAndAwaitSocket(bridge)
         defer { bridge.stop() }
 
         let command = try permissionCommand()
