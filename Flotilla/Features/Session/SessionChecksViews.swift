@@ -662,7 +662,12 @@ private struct CIFailureExcerptView: View {
                     .font(FlotillaTypography.caption2)
                     .foregroundStyle(FlotillaColors.danger)
             } else {
-                ProgressView("Fetching the log…").controlSize(.small)
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("Fetching the log…")
+                        .font(FlotillaTypography.caption2)
+                        .foregroundStyle(FlotillaColors.textTertiary)
+                }
             }
             if check.jobID != nil {
                 Button("Show Full Log") { Task { await showFullLog() } }
