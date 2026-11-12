@@ -688,12 +688,14 @@ final class CompanionBridgeHookTests: XCTestCase {
     /// `NWListener.start` returns before the socket file exists, and the hook
     /// script exits silently when `[ -S socket ]` is false — so a hook spawned
     /// straight after `start` can run first and never reach the bridge.
+    @MainActor
     private func startAndAwaitSocket(_ bridge: ClaudePermissionBridge) async {
         let socket = HookConfigurationWriter.companionSocketPath(supportDirectory: directory)
         bridge.start(socketURL: socket)
         await awaitSocket(socket)
     }
 
+    @MainActor
     private func awaitSocket(_ socket: URL) async {
         let deadline = Date().addingTimeInterval(5)
         var info = stat()
