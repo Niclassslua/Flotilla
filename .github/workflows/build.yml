@@ -37,6 +37,17 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      # Rolling cache: a fresh key per run, restored from the newest earlier one.
+      # Dependencies (SwiftTerm, Textual, ...) compile once instead of every run.
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build/DerivedData
+          key: dd-${{ runner.os }}-unit-${{ hashFiles('project.yml', '**/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            dd-${{ runner.os }}-unit-${{ hashFiles('project.yml', '**/Package.resolved') }}-
+            dd-${{ runner.os }}-unit-
+
       - name: Run package tests
         run: make test-packages
 
@@ -87,6 +98,17 @@ jobs:
 
       - name: Generate Xcode project
         run: xcodegen generate
+
+      # Rolling cache: a fresh key per run, restored from the newest earlier one.
+      # Dependencies (SwiftTerm, Textual, ...) compile once instead of every run.
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build/DerivedData
+          key: dd-${{ runner.os }}-ui-${{ hashFiles('project.yml', '**/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            dd-${{ runner.os }}-ui-${{ hashFiles('project.yml', '**/Package.resolved') }}-
+            dd-${{ runner.os }}-ui-
 
       - name: Run UI tests
         run: >
