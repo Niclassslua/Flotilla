@@ -111,14 +111,10 @@ final class ModelCatalogTests: XCTestCase {
 
     // MARK: - Claude Code models (stream-json `initialize`)
 
+    // One JSON object per line, like the CLI's stream-json output.
     private static let claudeInitializeOutput = """
     {"type":"system","subtype":"hook_started","hook_name":"SessionStart:startup"}
-    {"type":"control_response","response":{"subtype":"success","request_id":"r1","response":{"models":[
-      {"value":"default","displayName":"Default (recommended)","description":"Sonnet 5.5","supportsEffort":true,"supportedEffortLevels":["low","medium","high"]},
-      {"value":"opus","displayName":"Opus 5.5","description":"For complex work","supportsEffort":true,"supportedEffortLevels":["max","low","turbo","medium","high","xhigh"]},
-      {"value":"claude-haiku-4-5-20251001","displayName":"Haiku 4.5","description":"Fastest for quick answers"},
-      {"value":"claude-opus-4-6","displayName":"Opus 4.6","description":"Best for everyday, complex tasks","supportsEffort":true,"supportedEffortLevels":["low","medium","high","max"]}
-    ]}}}
+    {"type":"control_response","response":{"subtype":"success","request_id":"r1","response":{"models":[{"value":"default","displayName":"Default (recommended)","description":"Sonnet 5.5","supportsEffort":true,"supportedEffortLevels":["low","medium","high"]},{"value":"opus","displayName":"Opus 5.5","description":"For complex work","supportsEffort":true,"supportedEffortLevels":["max","low","turbo","medium","high","xhigh"]},{"value":"claude-haiku-4-5-20251001","displayName":"Haiku 4.5","description":"Fastest for quick answers"},{"value":"claude-opus-4-6","displayName":"Opus 4.6","description":"Best for everyday, complex tasks","supportsEffort":true,"supportedEffortLevels":["low","medium","high","max"]}]}}}
     """
 
     func testClaudeProfilesComeFromTheInitializeControlResponse() async {
