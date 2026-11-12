@@ -1,5 +1,16 @@
 import Foundation
 import UserNotifications
+import os
+
+private let log = Logger(subsystem: "com.niclassslua.flotilla", category: "notifications")
+
+private func post(_ request: UNNotificationRequest) async {
+    do {
+        try await UNUserNotificationCenter.current().add(request)
+    } catch {
+        log.error("Couldn't post notification: \(error.localizedDescription)")
+    }
+}
 
 public protocol NotificationDispatching: Sendable {
     func notifyWaitingForInput(sessionTitle: String, sessionID: UUID) async
@@ -24,12 +35,12 @@ public struct SystemNotificationDispatcher: NotificationDispatching {
 
     public func notifyWaitingForInput(sessionTitle: String, sessionID: UUID) async {
         let request = Self.waitingForInputRequest(sessionTitle: sessionTitle, sessionID: sessionID)
-        try? await UNUserNotificationCenter.current().add(request)
+        await post(request)
     }
 
     public func notifySessionFinished(sessionTitle: String, sessionID: UUID) async {
         let request = Self.finishedRequest(sessionTitle: sessionTitle, sessionID: sessionID)
-        try? await UNUserNotificationCenter.current().add(request)
+        await post(request)
     }
 
     /// Builds the request without posting it — separated out so the
@@ -51,7 +62,7 @@ public struct SystemNotificationDispatcher: NotificationDispatching {
     /// hook pipeline never sends it — the app's CI poller calls this directly.
     public func notifyCIFailed(sessionTitle: String, checkName: String, sessionID: UUID) async {
         let request = Self.ciFailedRequest(sessionTitle: sessionTitle, checkName: checkName, sessionID: sessionID)
-        try? await UNUserNotificationCenter.current().add(request)
+        await post(request)
     }
 
     public static func ciFailedRequest(sessionTitle: String, checkName: String, sessionID: UUID) -> UNNotificationRequest {

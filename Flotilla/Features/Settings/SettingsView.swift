@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 import AgentKit
 import ProcessKit
 import SessionKit
@@ -612,9 +613,23 @@ private struct GitSettingsPane: View {
 
 private struct NotificationSettingsPane: View {
     @Bindable var viewModel: SettingsViewModel
+    @State private var systemDenied = false
 
     var body: some View {
         Form {
+            if systemDenied, viewModel.settings.notifications.delivery != .never {
+                Section {
+                    HStack {
+                        Text("Notifications are turned off for Flotilla in macOS.")
+                        Spacer()
+                        Button("Open System Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
+                }
+            }
             Section {
                 Picker("Show notifications", selection: $viewModel.settings.notifications.delivery) {
                     ForEach(NotificationDelivery.allCases) { delivery in
@@ -653,6 +668,9 @@ private struct NotificationSettingsPane: View {
             }
         }
         .flotillaSettingsFormLayout()
+        .task {
+            systemDenied = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .denied
+        }
     }
 }
 

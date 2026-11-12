@@ -138,7 +138,6 @@ struct FlotillaApp: App {
                 terminalManager: terminalManager,
                 tmuxExecutable: locator.locate("tmux")
             ),
-            requestsAuthorization: false,
             isConfiguredToNotify: {
                 settingsViewModel.settings.notifications.isConfiguredToNotify
             },
@@ -271,6 +270,7 @@ struct FlotillaApp: App {
             .environment(\.editorFontSize, settingsViewModel.settings.terminal.editorFontSize)
             .onChange(of: settingsViewModel.settings.notifications.delivery) { _, delivery in
                 foregroundNotificationGate.withLock { $0 = (delivery == .always) }
+                if delivery != .never { Task { await HookCoordinator.requestAuthorizationIfUndetermined() } }
             }
         }
         .windowToolbarStyle(.unified(showsTitle: false))

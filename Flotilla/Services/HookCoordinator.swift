@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import UserNotifications
+import os
 import SessionKit
 import ProcessKit
 import HooksKit
@@ -60,10 +61,25 @@ final class HookCoordinator {
         }
         let shouldRequestAuth = isConfiguredToNotify?() ?? notificationsEnabled()
         if requestsAuthorization, shouldRequestAuth, ProcessInfo.processInfo.environment["UI_TESTING"] != "1" {
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            Task { await Self.requestAuthorizationIfUndetermined() }
         }
         if !ProcessInfo.processInfo.environment.keys.contains("UI_TESTING") || ProcessInfo.processInfo.environment["UI_TESTING_SIMULATE_WAITING_SESSION"] != nil {
             observeAll()
+        }
+    }
+
+    /// Asks macOS for permission only when it has never been asked; a no-op
+    /// once the user has answered. Notifications silently fail to post
+    /// without this, so call it whenever delivery becomes configured.
+    static func requestAuthorizationIfUndetermined() async {
+        guard ProcessInfo.processInfo.environment["UI_TESTING"] != "1" else { return }
+        let center = UNUserNotificationCenter.current()
+        guard await center.notificationSettings().authorizationStatus == .notDetermined else { return }
+        do {
+            _ = try await center.requestAuthorization(options: [.alert, .sound])
+        } catch {
+            Logger(subsystem: "com.niclassslua.flotilla", category: "notifications")
+                .error("Notification authorization failed: \(error.localizedDescription)")
         }
     }
 
