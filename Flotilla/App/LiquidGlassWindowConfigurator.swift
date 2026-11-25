@@ -1,4 +1,5 @@
 import AppKit
+import TerminalKit
 import SwiftUI
 
 /// Keeps the AppKit window in the same compositing mode as the workspace
@@ -40,11 +41,6 @@ private final class LiquidGlassConfigurationView: NSView {
     private func configureWindow() {
         guard let window else { return }
         window.isOpaque = !isEnabled
-        window.backgroundColor = isEnabled ? .clear : NSColor(
-            srgbRed: 10 / 255,
-            green: 10 / 255,
-            blue: 12 / 255,
-            alpha: 1
-        )
+        window.backgroundColor = isEnabled ? .clear : NSColor.flotillaTerminalBackground
     }
 }

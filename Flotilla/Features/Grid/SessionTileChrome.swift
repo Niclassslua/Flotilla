@@ -72,7 +72,7 @@ struct TileTerminalBody: View {
                 }
             }
             .flotillaLiquidSurface(
-                FlotillaColors.terminalCanvas,
+                FlotillaColors.canvas,
                 cornerRadius: 8,
                 glassTintOpacity: FlotillaGlassTint.terminal
             )
@@ -89,7 +89,7 @@ struct TileTerminalBody: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .flotillaLiquidSurface(
-                FlotillaColors.terminalCanvas,
+                FlotillaColors.canvas,
                 glassTintOpacity: FlotillaGlassTint.terminal
             )
         }
@@ -137,7 +137,7 @@ struct SessionTileSurface: ViewModifier {
     func body(content: Content) -> some View {
         content
             .flotillaLiquidSurface(
-                FlotillaColors.terminalCanvas,
+                FlotillaColors.canvas,
                 cornerRadius: cornerRadius,
                 glassTintOpacity: FlotillaGlassTint.terminal
             )

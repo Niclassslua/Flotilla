@@ -366,7 +366,7 @@ struct DetailColumn: View {
 
             restartButton(for: session, identifier: AXID.agentExitRestart.rawValue)
         }
-        .background(FlotillaColors.terminalCanvas.opacity(0.82))
+        .background(FlotillaColors.canvas.opacity(0.82))
         .contentShape(Rectangle())
     }
 
@@ -418,7 +418,7 @@ struct DetailColumn: View {
         }
         // The detail column supplies the glass backdrop. An opaque terminal
         // fill here hid it whenever no process was attached.
-        .background(liquidGlassEnabled ? Color.clear : FlotillaColors.terminalCanvas)
+        .background(liquidGlassEnabled ? Color.clear : FlotillaColors.canvas)
     }
 
     private func restartButton(for session: Session, identifier: String) -> some View {

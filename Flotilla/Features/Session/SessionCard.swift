@@ -156,7 +156,7 @@ struct SessionCard<Terminal: View>: View {
             tileContent
         }
         .flotillaLiquidSurface(
-            FlotillaColors.terminalCanvas,
+            FlotillaColors.canvas,
             cornerRadius: 8,
             glassTintOpacity: FlotillaGlassTint.terminal
         )

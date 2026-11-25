@@ -137,12 +137,7 @@ private final class XirpTerminalContainerView: NSView {
             // window is non-opaque with a clear backdrop. The workspace
             // appearance preference controls that opt-in.
             window?.isOpaque = !liquidGlassEnabled
-            window?.backgroundColor = liquidGlassEnabled ? .clear : NSColor(
-                srgbRed: 10 / 255,
-                green: 10 / 255,
-                blue: 12 / 255,
-                alpha: 1
-            )
+            window?.backgroundColor = liquidGlassEnabled ? .clear : NSColor.flotillaTerminalBackground
             installKeyDownMonitor()
         }
         requestTerminalFocusIfNeeded()

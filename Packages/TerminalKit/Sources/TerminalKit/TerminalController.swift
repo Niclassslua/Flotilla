@@ -531,6 +531,14 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
     private func configure(_ view: TerminalView) {
         view.terminalDelegate = self
         applyRenderer(gpuRendering, to: view)
+        (view as? FlotillaTerminalView)?.onEffectiveAppearanceChange = { [weak self, weak view] in
+            guard let self, let view else { return }
+            configureXirpAppearance(
+                view,
+                fontSize: CGFloat(fontSize),
+                backgroundOpacity: CGFloat(backgroundOpacity)
+            )
+        }
         // SwiftTerm's custom-drawn content is not exposed in the AX tree, so
         // republish each renderer's buffer for assististive technology and UI
         // automation. Only the currently mounted presentation is visible.
@@ -547,9 +555,9 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
         view.scrollerStyle = .overlay
     }
 
-    /// Mirrors Xirp's default xterm.js presentation. Xirp ships a Nerd Font
-    /// stack, uses 14 pt by default, and fixes its dark terminal palette even
-    /// when the surrounding application follows the system appearance.
+    /// Mirrors Xirp's default xterm.js presentation: a Nerd Font stack at
+    /// 14 pt by default, with a dark or light palette that follows the view's
+    /// effective appearance (the app's System/Light/Dark setting).
     @MainActor
     private func configureXirpAppearance(
         _ terminalView: TerminalView,
@@ -571,54 +579,63 @@ public final class TerminalController: NSObject, TerminalViewDelegate, @unchecke
             .first
             ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
 
-        terminalView.nativeBackgroundColor = NSColor(
-            srgbRed: 10 / 255,
-            green: 10 / 255,
-            blue: 12 / 255,
-            // Keep the terminal comfortably dark, but allow the host's glass
-            // surface to read through the default cells. SwiftTerm keeps
-            // selections and explicitly coloured cells opaque, preserving the
-            // contrast needed for dense terminal work.
-            alpha: max(0.05, min(backgroundOpacity, 0.9))
-        )
-        terminalView.nativeForegroundColor = NSColor(
-            srgbRed: 245 / 255,
-            green: 245 / 255,
-            blue: 248 / 255,
-            alpha: 1
-        )
+        let isLight = terminalView.effectiveAppearance.isFlotillaLight
+        // Keep the default cells mostly opaque, but allow the host's glass
+        // surface to read through. SwiftTerm keeps selections and explicitly
+        // coloured cells opaque, preserving contrast for dense terminal work.
+        terminalView.nativeBackgroundColor = (isLight ? NSColor.flotillaTerminalLight : .flotillaTerminalDark)
+            .withAlphaComponent(max(0.05, min(backgroundOpacity, 0.9)))
+        terminalView.nativeForegroundColor = isLight
+            ? NSColor(srgbRed: 0x1F / 255, green: 0x1F / 255, blue: 0x26 / 255, alpha: 1)
+            : NSColor(srgbRed: 245 / 255, green: 245 / 255, blue: 248 / 255, alpha: 1)
         terminalView.caretColor = terminalView.nativeForegroundColor
-        terminalView.selectedTextBackgroundColor = NSColor(
-            srgbRed: 50 / 255,
-            green: 50 / 255,
-            blue: 58 / 255,
-            alpha: 1
-        )
+        terminalView.selectedTextBackgroundColor = isLight
+            ? NSColor(srgbRed: 0xC8 / 255, green: 0xD3 / 255, blue: 0xE6 / 255, alpha: 1)
+            : NSColor(srgbRed: 50 / 255, green: 50 / 255, blue: 58 / 255, alpha: 1)
         terminalView.selectedTextForegroundColor = terminalView.nativeForegroundColor
-        terminalView.installColors(Self.makeXirpANSIColors())
+        terminalView.installColors(isLight ? Self.xirpLightANSIColors : Self.xirpDarkANSIColors)
         terminalView.useBrightColors = true
     }
 
-    private static func makeXirpANSIColors() -> [SwiftTerm.Color] {
-        [
-            .init(red8: 0x32, green8: 0x32, blue8: 0x3A),
-            .init(red8: 0xF8, green8: 0x71, blue8: 0x71),
-            .init(red8: 0x34, green8: 0xD3, blue8: 0x99),
-            .init(red8: 0xFB, green8: 0xBF, blue8: 0x24),
-            .init(red8: 0x60, green8: 0xA5, blue8: 0xFA),
-            .init(red8: 0xE8, green8: 0x79, blue8: 0xF9),
-            .init(red8: 0x22, green8: 0xD3, blue8: 0xEE),
-            .init(red8: 0xB9, green8: 0xB9, blue8: 0xC3),
-            .init(red8: 0x73, green8: 0x73, blue8: 0x7E),
-            .init(red8: 0xF8, green8: 0x71, blue8: 0x71),
-            .init(red8: 0x34, green8: 0xD3, blue8: 0x99),
-            .init(red8: 0xFB, green8: 0xBF, blue8: 0x24),
-            .init(red8: 0x60, green8: 0xA5, blue8: 0xFA),
-            .init(red8: 0xE8, green8: 0x79, blue8: 0xF9),
-            .init(red8: 0x22, green8: 0xD3, blue8: 0xEE),
-            .init(red8: 0xF5, green8: 0xF5, blue8: 0xF8),
-        ]
-    }
+    private static let xirpDarkANSIColors: [SwiftTerm.Color] = [
+        .init(red8: 0x32, green8: 0x32, blue8: 0x3A),
+        .init(red8: 0xF8, green8: 0x71, blue8: 0x71),
+        .init(red8: 0x34, green8: 0xD3, blue8: 0x99),
+        .init(red8: 0xFB, green8: 0xBF, blue8: 0x24),
+        .init(red8: 0x60, green8: 0xA5, blue8: 0xFA),
+        .init(red8: 0xE8, green8: 0x79, blue8: 0xF9),
+        .init(red8: 0x22, green8: 0xD3, blue8: 0xEE),
+        .init(red8: 0xB9, green8: 0xB9, blue8: 0xC3),
+        .init(red8: 0x73, green8: 0x73, blue8: 0x7E),
+        .init(red8: 0xF8, green8: 0x71, blue8: 0x71),
+        .init(red8: 0x34, green8: 0xD3, blue8: 0x99),
+        .init(red8: 0xFB, green8: 0xBF, blue8: 0x24),
+        .init(red8: 0x60, green8: 0xA5, blue8: 0xFA),
+        .init(red8: 0xE8, green8: 0x79, blue8: 0xF9),
+        .init(red8: 0x22, green8: 0xD3, blue8: 0xEE),
+        .init(red8: 0xF5, green8: 0xF5, blue8: 0xF8),
+    ]
+
+    /// Same hues as the dark palette, darkened so they hold contrast on a
+    /// light background. "White" maps to grey so it stays legible.
+    private static let xirpLightANSIColors: [SwiftTerm.Color] = [
+        .init(red8: 0x1F, green8: 0x1F, blue8: 0x26),
+        .init(red8: 0xDC, green8: 0x26, blue8: 0x26),
+        .init(red8: 0x05, green8: 0x96, blue8: 0x69),
+        .init(red8: 0xB4, green8: 0x53, blue8: 0x09),
+        .init(red8: 0x25, green8: 0x63, blue8: 0xEB),
+        .init(red8: 0xC0, green8: 0x26, blue8: 0xD3),
+        .init(red8: 0x08, green8: 0x91, blue8: 0xB2),
+        .init(red8: 0x6B, green8: 0x6B, blue8: 0x76),
+        .init(red8: 0x52, green8: 0x52, blue8: 0x5B),
+        .init(red8: 0xEF, green8: 0x44, blue8: 0x44),
+        .init(red8: 0x10, green8: 0xB9, blue8: 0x81),
+        .init(red8: 0xD9, green8: 0x77, blue8: 0x06),
+        .init(red8: 0x3B, green8: 0x82, blue8: 0xF6),
+        .init(red8: 0xD9, green8: 0x46, blue8: 0xEF),
+        .init(red8: 0x06, green8: 0xB6, blue8: 0xD4),
+        .init(red8: 0x9C, green8: 0x9C, blue8: 0xA6),
+    ]
 
     deinit {
         outputTask?.cancel()
