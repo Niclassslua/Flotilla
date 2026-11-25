@@ -60,11 +60,11 @@ struct HomeWidgetCard<Content: View>: View {
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .background {
             if opaque || !liquidGlassEnabled {
-                HomeWidgetCardMetrics.shape.fill(FlotillaColors.surfaceElevated.opacity(0.92))
+                HomeWidgetCardMetrics.shape.fill(FlotillaColors.surface)
             } else if #available(macOS 26.0, *) {
                 Color.clear.glassEffect(.regular, in: HomeWidgetCardMetrics.shape)
             } else {
-                HomeWidgetCardMetrics.shape.fill(FlotillaColors.surfaceElevated.opacity(0.92))
+                HomeWidgetCardMetrics.shape.fill(FlotillaColors.surface)
             }
         }
         .overlay {
