@@ -23,7 +23,12 @@ enum AgentBrand {
     /// a wash, or anywhere a flat `Color` is required.
     static func accentColor(for kind: AgentKind) -> Color {
         switch kind {
-        case .claudeCode: Color(red: 0xC6 / 255, green: 0x6F / 255, blue: 0x51 / 255) // #C66F51
+        // Claude's brighter brand orange in light mode: #C66F51 reads muddy on white.
+        case .claudeCode: Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                ? NSColor(srgbRed: 0xC6 / 255, green: 0x6F / 255, blue: 0x51 / 255, alpha: 1) // #C66F51
+                : NSColor(srgbRed: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255, alpha: 1) // #D97757
+        })
         case .codexCLI: Color(red: 0x6D / 255, green: 0x8D / 255, blue: 0xF0 / 255) // #6D8DF0
         case .openCode: .white // #FFFFFF
         case .antigravity: Color(red: 0x79 / 255, green: 0xB3 / 255, blue: 0x6C / 255) // #79B36C

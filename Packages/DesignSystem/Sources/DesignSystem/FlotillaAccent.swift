@@ -45,32 +45,18 @@ public enum FlotillaAccent: Sendable {
         center: .center
     )
 
+    /// The same in light and dark: a darker light-mode variant made charts
+    /// and the agent ring read muted next to dark mode.
     public static let originalColor: Color = {
         #if os(macOS)
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                ? PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1)
-                : PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
-        })
+        Color(nsColor: originalPlatformColor())
         #else
-        Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1)
-                : PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
-        })
+        Color(uiColor: originalPlatformColor())
         #endif
     }()
 
     public static func originalPlatformColor(isDark: Bool = true) -> PlatformColor {
-        #if os(macOS)
-        return isDark
-            ? PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1)
-            : PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
-        #else
-        return isDark
-            ? PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1)
-            : PlatformColor(red: 0.85, green: 0.3, blue: 0.12, alpha: 1)
-        #endif
+        PlatformColor(red: 0.96, green: 0.36, blue: 0.16, alpha: 1)
     }
 
     private struct AccentState: Sendable {

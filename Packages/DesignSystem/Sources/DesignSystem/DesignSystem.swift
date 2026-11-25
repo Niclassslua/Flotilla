@@ -279,6 +279,12 @@ public struct FlotillaColors: Sendable {
         light: PlatformColor(red: 0.15, green: 0.6, blue: 0.25, alpha: 1)
     )
 
+    /// Chart fills: the bright dark-mode values in both appearances. The
+    /// darker light-mode `diffAdded`/`diffRemoved` exist for text contrast
+    /// and make filled bars look muddy on white.
+    public static let chartAdded = Color(red: 0.2, green: 0.75, blue: 0.35)
+    public static let chartRemoved = Color(red: 1.0, green: 0.3, blue: 0.3)
+
     public static let diffAddedSurface = dynamic(
         dark: PlatformColor(red: 0.2, green: 0.75, blue: 0.35, alpha: 1).withAlphaComponent(0.12),
         light: PlatformColor(red: 0.15, green: 0.6, blue: 0.25, alpha: 1).withAlphaComponent(0.1)

@@ -300,7 +300,7 @@ struct RhythmChartContent: View {
                                 y: .value("Lines", stat.additions),
                                 width: .fixed(barWidth)
                             )
-                            .foregroundStyle(FlotillaColors.diffAdded.gradient)
+                            .foregroundStyle(FlotillaColors.chartAdded.gradient)
                             .clipShape(UnevenRoundedRectangle(topLeadingRadius: cornerRadius, topTrailingRadius: cornerRadius))
                         }
                         if stat.deletions > 0 {
@@ -309,7 +309,7 @@ struct RhythmChartContent: View {
                                 y: .value("Lines", -stat.deletions),
                                 width: .fixed(barWidth)
                             )
-                            .foregroundStyle(FlotillaColors.diffRemoved.gradient)
+                            .foregroundStyle(FlotillaColors.chartRemoved.gradient)
                             .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: cornerRadius, bottomTrailingRadius: cornerRadius))
                         }
                     }
