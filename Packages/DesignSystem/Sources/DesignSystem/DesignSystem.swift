@@ -535,7 +535,7 @@ public struct FlotillaLiquidSurface: ViewModifier {
                             }
                         }
                 } else {
-                    fallback
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(fallback)
                 }
             }
             .ignoresSafeArea(edges: ignoresSafeAreaEdges)
