@@ -535,13 +535,17 @@ struct ProcessTmuxSessionTerminator: TmuxSessionTerminating {
         let done = DispatchSemaphore(value: 0)
         var data = Data()
         DispatchQueue.global(qos: .userInitiated).async {
-            data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            // `readToEnd()` throws instead of raising an uncatchable
+            // NSFileHandle exception.
+            data = (try? outputPipe.fileHandleForReading.readToEnd()) ?? Data()
             exited.wait()
             done.signal()
         }
         guard done.wait(timeout: .now() + 2) == .success, process.terminationStatus == 0 else {
+            // Never close the read handle here: the reader above may still be
+            // inside the read, and closing under it aborted the process.
+            // Terminating tmux closes the pipe's write end, so the read ends.
             process.terminate()
-            try? outputPipe.fileHandleForReading.close()
             return []
         }
         let output = String(decoding: data, as: UTF8.self)
