@@ -22,6 +22,7 @@ public enum AXID: String, Sendable {
     case toolbarShowGrid = "Toolbar.ShowGrid"
     case toolbarShowBoard = "Toolbar.ShowBoard"
     case toolbarSettings = "Toolbar.Settings"
+    case toolbarKeepAwake = "Toolbar.KeepAwake"
     case toolbarBack = "Toolbar.Back"
     case toolbarForward = "Toolbar.Forward"
     case topBarLogo = "TopBar.Logo"

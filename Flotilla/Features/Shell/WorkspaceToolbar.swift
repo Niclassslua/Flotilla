@@ -117,6 +117,15 @@ struct WorkspaceToolbar: ToolbarContent {
             presentationButton(.grid, help: "Session grid", activeHelp: "Exit session grid", identifier: .toolbarShowGrid)
             presentationButton(.board, help: "Kanban board", activeHelp: "Exit Kanban board", identifier: .toolbarShowBoard)
 
+            Button(action: KeepAwake.shared.toggle) {
+                Image(systemName: KeepAwake.shared.isOn ? "cup.and.saucer.fill" : "cup.and.saucer")
+            }
+            .foregroundStyle(KeepAwake.shared.isOn ? FlotillaColors.accent : FlotillaColors.textPrimary)
+            .help(KeepAwake.shared.isOn ? "Keeping Mac awake — click to allow sleep" : "Keep Mac awake")
+            .accessibilityLabel("Keep Mac awake")
+            .accessibilityAddTraits(KeepAwake.shared.isOn ? [.isSelected] : [])
+            .accessibilityIdentifier(AXID.toolbarKeepAwake.rawValue)
+
             Button(action: onCommandPalette) {
                 Image(systemName: "command")
             }

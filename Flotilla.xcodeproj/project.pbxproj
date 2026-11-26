@@ -418,6 +418,7 @@
 		842F6F67A87FE6D2D5B0CA9C /* DiffStatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E030FA9058EADAD4C052103C /* DiffStatStore.swift */; };
 		84609379CAFF9C04B4BF433D /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE677A016A7E33854CFA93A /* MarkdownView.swift */; };
 		84AD4F1A1D121C061CB3B9BB /* MonacoHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E782E7FF5EA05CA2F213E13 /* MonacoHostView.swift */; };
+		8606F4010EE5EE7168A6E706 /* KeepAwake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DCF075323FB6B04DF98937D /* KeepAwake.swift */; };
 		8697AF15D47A068A4E78F516 /* folder-components.svg in Resources */ = {isa = PBXBuildFile; fileRef = 748E930383D36285416CD109 /* folder-components.svg */; };
 		86C85E4BEC1283DF930F454F /* MaterialFileIconTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36694C982342171E13852132 /* MaterialFileIconTests.swift */; };
 		86E878455A4F81987C9E1A5D /* pdf.svg in Resources */ = {isa = PBXBuildFile; fileRef = D5274BAB0BEC19CE71DFFA59 /* pdf.svg */; };
@@ -696,6 +697,7 @@
 		DCCFB0962BD377B5C30EE5FF /* AntigravityTranscriptCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DB98E66F256A7E941840F5A /* AntigravityTranscriptCodecTests.swift */; };
 		DCD9B37BC4007565D699B9D6 /* ProtectedFolderAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2873B38CFD98A17CA55C5AC1 /* ProtectedFolderAccess.swift */; };
 		DD0D904178162BB1A4B33DC1 /* CompanionCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58113A191F9820A7236B1A8F /* CompanionCommandRouter.swift */; };
+		DD374168E0A4B699007724CA /* KeepAwake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DCF075323FB6B04DF98937D /* KeepAwake.swift */; };
 		DD51E194539B5DF7A12DA2E2 /* CommitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9E093A8C26CA753EA9C323 /* CommitDetailView.swift */; };
 		DD58C49FEEBF43585119FCD9 /* ZoomableImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 760E38E54C8030EE82CEA041 /* ZoomableImageView.swift */; };
 		DDBD53C823B04728ECC26044 /* ReviewFixtureContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6460C3400F65BAB84C0513A4 /* ReviewFixtureContent.swift */; };
@@ -1095,6 +1097,7 @@
 		7D1C6AA6CFB7D0EDA39FC2C8 /* javascript.svg */ = {isa = PBXFileReference; path = javascript.svg; sourceTree = "<group>"; };
 		7DB910821E23F60CA8585408 /* HomeWidgetsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeWidgetsUITests.swift; sourceTree = "<group>"; };
 		7DB98E66F256A7E941840F5A /* AntigravityTranscriptCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityTranscriptCodecTests.swift; sourceTree = "<group>"; };
+		7DCF075323FB6B04DF98937D /* KeepAwake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeepAwake.swift; sourceTree = "<group>"; };
 		7F03DF2BEB8A3F361AE84220 /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		7F15D545EF64036535A2F93F /* TerminalKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TerminalKit; path = Packages/TerminalKit; sourceTree = SOURCE_ROOT; };
 		7FC34CF73E7A586705943393 /* FlotillaCompanionWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlotillaCompanionWidgetBundle.swift; sourceTree = "<group>"; };
@@ -2242,6 +2245,7 @@
 				8F81B27191ACD440D3F9ABEC /* FleetAttention.swift */,
 				179ED2D6FC5AA9AEAF3BE74D /* FlotillaApp.swift */,
 				21B8F05E680043FBA0A1BDE3 /* FlotillaNotificationDelegate.swift */,
+				7DCF075323FB6B04DF98937D /* KeepAwake.swift */,
 				960862CC41C3095160466701 /* LiquidGlassWindowConfigurator.swift */,
 				1BD0E51ECF35F3C9E7E50FB0 /* PerfLog.swift */,
 				6460C3400F65BAB84C0513A4 /* ReviewFixtureContent.swift */,
@@ -2902,6 +2906,7 @@
 				B644E11C41A26BDCF9DE431B /* KanbanCard.swift in Sources */,
 				9C49F8A17B8E19FD25FB2A39 /* KanbanStore.swift in Sources */,
 				F48683A01B14A4BDD77ED5DF /* KanbanViews.swift in Sources */,
+				DD374168E0A4B699007724CA /* KeepAwake.swift in Sources */,
 				4AF3CE15E2C0162DD1173BB8 /* KnowledgeActions.swift in Sources */,
 				3DDC29A7AC6608E903A749DA /* KnowledgeCatalogView.swift in Sources */,
 				A137555D444580B8720AC745 /* KnowledgeChrome.swift in Sources */,
@@ -3263,6 +3268,7 @@
 				F2AF44B4710F656682670CEB /* KanbanCard.swift in Sources */,
 				AAF966EB6B40F71B0EF2C27F /* KanbanStore.swift in Sources */,
 				DDEAF468EAE1353733FC0787 /* KanbanViews.swift in Sources */,
+				8606F4010EE5EE7168A6E706 /* KeepAwake.swift in Sources */,
 				331ECCA9ADE5387772D755EB /* KnowledgeActions.swift in Sources */,
 				8BB819546CCDD0A9D304BF31 /* KnowledgeCatalogView.swift in Sources */,
 				7AE60C4F93003C44BBAF0D66 /* KnowledgeChrome.swift in Sources */,
