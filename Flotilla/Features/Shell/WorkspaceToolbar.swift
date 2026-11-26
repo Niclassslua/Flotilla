@@ -108,15 +108,14 @@ struct WorkspaceToolbar: ToolbarContent {
         // from a toolbar declared inside the split view — see `FlotillaShell`.
         ToolbarSpacer(.flexible)
 
-        // Grid and Board, always present and always enabled. The segmented
+        // Grid and Board are always present and always enabled: the segmented
         // picker they replace was hidden in exactly the scopes you would want
-        // it from — Home and a project workspace — so reaching the grid from
-        // there meant a detour through the navigator. Keeping all four global
-        // actions in one group anchors them together.
-        ToolbarItemGroup(placement: .automatic) {
-            presentationButton(.grid, help: "Session grid", activeHelp: "Exit session grid", identifier: .toolbarShowGrid)
-            presentationButton(.board, help: "Kanban board", activeHelp: "Exit Kanban board", identifier: .toolbarShowBoard)
-
+        // it from (Home, a project workspace).
+        //
+        // Three trailing groups, left to right: keep-awake, presentations,
+        // then palette + settings. Each fixed spacer breaks the shared glass
+        // capsule so the groups read as separate containers.
+        ToolbarItem(placement: .automatic) {
             Button(action: KeepAwake.shared.toggle) {
                 Image(systemName: KeepAwake.shared.isOn ? "cup.and.saucer.fill" : "cup.and.saucer")
             }
@@ -125,7 +124,18 @@ struct WorkspaceToolbar: ToolbarContent {
             .accessibilityLabel("Keep Mac awake")
             .accessibilityAddTraits(KeepAwake.shared.isOn ? [.isSelected] : [])
             .accessibilityIdentifier(AXID.toolbarKeepAwake.rawValue)
+        }
 
+        ToolbarSpacer(.fixed)
+
+        ToolbarItemGroup(placement: .automatic) {
+            presentationButton(.grid, help: "Session grid", activeHelp: "Exit session grid", identifier: .toolbarShowGrid)
+            presentationButton(.board, help: "Kanban board", activeHelp: "Exit Kanban board", identifier: .toolbarShowBoard)
+        }
+
+        ToolbarSpacer(.fixed)
+
+        ToolbarItemGroup(placement: .automatic) {
             Button(action: onCommandPalette) {
                 Image(systemName: "command")
             }
